@@ -34,7 +34,7 @@ Das Steuerfenster ist in Tabs aufgeteilt:
 | **Maps** | alle Karten nach Realm, Suche, Doppelklick zeigt eine Karte |
 | **Overlay** | Position (Vorgabe oder Schieberegler horizontal/vertikal, 0 % = links/oben, 100 % = rechts/unten), Grösse, Deckkraft, Anzeigeoptionen |
 | **Erkennung** | Automatik, Ausblenden nach der Runde, Pause in Menüs, Live-Status, Scans pro Sekunde, Spielsprache, Debug-Bilder, Diagnose |
-| **Server** | Serverregionen mit Ping, Regionen per hosts-Datei sperren oder freigeben (siehe unten) |
+| **Server** | Serverregionen mit Ping, Regionen per hosts-Datei sperren oder freigeben, verbundener Spielserver (siehe unten) |
 | **Log** | Meldungen mit Kategorien *Erkennung*, *Overlay*, *System*, *Fehler*, einzeln ein-/ausblendbar |
 | **Einstellungen** | Dark Mode, Hotkeys ändern, Ordner öffnen |
 
@@ -59,12 +59,21 @@ Hotkeys lassen sich unter **Einstellungen → Hotkeys** ändern (Format z. B. `c
 
 Im Tab **Server** stehen alle Serverregionen von DBD (AWS GameLift) mit ihrem aktuellen Ping. Du hakst die Regionen an, auf denen du spielen willst, und drückst **Auswahl anwenden**. Alle anderen Regionen werden in der Windows-**hosts-Datei** gesperrt: Ihre Servernamen zeigen dann auf 0.0.0.0, DBD erreicht sie nicht und sucht Matches nur noch in den erlaubten Regionen. **Alles freigeben** entfernt die Sperren wieder.
 
-- **Administratorrechte:** Die hosts-Datei ist eine Windows-Systemdatei. Deshalb fragt Windows beim Anwenden und beim Freigeben nach. Nur dieser Schreibvorgang läuft mit Administratorrechten, das Programm selbst nicht.
+- **Administratorrechte:** Die hosts-Datei ist eine Windows-Systemdatei. Deshalb fragt Windows beim Anwenden und beim Freigeben nach. Nur dieser Schreibvorgang läuft mit Administratorrechten, das Programm selbst nicht (außer du startest es als Administrator oder nutzt die Anzeige des verbundenen Servers, siehe unten).
 - **DBD danach neu starten.** Die Region wird beim Spielstart festgelegt.
 - **Was genau geschrieben wird:** Nur ein eigener, markierter Abschnitt („DbD Map Scout: server regions“). Vor der ersten Änderung wird die Originaldatei als `hosts.dbdmapscout-backup` daneben gesichert. Einträge von „Make Your Choice“ oder anderen Tools für dieselben Server werden beim Anwenden entfernt, weil sie die Auswahl sonst überschreiben würden. Das Programm fragt vorher nach.
 - **Ping:** Gemessen wird wie im Spiel über die UDP-Ping-Beacons von GameLift (Port 7770), notfalls per normalem Ping. Die Namen werden direkt beim DNS-Server aufgelöst, deshalb gibt es auch für gesperrte Regionen einen Wert. Gemessen wird nur, wenn der Tab offen ist oder du „Ping messen“ drückst.
 - **Grenzen:** Mit VPN unzuverlässig. Anders als der „Enforced“-Modus von Make Your Choice setzt das Programm keine Firewall-Regeln. DBD kann deshalb in seltenen Fällen trotzdem auf eine andere Region ausweichen, meist N. Virginia. Die Sperren bleiben aktiv, auch wenn das Programm geschlossen ist. Beim Start meldet das Log, wenn Regionen gesperrt sind.
-- **Nicht übernommen** aus Make Your Choice: Firewall-Modus, Mitschneiden des Netzwerkverkehrs („Connected to“, bräuchte dauerhaft Administratorrechte), eigener Splash-Screen und Trailer überspringen (verändern Spieldateien), Warteschlangen-Anzeige über den Fremddienst Dead by Queue.
+- **Nicht übernommen** aus Make Your Choice: Firewall-Modus, eigener Splash-Screen und Trailer überspringen (verändern Spieldateien), Warteschlangen-Anzeige über den Fremddienst Dead by Queue.
+
+### Verbundener Spielserver („Connected to“)
+
+Mit dem Häkchen **Verbundenen Spielserver anzeigen** im Tab Server zeigt das Programm, mit welchem Server DBD gerade verbunden ist, z. B. „Verbunden mit: Frankfurt (3.120.45.67)“. Zwischen den Matches steht dort „Warte auf Match …“. Die Anzeige erscheint auch im Hauptfenster unter dem Rundentimer, und das Log meldet jeden neuen Server. Liegt er außerhalb deiner Regionsauswahl, steht das dabei.
+
+- **Administratorrechte:** Das Mitlesen des Netzwerkverkehrs braucht sie. Startest du das Programm als Administrator, läuft es ohne Nachfrage. Sonst fragt Windows bei jedem Programmstart einmal nach, solange das Häkchen gesetzt ist.
+- **Was gelesen wird:** Nur die Kopfdaten der Netzwerkpakete (IP-Adressen und Ports), nie deren Inhalt. Es wird nichts gesendet, nichts verändert und nichts gespeichert. Das Spiel wird dabei nicht angefasst, und es braucht keinen Zusatztreiber wie Npcap.
+- **Wie der Server erkannt wird:** Ein laufendes Match tauscht ständig viele UDP-Pakete mit seinem Server aus. Die Region steht im Namen, den AWS für die Server-Adresse vergibt (Reverse-DNS, z. B. `…eu-central-1.compute.amazonaws.com`). Andere Programme mit viel UDP-Verkehr wie Sprachchat werden ignoriert, weil sie nicht auf AWS-Servern laufen.
+- **Grenzen:** Mit VPN kann die Anzeige fehlen. Ohne Administratorrechte, zum Beispiel bei einer abgelehnten Windows-Abfrage, bleibt sie aus.
 
 ## So funktioniert die Erkennung
 

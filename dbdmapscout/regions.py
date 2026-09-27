@@ -265,6 +265,47 @@ def _python_exe() -> str:
 def _run_elevated(script, job_f, res_f, timeout, hwnd=None):
     """Start the helper with "runas" (UAC prompt) and wait.
     Returns (error dict or None, exit code)."""
+    proc, err = start_elevated(script, [job_f, res_f], hwnd)
+    if err:
+        return err, None
+    k32 = _kernel32()
+    code = None
+    try:
+        if k32.WaitForSingleObject(proc, int(timeout * 1000)) != 0:
+            return {"ok": False, "error": "Zeitüberschreitung beim Schreiben der hosts-Datei."}, None
+        code = exit_code(proc)
+    finally:
+        k32.CloseHandle(proc)
+    return None, code
+
+
+def _kernel32():
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    k32.WaitForSingleObject.restype = wintypes.DWORD
+    k32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+    k32.GetExitCodeProcess.restype = wintypes.BOOL
+    k32.CloseHandle.argtypes = [wintypes.HANDLE]
+    return k32
+
+
+def exit_code(proc) -> int | None:
+    """Exit code of a helper started with start_elevated (None = still running or unknown)."""
+    k32 = _kernel32()
+    if k32.WaitForSingleObject(proc, 0) != 0:
+        return None
+    c = wintypes.DWORD()
+    return int(c.value) if k32.GetExitCodeProcess(proc, ctypes.byref(c)) else None
+
+
+def close_handle(proc) -> None:
+    if proc:
+        _kernel32().CloseHandle(proc)
+
+
+def start_elevated(script, args, hwnd=None):
+    """Start one of our helper scripts with "runas" (UAC prompt), without waiting.
+    Returns (process handle, None) or (None, error dict); the caller closes the handle."""
     class SHELLEXECUTEINFOW(ctypes.Structure):
         _fields_ = [("cbSize", wintypes.DWORD), ("fMask", ctypes.c_ulong), ("hwnd", wintypes.HWND),
                     ("lpVerb", wintypes.LPCWSTR), ("lpFile", wintypes.LPCWSTR), ("lpParameters", wintypes.LPCWSTR),
@@ -273,41 +314,25 @@ def _run_elevated(script, job_f, res_f, timeout, hwnd=None):
                     ("dwHotKey", wintypes.DWORD), ("hIconOrMonitor", wintypes.HANDLE), ("hProcess", wintypes.HANDLE)]
 
     shell = ctypes.WinDLL("shell32", use_last_error=True)
-    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
     shell.ShellExecuteExW.argtypes = [ctypes.POINTER(SHELLEXECUTEINFOW)]
     shell.ShellExecuteExW.restype = wintypes.BOOL
-    k32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
-    k32.WaitForSingleObject.restype = wintypes.DWORD
-    k32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
-    k32.GetExitCodeProcess.restype = wintypes.BOOL
-    k32.CloseHandle.argtypes = [wintypes.HANDLE]
     sei = SHELLEXECUTEINFOW()
     sei.cbSize = ctypes.sizeof(SHELLEXECUTEINFOW)
     sei.fMask = 0x40 | 0x100                        # SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC
     sei.hwnd = hwnd or None                         # UAC prompt belongs to our window (comes to the front)
     sei.lpVerb = "runas"
     sei.lpFile = _python_exe()
-    # -I -S: isolated, no site-packages / .pth files – the helper needs the standard library only
-    sei.lpParameters = f'-I -S "{script}" "{job_f}" "{res_f}"'
+    # -I -S: isolated, no site-packages / .pth files – the helpers need the standard library only
+    sei.lpParameters = "-I -S " + " ".join(f'"{a}"' for a in [script, *args])
     sei.nShow = 0                                   # SW_HIDE
     if not shell.ShellExecuteExW(ctypes.byref(sei)):
         err = ctypes.get_last_error()
         if err == 1223:                             # ERROR_CANCELLED: user said no to UAC
-            return {"ok": False, "cancelled": True, "error": "Abgebrochen (keine Administratorrechte erteilt)."}, None
-        return {"ok": False, "error": f"Start mit Administratorrechten fehlgeschlagen (Fehler {err})."}, None
-    code = None
-    try:
-        if not sei.hProcess:
-            return {"ok": False, "error": "Hilfsprogramm nicht gestartet."}, None
-        if k32.WaitForSingleObject(sei.hProcess, int(timeout * 1000)) != 0:
-            return {"ok": False, "error": "Zeitüberschreitung beim Schreiben der hosts-Datei."}, None
-        c = wintypes.DWORD()
-        if k32.GetExitCodeProcess(sei.hProcess, ctypes.byref(c)):
-            code = int(c.value)
-    finally:
-        if sei.hProcess:
-            k32.CloseHandle(sei.hProcess)
-    return None, code
+            return None, {"ok": False, "cancelled": True, "error": "Abgebrochen (keine Administratorrechte erteilt)."}
+        return None, {"ok": False, "error": f"Start mit Administratorrechten fehlgeschlagen (Fehler {err})."}
+    if not sei.hProcess:
+        return None, {"ok": False, "error": "Hilfsprogramm nicht gestartet."}
+    return sei.hProcess, None
 
 
 def myc_firewall_active() -> bool:
