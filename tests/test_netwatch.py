@@ -196,3 +196,56 @@ def test_helper_never_creates_result_file(tmp_path):
     res.write_text("x" * 100)
     netwatch.write(str(res), {"ok": True})
     assert json.loads(res.read_text()) == {"ok": True}               # overwritten in place, no leftovers
+
+
+class _FakeSocketModule:
+    """Stands in for the Windows socket module: records ioctl calls, never receives anything."""
+    AF_INET, SOCK_RAW, SOCK_DGRAM, IPPROTO_IP, IP_HDRINCL = 2, 3, 2, 0, 2
+    SIO_RCVALL, RCVALL_OFF = 0x98000001, 0
+    timeout = TimeoutError
+    inet_ntoa = staticmethod(socket.inet_ntoa)
+
+    def __init__(self, fail_mode=None):
+        self.ioctls, self.fail_mode = [], fail_mode
+
+    def socket(self, *a):
+        mod = self
+
+        class S:
+            def __enter__(self): return self
+            def __exit__(self, *e): return False
+            def connect(self, addr): pass
+            def getsockname(self): return (LOCAL, 50000)
+            def bind(self, addr): pass
+            def setsockopt(self, *a): pass
+            def settimeout(self, t): pass
+            def close(self): pass
+
+            def ioctl(self, code, mode):
+                mod.ioctls.append(mode)
+                if mode == mod.fail_mode:
+                    raise OSError(10022, "invalid argument")
+
+            def recv(self, n): raise TimeoutError
+        return S()
+
+
+def test_capture_uses_own_traffic_mode_only(tmp_path, monkeypatch):
+    fake = _FakeSocketModule()
+    monkeypatch.setattr(netwatch, "socket", fake)
+    result = tmp_path / "r.json"
+    result.write_text("")
+    assert netwatch.main(["netwatch.py", str(tmp_path / "missing-control.json"), str(result)]) == 0
+    assert fake.ioctls == [netwatch.RCVALL_IPLEVEL, fake.RCVALL_OFF] == [3, 0]   # never 1 (promiscuous)
+
+
+def test_capture_refuses_instead_of_promiscuous_fallback(tmp_path, monkeypatch):
+    fake = _FakeSocketModule(fail_mode=3)
+    monkeypatch.setattr(netwatch, "socket", fake)
+    control, result = tmp_path / "c.json", tmp_path / "r.json"
+    control.write_text('{"stop": false}')
+    result.write_text("")
+    assert netwatch.main(["netwatch.py", str(control), str(result)]) == 1
+    assert 1 not in fake.ioctls                                    # no silent RCVALL_ON
+    err = json.loads(result.read_text())
+    assert err["ok"] is False and "RCVALL_IPLEVEL" in err["error"]

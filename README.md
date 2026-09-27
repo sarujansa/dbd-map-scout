@@ -68,12 +68,13 @@ Im Tab **Server** stehen alle Serverregionen von DBD (AWS GameLift) mit ihrem ak
 
 ### Verbundener Spielserver („Connected to“)
 
-Mit dem Häkchen **Verbundenen Spielserver anzeigen** im Tab Server zeigt das Programm, mit welchem Server DBD gerade verbunden ist, z. B. „Verbunden mit: Frankfurt (3.120.45.67)“. Zwischen den Matches steht dort „Warte auf Match …“. Die Anzeige erscheint auch im Hauptfenster unter dem Rundentimer, und das Log meldet jeden neuen Server. Liegt er außerhalb deiner Regionsauswahl, steht das dabei.
+Mit dem Häkchen **Verbundenen Spielserver anzeigen** im Tab Server zeigt das Programm, mit welchem Server DBD gerade verbunden ist, z. B. „Verbunden mit: Frankfurt (3.120.45.67)“. Zwischen den Matches steht dort „Warte auf Match …“. Die Anzeige erscheint auch im Hauptfenster unter dem Rundentimer, und das Log meldet jeden neuen Server mit seiner Region. Liegt er außerhalb deiner Regionsauswahl, steht das dabei. Die IP-Adresse steht nur live im Fenster und wird nicht ins Logfile geschrieben.
 
 - **Administratorrechte:** Das Mitlesen des Netzwerkverkehrs braucht sie. Startest du das Programm als Administrator, läuft es ohne Nachfrage. Sonst fragt Windows bei jedem Programmstart einmal nach, solange das Häkchen gesetzt ist.
-- **Was gelesen wird:** Nur die Kopfdaten der Netzwerkpakete (IP-Adressen und Ports), nie deren Inhalt. Es wird nichts gesendet, nichts verändert und nichts gespeichert. Das Spiel wird dabei nicht angefasst, und es braucht keinen Zusatztreiber wie Npcap.
+- **Was gelesen wird:** Nur die Kopfdaten der Netzwerkpakete (IP-Adressen und Ports), nie deren Inhalt. Es kommt nur der Verkehr deines eigenen PCs an: Die Netzwerkkarte wird nicht in den Promiscuous-Modus versetzt, der auch fremde Pakete im Netz annimmt. Unterstützt Windows das nicht, bleibt die Anzeige aus, statt auf diesen Modus auszuweichen. Es wird nichts gesendet, nichts verändert und nichts gespeichert. Das Spiel wird dabei nicht angefasst, und es braucht keinen Zusatztreiber wie Npcap.
 - **Wie der Server erkannt wird:** Ein laufendes Match tauscht ständig viele UDP-Pakete mit seinem Server aus. Die Region steht im Namen, den AWS für die Server-Adresse vergibt (Reverse-DNS, z. B. `…eu-central-1.compute.amazonaws.com`). Andere Programme mit viel UDP-Verkehr wie Sprachchat werden ignoriert, weil sie nicht auf AWS-Servern laufen.
 - **Grenzen:** Mit VPN kann die Anzeige fehlen. Ohne Administratorrechte, zum Beispiel bei einer abgelehnten Windows-Abfrage, bleibt sie aus.
+- **Am sichersten:** Das Programm normal starten statt als Administrator, dann läuft nur der kleine Mitschnitt-Helfer mit Adminrechten (eine Windows-Abfrage pro Start). Wer ganz auf Nummer sicher gehen will, lässt das Häkchen aus – für Map-Erkennung und Overlay wird der Mitschnitt nicht gebraucht.
 
 ## So funktioniert die Erkennung
 
