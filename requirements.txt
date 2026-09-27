@@ -1,0 +1,6 @@
+# Getestet mit: numpy 2.5.3, opencv-python-headless 5.0.0, onnxruntime 1.30.0, Pillow 12.3.0, mss 10.2.0
+numpy>=1.26
+opencv-python-headless>=4.8
+onnxruntime>=1.17
+Pillow>=10.0
+mss>=9.0

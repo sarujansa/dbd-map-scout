@@ -1,0 +1,1009 @@
+{
+ "_info": "Map-Katalog fuer DbD Map Scout: nur die mitgelieferten Bilder. Namen (EN + Uebersetzungen) aus dbd-map-overlay (Apache-2.0, LucaFontanot). variants: Layout-Nummer -> Bilddatei relativ zu maps/.",
+ "realms": {
+  "The MacMillan Estate": {
+   "en": "The MacMillan Estate",
+   "de": "Das MacMillan-Anwesen",
+   "fr": "La propriété MacMillan",
+   "es": "La finca Macmillan",
+   "it": "La Tenuta MacMillan",
+   "pl": "Posiadłość Macmillanów",
+   "pt-BR": "A Propriedade MacMillan",
+   "tr": "MacMillan Mülkü"
+  },
+  "Autohaven Wreckers": {
+   "en": "Autohaven Wreckers",
+   "de": "Autohaven-Schrottplatz",
+   "fr": "Casse Autohaven",
+   "es": "Desguace Autohaven",
+   "it": "Demolizioni Autohaven",
+   "pl": "Złomowisko Autohaven",
+   "pt-BR": "Ferro-Velho Autohaven",
+   "tr": "Otomobil Mezarlığı"
+  },
+  "Coldwind Farm": {
+   "en": "Coldwind Farm",
+   "de": "Coldwind Farm",
+   "fr": "Coldwind Farm",
+   "es": "Granja Coldwind",
+   "it": "Fattoria Coldwind",
+   "pl": "Farma Coldwind",
+   "pt-BR": "Fazenda Coldwind",
+   "tr": "Ayaz Yel Çiftliği"
+  },
+  "Crotus Prenn Asylum": {
+   "en": "Crotus Prenn Asylum",
+   "de": "Crotus-Prenn-Anstalt",
+   "fr": "Asile de Crotus Prenn",
+   "es": "Psiquiátrico Crotus Prenn",
+   "it": "Ospedale psichiatrico Crotus Prenn",
+   "pl": "Przytułek Crotus Prenn",
+   "pt-BR": "Hospício de Crotus Prenn",
+   "tr": "Crotus Prenn Tımarhanesi"
+  },
+  "Haddonfield": {
+   "en": "Haddonfield",
+   "de": "Haddonfield",
+   "fr": "Haddonfield",
+   "es": "Haddonfield",
+   "it": "Haddonfield",
+   "pl": "Haddonfield",
+   "pt-BR": "Haddonfield",
+   "tr": "Haddonfield"
+  },
+  "Backwater Swamp": {
+   "en": "Backwater Swamp",
+   "de": "Backwater-Sumpf",
+   "fr": "Marais de Backwater",
+   "es": "Pantano de aguas estancadas",
+   "it": "Palude Backwater",
+   "pl": "Bagienne Rozlewisko",
+   "pt-BR": "Pântano do Remanso",
+   "tr": "Bataklı Göl"
+  },
+  "Léry's Memorial Institute": {
+   "en": "Léry's Memorial Institute",
+   "de": "Lérys Gedenkinstitut",
+   "fr": "Institut de la mémoire de Léry",
+   "es": "Instituto Conmemorativo Léry",
+   "it": "Istituto Commemorativo Léry",
+   "pl": "Léry's Memorial Institute",
+   "pt-BR": "Instituto Memorial do Léry",
+   "tr": "Léry Ruh Sağlığı Enstitüsü"
+  },
+  "Red Forest": {
+   "en": "Red Forest",
+   "de": "Roter Wald",
+   "fr": "Forêt rouge",
+   "es": "Bosque rojo",
+   "it": "Foresta rossa",
+   "pl": "Czerwony Las",
+   "pt-BR": "Floresta Vermelha",
+   "tr": "Kızıl Orman"
+  },
+  "Springwood": {
+   "en": "Springwood",
+   "de": "Springwood",
+   "fr": "Springwood",
+   "es": "Springwood",
+   "it": "Springwood",
+   "pl": "Springwood",
+   "pt-BR": "Springwood",
+   "tr": "Springwood"
+  },
+  "Gideon Meat Plant": {
+   "en": "Gideon Meat Plant",
+   "de": "Gideon-Fleischfabrik",
+   "fr": "Usine de conditionnement de viande Gideon",
+   "es": "Planta procesadora de carne Gideon",
+   "it": "Mattatoio di Gideon",
+   "pl": "Zakład Mięsny Gideon",
+   "pt-BR": "Fábrica de Embalagem de Carnes Gideon",
+   "tr": "Gideon Et Fabrikası"
+  },
+  "Yamaoka Estate": {
+   "en": "Yamaoka Estate",
+   "de": "Yamaoka-Anwesen",
+   "fr": "Propriété Yamaoka",
+   "es": "Residencia Yamaoka",
+   "it": "Tenuta Yamaoka",
+   "pl": "Posiadłość Rodziny Yamaoka",
+   "pt-BR": "Propriedade dos Yamaoka",
+   "tr": "Yamaoka Malikânesi"
+  },
+  "Ormond": {
+   "en": "Ormond",
+   "de": "Ormond",
+   "fr": "Ormond",
+   "es": "Ormond",
+   "it": "Ormond",
+   "pl": "Ormond",
+   "pt-BR": "Ormond",
+   "tr": "Ormond"
+  },
+  "Hawkins National Laboratory": {
+   "en": "Hawkins National Laboratory",
+   "de": "Hawkins National Laboratory",
+   "fr": "Laboratoire national d’Hawkins",
+   "es": "Laboratorio Nacional de Hawkins",
+   "it": "Laboratorio Nazionale di Hawkins",
+   "pl": "Hawkins National Laboratory",
+   "pt-BR": "Laboratório Nacional de Hawkins",
+   "tr": "Hawkins Ulusal Laboratuvarı"
+  },
+  "Grave of Glenvale": {
+   "en": "Grave of Glenvale",
+   "de": "Grab von Glenvale",
+   "fr": "Tombe de Glenvale",
+   "es": "Tumba de Glenvale",
+   "it": "Tomba di Glenvale",
+   "pl": "Grób w Glenvale",
+   "pt-BR": "Túmulo de Glenvale",
+   "tr": "Glenvale Kabristanı"
+  },
+  "Silent Hill": {
+   "en": "Silent Hill",
+   "de": "Silent Hill",
+   "fr": "Silent Hill",
+   "es": "Silent Hill",
+   "it": "Silent Hill",
+   "pl": "Silent Hill",
+   "pt-BR": "Silent Hill",
+   "tr": "Silent Hill"
+  },
+  "Raccoon City": {
+   "en": "Raccoon City",
+   "de": "Raccoon City",
+   "fr": "Raccoon City",
+   "es": "Raccoon City",
+   "it": "Raccoon City",
+   "pl": "Raccoon City",
+   "pt-BR": "Raccoon City",
+   "tr": "Raccoon City"
+  },
+  "Forsaken Boneyard": {
+   "en": "Forsaken Boneyard",
+   "de": "Einsamer Friedhof",
+   "fr": "Cimetière abandonné",
+   "es": "Cementerio abandonado",
+   "it": "Cimitero abbandonato",
+   "pl": "Zapomniany cmentarz",
+   "pt-BR": "Cemitério Renegado",
+   "tr": "Terk Edilmiş Mezarlık"
+  },
+  "Withered Isle": {
+   "en": "Withered Isle",
+   "de": "Verkümmerte Insel",
+   "fr": "Île flétrie",
+   "es": "Isla marchita",
+   "it": "Isolotto putrefatto",
+   "pl": "Uschnięta Wyspa",
+   "pt-BR": "Ilha sem Vida",
+   "tr": "Solup Gitmiş Ada"
+  },
+  "The Decimated Borgo": {
+   "en": "The Decimated Borgo",
+   "de": "Das dezimierte Borgo",
+   "fr": "Le Borgo décimé",
+   "es": "El Burgo diezmado",
+   "es-MX": "El pueblo diezmado",
+   "it": "Il borgo decimato",
+   "pl": "Zdziesiątkowane Borgo",
+   "pt-BR": "Borgo Dizimado",
+   "tr": "Harabe Borgo"
+  },
+  "Dvarka Deepwood": {
+   "en": "Dvarka Deepwood",
+   "de": "Dvarka-Dschungel",
+   "fr": "Forêt profonde de Dvarka",
+   "es": "Espesura de Dvarka",
+   "es-MX": "Bosque espeso de Dvarka",
+   "it": "Foresta ombrosa di Dvarka",
+   "pl": "Gęsty las Dvarki",
+   "pt-BR": "Floresta de Dvarka",
+   "tr": "Dvarka Ormanı"
+  },
+  "Sleepless District": {
+   "en": "Sleepless District",
+   "de": "Schlafloses Viertel",
+   "fr": "Quartier qui jamais ne dort",
+   "es": "Barrio insomne",
+   "es-MX": "Distrito insomne",
+   "it": "Distretto insonne",
+   "pl": "Bezsenna dzielnica",
+   "pt-BR": "Distrito Insone",
+   "tr": "Uykusuz Muhit"
+  }
+ },
+ "maps": [
+  {
+   "id": "coal-tower",
+   "realm": "The MacMillan Estate",
+   "names": {
+    "en": "Coal Tower",
+    "de": "Kohlelager",
+    "fr": "Entrepôt de charbon",
+    "es": "Torre de carbón",
+    "it": "Torre di carbone",
+    "pl": "Wieża Węglowa",
+    "pt-BR": "Torre de Carvão",
+    "tr": "Kömür Kulesi"
+   },
+   "variants": {
+    "1": "McMillan/Coal Tower.webp",
+    "2": "McMillan/Coal Tower II.webp"
+   }
+  },
+  {
+   "id": "groaning-storehouse",
+   "realm": "The MacMillan Estate",
+   "names": {
+    "en": "Groaning Storehouse",
+    "de": "Seufzendes Lagerhaus",
+    "fr": "Entrepôt grondant",
+    "es": "Almacén quejumbroso",
+    "it": "Deposito scricchiolante",
+    "pl": "Jęczący Magazyn",
+    "pt-BR": "Armazém Rangente",
+    "tr": "İnleyen Depo"
+   },
+   "variants": {
+    "1": "McMillan/Groaning Storehouse.webp",
+    "2": "McMillan/Groaning Storehouse II.webp"
+   }
+  },
+  {
+   "id": "ironworks-of-misery",
+   "realm": "The MacMillan Estate",
+   "names": {
+    "en": "Ironworks of Misery",
+    "de": "Eisenwerk der Qual",
+    "fr": "Fonderie de souffrance",
+    "es": "Fundición de la Miseria",
+    "it": "Ferriera del Tormento",
+    "pl": "Huta Niedoli",
+    "pt-BR": "Fábrica da Miséria",
+    "tr": "Istırap Fabrikası"
+   },
+   "variants": {
+    "1": "McMillan/Ironworks Of Misery.webp",
+    "2": "McMillan/Ironworks of Misery II.webp"
+   }
+  },
+  {
+   "id": "shelter-woods",
+   "realm": "The MacMillan Estate",
+   "names": {
+    "en": "Shelter Woods",
+    "de": "Schutzwald",
+    "fr": "Forêt profonde",
+    "es": "Bosque refugio",
+    "it": "Rifugi boschivi",
+    "pl": "Leśne Schronisko",
+    "pt-BR": "Abrigo Florestal",
+    "tr": "Barakalı Orman"
+   },
+   "variants": {
+    "1": "McMillan/Shelter Woods.webp",
+    "2": "McMillan/Shelter Woods II.webp"
+   }
+  },
+  {
+   "id": "suffocation-pit",
+   "realm": "The MacMillan Estate",
+   "names": {
+    "en": "Suffocation Pit",
+    "de": "Grubenschacht",
+    "fr": "Puits d'asphyxie",
+    "es": "Pozo de asfixia",
+    "it": "Miniera del soffocamento",
+    "pl": "Duszna Kopalnia",
+    "pt-BR": "Fosso do Sufocamento",
+    "tr": "Boğma Çukuru"
+   },
+   "variants": {
+    "1": "McMillan/Suffocation Pit.webp",
+    "2": "McMillan/Suffocation Pit II.webp"
+   }
+  },
+  {
+   "id": "azarovs-resting-place",
+   "realm": "Autohaven Wreckers",
+   "names": {
+    "en": "Azarov's Resting Place",
+    "de": "Azarovs Ruhestätte",
+    "fr": "Dernière demeure d'Azarov",
+    "es": "Lugar de descanso de Azarov",
+    "it": "Sepolcro di Azarov",
+    "pl": "Miejsce Spoczynku Azarowa",
+    "pt-BR": "Sepultura de Azarov",
+    "tr": "Azarov'un Yazıhanesi"
+   },
+   "variants": {
+    "1": "Azarovs/Azarovs Resting Place.webp"
+   }
+  },
+  {
+   "id": "blood-lodge",
+   "realm": "Autohaven Wreckers",
+   "names": {
+    "en": "Blood Lodge",
+    "de": "Bluthütte",
+    "fr": "Cabane du sang",
+    "es": "Cabaña de sangre",
+    "it": "Rifugio insanguinato",
+    "pl": "Krwawa Stróżówka",
+    "pt-BR": "Abrigo Sangrento",
+    "tr": "Kan Kulübesi"
+   },
+   "variants": {
+    "1": "Azarovs/Blood Lodge.webp"
+   }
+  },
+  {
+   "id": "gas-heaven",
+   "realm": "Autohaven Wreckers",
+   "names": {
+    "en": "Gas Heaven",
+    "de": "Sprithimmel",
+    "fr": "Gas Heaven",
+    "es": "Gasolinera",
+    "it": "Gas Heaven",
+    "pl": "Stacja Paliw",
+    "pt-BR": "Paraíso do Combustível",
+    "tr": "Benzin İstasyonu"
+   },
+   "variants": {
+    "1": "Azarovs/Gas Heaven.webp"
+   }
+  },
+  {
+   "id": "wreckers-yard",
+   "realm": "Autohaven Wreckers",
+   "names": {
+    "en": "Wreckers' Yard",
+    "de": "Schrottplatz",
+    "fr": "Terrain de la casse",
+    "es": "Desguace",
+    "it": "Deposito Demolizioni",
+    "pl": "Podwórze Złomowiska",
+    "pt-BR": "Quintal do Ferro-Velho",
+    "tr": "Hurdacı Bahçesi"
+   },
+   "variants": {
+    "1": "Azarovs/Wreckers.webp"
+   }
+  },
+  {
+   "id": "wretched-shop",
+   "realm": "Autohaven Wreckers",
+   "names": {
+    "en": "Wretched Shop",
+    "de": "Werkstatt",
+    "fr": "Atelier misérable",
+    "es": "Taller ruinoso",
+    "it": "Negozio squallido",
+    "pl": "Sklep Nędzy",
+    "pt-BR": "Loja Desgraçada",
+    "tr": "Sefil Atölye"
+   },
+   "variants": {
+    "1": "Azarovs/Wretched Shop.webp"
+   }
+  },
+  {
+   "id": "fractured-cowshed",
+   "realm": "Coldwind Farm",
+   "names": {
+    "en": "Fractured Cowshed",
+    "de": "Verfallener Kuhstall",
+    "fr": "Étable en ruine",
+    "es": "Establo en ruinas",
+    "it": "Stalla danneggiata",
+    "pl": "Spękana Obora",
+    "pt-BR": "Estábulo Arruinado",
+    "tr": "Zedelenmiş Sığır Ahırı"
+   },
+   "variants": {
+    "1": "Coldwind/Fractured Cowshed.webp"
+   }
+  },
+  {
+   "id": "rancid-abattoir",
+   "realm": "Coldwind Farm",
+   "names": {
+    "en": "Rancid Abattoir",
+    "de": "Widerliches Schlachthaus",
+    "fr": "Abattoir putride",
+    "es": "Matadero pestilente",
+    "it": "Mattatoio irrancidito",
+    "pl": "Zjełczała Rzeźnia",
+    "pt-BR": "Abatedouro Asqueroso",
+    "tr": "Kokuşmuş Mezbaha"
+   },
+   "variants": {
+    "1": "Coldwind/Rancid Abbatoir.webp"
+   }
+  },
+  {
+   "id": "rotten-fields",
+   "realm": "Coldwind Farm",
+   "names": {
+    "en": "Rotten Fields",
+    "de": "Faulige Felder",
+    "fr": "Champs pourris",
+    "es": "Campos podridos",
+    "it": "Campi putrefatti",
+    "pl": "Zbutwiałe Pola",
+    "pt-BR": "Campos Pútridos",
+    "tr": "Başıboş Tarla"
+   },
+   "variants": {
+    "1": "Coldwind/Rotten Fields.webp"
+   }
+  },
+  {
+   "id": "thompson-house",
+   "realm": "Coldwind Farm",
+   "names": {
+    "en": "The Thompson House",
+    "de": "Das Thompson-Haus",
+    "fr": "La ferme Thompson",
+    "es": "La casa de los Thompson",
+    "it": "La Casa di Thompson",
+    "pl": "Dom Thompsona",
+    "pt-BR": "Casa dos Thompson",
+    "tr": "Thompson'ların Evi"
+   },
+   "variants": {
+    "1": "Coldwind/The Thompson House.webp"
+   }
+  },
+  {
+   "id": "torment-creek",
+   "realm": "Coldwind Farm",
+   "names": {
+    "en": "Torment Creek",
+    "de": "Tal der Qual",
+    "fr": "Vallon des Tourments",
+    "es": "Arroyo del tormento",
+    "it": "Torrente del Tormento",
+    "pl": "Przełęcz Udręki",
+    "pt-BR": "Córrego Atormentador",
+    "tr": "Eziyet Deresi"
+   },
+   "variants": {
+    "1": "Coldwind/Torment Creek.webp"
+   }
+  },
+  {
+   "id": "disturbed-ward",
+   "realm": "Crotus Prenn Asylum",
+   "names": {
+    "en": "Disturbed Ward",
+    "de": "Gestörtenabteilung",
+    "fr": "Salle des aliénés",
+    "es": "Sala de transtornados",
+    "it": "Reparto Squilibrati",
+    "pl": "Niespokojny Oddział",
+    "pt-BR": "Enfermaria Conturbada",
+    "tr": "Kaçık Koğuşu"
+   },
+   "variants": {
+    "1": "Crotus Pen/Disturbed Ward.webp"
+   }
+  },
+  {
+   "id": "father-campbells-chapel",
+   "realm": "Crotus Prenn Asylum",
+   "names": {
+    "en": "Father Campbell's Chapel",
+    "de": "Pater Campbells Kapelle",
+    "fr": "Chapelle du père Campbell",
+    "es": "Capilla del padre Campbell",
+    "it": "Chiesa di Padre Campbell",
+    "pl": "Kaplica Ojca Campbella",
+    "pt-BR": "Capela do Padre Campbell",
+    "tr": "Peder Campbell'in Kilisesi"
+   },
+   "variants": {
+    "1": "Crotus Pen/Father Campbells Chapel.webp"
+   }
+  },
+  {
+   "id": "lampkin-lane",
+   "realm": "Haddonfield",
+   "names": {
+    "en": "Lampkin Lane",
+    "de": "Lampkin Lane",
+    "fr": "Lampkin Lane",
+    "es": "Avenida Lampkin",
+    "it": "Lampkin Lane",
+    "pl": "Alejka Lampkin",
+    "pt-BR": "Travessa Lampkin",
+    "tr": "Lampkin Sokağı"
+   },
+   "variants": {
+    "1": "Other/Haddonfield.webp"
+   }
+  },
+  {
+   "id": "pale-rose",
+   "realm": "Backwater Swamp",
+   "names": {
+    "en": "The Pale Rose",
+    "de": "Die Pale Rose",
+    "fr": "Le Pale Rose",
+    "es": "La rosa pálida",
+    "es-MX": "La Rosa Pálida",
+    "it": "Il Pale Rose",
+    "pl": "Blada Róża",
+    "pt-BR": "A Rosa Lívida",
+    "tr": "Solmuş Gül"
+   },
+   "variants": {
+    "1": "Swamp/Pale Rose.webp"
+   }
+  },
+  {
+   "id": "grim-pantry",
+   "realm": "Backwater Swamp",
+   "names": {
+    "en": "Grim Pantry",
+    "de": "Schaurige Speisekammer",
+    "fr": "Cellier sinistre",
+    "es": "Despensa sombría",
+    "it": "Dispensa trucida",
+    "pl": "Ponura Spiżarnia",
+    "pt-BR": "Despensa Cruel",
+    "tr": "Kasvetli Kiler"
+   },
+   "variants": {
+    "1": "Swamp/Grim Pantry.webp"
+   }
+  },
+  {
+   "id": "treatment-theatre",
+   "realm": "Léry's Memorial Institute",
+   "names": {
+    "en": "Treatment Theatre",
+    "de": "Behandlungstheater",
+    "fr": "Théâtre de traitement",
+    "es": "Teatro de tratamiento",
+    "it": "Teatro delle cure",
+    "pl": "Teatr Leczenia",
+    "pt-BR": "Teatro de Tratamento",
+    "tr": "Tedavi Tiyatrosu"
+   },
+   "variants": {
+    "1": "Other/Lerys.webp"
+   }
+  },
+  {
+   "id": "mothers-dwelling",
+   "realm": "Red Forest",
+   "names": {
+    "en": "Mother's Dwelling",
+    "de": "Mutters Behausung",
+    "fr": "La maison maternelle",
+    "es": "Morada maternal",
+    "it": "La casetta della mamma",
+    "pl": "Dom Matki",
+    "pt-BR": "A Casa da Mamãe",
+    "tr": "Ana Yuvası"
+   },
+   "variants": {
+    "1": "Red Forest/Mothers Dwelling.webp"
+   }
+  },
+  {
+   "id": "temple-of-purgation",
+   "realm": "Red Forest",
+   "names": {
+    "en": "The Temple of Purgation",
+    "de": "Der Tempel der Reinigung",
+    "fr": "Le Temple de purgation",
+    "es": "El Templo de la Purgación",
+    "it": "Il Tempio della Purificazione",
+    "pl": "Świątynia Oczyszczenia",
+    "pt-BR": "O Templo da Purgação",
+    "tr": "Arınma Tapınağı"
+   },
+   "variants": {
+    "1": "Red Forest/Temple of Purgation.webp"
+   }
+  },
+  {
+   "id": "badham-preschool",
+   "realm": "Springwood",
+   "names": {
+    "en": "Badham Preschool",
+    "de": "Badham-Vorschule",
+    "fr": "École maternelle de Badham",
+    "es": "Guardería Badham",
+    "it": "Scuola materna di Badham",
+    "pl": "Przedszkole w Badham",
+    "pt-BR": "Escola Primária Badham",
+    "tr": "Badham Anaokulu"
+   },
+   "variants": {
+    "1": "Badham/Preschool 1.webp",
+    "2": "Badham/Preschool 2.webp",
+    "3": "Badham/Preschool 3.webp",
+    "4": "Badham/Preschool 4.webp",
+    "5": "Badham/Preschool 5.webp"
+   }
+  },
+  {
+   "id": "the-game",
+   "realm": "Gideon Meat Plant",
+   "names": {
+    "en": "The Game",
+    "de": "Das Spiel",
+    "fr": "Le jeu",
+    "es": "El juego",
+    "it": "Il gioco",
+    "pl": "Gra",
+    "pt-BR": "O Jogo",
+    "tr": "Oyun"
+   },
+   "variants": {
+    "1": "Other/THE GAME.webp"
+   }
+  },
+  {
+   "id": "family-residence",
+   "realm": "Yamaoka Estate",
+   "names": {
+    "en": "Family Residence",
+    "de": "Familiensitz",
+    "fr": "Résidence familiale",
+    "es": "Residencia familiar",
+    "it": "Residenza di famiglia",
+    "pl": "Rezydencja Rodzinna",
+    "pt-BR": "Residência da Família",
+    "tr": "Aile Konutu"
+   },
+   "variants": {
+    "1": "Yamaoka/Family Residence.webp"
+   }
+  },
+  {
+   "id": "sanctum-of-wrath",
+   "realm": "Yamaoka Estate",
+   "names": {
+    "en": "Sanctum of Wrath",
+    "de": "Heiligtum des Zorns",
+    "fr": "Sanctuaire du courroux",
+    "es": "Santuario de la cólera",
+    "es-MX": "Santuario de la ira",
+    "it": "Sacrario dell'Ira",
+    "pl": "Sanktuarium Gniewu",
+    "pt-BR": "Santuário da Ira",
+    "tr": "Hiddet Sunağı"
+   },
+   "variants": {
+    "1": "Yamaoka/Sanctum of Wrath.webp"
+   }
+  },
+  {
+   "id": "mount-ormond-resort",
+   "realm": "Ormond",
+   "names": {
+    "en": "Mount Ormond Resort",
+    "de": "Skiort am Mount Ormond",
+    "fr": "Station du mont Ormond",
+    "es": "Complejo del monte Ormond",
+    "it": "Resort del Monte Ormond",
+    "pl": "Ośrodek Mount Ormond",
+    "pt-BR": "Resort do Monte Ormond",
+    "tr": "Ormond Dağı Tatil Yeri"
+   },
+   "variants": {
+    "1": "Ormond/Ormond.webp",
+    "2": "Ormond/Ormond II.webp",
+    "3": "Ormond/Ormond III.webp"
+   }
+  },
+  {
+   "id": "ormond-lake-mine",
+   "realm": "Ormond",
+   "names": {
+    "en": "Ormond Lake Mine",
+    "de": "Mine am Ormond-See",
+    "fr": "Mine du lac d'Ormond",
+    "es": "Mina del lago Ormond",
+    "it": "Miniera del lago Ormond",
+    "pl": "Kopalnia nad jeziorem Ormond",
+    "pt-BR": "Mina do Lago de Ormond",
+    "tr": "Ormond Gölü Madeni"
+   },
+   "variants": {
+    "1": "Ormond/Ormond Lake Mine.webp"
+   }
+  },
+  {
+   "id": "underground-complex",
+   "realm": "Hawkins National Laboratory",
+   "names": {
+    "en": "The Underground Complex",
+    "de": "Der Untergrundkomplex",
+    "fr": "Le complexe souterrain",
+    "es": "El complejo subterráneo",
+    "it": "Il Complesso sotterraneo",
+    "pl": "Podziemny kompleks",
+    "pt-BR": "O Complexo Subterrâneo",
+    "tr": "Yeraltı Yerleşkesi"
+   },
+   "variants": {
+    "1": "Other/Hawkins.webp"
+   }
+  },
+  {
+   "id": "dead-dawg-saloon",
+   "realm": "Grave of Glenvale",
+   "names": {
+    "en": "Dead Dawg Saloon",
+    "de": "Dead Dawg Saloon",
+    "fr": "Saloon de Dead Dawg",
+    "es": "Salón Dead Dawg",
+    "es-MX": "Cantina el perro muerto",
+    "it": "Saloon Dead Dawg",
+    "pl": "Knajpa pod Martwym Ziomkiem",
+    "pt-BR": "Saloon do Cachorro Morto",
+    "tr": "Ölü İt Barı"
+   },
+   "variants": {
+    "1": "Other/Dead Dawg Saloon.webp"
+   }
+  },
+  {
+   "id": "midwich",
+   "realm": "Silent Hill",
+   "names": {
+    "en": "Midwich Elementary School",
+    "de": "Midwich Elementary School",
+    "fr": "École primaire Midwich",
+    "es": "Escuela de primaria Midwich",
+    "es-MX": "Primaria Midwich",
+    "it": "Scuola elementare Midwich",
+    "pl": "Szkoła podstawowa Midwich",
+    "pt-BR": "Escola Primária de Midwich",
+    "tr": "Midwich İlköğretim Okulu"
+   },
+   "variants": {
+    "1": "Other/Midwich.gif"
+   }
+  },
+  {
+   "id": "rpd-east",
+   "realm": "Raccoon City",
+   "names": {
+    "en": "Raccoon City Police Station East Wing",
+    "de": "Ostflügel der Polizeistation von Raccoon City",
+    "fr": "Aile est du Commissariat de Raccoon City",
+    "es": "Ala este de la comisaría de Raccoon City",
+    "es-MX": "Ala este del departamento de policía de Raccoon City",
+    "it": "Ala est della Stazione di polizia di Raccoon City",
+    "pl": "Posterunek policji Raccoon City – wschodnie skrzydło",
+    "pt-BR": "Ala Leste da Delegacia de Raccoon City",
+    "tr": "Raccoon City Polis Karakolu Doğu Kanadı"
+   },
+   "variants": {
+    "1": "Raccoon City/Rpd East Wing.webp"
+   }
+  },
+  {
+   "id": "rpd-west",
+   "realm": "Raccoon City",
+   "names": {
+    "en": "Raccoon City Police Station West Wing",
+    "de": "Westflügel der Polizeistation von Raccoon City",
+    "fr": "Aile ouest du Commissariat de Raccoon City",
+    "es": "Ala oeste de la comisaría de Raccoon City",
+    "es-MX": "Ala oeste del departamento de policía de Raccoon City",
+    "it": "Ala ovest della Stazione di polizia di Raccoon City",
+    "pl": "Posterunek policji Raccoon City – zachodnie skrzydło",
+    "pt-BR": "Ala Oeste da Delegacia de Raccoon City",
+    "tr": "Raccoon City Polis Karakolu Batı Kanadı"
+   },
+   "variants": {
+    "1": "Raccoon City/Rpd West Wing.webp"
+   }
+  },
+  {
+   "id": "eyrie-of-crows",
+   "realm": "Forsaken Boneyard",
+   "names": {
+    "en": "Eyrie of Crows",
+    "de": "Krähenhorst",
+    "fr": "Aire de corbeaux",
+    "es": "Nido de cuervos",
+    "es-MX": "Aviario de cuervos",
+    "it": "Nido di corvi",
+    "pl": "Gniazdo kruków",
+    "pt-BR": "Ninho dos Corvos",
+    "tr": "Karga Yuvası"
+   },
+   "variants": {
+    "1": "Forsaken Boneyard/Eyrie of Crows.webp"
+   }
+  },
+  {
+   "id": "dead-sands",
+   "realm": "Forsaken Boneyard",
+   "names": {
+    "en": "Dead Sands",
+    "de": "Tote Sande",
+    "fr": "Sables morts",
+    "es": "Arenas muertas",
+    "es-MX": "Arenas mortales",
+    "it": "Sabbie morte",
+    "pl": "Martwe piaski",
+    "pt-BR": "Areias Mortas",
+    "tr": "Ölü Kumlar"
+   },
+   "variants": {
+    "1": "Forsaken Boneyard/Dead Sands.webp"
+   }
+  },
+  {
+   "id": "garden-of-joy",
+   "realm": "Withered Isle",
+   "names": {
+    "en": "Garden of Joy",
+    "de": "Garten der Freude",
+    "fr": "Jardin de la joie",
+    "es": "Jardín del Júbilo",
+    "es-MX": "Jardín de dicha",
+    "it": "Giardino di gioia",
+    "pl": "Ogród Radości",
+    "pt-BR": "Jardim da Alegria",
+    "tr": "Neşe Bahçeleri"
+   },
+   "variants": {
+    "1": "Withered Isle/Garden of Joy.webp"
+   }
+  },
+  {
+   "id": "greenville-square",
+   "realm": "Withered Isle",
+   "names": {
+    "en": "Greenville Square",
+    "de": "Hauptplatz von Greenville",
+    "fr": "Place de Greenville",
+    "es": "Plaza de Greenville",
+    "it": "Greenville Square",
+    "pl": "Plac Greenville",
+    "pt-BR": "Praça de Greenville",
+    "tr": "Greenville Meydanı"
+   },
+   "variants": {
+    "1": "Withered Isle/Greenville Square.webp"
+   }
+  },
+  {
+   "id": "freddy-fazbears-pizza",
+   "realm": "Withered Isle",
+   "names": {
+    "en": "Freddy Fazbear's Pizza",
+    "de": "Freddy Fazbear’s Pizza",
+    "fr": "Freddy Fazbear's Pizza",
+    "es": "Freddy Fazbear's Pizza",
+    "it": "Pizzeria Freddy Fazbear",
+    "pl": "Pizzeria Freddy Fazbear",
+    "pt-BR": "Pizzaria do Freddy Fazbear",
+    "tr": "Freddy Fazbear's Pizza"
+   },
+   "variants": {
+    "1": "Withered Isle/Freddy Fazbears Pizza.webp"
+   }
+  },
+  {
+   "id": "fallen-refuge",
+   "realm": "Withered Isle",
+   "names": {
+    "en": "Fallen Refuge",
+    "de": "Gefallene Zuflucht",
+    "fr": "Refuge perdu",
+    "es": "Refugio caído",
+    "it": "Rifugio caduto",
+    "pl": "Upadły azyl",
+    "pt-BR": "Refúgio Caído",
+    "tr": "Kayıp Sığınak"
+   },
+   "variants": {
+    "1": "Withered Isle/Fallen Refuge.webp"
+   }
+  },
+  {
+   "id": "shattered-square",
+   "realm": "The Decimated Borgo",
+   "names": {
+    "en": "The Shattered Square",
+    "de": "Der zerstörte Platz",
+    "fr": "La place dévastée",
+    "es": "La plaza desolada",
+    "es-MX": "El cuadrado roto",
+    "it": "La piazza distrutta",
+    "pl": "Roztrzaskany plac",
+    "pt-BR": "Praça Arrasada",
+    "tr": "Parçalanmış Meydan"
+   },
+   "variants": {
+    "1": "The Decimated Borgo/The Shattered Square.webp"
+   }
+  },
+  {
+   "id": "forgotten-ruins",
+   "realm": "The Decimated Borgo",
+   "names": {
+    "en": "Forgotten Ruins",
+    "de": "Vergessene Ruinen",
+    "fr": "Ruines oubliées",
+    "es": "Ruinas olvidadas",
+    "it": "Rovine dimenticate",
+    "pl": "Zapomniane Ruiny",
+    "pt-BR": "Ruínas Esquecidas",
+    "tr": "Unutulmuş Harabeler"
+   },
+   "variants": {
+    "1": "The Decimated Borgo/Forgotten Ruins.webp"
+   }
+  },
+  {
+   "id": "toba-landing",
+   "realm": "Dvarka Deepwood",
+   "names": {
+    "en": "Toba Landing",
+    "de": "Toba-Landeplatz",
+    "fr": "Site d'atterrissage de Toba",
+    "es": "Aterrizaje en Toba",
+    "es-MX": "Desembarco en Toba",
+    "it": "Approdo al lago Toba",
+    "pl": "Ziemie Toba",
+    "pt-BR": "Pouso do Lago Toba",
+    "tr": "Toba Çıkarması"
+   },
+   "variants": {
+    "1": "Dvarka Deepwood/Toba Landing.webp"
+   }
+  },
+  {
+   "id": "nostromo-wreckage",
+   "realm": "Dvarka Deepwood",
+   "names": {
+    "en": "Nostromo Wreckage",
+    "de": "Nostromo-Wrack",
+    "fr": "Épave du Nostromo",
+    "es": "Restos de la Nostromo",
+    "es-MX": "Ruinas de la Nostromo",
+    "it": "Relitto Nostromo",
+    "pl": "Wrak Nostromo",
+    "pt-BR": "Destroços da Nostromo",
+    "tr": "Nostromo Enkazı"
+   },
+   "variants": {
+    "1": "Dvarka Deepwood/Nostromo Wreckage.webp"
+   }
+  },
+  {
+   "id": "tricksters-delusion",
+   "realm": "Sleepless District",
+   "names": {
+    "en": "Trickster's Delusion",
+    "de": "Illusion des Tricksters",
+    "fr": "Illusion du Farceur",
+    "es": "Delirio del Traicionero",
+    "es-MX": "Delirio del Embaucador",
+    "it": "Illusione dell'Ingannatore",
+    "pl": "Urojenia Magika",
+    "pt-BR": "Desilusão do Trapaça",
+    "tr": "Dümenci'nin Yanılması"
+   },
+   "variants": {
+    "1": "Sleepless District/Trickster's Delusion.webp"
+   }
+  }
+ ]
+}

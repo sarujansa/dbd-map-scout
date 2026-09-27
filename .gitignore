@@ -1,0 +1,12 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# runtime files
+settings.json
+settings.json.tmp
+dbdmapscout.log
+diagnose.txt
+debug/

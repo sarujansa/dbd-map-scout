@@ -1,0 +1,137 @@
+# DbD Map Scout
+
+Map-Overlay für Dead by Daylight. Beim Match-Start wird der Map-Name automatisch erkannt und die passende Callout-Karte aus dem Ordner `maps/` eingeblendet. Die Karte liegt als eigenes, durchklickbares Fenster über dem Spiel.
+
+## Installation (einmalig)
+
+1. **Python installieren** (falls noch nicht vorhanden): <https://www.python.org/downloads/>, Version 3.12 oder neuer. Im Installer **„Add python.exe to PATH“** anhaken.
+2. Ordner entpacken, z. B. nach `C:\Tools\dbd-map-scout`.
+3. **`start.bat`** doppelklicken. Beim ersten Start wird eine eigene Python-Umgebung (`.venv`) angelegt und die Pakete werden installiert (ca. 1–2 Minuten, rund 250 MB). Danach startet das Programm direkt.
+
+In DBD unter **Einstellungen → Grafik** den Anzeigemodus **„Fenster-Vollbild“** verwenden. Im exklusiven Vollbild kann Windows kein Fenster über dem Spiel anzeigen.
+
+## Benutzung
+
+Programm starten und DBD spielen. Wenn beim Match-Start unten links der Map-Name erscheint (z. B. „KOHLELAGER / DAS MACMILLAN-ANWESEN“), wird die Karte automatisch eingeblendet.
+
+**Nach der Runde** verschwindet die Karte wieder. Erkannt wird das an:
+
+- dem Ergebnisbildschirm (Knopf „CONTINUE“/„FORTFAHREN“),
+- Lobby, Hauptmenü, Blutnetz und Shop (Währungsanzeige oben rechts),
+- dem Ladebildschirm der nächsten Runde,
+- einem geschlossenen DBD.
+
+**In Menüs pausiert das Overlay.** DBD zeigt den Mauszeiger nur in Menüs (ESC-Menü, Ergebnisbildschirm, Lobby). Ist er ein paar Sekunden lang über dem DBD-Fenster sichtbar, blendet sich die Karte aus. Verschwindet er wieder, kommt sie zurück. Ist der Mauszeiger insgesamt eine Minute lang in einem Menü sichtbar, gilt die Runde als beendet.
+
+**Rundentimer.** Mit dem Map-Banner startet ein Timer, der beim erkannten Rundenende stoppt. Er steht im Steuerfenster unter dem Map-Namen („Runde läuft: 07:32“, danach „Letzte Runde: 12:04“) und als kleiner Streifen unter der Karte im Overlay (abschaltbar im Tab Overlay). Als Endzeit zählt der erste Hinweis auf das Rundenende, z. B. das Erscheinen des Mauszeigers auf dem Ergebnisbildschirm, nicht erst der Moment, in dem die Erkennung sicher ist. Der Timer stoppt nur, wenn „Overlay ausblenden, sobald ich nicht mehr in der Runde bin“ an ist und eine Karte angezeigt wird. Sonst läuft er bis zum nächsten Map-Banner weiter.
+
+Im Tab **Erkennung** zeigt die Zeile „Rundenende-Erkennung: …“ jederzeit, was das Programm gerade sieht, z. B. „im Match · Mauszeiger verborgen“. `Strg+Alt+M` holt eine ausgeblendete Karte sofort zurück.
+
+Das Steuerfenster ist in Tabs aufgeteilt:
+
+| Tab | Inhalt |
+|---|---|
+| **Maps** | alle Karten nach Realm, Suche, Doppelklick zeigt eine Karte |
+| **Overlay** | Position (Vorgabe oder Schieberegler horizontal/vertikal, 0 % = links/oben, 100 % = rechts/unten), Grösse, Deckkraft, Anzeigeoptionen |
+| **Erkennung** | Automatik, Ausblenden nach der Runde, Pause in Menüs, Live-Status, Scans pro Sekunde, Spielsprache, Debug-Bilder, Diagnose |
+| **Server** | Serverregionen mit Ping, Regionen per hosts-Datei sperren oder freigeben (siehe unten) |
+| **Log** | Meldungen mit Kategorien *Erkennung*, *Overlay*, *System*, *Fehler*, einzeln ein-/ausblendbar |
+| **Einstellungen** | Dark Mode, Hotkeys ändern, Ordner öffnen |
+
+**Position „automatisch“:** Läuft DBD mit 16:9-Bild auf einem breiteren Monitor (z. B. 3440×1440 mit schwarzen Rändern), landet die Karte im linken schwarzen Rand und wird so skaliert, dass sie hineinpasst. Sonst erscheint sie oben links. Sobald du einen Positions-Regler bewegst oder die Karte mit der Maus verschiebst, gilt „eigene Position“. „Zurücksetzen“ stellt wieder „automatisch“ ein.
+
+Das Overlay ist ein eigenes, natives Windows-Fenster: immer im Vordergrund, durchklickbar, und es nimmt dem Spiel nie den Fokus weg.
+
+| Hotkey | Funktion |
+|---|---|
+| `Strg+Alt+M` | Overlay ein/aus |
+| `Strg+Alt+V` | Layout-Variante wechseln (z. B. Coal Tower ↔ Coal Tower II) |
+| `Strg+Alt+S` | Bildschirm scannen (falls die automatische Erkennung den Banner verpasst hat) |
+| `Strg+Alt+←` / `→` | vorherige / nächste Map |
+| `Strg+Alt+↑` / `↓` | Overlay grösser / kleiner |
+| `Strg+Alt+P` | Position ändern (Overlay mit der Maus ziehen, Mausrad = Grösse, nochmals drücken = fertig) |
+
+Hotkeys lassen sich unter **Einstellungen → Hotkeys** ändern (Format z. B. `ctrl+shift+f8`). Alle Einstellungen landen in `settings.json`.
+
+**Spielsprache:** Standardmässig werden englische und deutsche Map-Namen erkannt. Wenn DBD auf Französisch, Spanisch, Italienisch, Polnisch, Portugiesisch oder Türkisch läuft, die Sprache im Steuerfenster anhaken.
+
+## Serverregion wählen (wie „Make Your Choice“)
+
+Im Tab **Server** stehen alle Serverregionen von DBD (AWS GameLift) mit ihrem aktuellen Ping. Du hakst die Regionen an, auf denen du spielen willst, und drückst **Auswahl anwenden**. Alle anderen Regionen werden in der Windows-**hosts-Datei** gesperrt: Ihre Servernamen zeigen dann auf 0.0.0.0, DBD erreicht sie nicht und sucht Matches nur noch in den erlaubten Regionen. **Alles freigeben** entfernt die Sperren wieder.
+
+- **Administratorrechte:** Die hosts-Datei ist eine Windows-Systemdatei. Deshalb fragt Windows beim Anwenden und beim Freigeben nach. Nur dieser Schreibvorgang läuft mit Administratorrechten, das Programm selbst nicht.
+- **DBD danach neu starten.** Die Region wird beim Spielstart festgelegt.
+- **Was genau geschrieben wird:** Nur ein eigener, markierter Abschnitt („DbD Map Scout: server regions“). Vor der ersten Änderung wird die Originaldatei als `hosts.dbdmapscout-backup` daneben gesichert. Einträge von „Make Your Choice“ oder anderen Tools für dieselben Server werden beim Anwenden entfernt, weil sie die Auswahl sonst überschreiben würden. Das Programm fragt vorher nach.
+- **Ping:** Gemessen wird wie im Spiel über die UDP-Ping-Beacons von GameLift (Port 7770), notfalls per normalem Ping. Die Namen werden direkt beim DNS-Server aufgelöst, deshalb gibt es auch für gesperrte Regionen einen Wert. Gemessen wird nur, wenn der Tab offen ist oder du „Ping messen“ drückst.
+- **Grenzen:** Mit VPN unzuverlässig. Anders als der „Enforced“-Modus von Make Your Choice setzt das Programm keine Firewall-Regeln. DBD kann deshalb in seltenen Fällen trotzdem auf eine andere Region ausweichen, meist N. Virginia. Die Sperren bleiben aktiv, auch wenn das Programm geschlossen ist. Beim Start meldet das Log, wenn Regionen gesperrt sind.
+- **Nicht übernommen** aus Make Your Choice: Firewall-Modus, Mitschneiden des Netzwerkverkehrs („Connected to“, bräuchte dauerhaft Administratorrechte), eigener Splash-Screen und Trailer überspringen (verändern Spieldateien), Warteschlangen-Anzeige über den Fremddienst Dead by Queue.
+
+## So funktioniert die Erkennung
+
+1. Etwa 5× pro Sekunde wird nur der Bereich unten links des DBD-Fensters aufgenommen, wie bei einer Bildschirmaufnahme.
+2. Gesucht wird die **dünne Trennlinie** zwischen Map-Name und Realm. Sie ist ein sehr eindeutiges Merkmal und kostet nur wenige Millisekunden. Solange sie nicht zu sehen ist, läuft keine OCR.
+3. Ist sie da, werden die Textzeile darüber (Map-Name, auch zweizeilig) und darunter (Realm) genau ausgeschnitten. Das funktioniert unabhängig von Auflösung, UI-Skalierung und Monitorformat.
+4. Ein Texterkennungsmodell (PaddleOCR PP-OCRv4, läuft lokal) liefert pro Buchstabe Wahrscheinlichkeiten. Statt daraus Text zu raten, wird für **jeden bekannten Map-Namen berechnet, wie wahrscheinlich genau dieser Name ist**, zusammen mit dem Realm. Deshalb stören Hintergrund, Nebel und Apostrophe kaum, und „COAL TOWER“ lässt sich von „COAL TOWER II“ unterscheiden.
+5. Die Ergebnisse mehrerer Bilder werden kombiniert. Unbekannter Text (z. B. eine neue Map ohne Bild) wird nicht auf eine falsche Map abgebildet, sondern im Log gemeldet.
+
+Hinweis zu Varianten: Seit Patch 8.6.0 sind die II/III-Layouts (MacMillan II, Ormond II/III, Badham II–V) nur noch in Custom Games spielbar. Bei unsicherer Lesung wird deshalb leicht das Standard-Layout bevorzugt. `Strg+Alt+V` wechselt manuell.
+
+### Wie gut ist die Erkennung?
+
+Getestet mit echten DBD-Screenshots und mit nachgebauten Map-Bannern auf echten Spielhintergründen. Nachgebaut heisst: Roboto-Schrift, Geometrie von echten 4K-Screenshots abgemessen, EN/DE, Nebel, Schnee, Einblend-Animation.
+
+| Test | Ergebnis |
+|---|---|
+| echte Banner-Screenshots (2 Maps × 5 Auflösungen × 2 Hintergründe) | 20/20 richtig |
+| alle 56 Bilder × EN/DE, gemischte Auflösungen 720p–4K + Ultrawide | 112/112 richtige Map inkl. Layout |
+| dasselbe mit sehr unruhigen Hintergründen | 112/112 richtige Map, 1× falsches Layout (Badham II → I) |
+| Bildschirme ohne Banner (Lobby, Menüs, Gameplay, Endscreen) | 0 Fehlalarme bei 319 Bildern |
+| Banner mit unbekannten Map-Namen | 0 von 120 fälschlich einer Map zugeordnet |
+| Vergleich mit dem Ansatz von dbd-map-overlay (nachgebaut), 1440p, einzelnes Bild mit voll sichtbarem Banner | 55/56 statt 44/56, ca. 0,1 s statt 1,5–3 s pro Bild |
+
+Die synthetischen Tests ersetzen keinen Praxistest. Wenn eine Map in echten Runden nicht erkannt wird, helfen die Debug-Bilder (siehe unten) beim Nachschärfen.
+
+## Eigene / neue Karten
+
+- **Neues Bild ergänzen:** Datei in einen Unterordner von `maps/` legen, benannt nach dem Map-Namen, wie er im Spiel steht, z. B. `maps/Neuer Realm/Neue Map.png`. Das Programm erkennt sie dann automatisch (englischer Name bzw. der Name aus der Datei).
+- **Bild austauschen:** Datei in `maps/` ersetzen oder in `maps.json` den Pfad unter `variants` ändern.
+- **Zusätzliche Schreibweise:** in `maps.json` bei der Map `"aliases": ["ANDERER NAME"]` ergänzen.
+
+## Wenn etwas nicht klappt
+
+- **Karte ist nicht zu sehen:** Im Steuerfenster „Overlay testen“ drücken. Die Karte erscheint dann 10 Sekunden lang in der Bildschirmmitte. Bleibt sie unsichtbar, „Diagnose kopieren“ drücken und den Text weitergeben. Er enthält Fensterposition, Fensterstil und Z-Reihenfolge gegenüber DBD.
+- **Map wird nicht erkannt:** Im Steuerfenster „Debug-Bilder speichern“ aktivieren und ein Match starten. Im Ordner `debug/` landen dann die Bilder, die das Programm gesehen hat, samt gelesenem Text.
+- **Karte verschwindet nach der Runde nicht:** Im Tab Erkennung auf die Zeile „Rundenende-Erkennung“ schauen. Direkt danach „Diagnose kopieren“ drücken: Der Text enthält die letzten Prüfungen (was bei „CONTINUE“, Währung und Ladebalken gelesen wurde und ob der Mauszeiger sichtbar war). Mit „Debug-Bilder speichern“ landen während der Runde außerdem verkleinerte Bildschirmfotos in `debug/frames/`.
+- **Eigene Screenshots testen:** Screenshots mit sichtbarem Map-Banner (Win+Druck) auf `screenshot_testen.bat` ziehen. Das Fenster zeigt dann, was erkannt wird.
+- **Fehlermeldungen sehen:** `start_debug.bat` startet mit Konsole. Ausserdem gibt es die Protokolldatei `dbdmapscout.log`.
+- **„Aufnahme ist schwarz“:** DBD auf „Fenster-Vollbild“ stellen. Bei aktiviertem Windows-HDR kann die Aufnahme ebenfalls Probleme machen.
+- **Hotkey geht nicht:** Das Log meldet, wenn ein anderes Programm die Kombination belegt. In `settings.json` eine andere wählen.
+
+## Regeln / Fair Play
+
+Das Programm wurde bewusst so gebaut, dass es **nicht mit dem Spiel interagiert**:
+
+- keine Tastatur- oder Mauseingaben ans Spiel, keine Automatisierung von Spielaktionen,
+- kein Zugriff auf den Spielprozess (kein Speicherlesen, keine Injection, nicht einmal ein Prozess-Handle), keine Netzwerkverbindung zum Spiel,
+- keine Spieldateien werden gelesen oder verändert,
+- gelesen werden nur Bildschirmpixel (wie bei OBS/Discord) und ob der Windows-Mauszeiger gerade sichtbar ist (dieselbe Systeminfo, mit der OBS den Zeiger in Aufnahmen zeichnet). Genutzt wird nur der Map-Name, den das Spiel allen anzeigt,
+- angezeigt wird eine statische Community-Karte, keine versteckten Informationen (keine Generatoren, keine Positionen),
+- Map-Erkennung und Overlay bauen keine Internetverbindung auf, die Texterkennung läuft komplett lokal. Nur der Tab **Server** misst auf Wunsch den Ping zu den GameLift-Servern von AWS.
+- Der Tab **Server** verändert nicht das Spiel, sondern die Windows-hosts-Datei. Das ist eine Systemeinstellung, die für den ganzen PC gilt und jederzeit mit „Alles freigeben“ rückgängig gemacht werden kann. BHVR hat Region-Tools wie „Make Your Choice“ weder offiziell erlaubt noch verboten. Auch hier gilt: Nutzung auf eigene Verantwortung.
+
+BHVRs [Game Rules](https://forums.bhvr.com/dead-by-daylight/kb/articles/139-game-rules) verbieten Drittsoftware, die einen „unfair advantage that wasn't intended by the game“ verschafft, sofern sie nicht freigegeben ist. Eine offizielle Freigabe für Map-Overlays gibt es nicht. Die Entscheidung liegt bei BHVR, Nutzung auf eigene Verantwortung. In Turnieren oder Ligen gelten deren eigene Regeln.
+
+## Aufbau
+
+```
+start.bat               Start (richtet beim ersten Mal alles ein)
+start_debug.bat         Start mit Konsole
+screenshot_testen.bat   Screenshots per Drag & Drop testen
+maps/                   Kartenbilder
+maps.json               Zuordnung Bild ↔ Ingame-Namen (EN/DE/FR/ES/IT/PL/PT/TR), Realm, Varianten
+models/                 OCR-Modelle (PP-OCRv4, ONNX)
+dbdmapscout/            Programmcode (Python); hostsedit.py schreibt die hosts-Datei (einziger Teil mit Adminrechten)
+tests/                  Selbsttests (optional: pip install pytest, dann python -m pytest tests)
+```
+
+Lizenzen und Quellen: siehe `THIRD_PARTY.md`.
