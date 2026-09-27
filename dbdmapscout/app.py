@@ -22,6 +22,7 @@ from .config import Settings
 from .hotkeys import HotkeyThread, parse, pretty
 from .overlay import load_frames
 from .overlay_win32 import make_overlay
+from .roundtimer import RoundTimer
 from .textnorm import fmt_duration, roman
 from .worker import DetectionWorker
 
@@ -57,8 +58,7 @@ class App:
         self.hidden_after_match = False  # match over -> hidden until the next map
         self.menu_paused = False         # a DBD menu is open (pointer visible) -> hidden for now
         self._watch_gen = 0
-        self.round_start = None          # round timer: map banner seen (time.time())
-        self.round_end = None            # round timer: match over (None = still running)
+        self.round = RoundTimer()        # runs while a map is on display
         self.game = None
         self._game_checked = 0.0
         self._save_job = None
@@ -580,7 +580,7 @@ class App:
             return
 
     # ============================================================ actions
-    def show_map(self, map_id: str, variant: int, source: str, detail: str = ""):
+    def show_map(self, map_id: str, variant: int, source: str, detail: str = "", keep_timer: bool = False):
         m = self.catalog.maps.get(map_id)
         if m is None:
             return
@@ -593,9 +593,12 @@ class App:
         except Exception as e:
             self._log(f"Bild konnte nicht geladen werden: {path} ({e})", "Fehler")
             return
+        was_on = self._map_on()
         self.current = (map_id, shown)
         self.source = source
         self.overlay.set_map(path, m.label(shown))
+        if not was_on and not keep_timer:
+            self._round_started(time.time())     # map appears -> timer from zero (a switch while on keeps it)
         self.user_visible = True
         self.hidden_after_match = False
         self.menu_paused = False
@@ -618,6 +621,7 @@ class App:
         if not self.overlay.has_map():
             self._log("Noch keine Map gewählt.", "Overlay")
             return
+        was_on = self._map_on()
         if self.hidden_after_match or self.menu_paused:
             # hidden automatically -> the user wants to see it now; watch again as if picked by hand
             self.user_visible = True
@@ -625,6 +629,10 @@ class App:
             self._watch("manual")
         else:
             self.user_visible = not self.user_visible
+        if self._map_on() and not was_on:
+            self._round_started(time.time())
+        elif was_on and not self._map_on():
+            self._round_ended(time.time())
         self._update_toggle_text()
         self._log("Overlay eingeblendet." if self.user_visible else "Overlay ausgeblendet.", "Overlay")
         self._tick_overlay(reschedule=False)
@@ -634,6 +642,10 @@ class App:
         self._watch_gen += 1
         self.worker.watch_gen = (self._watch_gen, source)
         self.worker.map_on_screen = True
+
+    def _map_on(self):
+        """A map is on display for this round (a menu pause or another active window only hides it briefly)."""
+        return self.overlay.has_map() and self.user_visible and not self.hidden_after_match
 
     def _update_toggle_text(self):
         on = self.user_visible and not self.hidden_after_match and not self.menu_paused
@@ -756,7 +768,6 @@ class App:
             self._set_status(d["text"])
         elif k == "banner":
             self._log("Map-Banner gefunden, lese …", "Erkennung")
-            self._round_started(d.get("t") or time.time())
         elif k == "detected":
             m = self.catalog.maps.get(d["map_id"])
             if not m:
@@ -767,8 +778,10 @@ class App:
             detail = f"automatisch erkannt ({d['probability']:.0%})"
             if len(m.variants) > 1:
                 detail += f" · Layout {roman(d['variant'])} ({vp:.0%})"
+            if self.round.detected(time.time()):
+                self._log("Rundentimer gestartet.", "Erkennung")
             if not same:
-                self.show_map(d["map_id"], d["variant"], "auto", detail)
+                self.show_map(d["map_id"], d["variant"], "auto", detail, keep_timer=True)
                 self._log(f"Erkannt: {m.label(d['variant'])} – gelesen „{d['name_text']}“ / „{d['realm_text']}“",
                           "Erkennung")
                 if len(m.variants) > 1 and vp < 0.8:
@@ -811,29 +824,23 @@ class App:
             messagebox.showerror("DbD Map Scout", "Die Erkennung ist abgestürzt:\n\n" + d["text"][-1500:])
 
     # ---------------------------------------------------------- round timer
-    ROUND_RESTART = 90.0      # a banner restarts a running timer only after this long (same banner seen again)
-
     def _round_started(self, t):
-        running = self.round_start is not None and self.round_end is None
-        if running and t - self.round_start < self.ROUND_RESTART:
-            return
-        self.round_start, self.round_end = t, None
+        self.round.start(t)
         self._log("Rundentimer gestartet.", "Erkennung")
 
     def _round_ended(self, t):
-        if self.round_start is None or self.round_end is not None:
-            return
-        self.round_end = max(self.round_start, t)
-        self._log(f"Rundentimer gestoppt: {fmt_duration(self.round_end - self.round_start)}.", "Erkennung")
+        if self.round.stop(t):
+            self._log(f"Rundentimer gestoppt: {fmt_duration(self.round.elapsed(t))}.", "Erkennung")
 
     def _tick_timer(self):
-        if self.round_start is None:
+        r = self.round
+        if r.start_t is None:
             text, overlay_text = "", ""
-        elif self.round_end is None:
-            text = overlay_text = fmt_duration(time.time() - self.round_start)
-            text = f"Runde läuft: {text}"
+        elif r.running:
+            overlay_text = fmt_duration(r.elapsed(time.time()))
+            text = f"Runde läuft: {overlay_text}"
         else:
-            text, overlay_text = f"Letzte Runde: {fmt_duration(self.round_end - self.round_start)}", ""
+            text, overlay_text = f"Letzte Runde: {fmt_duration(r.elapsed(0))}", ""
         if text != self.timer_var.get():
             self.timer_var.set(text)
         self.overlay.set_timer(overlay_text if self.settings["overlay"].get("show_timer", True) else "")
