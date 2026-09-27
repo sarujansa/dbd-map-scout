@@ -395,8 +395,9 @@ class App:
             self._conn_last = key
             if srv:
                 note = "" if srv["region"] in self.srv_sel else " – nicht in deiner Regionsauswahl"
-                self._log(f"Verbunden mit Spielserver: {regions.NAMES.get(srv['region'], srv['region'])} "
-                          f"({srv['ip']}:{srv['port']}){note}.", "System")
+                # region only: the log file is kept on disk, the server address is shown live in the window only
+                self._log(f"Verbunden mit Spielserver: {regions.NAMES.get(srv['region'], srv['region'])}{note}.",
+                          "System")
         text = self.conn.text()
         if self._conn_busy:
             text = "Warte auf Windows (Administratorrechte) …"
