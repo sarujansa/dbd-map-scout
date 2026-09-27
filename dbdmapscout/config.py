@@ -15,6 +15,7 @@ DEFAULTS = {
     "scans_per_second": 5,
     "hide_after_match": True,
     "pause_in_menus": True,             # hide the overlay while a DBD menu is open (mouse pointer visible)
+    "show_connection": False,           # Server tab: show the connected game server (elevated netwatch helper)
     "overlay": {
         "anchor": "auto",              # auto | top-left | top-right | bottom-left | bottom-right | custom
                                         # auto = in the black bar left of a 16:9 picture, else top-left
@@ -26,7 +27,7 @@ DEFAULTS = {
         "opacity": 0.85,
         "only_when_game_focused": True,
         "show_caption": False,          # the map pictures already carry their name
-        "show_timer": True,             # round timer below the map (banner -> end of match)
+        "show_timer": True,             # round timer below the map (map shown -> map gone)
         "transparent": True,            # transparent area around the map (off = dark rectangle)
     },
     "hotkeys": {

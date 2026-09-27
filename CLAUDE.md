@@ -1,6 +1,6 @@
 # DbD Map Scout – Projektkontext für Claude Code
 
-Map-Overlay für Dead by Daylight (Windows). Erkennt beim Match-Start den Map-Namen per OCR und blendet die passende Callout-Karte aus `maps/` als klickdurchlässiges Overlay ein. Außerdem: Ausblenden nach der Runde bzw. Pause in Menüs, und ein Tab „Server“ zur Regionswahl über die hosts-Datei (Idee von „Make Your Choice“). Sprache der Oberfläche, Logs und Doku: **Deutsch**. Code und Kommentare: Englisch.
+Map-Overlay für Dead by Daylight (Windows). Erkennt beim Match-Start den Map-Namen per OCR und blendet die passende Callout-Karte aus `maps/` als klickdurchlässiges Overlay ein. Außerdem: Ausblenden nach der Runde bzw. Pause in Menüs, und ein Tab „Server“ zur Regionswahl über die hosts-Datei und Anzeige des verbundenen Spielservers (Ideen von „Make Your Choice“). Sprache der Oberfläche, Logs und Doku: **Deutsch**. Code und Kommentare: Englisch.
 
 ## Harte Regeln (nicht verhandelbar)
 
@@ -9,8 +9,8 @@ Das Programm muss „regelkonform“ zu Dead by Daylight bleiben. Konkret:
 - **Keine Eingaben ans Spiel** (kein SendInput, keine Tastatur-/Maus-Simulation, keine Automatisierung).
 - **Kein Zugriff auf den Spielprozess** – nicht einmal `OpenProcess`, kein Speicherlesen, keine Injection, keine Modul-/Handle-Abfragen mit PID.
 - **Keine Spieldateien** lesen oder schreiben (auch nicht `GameUserSettings.ini`, Splash-Screen, Movies).
-- Erlaubt sind nur: **Bildschirmpixel** (mss/BitBlt), Fensterinfos (Titel, Klasse `UnrealWindow`, Position über EnumWindows), **Mauszeiger-Status** (`GetCursorInfo`, wie OBS) und die **Windows-hosts-Datei** (nur Tab „Server“, nur GameLift-Namen).
-- Map-Erkennung und Overlay bauen **keine Internetverbindung** auf; nur der Server-Tab pingt AWS-GameLift (UDP 7770 / ICMP) und löst DNS auf.
+- Erlaubt sind nur: **Bildschirmpixel** (mss/BitBlt), Fensterinfos (Titel, Klasse `UnrealWindow`, Position über EnumWindows), **Mauszeiger-Status** (`GetCursorInfo`, wie OBS), die **Windows-hosts-Datei** (nur Tab „Server“, nur GameLift-Namen) und **Paketköpfe des Netzwerkverkehrs** (nur Tab „Server“, Anzeige „Verbunden mit“; vom Nutzer ausdrücklich gewünscht, wie in Make Your Choice). Beim Mitschnitt: nur IPv4/UDP-Kopffelder (Adressen, Ports) lesen, **nie Paketinhalte**, nichts senden, nichts speichern außer der Ergebnisdatei, kein Treiber (Raw-Socket `SIO_RCVALL`), keine Zuordnung über die PID des Spiels.
+- Map-Erkennung und Overlay bauen **keine Internetverbindung** auf; nur der Server-Tab pingt AWS-GameLift (UDP 7770 / ICMP) und löst DNS auf (auch Reverse-DNS der Spielserver-Adresse).
 - Neue Features, die gegen diese Regeln verstoßen würden: nicht umsetzen, sondern nachfragen.
 
 ## Setup des Nutzers (wichtig für Tests und Schwellenwerte)
@@ -32,7 +32,7 @@ start_debug.bat           :: mit Konsole
 .venv\Scripts\python -m pytest -q tests
 ```
 
-- Tests immer laufen lassen nach Änderungen an `detector.py`, `matchend.py`, `hostsedit.py`, `regions.py`.
+- Tests immer laufen lassen nach Änderungen an `detector.py`, `matchend.py`, `hostsedit.py`, `regions.py`, `netwatch.py`, `connwatch.py`, `roundtimer.py`.
 - Tests dürfen **niemals die echte hosts-Datei** anfassen. `hostsedit.hosts_path()` ignoriert die Test-Variable `DBDMS_HOSTS_FILE` unter Windows absichtlich (Sicherheit des Admin-Helfers) – Schreibtests laufen daher nur über `hostsedit.build()` / `apply_job` mit reinen Text-/Temp-Dateien bzw. unter Linux/CI. Nicht „reparieren“.
 - `settings.json`, `dbdmapscout.log`, `diagnose.txt`, `debug/` sind Laufzeitdateien, nicht committen.
 
@@ -45,12 +45,15 @@ start_debug.bat           :: mit Konsole
 | `worker.py` | Hintergrund-Thread: Aufnahme → Banner-Erkennung → Rundenende; postet Events (`detected`, `menu`, `match_end`, `watch_info`, `warn`, …) |
 | `detector.py` | Banner: Trennlinie finden → Text ausschneiden → OCR-Scoring gegen Katalog → `Accumulator`. Rundenende: `OutOfMatchWatcher.observe()` (CONTINUE, Währung, Ladebalken) |
 | `matchend.py` | `MatchEndTracker` – reine Logik (testbar): Menü-Pause per Mauszeiger, Rundenende-Latch, Scharfschalten bei manueller Map |
+| `roundtimer.py` | `RoundTimer` – reine Logik: läuft, solange eine Karte eingeblendet ist; neue Map-Erkennung startet neu (außer dasselbe Banner < 90 s) |
 | `ocr.py` | PP-OCRv4-Erkennungsnetz (ONNX) + `LexiconScorer` (CTC-Forward über alle Kandidaten) |
 | `catalog.py`, `maps.json`, `textnorm.py` | Map-/Realm-Namen (9 Sprachen), Varianten, Bildpfade |
 | `capture.py` | DBD-Fenster finden, mss-Aufnahme, `cursor_state()`; öffnet nie den Spielprozess |
 | `overlay_win32.py` / `overlay.py` | natives Layered-Window-Overlay (WS_EX_TRANSPARENT/NOACTIVATE) / Tk-Fallback |
 | `regions.py` | Server-Tab: Regionstabelle (Namen), Ping (UDP-Beacon, DNS ohne hosts), `run_job()` startet Helfer per UAC |
-| `hostsedit.py` | **einziger Teil mit Adminrechten**: schreibt nur den eigenen markierten Abschnitt der hosts-Datei. Nur Standardbibliothek, gestartet mit `pythonw -I -S`. Erlaubt nur Namen aus `MANAGED` (fest codiert) |
+| `hostsedit.py` | Admin-Helfer (UAC): schreibt nur den eigenen markierten Abschnitt der hosts-Datei. Nur Standardbibliothek, gestartet mit `pythonw -I -S`. Erlaubt nur Namen aus `MANAGED` (fest codiert) |
+| `netwatch.py` | Admin-Teil „Verbunden mit“: Raw-Socket, zählt UDP-Pakete je öffentlicher Gegenstelle, schreibt jede Sekunde die aktivsten in eine Ergebnisdatei. Nur Standardbibliothek. Läuft als Thread, wenn das Programm schon Admin ist, sonst als Helfer per UAC (`pythonw -I -S`). Beendet sich, wenn die Steuerdatei fehlt, „stop“ sagt oder 20 s nicht aufgefrischt wurde |
+| `connwatch.py` | startet `netwatch`, liest die Ergebnisdatei, wählt den Spielserver (≥ 10 Pakete/s, Reverse-DNS = AWS EC2) und bestimmt die Region aus dem DNS-Namen |
 | `fullscan.py`, `hotkeys.py`, `diagnose.py`, `theme.py`, `config.py` | Vollbild-Scan, globale Hotkeys, Diagnose-Text, Dark Mode, Einstellungen (+ Migrationen, `SETTINGS_VERSION`) |
 
 ## Wichtige Designentscheidungen (nicht ohne Grund ändern)
@@ -64,7 +67,7 @@ start_debug.bat           :: mit Konsole
   - Eigenes Overlay wird vor jeder Auswertung aus dem Bild geschwärzt (`worker._mask_overlay`).
 - Events mit `gen` (Map-Generation) – veraltete `menu`/`match_end` für eine alte Map werden ignoriert.
 - hosts-Datei: latin-1 lesen/schreiben (byte-genau), nur an LF splitten, Backup `hosts.dbdmapscout-backup` vor der ersten Änderung, Fremdeinträge (Make Your Choice) werden ersetzt. Ergebnisdatei wird vom normalen Prozess vorab angelegt (sonst nach Admin-Schreiben nicht lesbar).
-- Bewusst **nicht** umgesetzt: Firewall-Modus, Netzwerk-Mitschnitt („Connected to“), Spieldatei-Änderungen, Dead-by-Queue-API.
+- Bewusst **nicht** umgesetzt: Firewall-Modus, Spieldatei-Änderungen, Dead-by-Queue-API. („Verbunden mit“ per Paketköpfen ist seit 1.5.0 drin, auf Wunsch des Nutzers.)
 - Make Your Choice ist GPL-3.0: **keinen Code daraus übernehmen**, nur eigene Umsetzungen. Karten-/Realm-Namen stammen aus LucaFontanot/dbd-map-overlay (Apache-2.0), siehe `THIRD_PARTY.md`.
 
 ## Fehlersuche mit echten Daten

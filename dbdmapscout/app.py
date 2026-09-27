@@ -19,6 +19,7 @@ from . import __version__, regions, theme
 from .capture import IS_WIN, describe_window, find_game_window, foreground_root, is_game_window
 from .catalog import Catalog
 from .config import Settings
+from .connwatch import ConnectionWatch
 from .hotkeys import HotkeyThread, parse, pretty
 from .overlay import load_frames
 from .overlay_win32 import make_overlay
@@ -72,6 +73,10 @@ class App:
         self.srv_state = {}              # result of regions.current_state()
         self._srv_busy = False
         self._srv_last_ping = 0.0
+        self.conn = ConnectionWatch()      # "Verbunden mit": which game server DBD talks to (needs admin rights)
+        self._conn_busy = False
+        self._conn_next = 0.0
+        self._conn_last = None
 
         self.overlay = make_overlay(self.root, prefer_native=self.settings["overlay"].get("native_window", True))
         self.overlay.game_hwnd = lambda: self.game.hwnd if self.game else None
@@ -90,6 +95,8 @@ class App:
         self._log(f"Bereit. {len(self.catalog.maps)} Maps geladen, Spielsprachen: "
                   f"{', '.join(self.settings['languages'])}.", "System")
         self._srv_refresh(log_summary=True)
+        if self.settings.get("show_connection"):
+            self.root.after(1500, self._conn_start)
         if not IS_WIN and not simulate:
             self._log("Kein Windows: Fenstersuche, Hotkeys und Click-Through sind nur unter Windows aktiv.", "System")
 
@@ -118,6 +125,8 @@ class App:
         ttk.Label(info, textvariable=self.detail_var, style="Dim.TLabel", wraplength=320).pack(anchor="w")
         self.timer_var = tk.StringVar(value="")
         ttk.Label(info, textvariable=self.timer_var).pack(anchor="w")
+        self.conn_var = tk.StringVar(value="")
+        ttk.Label(info, textvariable=self.conn_var).pack(anchor="w")
 
         btns = ttk.Frame(self.root)
         btns.pack(fill="x", padx=10, pady=(2, 6))
@@ -314,12 +323,87 @@ class App:
         self.srv_btns[2].pack(side="left")
         self.srv_status = tk.StringVar(value="")
         ttk.Label(f, textvariable=self.srv_status, wraplength=440).pack(anchor="w", pady=(6, 0))
+        conn = ttk.Frame(f)
+        conn.pack(fill="x", pady=(8, 0))
+        self.conn_show_var = tk.BooleanVar(value=bool(self.settings.get("show_connection")))
+        ttk.Checkbutton(conn, text="Verbundenen Spielserver anzeigen (Administratorrechte)",
+                        variable=self.conn_show_var, command=self._conn_toggled).pack(anchor="w")
+        self.conn_tab_var = tk.StringVar(value="")
+        ttk.Label(conn, textvariable=self.conn_tab_var, style="Big.TLabel").pack(anchor="w")
         ttk.Label(f, text="Windows fragt beim Anwenden nach Administratorrechten. Danach DBD neu starten. "
                           "Mit VPN unzuverlässig. BHVR hat solche Region-Tools weder erlaubt noch verboten – "
                           "Nutzung auf eigene Verantwortung.", style="Dim.TLabel", wraplength=440).pack(
             anchor="w", pady=(4, 0))
         self._srv_render()
         return f
+
+    # ---------------------------------------------------------- connected server
+    def _conn_toggled(self):
+        on = bool(self.conn_show_var.get())
+        self.settings.set("show_connection", on)
+        self._save_soon()
+        if on:
+            self._conn_start()
+        else:
+            self.conn.stop()
+            self._log("Anzeige des Spielservers beendet.", "System")
+            self._conn_tick(force=True)
+
+    def _conn_start(self):
+        if self.conn.running or self._conn_busy:
+            return
+        self._conn_busy = True
+        self.conn_tab_var.set("Warte auf Windows (Administratorrechte) …")
+        hwnd = self._root_hwnd()
+
+        def work():
+            try:
+                err = self.conn.start(hwnd)
+            except Exception as e:
+                err = {"error": f"{type(e).__name__}: {e}"}
+            self.events.put(("conn_started", err))
+        threading.Thread(target=work, daemon=True, name="netwatch").start()
+
+    def _conn_started(self, err):
+        self._conn_busy = False
+        if not err and not self.conn_show_var.get():      # unticked while Windows was asking
+            self.conn.stop()
+        elif err:
+            self._log(f"Spielserver-Anzeige: {err.get('error', 'Fehler')}", "Fehler")
+            self.conn.error = err.get("error", "")
+            if err.get("cancelled") or not IS_WIN:
+                self.conn_show_var.set(False)
+                self.settings.set("show_connection", False)
+                self._save_soon()
+                self.conn.error = ""
+        else:
+            self._log("Spielserver-Anzeige läuft (liest nur Paketköpfe, keine Inhalte).", "System")
+        self._conn_tick(force=True)
+
+    def _conn_tick(self, force=False):
+        now = time.time()
+        if not force and now < self._conn_next:
+            return
+        self._conn_next = now + 1.0
+        was_running = self.conn.running
+        self.conn.poll(now)
+        if was_running and not self.conn.running and self.conn.error:
+            self._log(f"Spielserver-Anzeige beendet: {self.conn.error}", "Fehler")
+        srv = self.conn.server
+        key = (srv["ip"], srv["region"]) if srv else None
+        if key != self._conn_last:
+            self._conn_last = key
+            if srv:
+                note = "" if srv["region"] in self.srv_sel else " – nicht in deiner Regionsauswahl"
+                self._log(f"Verbunden mit Spielserver: {regions.NAMES.get(srv['region'], srv['region'])} "
+                          f"({srv['ip']}:{srv['port']}){note}.", "System")
+        text = self.conn.text()
+        if self._conn_busy:
+            text = "Warte auf Windows (Administratorrechte) …"
+        self.conn_tab_var.set(f"Verbunden mit: {text}" if text and self.conn.running else text)
+        main = f"Verbunden mit: {text}" if self.conn.running else ""
+        if main != self.conn_var.get():
+            self.conn_var.set(main)
 
     def _srv_click(self, e):
         t = self.srv_tree
@@ -746,6 +830,8 @@ class App:
                                   "Fehler")
                         self.srv_status.set("Achtung: Firewall-Regeln von Make Your Choice aktiv (siehe Log).  "
                                             + self.srv_status.get())
+                elif isinstance(ev, tuple) and ev[0] == "conn_started":
+                    self._conn_started(ev[1])
                 elif isinstance(ev, tuple) and ev[0] == "srv_job":
                     self._srv_job_done(ev[1], ev[2])
                 else:
@@ -934,6 +1020,10 @@ class App:
             self._place_overlay()
         except Exception:
             self._report_once("overlay", traceback.format_exc())
+        try:
+            self._conn_tick()
+        except Exception:
+            self._report_once("verbindung", traceback.format_exc())
         try:
             status = f"Rundenende-Erkennung: {self.worker.watch_status}"
             if status != self.watch_var.get():
@@ -1261,6 +1351,7 @@ class App:
             if self.root.state() == "normal":
                 self.settings.set("window_geometry", self.root.geometry())
             self.settings.save()
+            self.conn.stop()
             self.worker.stop()
             self.hotkeys.stop()
             self.worker.join(timeout=4)      # let a running OCR call finish cleanly
