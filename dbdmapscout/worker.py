@@ -1,0 +1,347 @@
+"""Background thread: capture -> detect -> events for the UI thread."""
+from __future__ import annotations
+
+import collections
+import logging
+import os
+import queue
+import threading
+import time
+import traceback
+from dataclasses import dataclass
+
+import cv2
+
+from .capture import ImageSource, ScreenGrabber, cursor_state, find_game_window, foreground_root
+from .detector import ROI, Accumulator, BannerReader, OutOfMatchWatcher
+from .matchend import MatchEndTracker, Signals
+from .ocr import Recognizer
+
+log = logging.getLogger("dbdmapscout")
+END_CHECK_INTERVAL = 0.5          # seconds between two looks for result screen / lobby / loading screen
+
+
+@dataclass
+class Event:
+    kind: str          # status | detected | unknown | banner | menu | match_end | watch_info | warn | scan_result | error
+    data: dict
+
+
+class DetectionWorker(threading.Thread):
+    def __init__(self, root_dir: str, settings, catalog, events: queue.Queue, simulate: str | None = None):
+        super().__init__(daemon=True, name="detector")
+        self.root_dir = root_dir
+        self.settings = settings
+        self.catalog = catalog
+        self.events = events
+        self.simulate = simulate
+        self.commands: queue.Queue = queue.Queue()
+        self.running = True
+        self.map_on_screen = False       # set by the UI: a map is displayed (not hidden after a match)
+        self.watch_gen = None            # set by the UI: (number, source) of the map on display
+        self.overlay_rect = None         # set by the UI: overlay position on screen (x, y, w, h) or None
+        self.watch_status = "keine Map angezeigt"
+        self.end_history = collections.deque(maxlen=80)     # for the diagnosis
+        self._scanner = None
+        self._reported = set()
+        self._last_frame_save = 0.0
+
+    # ------------------------------------------------------------- helpers
+    def post(self, kind, **data):
+        self.events.put(Event(kind, data))
+
+    def stop(self):
+        self.running = False
+        self.commands.put(("stop",))
+
+    def request_scan(self):
+        self.commands.put(("scan",))
+
+    def set_catalog(self, catalog):
+        self.commands.put(("catalog", catalog))
+
+    def _report(self, key, text):
+        """An unexpected error: full text to the log file, one line to the UI (once per kind)."""
+        log.error(text)
+        if key not in self._reported:
+            self._reported.add(key)
+            last = text.strip().splitlines()[-1] if text.strip() else key
+            self.post("warn", text=f"{key}: {last}")
+
+    # ---------------------------------------------------------------- loop
+    def run(self):
+        try:
+            self._run()
+        except Exception:
+            self.post("error", text=traceback.format_exc())
+
+    def _run(self):
+        models = os.path.join(self.root_dir, "models")
+        rec = Recognizer(os.path.join(models, "ch_PP-OCRv4_rec_infer.onnx"),
+                         threads=self.settings.get("ocr_threads", 2))
+        reader = BannerReader(rec, self.catalog)
+        acc = Accumulator()
+        out_of_match = OutOfMatchWatcher(rec)
+        source = ImageSource(self.simulate) if self.simulate else None
+        grabber = None if source else ScreenGrabber()
+
+        window, window_checked = None, 0.0
+        session, last_seen, session_frames = False, 0.0, []
+        tracker = MatchEndTracker()
+        tracker_gen = None
+        last_end_check = 0.0
+        last_hist = 0.0
+        last_status = None
+        black_since = None
+
+        while self.running:
+            tick = time.time()
+            # --------------------------------------------------- commands
+            try:
+                while True:
+                    cmd = self.commands.get_nowait()
+                    if cmd[0] == "stop":
+                        return
+                    if cmd[0] == "catalog":
+                        self.catalog = cmd[1]
+                        reader = BannerReader(rec, self.catalog)
+                        acc.reset()
+                        if self._scanner:
+                            self._scanner = None
+                    if cmd[0] == "scan":
+                        self._manual_scan(rec, grabber, source, window)
+            except queue.Empty:
+                pass
+
+            # --------------------------------------------- where is DBD?
+            if source is None and tick - window_checked > 1.5:
+                window = find_game_window()
+                window_checked = tick
+            if source is not None:
+                frame = source.current()
+                if frame is None:
+                    time.sleep(0.5)
+                    continue
+                fh, fw = frame.shape[:2]
+                status = f"Simulation: {os.path.basename(self.simulate)}"
+                grab = lambda box: frame[box[1]:box[1] + box[3], box[0]:box[0] + box[2]]
+                origin = (0, 0)
+            else:
+                if window is not None and window.minimized:
+                    self._status("DBD ist minimiert", last_status)
+                    last_status = "DBD ist minimiert"
+                    time.sleep(0.5)
+                    continue
+                if window is not None and window.width > 100 and window.height > 100:
+                    origin = (window.left, window.top)
+                    fw, fh = window.width, window.height
+                    status = f"DBD gefunden ({fw}×{fh}) – warte auf Map-Banner"
+                else:
+                    ml, mt, mw, mh = grabber.primary_monitor()
+                    origin, fw, fh = (ml, mt), mw, mh
+                    status = "DBD-Fenster nicht gefunden – beobachte Hauptbildschirm"
+                grab = lambda box: grabber.grab(origin[0] + box[0], origin[1] + box[1], box[2], box[3])
+
+            if not self.settings.get("auto_detect", True):
+                status = "Automatische Erkennung ist aus"
+            if status != last_status:
+                self._status(status, last_status)
+                last_status = status
+            sep = None
+            if self.settings.get("auto_detect", True):
+                # ------------------------------------------------ banner search
+                box = (int(ROI[0] * fw), int(ROI[1] * fh), int((ROI[2] - ROI[0]) * fw), int((ROI[3] - ROI[1]) * fh))
+                try:
+                    img = grab(box)
+                except Exception as e:           # e.g. window moved off-screen
+                    warn = f"Bildschirmaufnahme fehlgeschlagen: {e}"
+                    self._status(warn, last_status)
+                    last_status = warn
+                    time.sleep(1.0)
+                    continue
+                if img.size and float(img.mean()) < 1.0 and window is not None:
+                    black_since = black_since or tick
+                    if tick - black_since > 8:
+                        warn = "Aufnahme ist schwarz – DBD im Modus „Fenster-Vollbild“ betreiben"
+                        self._status(warn, last_status)
+                        last_status = warn
+                else:
+                    black_since = None
+
+                if source is None and self.overlay_rect:
+                    self._mask_overlay(img, origin[0] + box[0], origin[1] + box[1])
+                sep, res = reader.read(img, fw, fh)
+                if sep is not None:
+                    if not session:
+                        session, session_frames = True, []
+                        acc.reset()
+                        self.post("banner", t=tick)
+                    last_seen = tick
+                    if res is not None:
+                        session_frames.append((res.name_text, res.realm_text, res.name_fit))
+                        d = acc.add(res)
+                        if d is not None:
+                            self.post("detected", map_id=d.map_id, variant=d.variant, probability=d.probability,
+                                      variant_probability=d.variant_probability, name_text=d.name_text,
+                                      realm_text=d.realm_text, frames=d.frames)
+                        if self.settings.get("save_debug_images"):
+                            self._save_debug(img, res, sep)
+                elif session and tick - last_seen > 1.5:
+                    session = False
+                    if acc.decided is None and session_frames:
+                        best = max(session_frames, key=lambda f: f[2])
+                        self.post("unknown", name_text=best[0], realm_text=best[1])
+
+            # ------------------------------------- left the trial? -> hide map
+            gen = self.watch_gen
+            if gen != tracker_gen:
+                tracker.reset(gen[0] if gen else None, gen[1] if gen else None, tick)
+                tracker_gen = gen
+            use_end = bool(self.settings.get("hide_after_match", True))
+            use_menu = bool(self.settings.get("pause_in_menus", True))
+            watching = (self.map_on_screen and gen is not None and (use_end or use_menu)
+                        and tracker.active and not tracker.ended)
+            if watching:
+                tracker.use_end, tracker.use_cursor = use_end, use_menu
+                if source is not None:                       # simulation: no window, no pointer
+                    game, foreground, pointer = True, True, None
+                else:
+                    game = window is not None
+                    foreground = game and foreground_root() == window.hwnd
+                    pointer = None
+                    if foreground:
+                        cur = cursor_state()
+                        if cur is not None:
+                            vis, cx, cy = cur
+                            pointer = vis and (window.left <= cx < window.left + window.width
+                                               and window.top <= cy < window.top + window.height)
+                obs = full = None
+                if sep is None and tick - last_end_check >= END_CHECK_INTERVAL and (game or source is not None):
+                    last_end_check = tick
+                    try:
+                        full = grab((0, 0, fw, fh))
+                        look = full
+                        if source is None and self.overlay_rect:
+                            look = full.copy()
+                            self._mask_overlay(look, origin[0], origin[1])
+                        obs = out_of_match.observe(look)
+                    except Exception:
+                        self._report("Rundenende-Prüfung", traceback.format_exc())
+                events = tracker.update(Signals(t=tick, game=game, foreground=foreground, cursor=pointer,
+                                                banner=sep is not None, obs=obs))
+                self.watch_status = tracker.describe()
+                interesting = obs is not None and (obs.reason or obs.continue_fit is not None
+                                                   or obs.currency_groups or obs.loading)
+                if interesting or events or (obs is not None and tick - last_hist > 30):
+                    last_hist = tick
+                    ptr = "–" if pointer is None else ("sichtbar" if pointer else "verborgen")
+                    line = (f"{time.strftime('%H:%M:%S')} {obs.describe() if obs else '(kein Bild)'} · "
+                            f"Maus {ptr} · DBD aktiv {'ja' if foreground else 'nein'} · {tracker.describe()}")
+                    if events:
+                        line += " · " + ", ".join(e[0] + (f"={e[1]}" if len(e) > 1 else "") for e in events)
+                    self.end_history.append(line)
+                    if interesting or events:
+                        log.info("Rundenende: %s", line)
+                if full is not None and self.settings.get("save_debug_images"):
+                    tag = ("ende" if any(e[0] == "match_end" for e in events) else
+                           "menue" if events else "hinweis" if interesting else None)
+                    if tag or tick - self._last_frame_save > 5:
+                        self._save_frame(full, tag or "runde")
+                for ev in events:
+                    if ev[0] == "menu":
+                        self.post("menu", on=ev[1], gen=tracker.generation)
+                    elif ev[0] == "match_end":
+                        self.post("match_end", reason=ev[1], gen=tracker.generation, t=tracker.end_t)
+                    elif ev[0] == "armed" and tracker.source != "auto":
+                        self.post("watch_info", text="Rundenende-Erkennung für die gewählte Map ist jetzt aktiv.")
+                    elif ev[0] == "cursor_unreliable":
+                        self.post("watch_info", text="Mauszeiger war beim Map-Banner sichtbar – Menü-Erkennung "
+                                                     "per Mauszeiger ist für diese Runde aus.")
+            elif not (use_end or use_menu):
+                self.watch_status = "aus (Einstellung)"
+            elif tracker.ended and self.map_on_screen:
+                self.watch_status = tracker.describe()
+            elif not self.map_on_screen:
+                self.watch_status = ("Runde vorbei – wartet auf die nächste Map" if tracker.ended
+                                     else "keine Map angezeigt")
+
+            rate = max(1.0, float(self.settings.get("scans_per_second", 5)))
+            try:
+                cmd = self.commands.get(timeout=max(0.02, 1.0 / rate - (time.time() - tick)))
+                self.commands.put(cmd)          # handled at the top of the next loop
+            except queue.Empty:
+                pass
+        if grabber:
+            grabber.close()
+
+    def _status(self, text, last):
+        if text != last:
+            self.post("status", text=text)
+
+    # ---------------------------------------------------------- full scan
+    def _manual_scan(self, rec, grabber, source, window):
+        from .fullscan import FullScanner, TextDetector
+        t0 = time.time()
+        try:
+            if self._scanner is None:
+                det = TextDetector(os.path.join(self.root_dir, "models", "ch_PP-OCRv4_det_infer.onnx"),
+                                   threads=max(2, int(self.settings.get("ocr_threads", 2))))
+                self._scanner = FullScanner(det, rec, self.catalog)
+            if source is not None:
+                frame = source.current()
+            elif window is not None and not window.minimized:
+                frame = grabber.grab(window.left, window.top, window.width, window.height)
+            else:
+                frame = grabber.grab(*grabber.primary_monitor())
+            hits = self._scanner.scan(frame)
+            self.post("scan_result", hits=hits, seconds=time.time() - t0)
+        except Exception as e:
+            self.post("scan_result", hits=[], seconds=time.time() - t0, error=str(e))
+
+    # ------------------------------------------------------------- helpers
+    def _mask_overlay(self, img, left, top):
+        """Black out our own overlay in a screenshot (it is always on top and would
+        otherwise be read as part of the game picture)."""
+        r = self.overlay_rect
+        if not r:
+            return
+        x0, y0 = int(r[0] - left), int(r[1] - top)
+        x1, y1 = x0 + int(r[2]), y0 + int(r[3])
+        h, w = img.shape[:2]
+        x0, y0, x1, y1 = max(0, x0), max(0, y0), min(w, x1), min(h, y1)
+        if x1 > x0 and y1 > y0:
+            img[y0:y1, x0:x1] = 0
+
+    def _save_frame(self, frame, tag):
+        """Debug: downscaled screenshots while a map is shown (folder debug/frames)."""
+        try:
+            self._last_frame_save = time.time()
+            d = os.path.join(self.root_dir, "debug", "frames")
+            os.makedirs(d, exist_ok=True)
+            h, w = frame.shape[:2]
+            s = min(1.0, 1280.0 / max(1, w))
+            small = cv2.resize(frame, None, fx=s, fy=s, interpolation=cv2.INTER_AREA) if s < 1 else frame
+            stamp = time.strftime("%Y%m%d-%H%M%S") + f"-{int(time.time() * 1000) % 1000:03d}"
+            cv2.imencode(".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, 82])[1].tofile(os.path.join(d, f"{stamp}-{tag}.jpg"))
+            files = sorted(os.listdir(d))
+            for old in files[:-150]:
+                os.remove(os.path.join(d, old))
+        except Exception:
+            pass
+
+    # --------------------------------------------------------------- debug
+    def _save_debug(self, img, res, sep):
+        try:
+            d = os.path.join(self.root_dir, "debug")
+            os.makedirs(d, exist_ok=True)
+            stamp = time.strftime("%Y%m%d-%H%M%S") + f"-{int(time.time() * 1000) % 1000:03d}"
+            vis = img.copy()
+            cv2.line(vis, (sep.x0, sep.y), (sep.x1, sep.y), (0, 0, 255), 1)
+            cv2.imencode(".png", vis)[1].tofile(os.path.join(d, f"{stamp}.png"))
+            with open(os.path.join(d, f"{stamp}.txt"), "w", encoding="utf-8") as fh:
+                fh.write(f"name: {res.name_text}\nrealm: {res.realm_text}\nbest: {res.best}\nfit: {res.name_fit:.2f}\n")
+            files = sorted(f for f in os.listdir(d) if os.path.isfile(os.path.join(d, f)))
+            for old in files[:-400]:                   # keep the folder small
+                os.remove(os.path.join(d, old))
+        except Exception:
+            pass
