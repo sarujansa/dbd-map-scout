@@ -44,6 +44,8 @@ Das Steuerfenster ist in Tabs aufgeteilt:
 
 Das Overlay ist ein eigenes, natives Windows-Fenster: immer im Vordergrund, durchklickbar, und es nimmt dem Spiel nie den Fokus weg.
 
+**Erkennung, wenn andere Fenster über DBD liegen.** Normalerweise wird der Bildschirm aufgenommen – liegt ein anderes Fenster über DBD, sieht das Programm dieses Fenster. Ist DBD nicht das aktive Fenster, nutzt das Programm deshalb die **Fensteraufnahme von Windows** (Windows Graphics Capture, dieselbe Technik wie OBS „Fensteraufnahme“): Windows liefert das Bild des DBD-Fensters, egal was darüber liegt. Das Spiel wird dabei nicht angefasst. Ist DBD wieder 5 Sekunden aktiv, geht es zurück zur sparsameren Bildschirmaufnahme. Minimiert geht nichts. Abschaltbar im Tab Erkennung („Auch erkennen, wenn andere Fenster über DBD liegen“). Das nötige Zusatzpaket installiert `start.bat` beim nächsten Start einmalig; klappt das nicht, läuft alles wie bisher über die Bildschirmaufnahme. Die Zeile „Aufnahme“ in der Diagnose zeigt, welche Quelle gerade genutzt wird.
+
 | Hotkey | Funktion |
 |---|---|
 | `Strg+Alt+M` | Overlay ein/aus |

@@ -267,6 +267,11 @@ class App:
                         variable=self.menu_var, command=self._detect_flags_changed).pack(anchor="w", pady=(4, 1))
         ttk.Label(auto, text="erkannt am sichtbaren Mauszeiger (ESC-Menü, Ergebnisbildschirm, Lobby)",
                   style="Dim.TLabel", wraplength=400).pack(anchor="w", padx=(22, 0))
+        self.wgc_var = tk.BooleanVar(value=self.settings.get("window_capture", True))
+        ttk.Checkbutton(auto, text="Auch erkennen, wenn andere Fenster über DBD liegen",
+                        variable=self.wgc_var, command=self._detect_flags_changed).pack(anchor="w", pady=(4, 1))
+        ttk.Label(auto, text="Fensteraufnahme wie bei OBS (Windows Graphics Capture), nur solange DBD im "
+                             "Hintergrund ist", style="Dim.TLabel", wraplength=400).pack(anchor="w", padx=(22, 0))
         self.watch_var = tk.StringVar(value="Rundenende-Erkennung: keine Map angezeigt")
         ttk.Label(auto, textvariable=self.watch_var, style="Dim.TLabel", wraplength=420).pack(anchor="w", pady=(6, 2))
         self.rate_var = tk.DoubleVar(value=float(self.settings.get("scans_per_second", 5)))
@@ -1236,6 +1241,7 @@ class App:
         self.settings.set("auto_detect", bool(self.auto_var.get()))
         self.settings.set("hide_after_match", bool(self.hide_var.get()))
         self.settings.set("pause_in_menus", bool(self.menu_var.get()))
+        self.settings.set("window_capture", bool(self.wgc_var.get()))
         if not self.menu_var.get() and self.menu_paused:
             self.menu_paused = False
             self._update_toggle_text()
