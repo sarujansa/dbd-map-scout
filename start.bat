@@ -33,7 +33,10 @@ if /i "%~1"=="debug" (
   pause
   exit /b 0
 )
-start "" "%VENV%\Scripts\pythonw.exe" -m dbdmapscout
+rem "tray": Autostart mit Windows (Aufgabe "DbD Map Scout (Autostart)") - im Infobereich starten
+set "ARGS="
+if /i "%~1"=="tray" set "ARGS=--tray"
+start "" "%VENV%\Scripts\pythonw.exe" -m dbdmapscout %ARGS%
 exit /b 0
 
 :nopython
