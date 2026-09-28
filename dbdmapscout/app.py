@@ -15,7 +15,7 @@ from tkinter import messagebox, ttk
 
 from PIL import Image, ImageTk
 
-from . import __version__, regions, theme
+from . import __version__, layout, regions, theme
 from .capture import IS_WIN, describe_window, find_game_window, foreground_root, is_game_window
 from .catalog import Catalog
 from .config import Settings
@@ -262,6 +262,9 @@ class App:
         self.transp_var = tk.BooleanVar(value=o.get("transparent", True))
         self.timer_show_var = tk.BooleanVar(value=o.get("show_timer", True))
         self.server_show_var = tk.BooleanVar(value=o.get("show_server", True))
+        self.keep_bar_var = tk.BooleanVar(value=o.get("keep_in_bar", True))
+        ttk.Checkbutton(pos, text="Karte im schwarzen Rand halten (Ultrawide: nie ins Spielbild ragen)",
+                        variable=self.keep_bar_var, command=self._overlay_flags_changed).pack(anchor="w", pady=(4, 0))
         for text, var in (("Nur zeigen, wenn DBD das aktive Fenster ist", self.focus_var),
                           ("Map-Namen über der Karte anzeigen", self.caption_var),
                           ("Rundentimer unter der Karte anzeigen", self.timer_show_var),
@@ -1292,21 +1295,30 @@ class App:
         height = int(gh * o["height"])
         w, h = self.overlay.render(height)
         a = o["anchor"]
-        bar = (gw - gh * 16 / 9) / 2          # black bar left/right of a 16:9 picture (ultrawide)
-        if a == "auto" and bar >= 200:
-            avail = bar - 2 * margin
-            if w > avail:                       # shrink until it fits into the bar
+        bar = layout.bar_width(gw, gh)          # black bar left/right of a 16:9 picture (ultrawide)
+        if a == "auto" and bar < layout.MIN_BAR:
+            a = "top-left"
+
+        def place(w, h):
+            if a == "auto":
+                return gx + max(margin, (bar - w) / 2), gy + margin
+            if a == "custom":
+                return gx + o.get("pos_x", 0.0) * max(0, gw - w), gy + o.get("pos_y", 0.0) * max(0, gh - h)
+            return (gx + margin if a.endswith("left") else gx + gw - w - margin,
+                    gy + margin if a.startswith("top") else gy + gh - h - margin)
+
+        x, y = place(w, h)
+        side = (layout.bar_side(a, x, w, gx, gw, bar)
+                if a == "auto" or o.get("keep_in_bar", True) else None)
+        if side:
+            avail = layout.max_width(bar, margin)
+            for _ in range(2):                  # shrink until it fits into the bar (info block: not linear)
+                if w <= avail:
+                    break
                 height = max(80, int(height * avail / w))
                 w, h = self.overlay.render(height)
-            x = gx + max(margin, (bar - w) / 2)
-            y = gy + margin
-        elif a == "custom":
-            x = gx + o.get("pos_x", 0.0) * max(0, gw - w)
-            y = gy + o.get("pos_y", 0.0) * max(0, gh - h)
-        else:
-            a = "top-left" if a == "auto" else a
-            x = gx + margin if a.endswith("left") else gx + gw - w - margin
-            y = gy + margin if a.startswith("top") else gy + gh - h - margin
+            x, y = place(w, h)
+            x = layout.clamp_x(side, x, w, gx, gw, bar, margin)
         self.overlay.show_at(int(x), int(y))
         self._last_place = (int(x), int(y), w, h)
         self.worker.overlay_rect = self._last_place if self.overlay.shown else None
@@ -1403,6 +1415,7 @@ class App:
         o["show_caption"] = bool(self.caption_var.get())
         o["show_timer"] = bool(self.timer_show_var.get())
         o["show_server"] = bool(self.server_show_var.get())
+        o["keep_in_bar"] = bool(self.keep_bar_var.get())
         if bool(self.transp_var.get()) != o.get("transparent", True):
             o["transparent"] = bool(self.transp_var.get())
             self.overlay.set_transparent(o["transparent"])
