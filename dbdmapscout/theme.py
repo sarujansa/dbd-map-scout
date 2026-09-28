@@ -14,7 +14,7 @@ LOG_COLORS = {
     False: {"ts": "#8a8f96", "Erkennung": "#1e7b34", "Overlay": "#1f5fa8", "System": "#555b63", "Fehler": "#b3261e",
             "text": "#1b1b1b"},
 }
-DOT = {"ok": "#3fb950", "warn": "#d29922", "err": "#e5534b", "info": "#58a6ff"}
+DOT = {"ok": "#3fb950", "warn": "#d29922", "err": "#e5534b", "info": "#58a6ff", "idle": "#8b8f98"}
 
 DARK = {
     "bg": "#1e1f22", "panel": "#2b2d31", "field": "#232428", "border": "#3a3c42",
