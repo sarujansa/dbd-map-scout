@@ -565,6 +565,8 @@ class App:
         srv = self.conn.server
         if srv and self._hist is not None:
             self._hist["region"] = srv["region"]           # region only, never the address
+            if self.conn.ping_ms is not None:
+                self._hist.setdefault("pings", []).append(float(self.conn.ping_ms))
         key = (srv["ip"], srv["region"]) if srv else None
         if key != self._conn_last:
             self._conn_last = key
@@ -797,8 +799,9 @@ class App:
                                                  ("avg", _("Ø Dauer"), 80, "e"), ("max", _("Längste"), 80, "e")), 9)
         box_r = ttk.LabelFrame(f, text=_("Serverregionen"), padding=6)
         box_r.pack(fill="both", expand=True, pady=(8, 0))
-        self.stats_regs = self._stats_tree(box_r, (("reg", _("Region"), 230, "w"), ("n", _("Runden"), 70, "e"),
-                                                   ("avg", _("Ø Dauer"), 80, "e"), ("share", _("Anteil"), 80, "e")), 5)
+        self.stats_regs = self._stats_tree(box_r, (("reg", _("Region"), 190, "w"), ("n", _("Runden"), 65, "e"),
+                                                   ("avg", _("Ø Dauer"), 75, "e"), ("share", _("Anteil"), 65, "e"),
+                                                   ("ping", _("Ø Ping"), 70, "e")), 5)
         ttk.Label(box_r, text=_("Region nur bekannt, wenn im Tab Server „Verbundener Spielserver“ an war."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         box_w = ttk.LabelFrame(f, text=_("Wartezeit in der Lobby"), padding=6)
@@ -898,8 +901,11 @@ class App:
             t.insert("", "end", values=(name, n, fmt_duration(avg), fmt_duration(longest)))
         t = self.stats_regs
         t.delete(*t.get_children())
+        pings = history.ping_by_region(rounds)
         for code, n, avg, share in history.per_region(rounds):
-            t.insert("", "end", values=(self._stats_region_name(code), n, fmt_duration(avg), f"{share:.0%}"))
+            p = pings.get(code)
+            t.insert("", "end", values=(self._stats_region_name(code), n, fmt_duration(avg), f"{share:.0%}",
+                                        f"{p:.0f} ms" if p is not None else "–"))
         ws = history.wait_summary(rounds)
         self.stats_wait_var.set(_("Ø {avg} · Median {median} · kürzeste {min} · längste {max} ({n} Runden)",
                                   avg=fmt_duration(ws["avg"]), median=fmt_duration(ws["median"]),
@@ -924,7 +930,9 @@ class App:
             t.insert("", "end", iid=repr(r.t), values=(time.strftime("%d.%m.%y %H:%M", time.localtime(r.t)), r.map,
                                                        fmt_duration(r.seconds),
                                                        fmt_duration(r.wait) if r.wait is not None else "–", role,
-                                                       _(regions.NAMES.get(r.region, r.region)) if r.region else "–"))
+                                                       (_(regions.NAMES.get(r.region, r.region))
+                                                        + (f" · {r.ping:.0f} ms" if r.ping is not None else ""))
+                                                       if r.region else "–"))
         if keep and t.exists(keep[0]):
             t.selection_set(keep[0])
         self._stats_role_buttons()
@@ -1040,6 +1048,19 @@ class App:
         ttk.Label(st, textvariable=self.autostart_info, style="Dim.TLabel", wraplength=400).pack(
             anchor="w", padx=(22, 0))
 
+        nt = ttk.LabelFrame(f, text=_("Benachrichtigungen"), padding=8)
+        nt.pack(fill="x", pady=(8, 0))
+        self.notify_vars = {}
+        for key, label in (("lobby_notify", N_("Ton und Meldung, wenn eine Lobby gefunden wurde")),
+                           ("lobby_remind", N_("Erinnern, wenn der Lobby-Countdown abläuft und READY noch nicht "
+                                               "gedrückt ist")),
+                           ("notify_background_only", N_("Nur wenn DBD nicht das aktive Fenster ist"))):
+            v = self.notify_vars[key] = tk.BooleanVar(value=bool(self.settings.get(key, True)))
+            ttk.Checkbutton(nt, text=_(label), variable=v, command=self._notify_flags_changed).pack(anchor="w")
+        ttk.Label(nt, text=_("Die Meldung erscheint am Symbol im Infobereich (dafür „Beim Minimieren in den "
+                             "Infobereich“ anlassen); der Ton kommt immer."), style="Dim.TLabel",
+                  wraplength=400).pack(anchor="w", padx=(22, 0))
+
         upd = ttk.LabelFrame(f, text=_("Updates"), padding=8)
         upd.pack(fill="x", pady=(8, 0))
         self.update_var = tk.BooleanVar(value=self.settings.get("auto_update", True))
@@ -1070,6 +1091,27 @@ class App:
         ttk.Label(f, text=f"DbD Map Scout {__version__} · " + _("liest nur Bildschirmpixel, sendet keine Eingaben ans Spiel."),
                   style="Dim.TLabel", wraplength=430).pack(anchor="w", pady=(10, 0))
         return outer
+
+    def _notify_flags_changed(self):
+        for key, v in self.notify_vars.items():
+            self.settings.set(key, bool(v.get()))
+        self._save_soon()
+
+    def _notify(self, title, text):
+        """Sound + tray notification (lobby found, countdown) – only local, nothing goes to the game."""
+        if self.settings.get("notify_background_only", True) and not self.simulate and self.game is not None:
+            fg = foreground_root()
+            if is_game_window(fg):
+                return                                   # DBD is in front: the player sees it anyway
+        try:
+            if IS_WIN:
+                import winsound
+                winsound.PlaySound("SystemNotification", winsound.SND_ALIAS | winsound.SND_ASYNC)
+            else:
+                self.root.bell()
+        except Exception:
+            log.debug("notify sound", exc_info=True)
+        self.tray.notify(title, text)
 
     def _ui_lang_changed(self):
         code = next((c for c, lbl in self._ui_langs if lbl == self.ui_lang_var.get()), "auto")
@@ -1552,6 +1594,9 @@ class App:
             return
         if role in history.ROLES:
             rec["role"] = role                        # the result screen is the surest source
+        ping = history.median(rec.pop("pings", []))
+        if ping is not None:
+            rec["ping"] = round(ping, 1)
         seconds = max(0.0, t - rec["t"])
         if not history.should_record(seconds):
             return
@@ -1622,6 +1667,9 @@ class App:
         elif what == "found" and d.get("found") is not None:
             f = d["found"]
             self._queue = {"state": "custom" if f.custom else "lobby", "role": f.role, "found": f}
+            if not f.custom and self.settings.get("lobby_notify", True):
+                self._notify(_("Lobby gefunden"), (_("nach {time}", time=fmt_duration(f.wait)) + " – "
+                                                   if f.wait is not None else "") + _("READY drücken."))
             if f.custom:
                 self._log(_("Custom Game – keine Wartezeit."), "Erkennung")
             elif f.wait is not None:
@@ -1630,6 +1678,11 @@ class App:
             else:
                 self._log(_("Lobby gefunden{role}.", role=f" ({self._role_name(f.role)})" if f.role else ""),
                           "Erkennung")
+        elif what == "remind":
+            if self.settings.get("lobby_remind", True):
+                self._notify(_("Lobby startet gleich"), _("Noch {n} s – READY ist noch nicht gedrückt.",
+                                                           n=int(d.get("seconds") or 0)))
+                self._log(_("Lobby-Countdown läuft ab, READY ist noch nicht gedrückt."), "Erkennung")
         else:
             self._queue = dict(prev, role=d.get("role") or prev.get("role"))
 

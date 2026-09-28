@@ -168,3 +168,15 @@ def test_result_role_with_our_overlay_blacked_out(reader):
         img = cv2.imread(os.path.join(DATA, name + ".result.jpg"))
         img[:, :423 - lobby.result_box(W, H)[0]] = 0
         assert reader.result_role(img) == role
+
+
+def test_reminder_when_countdown_runs_out_without_ready():
+    q = QueueTracker()
+    lob = lambda s: LobbyView("ready", 0, "", f"00:{s:02d}")               # noqa: E731
+    ev = run(q, [(0, V("search", "survivor", 0)), (1, V("search", "survivor", 1)), (50, lob(59)), (51, lob(58)),
+                 (80, lob(20)), (95, lob(14)), (96, lob(13)), (97, lob(12))])
+    assert [e for e in ev if e[0] == "remind"] == [("remind", 14)]           # once per lobby
+    q2 = QueueTracker()                                                      # READY pressed: CANCEL, no reminder
+    ev2 = run(q2, [(0, lob(59)), (1, lob(58)), (2, LobbyView("cancel", 0, "", "00:10"))])
+    assert not [e for e in ev2 if e[0] == "remind"]
+    assert LobbyView("ready", 0, "", "00:53").countdown == 53 and LobbyView("play", 0).countdown is None

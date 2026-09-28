@@ -117,6 +117,30 @@ EN = {
     "Ergebnisbildschirm: gespielt als {role}.": "Results screen: played as {role}.",
     "Wartezeit in der Lobby": "Waiting time in the lobby",
     "Rolle der markierten Runde:": "Role of the selected round:",
+    "Benachrichtigungen": "Notifications",
+    "Ton und Meldung, wenn eine Lobby gefunden wurde": "Sound and notification when a lobby was found",
+    "Erinnern, wenn der Lobby-Countdown abläuft und READY noch nicht gedrückt ist":
+        "Remind me when the lobby countdown runs out and READY is not pressed yet",
+    "Nur wenn DBD nicht das aktive Fenster ist": "Only when DBD is not the active window",
+    "Die Meldung erscheint am Symbol im Infobereich (dafür „Beim Minimieren in den Infobereich“ anlassen); der Ton "
+    "kommt immer.":
+        "The notification appears at the icon in the notification area (keep \"Minimise into the notification "
+        "area\" on for it); the sound always plays.",
+    "Lobby gefunden": "Lobby found",
+    "nach {time}": "after {time}",
+    "READY drücken.": "Press READY.",
+    "Lobby startet gleich": "Lobby starts soon",
+    "Noch {n} s – READY ist noch nicht gedrückt.": "{n} s left – READY is not pressed yet.",
+    "Lobby-Countdown läuft ab, READY ist noch nicht gedrückt.": "Lobby countdown is running out, READY is not pressed.",
+    "Ø Ping": "Ø ping",
+    "Spielt einen Hinweiston und zeigt eine Windows-Meldung, sobald DBD eine Lobby gefunden hat – praktisch, wenn "
+    "du während der Suche etwas anderes machst.":
+        "Plays a sound and shows a Windows notification as soon as DBD has found a lobby – handy if you do something "
+        "else while searching.",
+    "Noch einmal melden, wenn der Countdown der Lobby unter 15 s fällt und du READY nicht gedrückt hast.":
+        "Notify again when the lobby countdown drops below 15 s and you have not pressed READY.",
+    "Keine Meldung, solange DBD im Vordergrund ist – dann siehst du die Lobby ja selbst.":
+        "No notification while DBD is in front – then you see the lobby yourself.",
     "Rolle für {map} ({when}) auf {role} geändert.": "Role for {map} ({when}) changed to {role}.",
     "Rolle konnte nicht gespeichert werden: {error}": "Could not save the role: {error}",
     "Diese Runde als Killer-Runde zählen (falls die Erkennung falsch lag).":
