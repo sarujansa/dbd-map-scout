@@ -25,6 +25,7 @@ import threading
 import time
 
 from . import netwatch, regions
+from .i18n import _
 
 IS_WIN = sys.platform == "win32"
 MIN_PPS = 10.0         # a running match exchanges dozens of packets per second with its server
@@ -59,7 +60,7 @@ def pick_server(flows, region_of) -> dict | None:
 
 
 def region_name(code: str) -> str:
-    return regions.NAMES.get(code, code)
+    return _(regions.NAMES.get(code, code))
 
 
 def is_admin() -> bool:
@@ -136,7 +137,7 @@ class ConnectionWatch:
         if self.running:
             return None
         if not IS_WIN:
-            return {"error": "Nur unter Windows verfügbar."}
+            return {"error": _("Nur unter Windows verfügbar.")}
         fd, control = tempfile.mkstemp(prefix="dbdmapscout-net-", suffix=".json")
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             json.dump({"stop": False}, fh)
@@ -191,7 +192,7 @@ class ConnectionWatch:
         else:
             code = regions.exit_code(self.proc)
         if code is not None:                     # capture ended by itself
-            self.error = (data or {}).get("error") or f"Mitschnitt beendet (Code {code})."
+            self.error = (data or {}).get("error") or _("Mitschnitt beendet (Code {code}).", code=code)
             self.stop()
             return
         if not data or not data.get("ok"):
@@ -269,13 +270,13 @@ class ConnectionWatch:
     # --------------------------------------------------------------- text
     def text(self) -> str:
         if not self.running:
-            return f"Fehler: {self.error}" if self.error else ""
+            return _("Fehler: {error}", error=self.error) if self.error else ""
         if self.no_data:
-            return "keine Daten vom Mitschnitt"
+            return _("keine Daten vom Mitschnitt")
         if self.server:
             ping = f" · {self.ping_ms:.0f} ms" if self.ping_ms is not None else ""
             return f"{region_name(self.server['region'])} ({self.server['ip']}){ping}"
-        return "Warte auf Match …"
+        return _("Warte auf Match …")
 
 
 def _remove(*paths):

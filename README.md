@@ -1,6 +1,10 @@
 # DbD Map Scout
 
+*[English version: README.en.md](README.en.md)*
+
 Map-Overlay für Dead by Daylight. Beim Match-Start wird der Map-Name automatisch erkannt und die passende Callout-Karte aus dem Ordner `maps/` eingeblendet. Die Karte liegt als eigenes, durchklickbares Fenster über dem Spiel.
+
+**Sprache:** Das Programm zeigt Deutsch oder Englisch. Standardmässig richtet es sich nach der Windows-Sprache (Deutsch, wenn Windows auf Deutsch läuft, sonst Englisch). Umstellen unter **Einstellungen → Sprache und Darstellung → Sprache / Language**; wirkt nach dem nächsten Start.
 
 ## Installation (einmalig)
 
@@ -51,7 +55,7 @@ Das Steuerfenster ist in Tabs aufgeteilt:
 | **Erkennung** | Automatik, Ausblenden nach der Runde, Pause in Menüs, Spielsprache; eingeklappt unter „Erweitert“: Fensteraufnahme, Scans pro Sekunde, Live-Status, Debug-Bilder, Diagnose |
 | **Server** | oben der verbundene Spielserver, darunter Serverregionen mit Ping, per hosts-Datei sperren oder freigeben (siehe unten) |
 | **Log** | Meldungen mit Kategorien *Erkennung*, *Overlay*, *System*, *Fehler*, einzeln ein-/ausblendbar |
-| **Einstellungen** | Dark Mode, Hotkeys ändern, Ordner öffnen |
+| **Einstellungen** | Sprache, Dark Mode, Hotkeys ändern, Start/Infobereich, Updates, eigene Zuordnungen, Ordner öffnen |
 
 **Position „automatisch“:** Läuft DBD mit 16:9-Bild auf einem breiteren Monitor (z. B. 3440×1440 mit schwarzen Rändern), landet die Karte im linken schwarzen Rand und wird so skaliert, dass sie hineinpasst. Sonst erscheint sie oben links. Sobald du einen Positions-Regler bewegst oder die Karte mit der Maus verschiebst, gilt „eigene Position“. „Zurücksetzen“ stellt wieder „automatisch“ ein.
 
@@ -72,7 +76,7 @@ Das Overlay ist ein eigenes, natives Windows-Fenster: immer im Vordergrund, durc
 
 Hotkeys lassen sich unter **Einstellungen → Hotkeys** ändern: Feld anklicken und die neue Kombination drücken (Esc bricht ab, Entf schaltet den Hotkey aus, „Standard“ stellt alle zurück). Buchstaben und Ziffern brauchen Strg oder Alt, damit der Hotkey nicht das normale Tippen blockiert; doppelt belegte Kombinationen werden abgelehnt. Alle Einstellungen landen in `settings.json`.
 
-**Spielsprache:** Standardmässig werden englische und deutsche Map-Namen erkannt. Wenn DBD auf Französisch, Spanisch, Italienisch, Polnisch, Portugiesisch oder Türkisch läuft, die Sprache im Steuerfenster anhaken.
+**Spielsprache:** Standardmässig werden englische und deutsche Map-Namen erkannt. Wenn DBD auf Französisch, Spanisch, Italienisch, Polnisch, Portugiesisch oder Türkisch läuft, die Sprache im Steuerfenster anhaken (Tab Erkennung). Das ist unabhängig von der Sprache des Programms selbst.
 
 ## Serverregion wählen (wie „Make Your Choice“)
 

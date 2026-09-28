@@ -28,6 +28,61 @@ FETCH_TIMEOUT = 25          # s; offline or a hanging credential prompt must not
 STATUS_FILE = "update_status.txt"
 REQUIREMENTS = (("requirements.txt", False), ("requirements-extra.txt", True))   # (file, --no-deps)
 
+# Own small translation table: this script runs before the program and may not import it.
+EN = {
+    "Update-Prüfung ist ausgeschaltet.": "Update check is switched off.",
+    "Update übersprungen: git ist nicht installiert.": "Update skipped: git is not installed.",
+    "Update übersprungen: kein Git-Ordner (entpackte Kopie).": "Update skipped: not a git folder (unpacked copy).",
+    "Update übersprungen: {reason}": "Update skipped: {reason}",
+    "Update übersprungen: Zweig „{current}“ statt „{branch}“.":
+        "Update skipped: branch “{current}” instead of “{branch}”.",
+    "Update übersprungen: eigene Änderungen an Programmdateien.":
+        "Update skipped: own changes to program files.",
+    "Update übersprungen: GitHub nicht erreichbar": "Update skipped: GitHub not reachable",
+    "Update übersprungen: eigene Commits auf main (kein reines Nachziehen möglich).":
+        "Update skipped: own commits on main (a plain fast-forward is not possible).",
+    "Update fehlgeschlagen, alter Stand bleibt: {error}": "Update failed, the old version stays: {error}",
+    "Update installiert: {old} → {new}": "Update installed: {old} → {new}",
+    "Update installiert.": "Update installed.",
+    "Installiere Pakete aus {name} ...": "Installing packages from {name} ...",
+    "Pakete aus {name} installiert.": "Packages from {name} installed.",
+    "Pakete aus {name} konnten nicht installiert werden (Internet?) – nächster Start versucht es wieder.":
+        "Packages from {name} could not be installed (internet?) – the next start tries again.",
+    "Suche nach Updates ...": "Looking for updates ...",
+    "Update-Prüfung fehlgeschlagen: {error}": "Update check failed: {error}",
+}
+_lang = None
+
+
+def _language(root) -> str:
+    """Same choice as the program: settings.json "ui_language", "auto" = Windows language."""
+    env = os.environ.get("DBDMS_LANG")
+    if env in ("de", "en"):
+        return env
+    try:
+        with open(os.path.join(root, "settings.json"), encoding="utf-8") as fh:
+            setting = json.load(fh).get("ui_language", "auto")
+    except (OSError, ValueError, AttributeError):
+        setting = "auto"
+    if setting in ("de", "en"):
+        return setting
+    try:
+        if sys.platform == "win32":
+            import ctypes
+            return "de" if (ctypes.windll.kernel32.GetUserDefaultUILanguage() & 0x3FF) == 0x07 else "en"
+        import locale
+        return "de" if (locale.getlocale()[0] or os.environ.get("LANG", "")).lower().startswith("de") else "en"
+    except Exception:
+        return "en"
+
+
+def _t(root, text, **kw) -> str:
+    global _lang
+    if _lang is None:
+        _lang = _language(root)
+    out = EN.get(text, text) if _lang == "en" else text
+    return out.format(**kw) if kw else out
+
 
 def _git(root, *args, timeout=15):
     env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GCM_INTERACTIVE="never")   # never wait for a password
@@ -57,40 +112,42 @@ def _version(root, rev) -> str:
 def update(root: str, branch: str = "main"):
     """Returns (exit code, message for the log)."""
     if not _enabled(root):
-        return SKIPPED, "Update-Prüfung ist ausgeschaltet."
+        return SKIPPED, _t(root, "Update-Prüfung ist ausgeschaltet.")
     if shutil.which("git") is None:
-        return SKIPPED, "Update übersprungen: git ist nicht installiert."
+        return SKIPPED, _t(root, "Update übersprungen: git ist nicht installiert.")
     if not os.path.isdir(os.path.join(root, ".git")):
-        return SKIPPED, "Update übersprungen: kein Git-Ordner (entpackte Kopie)."
+        return SKIPPED, _t(root, "Update übersprungen: kein Git-Ordner (entpackte Kopie).")
     code, current = _git(root, "rev-parse", "--abbrev-ref", "HEAD")
     if code != 0:
-        return SKIPPED, f"Update übersprungen: {current}"
+        return SKIPPED, _t(root, "Update übersprungen: {reason}", reason=current)
     if current != branch:
-        return SKIPPED, f"Update übersprungen: Zweig „{current}“ statt „{branch}“."
+        return SKIPPED, _t(root, "Update übersprungen: Zweig „{current}“ statt „{branch}“.", current=current,
+                          branch=branch)
     if _git(root, "diff", "--quiet", "HEAD")[0] != 0:
-        return SKIPPED, "Update übersprungen: eigene Änderungen an Programmdateien."
+        return SKIPPED, _t(root, "Update übersprungen: eigene Änderungen an Programmdateien.")
     _, old = _git(root, "rev-parse", "HEAD")
     code, out = _git(root, "fetch", "--quiet", "origin", branch, timeout=FETCH_TIMEOUT)
     if code != 0:
-        return SKIPPED, "Update übersprungen: GitHub nicht erreichbar" + (f" ({out.splitlines()[-1]})" if out else ".")
+        return SKIPPED, _t(root, "Update übersprungen: GitHub nicht erreichbar") + (
+            f" ({out.splitlines()[-1]})" if out else ".")
     _, new = _git(root, "rev-parse", "FETCH_HEAD")
     if new == old:
         return NOTHING, ""
     if _git(root, "merge-base", "--is-ancestor", "HEAD", "FETCH_HEAD")[0] != 0:
-        return SKIPPED, "Update übersprungen: eigene Commits auf main (kein reines Nachziehen möglich)."
+        return SKIPPED, _t(root, "Update übersprungen: eigene Commits auf main (kein reines Nachziehen möglich).")
     code, out = _git(root, "merge", "--ff-only", "--quiet", "FETCH_HEAD")
     if code != 0:
-        return SKIPPED, f"Update fehlgeschlagen, alter Stand bleibt: {out}"
+        return SKIPPED, _t(root, "Update fehlgeschlagen, alter Stand bleibt: {error}", error=out)
     # files (maybe start.bat itself) have changed now: whatever happens below, report UPDATED so
     # start.bat restarts itself instead of reading on in its changed file
     try:
         _, log = _git(root, "log", "--format=%s", f"{old}..{new}")
         changes = [line for line in log.splitlines() if line and not line.startswith("Merge pull request")]
-        msg = f"Update installiert: {_version(root, old)} → {_version(root, new)}"
+        msg = _t(root, "Update installiert: {old} → {new}", old=_version(root, old), new=_version(root, new))
         if changes:
             msg += "\n" + "\n".join(f"  • {c}" for c in changes[:12])
     except Exception:
-        msg = "Update installiert."
+        msg = _t(root, "Update installiert.")
     return UPDATED, msg
 
 
@@ -119,17 +176,17 @@ def sync_packages(root: str, venv: str, run=None) -> list:
                     continue
         except OSError:
             pass
-        print(f"Installiere Pakete aus {name} ...")
+        print(_t(root, "Installiere Pakete aus {name} ...", name=name))
         args = [sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "-r", os.path.join(root, name)]
         if no_deps:
             args.insert(-2, "--no-deps")
         if run(args) == 0:
             with open(stamp, "w", encoding="utf-8") as fh:
                 fh.write(digest)
-            msgs.append(f"Pakete aus {name} installiert.")
+            msgs.append(_t(root, "Pakete aus {name} installiert.", name=name))
         else:
-            msgs.append(f"Pakete aus {name} konnten nicht installiert werden (Internet?) – nächster Start versucht es "
-                        "wieder.")
+            msgs.append(_t(root, "Pakete aus {name} konnten nicht installiert werden (Internet?) – nächster Start "
+                                 "versucht es wieder.", name=name))
     return msgs
 
 
@@ -155,11 +212,11 @@ def main(argv) -> int:
     if "--deps" in argv:
         _write_status(venv, sync_packages(root, venv))
         return 0
-    print("Suche nach Updates ...")
+    print(_t(root, "Suche nach Updates ..."))
     try:
         code, msg = update(root)
     except Exception as e:                          # never block the start
-        code, msg = SKIPPED, f"Update-Prüfung fehlgeschlagen: {type(e).__name__}: {e}"
+        code, msg = SKIPPED, _t(root, "Update-Prüfung fehlgeschlagen: {error}", error=f"{type(e).__name__}: {e}")
     if msg:
         print(msg)
     _write_status(venv, [msg])

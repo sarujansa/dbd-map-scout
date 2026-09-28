@@ -7,6 +7,9 @@ import os
 import sys
 import traceback
 
+from . import i18n
+from .i18n import _
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -36,7 +39,7 @@ def _single_instance() -> bool:
             from tkinter import messagebox
             r = tk.Tk()
             r.withdraw()
-            messagebox.showinfo("DbD Map Scout", "DbD Map Scout läuft bereits.")
+            messagebox.showinfo("DbD Map Scout", _("DbD Map Scout läuft bereits."))
             r.destroy()
         except Exception:
             pass
@@ -91,6 +94,7 @@ def main():
         run_test(args.test, [l.strip() for l in args.lang.split(",") if l.strip()])
         return
 
+    i18n.init_from_settings(os.path.join(ROOT, "settings.json"))
     if not _single_instance():
         return
     _setup_logging()
@@ -107,7 +111,7 @@ def main():
             from tkinter import messagebox
             r = tk.Tk()
             r.withdraw()
-            messagebox.showerror("DbD Map Scout", "Start fehlgeschlagen:\n\n" + text[-1500:])
+            messagebox.showerror("DbD Map Scout", _("Start fehlgeschlagen:") + "\n\n" + text[-1500:])
             r.destroy()
         except Exception:
             print(text, file=sys.stderr)

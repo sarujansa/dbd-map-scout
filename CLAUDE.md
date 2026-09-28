@@ -1,6 +1,6 @@
 # DbD Map Scout – Projektkontext für Claude Code
 
-Map-Overlay für Dead by Daylight (Windows). Erkennt beim Match-Start den Map-Namen per OCR und blendet die passende Callout-Karte aus `maps/` als klickdurchlässiges Overlay ein. Außerdem: Ausblenden nach der Runde bzw. Pause in Menüs, und ein Tab „Server“ zur Regionswahl über die hosts-Datei und Anzeige des verbundenen Spielservers (Ideen von „Make Your Choice“). Sprache der Oberfläche, Logs und Doku: **Deutsch**. Code und Kommentare: Englisch.
+Map-Overlay für Dead by Daylight (Windows). Erkennt beim Match-Start den Map-Namen per OCR und blendet die passende Callout-Karte aus `maps/` als klickdurchlässiges Overlay ein. Außerdem: Ausblenden nach der Runde bzw. Pause in Menüs, und ein Tab „Server“ zur Regionswahl über die hosts-Datei und Anzeige des verbundenen Spielservers (Ideen von „Make Your Choice“). Oberfläche und Log: **Deutsch und Englisch** (`i18n.py`, Einstellung `ui_language`, „auto“ = Windows-Sprache). Doku: Deutsch (`README.md`) + Englisch (`README.en.md`). Code und Kommentare: Englisch.
 
 ## Harte Regeln (nicht verhandelbar)
 
@@ -68,6 +68,7 @@ start_debug.bat           :: mit Konsole
 | `tray.py` | Symbol im Infobereich (pystray 0.19.5, LGPL, eigener Thread); Menüaktionen nur als Event (`("tray", …)`) in die Queue, nie Tk aus dem Tray-Thread. Minimieren → `withdraw` (nur `<Unmap>` des Hauptfensters) |
 | `hotkeys.py` | globale Hotkeys (RegisterHotKey) + `combo_from_keys()` für die Aufnahme per Tastendruck (Buchstaben/Ziffern nur mit Strg/Alt; Windows-keycode für Shift+Ziffer). Während der Aufnahme werden die globalen Hotkeys abgemeldet, sonst kommt die Kombination nie im Fenster an |
 | `tooltip.py` | Hinweistexte beim Überfahren: Texte zentral in `TIPS` (nach Knopfbeschriftung), `attach_all()` nach dem Aufbau des Fensters bzw. jedes Dialogs; Knöpfe mit wechselnder Beschriftung über `App._tip_lookup`. **Neue Knöpfe/Häkchen brauchen einen Eintrag** (`tooltip.missing()` muss leer bleiben) |
+| `i18n.py`, `i18n_en.py` | Übersetzung: deutscher Text im Code ist der Schlüssel, `_("… {name}", name=x)` (benannte Platzhalter, nie f-Strings in `_()`), `N_()` markiert Texte in Listen/Tabellen, die später mit `_()` angezeigt werden. Englisch in `i18n_en.EN`. **Jeder neue UI-/Log-Text braucht einen Eintrag** – `tests/test_i18n.py` prüft Vollständigkeit, Platzhalter, unübersetzte `text=`-Literale und dass `_` nie lokal überschrieben wird (`path, _ = …` ist verboten). Interne Schlüssel (Rundenende-Gründe, Regionsnamen, hosts-Zustände, Log-Kategorien) bleiben deutsch und werden erst bei der Anzeige übersetzt. `update.py` hat eine eigene kleine Tabelle (läuft vor dem Programm). Tests laufen mit `DBDMS_LANG=de` (`tests/conftest.py`). Nicht übersetzt: Diagnose-Text, Admin-Helfer (`hostsedit.py`, `netwatch.py`), `--help` |
 | `fullscan.py`, `hotkeys.py`, `diagnose.py`, `theme.py`, `config.py` | Vollbild-Scan, globale Hotkeys, Diagnose-Text, Dark Mode, Einstellungen (+ Migrationen, `SETTINGS_VERSION`) |
 
 ## Wichtige Designentscheidungen (nicht ohne Grund ändern)
