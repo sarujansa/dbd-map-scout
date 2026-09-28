@@ -4,3 +4,5 @@ opencv-python-headless>=4.8
 onnxruntime>=1.17
 Pillow>=10.0
 mss>=9.0
+pystray==0.19.5          # Symbol im Infobereich (LGPL-3.0, unverändert genutzt)
+six>=1.16                # von pystray benötigt
