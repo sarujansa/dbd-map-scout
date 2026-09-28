@@ -116,6 +116,15 @@ EN = {
     "Wartezeit {time}": "waited {time}",
     "Ergebnisbildschirm: gespielt als {role}.": "Results screen: played as {role}.",
     "Wartezeit in der Lobby": "Waiting time in the lobby",
+    "Rolle der markierten Runde:": "Role of the selected round:",
+    "Rolle für {map} ({when}) auf {role} geändert.": "Role for {map} ({when}) changed to {role}.",
+    "Rolle konnte nicht gespeichert werden: {error}": "Could not save the role: {error}",
+    "Diese Runde als Killer-Runde zählen (falls die Erkennung falsch lag).":
+        "Count this round as a killer round (if the detection was wrong).",
+    "Diese Runde als Survivor-Runde zählen (falls die Erkennung falsch lag).":
+        "Count this round as a survivor round (if the detection was wrong).",
+    "Diese Runde als Custom Game zählen – sie fliesst dann nicht in die Wartezeit ein.":
+        "Count this round as a custom game – it is then left out of the waiting time.",
     "Ø {avg} · Median {median} · kürzeste {min} · längste {max} ({n} Runden)":
         "Ø {avg} · median {median} · shortest {min} · longest {max} ({n} rounds)",
     "Noch keine Wartezeiten in dieser Auswahl.": "No waiting times in this selection yet.",
