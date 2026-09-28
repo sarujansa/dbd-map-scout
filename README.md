@@ -46,7 +46,7 @@ Oben im Steuerfenster steht immer, woran das Programm gerade ist: **Wartet auf D
 
 **Layout-Knopf:** Erscheint nur bei Maps mit mehreren Layouts (Coal Tower, Groaning Storehouse, Ironworks of Misery, Shelter Woods, Suffocation Pit, Mount Ormond Resort, Badham Preschool) und zeigt das angezeigte Layout, z. B. „Layout II von V ▸“. Ein Klick schaltet weiter. War die Erkennung beim Layout unsicher, steht „(unsicher)“ dahinter.
 
-Das Steuerfenster ist in Tabs aufgeteilt:
+Das Steuerfenster ist in Tabs aufgeteilt. Passt ein Tab nicht ins Fenster, erscheint rechts eine Scrollbar (auch per Mausrad); das Fenster lässt sich dafür beliebig kleiner oder grösser ziehen:
 
 | Tab | Inhalt |
 |---|---|
