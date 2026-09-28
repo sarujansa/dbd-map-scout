@@ -114,3 +114,14 @@ def test_role_can_be_corrected(tmp_path):
     import pytest
     with pytest.raises(ValueError):
         h.set_role(p, 100.5, "hacker")
+
+
+def test_ping_per_round_and_region(tmp_path):
+    assert h.median([30, None, 10, 20]) == 20 and h.median([10, 20]) == 15 and h.median([]) is None
+    p = str(tmp_path / h.FILE)
+    h.append(p, h.Round(t=1.0, seconds=600, map_id="a", map="A", region="eu-central-1", ping=20.0))
+    h.append(p, h.Round(t=2.0, seconds=600, map_id="a", map="A", region="eu-central-1", ping=30.0))
+    h.append(p, h.Round(t=3.0, seconds=600, map_id="a", map="A", region="eu-west-2"))               # no ping
+    rs = h.load(p)
+    assert [r.ping for r in rs] == [20.0, 30.0, None]
+    assert h.ping_by_region(rs) == {"eu-central-1": 25.0}

@@ -363,6 +363,8 @@ class DetectionWorker(threading.Thread):
             self.post("queue", what="role", role=ev[1])
         elif ev[0] == "found":
             self.post("queue", what="found", found=ev[1], role=ev[1].role)
+        elif ev[0] == "remind":
+            self.post("queue", what="remind", seconds=ev[1])
 
     def _status(self, text, last):
         if text != last:

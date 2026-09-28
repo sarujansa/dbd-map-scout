@@ -25,6 +25,7 @@ class Round:
     wait: float | None = None   # seconds searched in the lobby until it was found (None: not seen / custom)
     role: str = ""          # killer | survivor | "" (unknown)
     custom: bool = False    # custom game (no queue)
+    ping: float | None = None   # median ping (ms) to the server region during the round
 
 
 def should_record(seconds: float) -> bool:
@@ -68,7 +69,9 @@ def load(path: str) -> list:
                                      source=str(d.get("source") or ""),
                                      wait=float(wait) if isinstance(wait, (int, float)) and wait >= 0 else None,
                                      role=str(d.get("role") or "") if d.get("role") in ROLES else "",
-                                     custom=bool(d.get("custom"))))
+                                     custom=bool(d.get("custom")),
+                                     ping=float(d["ping"]) if isinstance(d.get("ping"), (int, float))
+                                     and d["ping"] >= 0 else None))
                 except (ValueError, KeyError, TypeError):
                     continue
     except OSError:
@@ -208,3 +211,21 @@ def set_role(path: str, t: float, role: str):
             fh.write(json.dumps(asdict(r), ensure_ascii=False) + "\n")
     os.replace(tmp, path)
     return hit
+
+
+# ------------------------------------------------------------------ ping
+def median(values):
+    v = sorted(x for x in values if x is not None)
+    if not v:
+        return None
+    n = len(v)
+    return v[n // 2] if n % 2 else (v[n // 2 - 1] + v[n // 2]) / 2
+
+
+def ping_by_region(rounds) -> dict:
+    """{region code: average of the rounds' ping}, only rounds with a measured ping."""
+    groups = {}
+    for r in rounds:
+        if r.ping is not None and r.region:
+            groups.setdefault(r.region, []).append(r.ping)
+    return {c: sum(p) / len(p) for c, p in groups.items()}
