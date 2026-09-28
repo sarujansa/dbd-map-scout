@@ -339,6 +339,10 @@ class Win32Overlay:
     def has_map(self) -> bool:
         return bool(self._frames)
 
+    def map_size(self):
+        """Size of the map picture as loaded (w, h) – to fit it without rendering it first."""
+        return self._frames[0][0].size if self._frames else (0, 0)
+
     def set_transparent(self, on: bool):
         self.transparent = bool(on)
         self._key = None

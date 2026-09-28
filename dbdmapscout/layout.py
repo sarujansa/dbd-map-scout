@@ -37,6 +37,18 @@ def max_width(bar: float, margin: float) -> float:
     return bar - 2 * margin
 
 
+def fit_height(height: int, avail: float, img_w: int, img_h: int, minimum: int = 80) -> int:
+    """Largest height <= ``height`` at which the scaled map (compose: round(img_w * h / img_h)) is at
+    most ``avail`` wide. Computed from the picture size, so nothing too big is ever put on screen
+    (rendering first and shrinking afterwards made the overlay pulse on every tick)."""
+    if img_w <= 0 or img_h <= 0 or round(img_w * height / img_h) <= avail:
+        return height
+    h = int(avail * img_h / img_w) + 1
+    while h > minimum and round(img_w * h / img_h) > avail:
+        h -= 1
+    return max(minimum, min(height, h))
+
+
 def clamp_x(side: str, x: float, w: float, gx: float, gw: float, bar: float, margin: float) -> float:
     """Move x so that [x, x+w] lies inside the bar (with margin)."""
     if side == "left":
