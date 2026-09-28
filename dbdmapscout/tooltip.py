@@ -35,6 +35,10 @@ TIPS = {
                                    "Werte (ältere Sicherung) bekommen ihren Standard.",
     "Meldung testen": "Zeigt die Meldung und spielt den Ton – so siehst du, wo sie erscheint.",
     "Killer": "Diese Runde als Killer-Runde zählen (falls die Erkennung falsch lag).",
+    "Zuordnen": "Der markierte Name (Skin oder neuer Killer) zählt ab jetzt als der gewählte Killer – auch in allen "
+                "bisherigen Runden.",
+    "Zuordnungen löschen": "Entfernt alle eigenen Killer-Zuordnungen; die Namen erscheinen wieder so, wie sie gelesen "
+                           "wurden.",
     "Survivor": "Diese Runde als Survivor-Runde zählen (falls die Erkennung falsch lag).",
     "Custom Game": "Diese Runde als Custom Game zählen – sie fliesst dann nicht in die Wartezeit ein.",
     "Drehen ↻": "Dreht die angezeigte Karte um 90° im Uhrzeigersinn (für jede Map gemerkt). Der Map-Name "

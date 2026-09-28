@@ -380,9 +380,22 @@ EN = {
     "Alle Regionen": "All regions",
     "Alle Killer": "All killers",
     "Häufigste Map": "Most frequent map",
-    "Name unter dem Lobby-Knopf, nur wenn du Killer spielst. Killer auswählen (oben) zeigt Maps und Dauer nur für ihn.":
-        "Name below the lobby button, only when you play killer. Picking a killer (above) shows maps and durations "
-        "for that killer only.",
+    "Name unter dem Lobby-Knopf, nur wenn du Killer spielst. Manche Skins zeigen dort ihren eigenen Namen – dann Zeile "
+    "markieren und dem Killer zuordnen (gilt auch rückwirkend). Killer auswählen (oben) zeigt Maps und Dauer nur für "
+    "ihn.":
+        "Name below the lobby button, only when you play killer. Some skins show their own name there – then select "
+        "the row and assign it to the killer (also applies to past rounds). Picking a killer (above) shows maps and "
+        "durations for that killer only.",
+    "Der markierte Name (Skin oder neuer Killer) zählt ab jetzt als der gewählte Killer – auch in allen bisherigen "
+    "Runden.": "The selected name (skin or new killer) counts as the chosen killer from now on – in all past rounds "
+               "too.",
+    "Entfernt alle eigenen Killer-Zuordnungen; die Namen erscheinen wieder so, wie sie gelesen wurden.":
+        "Removes all own killer assignments; the names show up again as they were read.",
+    "Zuordnen": "Assign",
+    "Zuordnungen löschen": "Delete assignments",
+    "„{name}“ zählt jetzt als {killer}.": "\"{name}\" now counts as {killer}.",
+    "Alle eigenen Killer-Zuordnungen löschen?": "Delete all own killer assignments?",
+    "Killer-Zuordnungen gelöscht.": "Killer assignments deleted.",
     "ohne Region": "no region",
     "Anteil": "Share",
     "Region nur bekannt, wenn im Tab Server „Verbundener Spielserver“ an war.":
@@ -581,7 +594,6 @@ EN = {
     "Welche Map war das? Der Name wird künftig automatisch erkannt.":
         "Which map was it? The name will be recognised automatically from now on.",
     "Bitte eine Map auswählen.": "Please choose a map.",
-    "Zuordnen": "Assign",
     "Abbrechen": "Cancel",
     "„{text}“ wird jetzt als {map} erkannt (eigene Zuordnung).": "“{text}” is now recognised as {map} (own assignment).",
     "zugeordnet: „{text}“": "assigned: “{text}”",

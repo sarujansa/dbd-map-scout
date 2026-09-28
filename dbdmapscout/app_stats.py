@@ -11,7 +11,8 @@ from tkinter import messagebox, ttk
 
 from . import history, regions
 from .i18n import N_, _
-from .lobby import killer_label
+from .lobby import KILLERS, killer_label
+from .textnorm import fold
 from .textnorm import fmt_duration
 
 log = logging.getLogger("dbdmapscout")
@@ -76,10 +77,23 @@ class StatsTab:
         box_k.pack(fill="both", expand=True, pady=(8, 0))
         self.stats_kill = self._stats_tree(box_k, (("killer", _("Killer"), 150, "w"), ("n", _("Runden"), 70, "e"),
                                                    ("avg", _("Ø Dauer"), 80, "e"), ("map", _("Häufigste Map"), 160, "w")),
-                                           5)
-        ttk.Label(box_k, text=_("Name unter dem Lobby-Knopf, nur wenn du Killer spielst. Killer auswählen (oben) zeigt "
-                                "Maps und Dauer nur für ihn."), style="Dim.TLabel", wraplength=520).pack(anchor="w",
-                                                                                                       pady=(4, 0))
+                                           5, select=True)
+        self.stats_kill.bind("<<TreeviewSelect>>", lambda e: self._stats_alias_buttons())
+        ar = ttk.Frame(box_k)
+        ar.pack(fill="x", pady=(6, 0))
+        self._stats_alias_choices = sorted(KILLERS, key=killer_label)
+        self.stats_alias_var = tk.StringVar(value="")
+        self.stats_alias_cb = ttk.Combobox(ar, textvariable=self.stats_alias_var, state="disabled", width=16,
+                                           values=[killer_label(k) for k in self._stats_alias_choices])
+        self.stats_alias_cb.pack(side="left")
+        self.stats_alias_btn = ttk.Button(ar, text=_("Zuordnen"), command=self._stats_alias_set, state="disabled")
+        self.stats_alias_btn.pack(side="left", padx=(6, 0))
+        self.stats_alias_clear = ttk.Button(ar, text=_("Zuordnungen löschen"), command=self._stats_alias_reset)
+        self.stats_alias_clear.pack(side="left", padx=(6, 0))
+        ttk.Label(box_k, text=_("Name unter dem Lobby-Knopf, nur wenn du Killer spielst. Manche Skins zeigen dort ihren "
+                                "eigenen Namen – dann Zeile markieren und dem Killer zuordnen (gilt auch rückwirkend). "
+                                "Killer auswählen (oben) zeigt Maps und Dauer nur für ihn."),
+                  style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         box_r = ttk.LabelFrame(f, text=_("Serverregionen"), padding=6)
         box_r.pack(fill="both", expand=True, pady=(8, 0))
         self.stats_regs = self._stats_tree(box_r, (("reg", _("Region"), 190, "w"), ("n", _("Runden"), 65, "e"),
@@ -154,6 +168,8 @@ class StatsTab:
 
     def _stats_render(self):
         all_rounds = history.load(self._hist_path())
+        for r in all_rounds:                         # skins / new killers: the user's assignment
+            r.killer = self._killer_of(r.killer)
         # region filter: the regions that occur (kept selected even if the list changes)
         wanted = next((c for c, lbl in self._stats_regions if lbl == self.stats_region_var.get()), None)
         self._stats_regions = [(None, _("Alle Regionen"))] + \
@@ -197,8 +213,12 @@ class StatsTab:
             t.insert("", "end", values=(name, n, fmt_duration(avg), fmt_duration(longest)))
         t = self.stats_kill
         t.delete(*t.get_children())
+        keep = t.selection()
         for name, n, avg, top in history.per_killer(rounds):
-            t.insert("", "end", values=(killer_label(name), n, fmt_duration(avg), top))
+            t.insert("", "end", iid=name, values=(killer_label(name), n, fmt_duration(avg), top))
+        if keep and t.exists(keep[0]):
+            t.selection_set(keep[0])
+        self._stats_alias_buttons()
         t = self.stats_regs
         t.delete(*t.get_children())
         pings = history.ping_by_region(rounds)
@@ -242,6 +262,37 @@ class StatsTab:
         state = "normal" if self.stats_last.selection() else "disabled"
         for b in self.stats_role_btns:
             b.configure(state=state)
+
+    def _stats_alias_buttons(self):
+        sel = self.stats_kill.selection()
+        free = bool(sel) and sel[0] not in KILLERS           # only names that are not a listed killer
+        self.stats_alias_cb.configure(state="readonly" if free else "disabled")
+        self.stats_alias_btn.configure(state="normal" if free else "disabled")
+        self.stats_alias_clear.configure(state="normal" if self.settings.get("killer_aliases") else "disabled")
+
+    def _stats_alias_set(self):
+        """Marked name (skin, new killer) -> the killer picked in the list; applies to all rounds."""
+        sel = self.stats_kill.selection()
+        label = self.stats_alias_var.get()
+        target = next((k for k in self._stats_alias_choices if killer_label(k) == label), None)
+        if not sel or target is None:
+            return
+        aliases = dict(self.settings.get("killer_aliases") or {})
+        aliases[fold(sel[0])] = target
+        self.settings.set("killer_aliases", aliases)
+        self._save_soon()
+        self._log(_("„{name}“ zählt jetzt als {killer}.", name=sel[0], killer=killer_label(target)), "System")
+        self.stats_alias_var.set("")
+        self._stats_render()
+
+    def _stats_alias_reset(self):
+        if not messagebox.askokcancel(_("Zuordnungen löschen"), _("Alle eigenen Killer-Zuordnungen löschen?"),
+                                      parent=self.root):
+            return
+        self.settings.set("killer_aliases", {})
+        self._save_soon()
+        self._log(_("Killer-Zuordnungen gelöscht."), "System")
+        self._stats_render()
 
     def _stats_set_role(self, role):
         """Correct the role of the round marked in "Letzte Runden" (detection wrong or unknown)."""

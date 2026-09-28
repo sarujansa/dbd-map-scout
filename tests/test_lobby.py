@@ -185,7 +185,7 @@ def test_reminder_when_countdown_runs_out_without_ready():
 # ------------------------------------------------------------------ own killer
 @pytest.mark.parametrize("name, killer", [("k_search_hb", "The Hillbilly"), ("k_search_nurse", "The Nurse"),
                                           ("k_search_loadout", "The Hillbilly"), ("k_ready", "The Hillbilly"),
-                                          ("k_search_grizzly", "Murderous Grizzly"), ("s_search", ""),
+                                          ("k_search_grizzly", "The Oni"), ("s_search", ""),
                                           ("s_ready", ""), ("custom_ready", ""), ("k_play", "")])
 def test_killer_name(reader, name, killer):
     assert view(reader, name).killer == killer
@@ -198,7 +198,7 @@ def test_killer_missing_from_the_list_is_kept_as_read(reader, monkeypatch):
     assert view(r, "k_search_nurse").killer == "The Nurse"                  # read text, not the lexicon
     assert r.killers.strings and "THENURSE" not in r.killers.strings
     assert lobby.plain_name("THE  NEW-ONE!") == "The New One"
-    assert lobby.killer_label("The Nurse") == "Nurse" and lobby.killer_label("Murderous Grizzly") == "Murderous Grizzly"
+    assert lobby.killer_label("The Nurse") == "Nurse" and lobby.killer_label("Frank Stone") == "Frank Stone"
 
 
 def K(kind, name, elapsed=None):
@@ -206,6 +206,16 @@ def K(kind, name, elapsed=None):
     v = V(kind, "killer", elapsed)
     v.name, v.killer = name.upper(), name
     return v
+
+
+def test_unlisted_skin_is_kept_and_can_be_assigned(reader, monkeypatch):
+    monkeypatch.setattr(lobby, "SKINS", {})
+    r = lobby.LobbyReader(reader.rec)
+    name = view(r, "k_search_grizzly").killer
+    assert name.replace(" ", "").lower() == "murderousgrizzly"             # as read, not a wrong killer
+    assert lobby.resolve_killer(name, {"MURDEROUSGRIZZLY": "The Oni"}) == "The Oni"
+    assert lobby.resolve_killer(name, {}) == name and lobby.resolve_killer("", {"X": "Y"}) == ""
+    assert all(k in lobby.KILLERS for k in lobby.SKINS.values())
 
 
 def test_found_lobby_carries_the_killer():
