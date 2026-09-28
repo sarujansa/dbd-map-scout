@@ -90,6 +90,7 @@ def _watch(tmp_path, monkeypatch, exit_code=None):
     w._started = w._touched = 1000.0
     monkeypatch.setattr(connwatch.regions, "exit_code", lambda p: exit_code)
     monkeypatch.setattr(connwatch.regions, "close_handle", lambda p: None)
+    monkeypatch.setattr(connwatch.regions, "resolve", lambda name: [])     # no real DNS for the ping
     return w, control, result
 
 
@@ -137,6 +138,7 @@ def test_in_process_when_already_admin(monkeypatch):
     monkeypatch.setattr(connwatch, "is_admin", lambda: True)
     monkeypatch.setattr(connwatch.regions, "start_elevated", lambda *a, **k: (_ for _ in ()).throw(AssertionError))
     monkeypatch.setattr(netwatch, "watch", fake_watch)
+    monkeypatch.setattr(connwatch.regions, "resolve", lambda name: [])     # no real DNS for the ping
     w = connwatch.ConnectionWatch()
     w._rdns = {SERVER: ("eu-central-1", time.time())}
     assert w.start() is None and w.running
@@ -249,3 +251,40 @@ def test_capture_refuses_instead_of_promiscuous_fallback(tmp_path, monkeypatch):
     assert 1 not in fake.ioctls                                    # no silent RCVALL_ON
     err = json.loads(result.read_text())
     assert err["ok"] is False and "RCVALL_IPLEVEL" in err["error"]
+
+
+def test_ping_to_region_beacon_median_and_reset(monkeypatch):
+    """Ping goes to the region's GameLift beacon (never the game server), median of the last values,
+    starts over when the region changes and is gone without a server."""
+    resolved, pinged = [], []
+    answers = iter([30.0, 90.0, 32.0, 31.0, 150.0])
+    monkeypatch.setattr(connwatch.regions, "resolve", lambda name: resolved.append(name) or ["35.1.1.1"])
+    monkeypatch.setattr(connwatch.regions, "udp_ping", lambda ip: pinged.append(ip) or next(answers))
+    monkeypatch.setattr(connwatch.regions, "icmp_ping", lambda ip: None)
+    monkeypatch.setattr(connwatch.threading, "Thread", _InlineThread)
+    w = connwatch.ConnectionWatch()
+    w.server = {"ip": SERVER, "port": 7777, "region": "eu-central-1"}
+    t = 1000.0
+    for expected in (30.0, 60.0, 32.0):                                # medians of 30 | 30,90 | 30,90,32
+        w._update_ping(t)
+        assert w.ping_ms == expected
+        t += connwatch.PING_EVERY
+    w._update_ping(t - 1)                                              # too soon: no extra packet
+    assert len(pinged) == 3
+    assert resolved == ["gamelift-ping.eu-central-1.api.aws"]          # resolved once, then cached
+    assert SERVER not in pinged                                         # the game server gets nothing
+    w.server = {"ip": "3.2.2.2", "port": 7777, "region": "eu-west-1"}  # other region: start over
+    w._update_ping(t)
+    assert w.ping_ms == 31.0 and resolved[-1] == "gamelift-ping.eu-west-1.api.aws"
+    w.server = None
+    w._update_ping(t + 100)
+    assert w.ping_ms is None
+
+
+def test_ping_shown_in_text(monkeypatch):
+    w = connwatch.ConnectionWatch()
+    w.proc = object()
+    w.server = {"ip": SERVER, "port": 7777, "region": "eu-central-1"}
+    assert w.text() == f"Frankfurt ({SERVER})"
+    w.ping_ms = 23.4
+    assert w.text() == f"Frankfurt ({SERVER}) · 23 ms"

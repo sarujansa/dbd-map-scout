@@ -405,7 +405,8 @@ class App:
             text = "Warte auf Windows (Administratorrechte) …"
         self.conn_tab_var.set(f"Verbunden mit: {text}" if text and self.conn.running else text)
         show = self.settings["overlay"].get("show_server", True)
-        self.overlay.set_server(regions.NAMES.get(srv["region"], srv["region"]) if srv and show else "")
+        self.overlay.set_server(regions.NAMES.get(srv["region"], srv["region"]) if srv and show else "",
+                                self.conn.ping_ms)
         main = f"Verbunden mit: {text}" if self.conn.running else ""
         if main != self.conn_var.get():
             self.conn_var.set(main)

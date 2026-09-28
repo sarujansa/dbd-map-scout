@@ -153,6 +153,12 @@ def add_border(pic: Image.Image) -> Image.Image:
 INFO_TIMER = (255, 255, 255, 255)
 INFO_SERVER = (178, 184, 248, 255)     # light tone of the map colour
 INFO_DOT = (74, 222, 128, 255)         # "connected"
+PING_GOOD, PING_OK = 60, 120           # ms: green up to here, amber up to here, red above
+PING_COLOURS = ((134, 239, 172, 255), (251, 191, 36, 255), (248, 113, 113, 255))
+
+
+def ping_colour(ms: float):
+    return PING_COLOURS[0] if ms <= PING_GOOD else PING_COLOURS[1] if ms <= PING_OK else PING_COLOURS[2]
 
 
 def _content_bottom(pic: Image.Image) -> int:
@@ -166,25 +172,40 @@ def _tracked_width(d, text, font, track):
     return sum(d.textlength(c, font=font) for c in text) + track * max(0, len(text) - 1)
 
 
-def add_info(pic: Image.Image, timer: str, server: str, height: int, backdrop: bool = False) -> Image.Image:
-    """Round timer and connected server below the map, styled like the map title: white heavy digits
-    with a soft shadow (no box), below them a green "connected" dot and the region in small caps.
+def add_info(pic: Image.Image, timer: str, server: str, height: int, backdrop: bool = False,
+             ping: float | None = None) -> Image.Image:
+    """Round timer, connected server and its ping below the map, styled like the map title: white heavy
+    digits with a soft shadow (no box); below them a green "connected" dot with the region in small
+    caps, and the ping coloured by quality. The ping is only shown together with a server.
     ``backdrop``: the map sits on a dark rectangle (transparent edge off) – extend it behind the info."""
+    if not server:
+        ping = None
     if not timer and not server:
         return pic
     d0 = ImageDraw.Draw(pic)
     tfont, sfont = _font(max(22, height // 11), heavy=True), _font(max(14, height // 24))
-    stext = server.upper()
     track = max(1, height // 220)
     dot = max(7, height // 44)
     gap = max(4, height // 64)
-    tb = d0.textbbox((0, 0), timer or "0", font=tfont)
-    sb = d0.textbbox((0, 0), stext or "0", font=sfont)
-    th = tb[3] - tb[1] if timer else 0
-    sh = sb[3] - sb[1] if server else 0
-    block_h = th + sh + (gap if timer and server else 0)
-    sw = int(_tracked_width(d0, stext, sfont, track)) + 2 * dot if server else 0
-    width = max(pic.width, (tb[2] - tb[0]) + 2 * gap, sw + 2 * gap)
+    # rows: (kind, [(text, colour), ...] segments, font); small rows are tracked caps
+    rows = []
+    if timer:
+        rows.append(("timer", [(timer, INFO_TIMER)], tfont))
+    if server:
+        rows.append(("server", [(server.upper(), INFO_SERVER)], sfont))
+    if ping is not None:
+        rows.append(("ping", [("PING ", INFO_SERVER), (f"{ping:.0f} MS", ping_colour(ping))], sfont))
+    boxes, widths = [], []
+    for kind, segs, font in rows:
+        text = "".join(t for t, _ in segs)
+        boxes.append(d0.textbbox((0, 0), text if kind == "timer" else text or "0", font=font))
+        if kind == "timer":
+            widths.append(boxes[-1][2] - boxes[-1][0])
+        else:
+            widths.append(int(_tracked_width(d0, text, font, track)) + (2 * dot if kind == "server" else 0))
+    heights = [b[3] - b[1] for b in boxes]
+    block_h = sum(heights) + gap * (len(rows) - 1)
+    width = max([pic.width] + [w + 2 * gap for w in widths])
     # text layer for the info block only (shadow = blurred dark copy, like the title of the map pictures)
     blur = max(2, height // 150)
     pad = 3 * blur
@@ -195,25 +216,29 @@ def add_info(pic: Image.Image, timer: str, server: str, height: int, backdrop: b
     canvas = Image.new("RGBA", (width, max(pic.height, top + block_h + pad + 2 * off)),
                        BACKDROP + (255,) if backdrop else (0, 0, 0, 0))
     canvas.alpha_composite(pic, (0, 0))
+    dark = (0, 0, 0, 230)
 
-    def draw(d, dark):
+    def draw(d, shadow):
         y = pad
-        if timer:
-            d.text(((layer_w - (tb[2] - tb[0])) // 2 - tb[0], y - tb[1]), timer, font=tfont,
-                   fill=(0, 0, 0, 230) if dark else INFO_TIMER,
-                   stroke_width=2 * halo if dark else 0, stroke_fill=(0, 0, 0, 230))
-            y += th + gap
-        if server:
-            x = (layer_w - sw) // 2
-            cy = y + sh // 2
-            grow = halo if dark else 0
-            d.ellipse([x - grow, cy - dot // 2 - grow, x + dot + grow, cy - dot // 2 + dot + grow],
-                      fill=(0, 0, 0, 230) if dark else INFO_DOT)
-            x += 2 * dot
-            for ch in stext:
-                d.text((x, y - sb[1]), ch, font=sfont, fill=(0, 0, 0, 230) if dark else INFO_SERVER,
-                       stroke_width=halo if dark else 0, stroke_fill=(0, 0, 0, 230))
-                x += d.textlength(ch, font=sfont) + track
+        for (kind, segs, font), (x0, y0, x1, y1), w, h in zip(rows, boxes, widths, heights):
+            if kind == "timer":
+                d.text(((layer_w - w) // 2 - x0, y - y0), segs[0][0], font=font,
+                       fill=dark if shadow else segs[0][1],
+                       stroke_width=2 * halo if shadow else 0, stroke_fill=dark)
+            else:
+                x = (layer_w - w) // 2
+                if kind == "server":
+                    grow = halo if shadow else 0
+                    cy = y + h // 2
+                    d.ellipse([x - grow, cy - dot // 2 - grow, x + dot + grow, cy - dot // 2 + dot + grow],
+                              fill=dark if shadow else INFO_DOT)
+                    x += 2 * dot
+                for text, colour in segs:
+                    for ch in text:
+                        d.text((x, y - y0), ch, font=font, fill=dark if shadow else colour,
+                               stroke_width=halo if shadow else 0, stroke_fill=dark)
+                        x += d.textlength(ch, font=font) + track
+            y += h + gap
 
     shadow = Image.new("RGBA", (layer_w, layer_h), (0, 0, 0, 0))
     draw(ImageDraw.Draw(shadow), True)
@@ -254,6 +279,7 @@ class Win32Overlay:
         self._caption = ""
         self._timer = ""                # round timer text below the map ("" = none)
         self._server = ""               # connected server region below the timer ("" = none)
+        self._ping = None               # ping to that region in ms, below the region
         self._base = []                 # [(PIL RGBA, duration)] scaled map (+ caption), cached per size
         self._base_key = None
         self._prepared = []             # [(bytes, w, h, duration)]
@@ -305,9 +331,10 @@ class Win32Overlay:
         """Round timer shown below the map; only re-renders when the text changes."""
         self._timer = text or ""
 
-    def set_server(self, text: str):
-        """Connected server region shown below the timer."""
+    def set_server(self, text: str, ping: float | None = None):
+        """Connected server region (and its ping) shown below the timer."""
         self._server = text or ""
+        self._ping = round(ping) if ping is not None and self._server else None
 
     def has_map(self) -> bool:
         return bool(self._frames)
@@ -327,12 +354,13 @@ class Win32Overlay:
             self._base = [(compose(img, height, base_key[1], self.transparent, False), dur)
                           for img, dur in self._frames]
             self._base_key = base_key
-        key = (base_key, self._editing, self._timer, self._server)
+        key = (base_key, self._editing, self._timer, self._server, self._ping)
         if key != self._key:
             self._prepared = []
             for pic, dur in self._base:
                 if self._timer or self._server:
-                    pic = add_info(pic, self._timer, self._server, height, backdrop=not self.transparent)
+                    pic = add_info(pic, self._timer, self._server, height, backdrop=not self.transparent,
+                                   ping=self._ping)
                 if self._editing:
                     pic = add_border(pic.copy())
                 self._prepared.append((premultiplied_bgra(pic), pic.width, pic.height, dur))

@@ -6,13 +6,19 @@ administrator rights (UAC). Either way it writes its result file, read here.
 The game server is the busiest UDP partner on a public address whose
 reverse DNS name is an AWS EC2 machine (GameLift runs on EC2); the region
 is part of that name, e.g. ``ec2-3-120-1-2.eu-central-1.compute.amazonaws.com``.
+
+Ping: while connected, the GameLift UDP ping beacon of that region
+(``gamelift-ping.<region>.api.aws``, port 7770) is measured every few seconds,
+the way DBD itself measures region latency. The game server is never sent anything.
 """
 from __future__ import annotations
 
+import collections
 import json
 import os
 import re
 import socket
+import statistics
 import sys
 import tempfile
 import threading
@@ -26,6 +32,8 @@ LOST_AFTER = 8.0       # no server traffic for this long -> not connected any mo
 TOUCH_EVERY = 5.0      # refresh the control file (the helper stops when it gets older than 20 s)
 NO_DATA_AFTER = 8.0    # result file not updated for this long -> the helper is not working
 RDNS_RETRY = 60.0      # look up an address again after this long if it gave no AWS region
+PING_EVERY = 5.0       # one ping to the region's beacon this often while connected (GameLift allows 3/s)
+PING_KEEP = 3          # shown value = median of the last pings (one slow packet does not jump the display)
 _REGION_RE = re.compile(r"\.([a-z]{2}(?:-[a-z]+)+-\d)\.compute\.amazonaws\.com$")
 
 
@@ -77,6 +85,12 @@ class ConnectionWatch:
         self._started = 0.0
         self._rdns = {}                # ip -> (region code or "" = none/pending, time of the lookup)
         self._lock = threading.Lock()
+        self.ping_ms = None            # latency to the connected region (median of the last pings)
+        self._pings = collections.deque(maxlen=PING_KEEP)
+        self._ping_region = None
+        self._next_ping = 0.0
+        self._pinging = False
+        self._beacons = {}             # region -> ping beacon IP
 
     @property
     def running(self) -> bool:
@@ -124,6 +138,7 @@ class ConnectionWatch:
         _remove(self.control, self.result)      # gone control file stops the helper as well
         self.proc = self.control = self.result = None
         self.server = None
+        self._update_ping(0.0)
 
     # --------------------------------------------------------------- polling
     def poll(self, now: float | None = None) -> None:
@@ -155,6 +170,43 @@ class ConnectionWatch:
             self.server, self._seen = found, now
         elif self.server and now - self._seen > LOST_AFTER:
             self.server = None
+        self._update_ping(now)
+
+    # --------------------------------------------------------------- ping
+    def _update_ping(self, now: float) -> None:
+        region = self.server["region"] if self.server else None
+        with self._lock:
+            if region != self._ping_region:          # other region / no server: old values are void
+                self._ping_region = region
+                self._pings.clear()
+                self.ping_ms = None
+                self._next_ping = 0.0
+            if region is None or self._pinging or now < self._next_ping:
+                return
+            self._pinging = True
+            self._next_ping = now + PING_EVERY
+        threading.Thread(target=self._ping, args=(region,), daemon=True, name="ping").start()
+
+    def _ping(self, region: str) -> None:
+        ms = None
+        try:
+            ip = self._beacons.get(region)
+            if not ip:
+                ips = regions.resolve(regions.hosts_for(region)[1])   # DNS server, ignores the hosts file
+                ip = ips[0] if ips else None
+                if ip:
+                    self._beacons[region] = ip
+            if ip:
+                ms = regions.udp_ping(ip)
+                if ms is None:
+                    ms = regions.icmp_ping(ip)
+        except Exception:
+            ms = None
+        with self._lock:
+            if region == self._ping_region and ms is not None:
+                self._pings.append(ms)
+                self.ping_ms = float(statistics.median(self._pings))
+            self._pinging = False
 
     def _read(self):
         try:
@@ -188,7 +240,8 @@ class ConnectionWatch:
         if self.no_data:
             return "keine Daten vom Mitschnitt"
         if self.server:
-            return f"{region_name(self.server['region'])} ({self.server['ip']})"
+            ping = f" · {self.ping_ms:.0f} ms" if self.ping_ms is not None else ""
+            return f"{region_name(self.server['region'])} ({self.server['ip']}){ping}"
         return "Warte auf Match …"
 
 

@@ -52,3 +52,17 @@ def test_backdrop_mode_extends_dark_rectangle():
     out = ow.add_info(pic, "07:32", "Irland", 400, backdrop=True)
     assert out.getpixel((2, out.height - 2)) == ow.BACKDROP + (255,)
     assert ow.add_info(pic, "07:32", "Irland", 400).getpixel((2, out.height - 2))[3] == 0
+
+
+def test_ping_row_below_server_and_coloured():
+    pic = map_pic()
+    without = ow.add_info(pic, "07:32", "Frankfurt", 400)
+    with_ping = ow.add_info(pic, "07:32", "Frankfurt", 400, ping=23)
+    assert with_ping.height > without.height                         # extra row below the region
+    assert ow.add_info(pic, "07:32", "", 400, ping=23).height == ow.add_info(pic, "07:32", "", 400).height
+    assert ow.ping_colour(23) == ow.PING_COLOURS[0]
+    assert ow.ping_colour(95) == ow.PING_COLOURS[1]
+    assert ow.ping_colour(180) == ow.PING_COLOURS[2]
+    green = ow.PING_COLOURS[0][:3]
+    rows = with_ping.crop((0, without.height - 10, with_ping.width, with_ping.height)).convert("RGB")
+    assert green in {c for _, c in rows.getcolors(1 << 20)}           # value drawn in its quality colour
