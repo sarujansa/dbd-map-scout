@@ -57,6 +57,7 @@ start_debug.bat           :: mit Konsole
 | `wincapture.py` | Fensteraufnahme (WGC) für DBD im Hintergrund: `CapturePolicy` (reine Logik: an, sobald DBD nicht aktiv; aus nach 5 s aktiv), `WindowCapture` (kopiert nur die angefragte Region im Rückruf; falsche Bildgröße/keine Bilder → `None` → Worker nimmt mss). Bilder daraus enthalten das eigene Overlay nicht → kein Ausschwärzen |
 | Nur Infos | `overlay.show_map` = False: beide Overlays (`set_show_map`) zeichnen statt der Karte nur den Infoblock (Win32: leeres 1×1-Bild + `add_info`; Tk: Bild-Label ausgeblendet); `map_size()` liefert dann (0, 0), ohne Timer/Server wird das Overlay versteckt (Grund „nichts anzuzeigen“, nicht geloggt) |
 | Grösse pro Map | `settings.json` → `overlay.map_heights` {map_id: Anteil}: Hotkeys/Mausrad ändern nur die angezeigte Map (`App._resize`), Schieberegler = Standard; `App._map_height()` liefert die gültige Grösse |
+| Drehen pro Map | `overlay.map_rotations` {map_id: 90/180/270}, Knopf „Drehen ↻“ / Hotkey `rotate_map` (`App.rotate_map`, `_reload_picture` ändert weder Sichtbarkeit noch Timer). `mapimage.title_split()` findet den Map-Namen oben (transparente Zeilenlücke im oberen Viertel), `rotate()` dreht nur die Karte darunter, der Name bleibt aufrecht; bei GIFs gilt die Teilung des ersten Bilds für alle. Angewendet beim Laden (`overlay.load_frames(path, rotation)`), daher stimmen `map_size()`/`fit_height` automatisch. Automatisch mit der Kamera drehen: nicht möglich ohne Spielspeicher – abgelehnt |
 | `layout.py` | reine Logik: Overlay im schwarzen Balken halten (`bar_side`, `clamp_x`); gilt für alle Positionen, solange `keep_in_bar` an ist; „automatisch“ immer. Mitten über dem Spiel platziert → keine Begrenzung |
 | `mapimage.py` | reine Bildlogik für eigene Kartenbilder: Rand abschneiden, Hintergrundfarben `#282a42`/`#535781` (10 % euklidisch) transparent, 1280 px hoch, WebP; GIF unverändert. Ziel `user_maps/` (gitignored, sonst blockiert das Update) |
 | `picturedlg.py` | Dialog „Kartenbild hinzufügen …“ (Tab Maps, Leiste „unbekannte Map“): vorhandene Map/Layout ersetzen oder neue Map (Name + Realm-Ordner), Vorschau, „Eigenes Bild löschen“. `catalog.py`: Bild in `user_maps/` mit gleichem relativem Pfad (beliebige Endung) ersetzt das mitgelieferte, sonst neue `custom:`-Map |
@@ -98,6 +99,8 @@ start_debug.bat           :: mit Konsole
 ## Offene Ideen (vom Nutzer noch nicht entschieden)
 
 Halten-zum-Anzeigen-Taste, Etagen-Hotkey (Midwich), Autostart mit DBD + Tray-Icon, .exe-Build (vorerst verworfen: Updates per git pull, Virenscanner-Fehlalarme, Admin-Helfer bräuchten Umbau – Desktop-Verknüpfung reicht), Ausblenden im Zuschauermodus, „Match Details“ als zweite Erkennungsquelle.
+
+Gewählt, wartet auf Screenshots des Nutzers (3440×1440): **Wartezeit in der Statistik** (Suche/Lobby → Map-Banner, Ø pro Tag/Uhrzeit/Region; braucht Erkennung „sucht gerade“, sonst zählen Blutnetz/Shop mit) und **Rolle erkennen** (Killer/Survivor am HUD; Statistik und Overlay-Einstellungen pro Rolle; erst nur Anzeige, automatisches Umschalten erst nach Bestätigung).
 
 ## Arbeitsweise
 

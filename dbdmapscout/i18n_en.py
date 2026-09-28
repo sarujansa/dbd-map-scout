@@ -97,11 +97,21 @@ EN = {
         "Off: the overlay shows only the round timer, server region and ping – without the map. Detection, end of "
         "round and statistics work as usual.",
     "Für diese Map zurücksetzen": "Reset for this map",
-    "{map}: eigene Grösse {n} % (Hotkeys/Mausrad)": "{map}: own size {n} % (hotkeys/mouse wheel)",
+    "eigene Grösse {n} % (Hotkeys/Mausrad)": "own size {n} % (hotkeys/mouse wheel)",
+    "gedreht um {deg}°": "turned by {deg}°",
+    "Drehen ↻": "Rotate ↻",
+    "Karte drehen": "Rotate map",
+    "{map} um {deg}° gedreht.": "{map} turned by {deg}°.",
+    "Drehung für {map} entfernt.": "Rotation for {map} removed.",
+    "Dreht die angezeigte Karte um 90° im Uhrzeigersinn (für jede Map gemerkt). Der Map-Name darüber bleibt "
+    "aufrecht, die Zahlen in der Karte drehen sich mit.":
+        "Turns the map on display by 90° clockwise (remembered for each map). The map name above it stays "
+        "upright, the numbers inside the map turn with it.",
     "Eigene Grösse für {map} entfernt – es gilt wieder der Schieberegler.":
         "Own size for {map} removed – the slider applies again.",
-    "Entfernt die eigene Grösse der angezeigten Map – danach gilt wieder der Schieberegler für alle Maps.":
-        "Removes the own size of the map on display – the slider for all maps applies again.",
+    "Entfernt eigene Grösse und Drehung der angezeigten Map – danach gilt wieder der Schieberegler für alle "
+    "Maps.":
+        "Removes the own size and rotation of the map on display – the slider for all maps applies again.",
     "Deckkraft": "Opacity",
     "Nur zeigen, wenn DBD das aktive Fenster ist": "Only show while DBD is the active window",
     "Map-Namen über der Karte anzeigen": "Show the map name above the map",
