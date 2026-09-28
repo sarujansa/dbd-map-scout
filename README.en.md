@@ -60,6 +60,8 @@ The control window has these tabs. If a tab does not fit into the window, a scro
 
 **Position "automatic":** if DBD runs with a 16:9 picture on a wider monitor (e.g. 3440×1440 with black bars), the map goes into the left black bar and is scaled to fit. Otherwise it appears at the top left. As soon as you move a position slider or drag the map with the mouse, "custom position" applies. "Reset" sets "automatic" again.
 
+**Info only, without the map:** switch off "Show the map" in the Overlay tab – the overlay then shows only the round timer, server region and ping when a round starts (same place, same style). Detection, hiding after the round, menu pause and statistics keep working as usual.
+
 **Keep in the black bar** (Overlay tab, on by default): on ultrawide the map stays inside the bar it is in, whatever the position – "top/bottom left" in the left bar, "top/bottom right" in the right one, a custom position in the bar where it starts. If it is too wide, it is made smaller instead of reaching into the game picture. A map placed over the middle of the game on purpose stays as it is. Switch it off if the map may be bigger than the bar.
 
 The overlay is a native Windows window of its own: always on top, click-through, and it never takes the focus away from the game.
