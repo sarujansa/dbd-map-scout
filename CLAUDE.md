@@ -10,7 +10,7 @@ Das Programm muss „regelkonform“ zu Dead by Daylight bleiben. Konkret:
 - **Kein Zugriff auf den Spielprozess** – nicht einmal `OpenProcess`, kein Speicherlesen, keine Injection, keine Modul-/Handle-Abfragen mit PID.
 - **Keine Spieldateien** lesen oder schreiben (auch nicht `GameUserSettings.ini`, Splash-Screen, Movies).
 - Erlaubt sind nur: **Bildschirmpixel** (mss/BitBlt), Fensterinfos (Titel, Klasse `UnrealWindow`, Position über EnumWindows), **Mauszeiger-Status** (`GetCursorInfo`, wie OBS), die **Windows-hosts-Datei** (nur Tab „Server“, nur GameLift-Namen) und **Paketköpfe des Netzwerkverkehrs** (nur Tab „Server“, Anzeige „Verbunden mit“; vom Nutzer ausdrücklich gewünscht, wie in Make Your Choice). Beim Mitschnitt: nur IPv4/UDP-Kopffelder (Adressen, Ports) lesen, **nie Paketinhalte**, nichts senden, nichts speichern außer der temporären Ergebnisdatei (Server-IP **nicht** ins Logfile, nur die Region), kein Treiber (Raw-Socket `SIO_RCVALL`), **nur Modus `RCVALL_IPLEVEL`** (eigener Verkehr; nie `RCVALL_ON`/Promiscuous, auch nicht als Rückfall), keine Zuordnung über die PID des Spiels.
-- Map-Erkennung und Overlay bauen **keine Internetverbindung** auf; nur der Server-Tab pingt AWS-GameLift (UDP 7770 / ICMP) und löst DNS auf (auch Reverse-DNS der Spielserver-Adresse).
+- Map-Erkennung und Overlay bauen **keine Internetverbindung** auf; nur der Server-Tab pingt AWS-GameLift (UDP 7770 / ICMP) und löst DNS auf (auch Reverse-DNS der Spielserver-Adresse). Während „Verbunden mit“ läuft, alle 5 s ein Ping an den Beacon der verbundenen Region (`gamelift-ping.<region>.api.aws`) – **nie Pakete an den Spielserver selbst**.
 - Neue Features, die gegen diese Regeln verstoßen würden: nicht umsetzen, sondern nachfragen.
 
 ## Setup des Nutzers (wichtig für Tests und Schwellenwerte)
@@ -53,7 +53,7 @@ start_debug.bat           :: mit Konsole
 | `regions.py` | Server-Tab: Regionstabelle (Namen), Ping (UDP-Beacon, DNS ohne hosts), `run_job()` startet Helfer per UAC |
 | `hostsedit.py` | Admin-Helfer (UAC): schreibt nur den eigenen markierten Abschnitt der hosts-Datei. Nur Standardbibliothek, gestartet mit `pythonw -I -S`. Erlaubt nur Namen aus `MANAGED` (fest codiert) |
 | `netwatch.py` | Admin-Teil „Verbunden mit“: Raw-Socket (`RCVALL_IPLEVEL`, kein Rückfall), zählt UDP-Pakete je öffentlicher Gegenstelle, schreibt jede Sekunde die aktivsten in eine Ergebnisdatei. Nur Standardbibliothek. Läuft als Thread, wenn das Programm schon Admin ist, sonst als Helfer per UAC (`pythonw -I -S`). Beendet sich, wenn die Steuerdatei fehlt, „stop“ sagt oder 20 s nicht aufgefrischt wurde |
-| `connwatch.py` | startet `netwatch`, liest die Ergebnisdatei, wählt den Spielserver (≥ 10 Pakete/s, Reverse-DNS = AWS EC2) und bestimmt die Region aus dem DNS-Namen |
+| `connwatch.py` | startet `netwatch`, liest die Ergebnisdatei, wählt den Spielserver (≥ 10 Pakete/s, Reverse-DNS = AWS EC2), bestimmt die Region aus dem DNS-Namen und misst den Ping zum Beacon dieser Region (Median der letzten 3, alle 5 s) |
 | `fullscan.py`, `hotkeys.py`, `diagnose.py`, `theme.py`, `config.py` | Vollbild-Scan, globale Hotkeys, Diagnose-Text, Dark Mode, Einstellungen (+ Migrationen, `SETTINGS_VERSION`) |
 
 ## Wichtige Designentscheidungen (nicht ohne Grund ändern)
