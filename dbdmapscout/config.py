@@ -32,6 +32,7 @@ DEFAULTS = {
         "show_server": True,            # connected server region below the timer (needs the Server tab option)
         "transparent": True,            # transparent area around the map (off = dark rectangle)
         "keep_in_bar": True,            # ultrawide: shrink/move the map so it stays inside the black bar
+        "map_heights": {},              # map id -> own size (hotkeys / mouse wheel with that map on display)
     },
     "hotkeys": {
         "toggle_overlay": "ctrl+alt+m",

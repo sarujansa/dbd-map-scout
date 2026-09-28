@@ -55,7 +55,7 @@ The control window has these tabs. If a tab does not fit into the window, a scro
 | **Detection** | automatic mode, hiding after the round, pause in menus, game language; folded under "Advanced": window capture, scans per second, live status, debug pictures, diagnostics |
 | **Server** | the connected game server at the top, below it server regions with ping, blocked or allowed through the hosts file (see below) |
 | **Log** | messages in the categories *Detection*, *Overlay*, *System*, *Error*, each can be shown or hidden |
-| **Statistics** | your rounds: count, average length, total time; per map rounds, average and longest length (click a column to sort); the last 100 rounds with date, length and server region. Counted from the detected map banner to the detected end of the round (from 1 minute; without a detected end the round is not counted). Stored only locally in `rounds.jsonl`, "Delete history" removes everything |
+| **Statistics** | your rounds, filtered by period (today, this week, this month, this year) and server region: count, average length, total time; per map rounds, average and longest length (click a column to sort); per server region rounds, average length and share; the last 100 rounds with date, length and server region. Counted from the detected map banner to the detected end of the round (from 1 minute; without a detected end the round is not counted). Stored only locally in `rounds.jsonl`, "Delete history" removes everything |
 | **Settings** | language, dark mode, hotkeys, start/notification area, updates, own assignments, folders |
 
 **Position "automatic":** if DBD runs with a 16:9 picture on a wider monitor (e.g. 3440×1440 with black bars), the map goes into the left black bar and is scaled to fit. Otherwise it appears at the top left. As soon as you move a position slider or drag the map with the mouse, "custom position" applies. "Reset" sets "automatic" again.
@@ -72,7 +72,7 @@ The overlay is a native Windows window of its own: always on top, click-through,
 | `Ctrl+Alt+V` | switch layout variant (e.g. Coal Tower ↔ Coal Tower II) |
 | `Ctrl+Alt+S` | scan the screen (if automatic detection missed the banner) |
 | `Ctrl+Alt+←` / `→` | previous / next map |
-| `Ctrl+Alt+↑` / `↓` | overlay bigger / smaller |
+| `Ctrl+Alt+↑` / `↓` | overlay bigger / smaller – applies to the map on display and is remembered per map (Overlay tab: "Reset for this map"; the "Size" slider is the default size for all others) |
 | `Ctrl+Alt+P` | change position (drag the overlay with the mouse, mouse wheel = size, press again = done) |
 
 Hotkeys can be changed under **Settings → Hotkeys**: click the field and press the new combination (Esc cancels, Delete switches the hotkey off, "Defaults" resets all). Letters and digits need Ctrl or Alt so the hotkey does not block normal typing; combinations used twice are refused. All settings are stored in `settings.json`.
