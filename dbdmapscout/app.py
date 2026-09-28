@@ -863,7 +863,7 @@ class App:
         self.worker.request_scan()
 
     def test_overlay(self):
-        """Show the overlay in the middle of the game/screen for 10 s, ignoring all filters.
+        """Show the overlay at its normal place for 10 s, ignoring all reasons to hide it.
         Pressing the button again during the test ends it at once."""
         if time.time() < getattr(self, "_force_until", 0):
             self._force_until = 0
@@ -875,7 +875,7 @@ class App:
                 self.show_map(first[0], first[1], "manual", "Testanzeige")
                 self._test_map = True            # loaded only for the test: hidden again when it ends
         self._force_until = time.time() + 10
-        self._log("Test: Overlay 10 s lang in der Bildschirmmitte – jetzt zu DBD wechseln "
+        self._log("Test: Overlay 10 s lang an seiner normalen Position – jetzt zu DBD wechseln "
                   "(nochmal drücken beendet den Test).", "Overlay")
         self.test_btn.configure(text="Test beenden")
         self._tick_overlay(reschedule=False)
@@ -1249,15 +1249,11 @@ class App:
         o = self.settings["overlay"]
         self.worker.map_on_screen = self.overlay.has_map() and not self.hidden_after_match
         gx, gy, gw, gh = self._game_rect()               # keeps the game window info fresh
-        if time.time() < getattr(self, "_force_until", 0) and self.overlay.has_map():
-            self.overlay.opacity = 1.0
-            w, h = self.overlay.render(int(gh * o["height"]))
-            self.overlay.show_at(gx + (gw - w) // 2, gy + (gh - h) // 2)
-            self._last_place = (gx + (gw - w) // 2, gy + (gh - h) // 2, w, h)
-            self.worker.overlay_rect = self._last_place
+        # test: shown at its normal place, ignoring every reason to hide it
+        forced = time.time() < getattr(self, "_force_until", 0) and self.overlay.has_map()
+        if forced:
             self._pos_forced = True
-            return
-        if getattr(self, "_pos_forced", False):
+        elif getattr(self, "_pos_forced", False):
             self._pos_forced = False
             if getattr(self, "_test_map", False):
                 self._test_map = False
@@ -1269,7 +1265,9 @@ class App:
                 and self.test_btn.cget("text") != "Overlay testen"):
             self.test_btn.configure(text="Overlay testen")
         reason = None
-        if not self.overlay.has_map():
+        if forced:
+            pass
+        elif not self.overlay.has_map():
             reason = "keine Map"
         elif not ((self.user_visible and not self.hidden_after_match) or self.overlay.editing):
             reason = "ausgeblendet"
@@ -1281,7 +1279,8 @@ class App:
             own = {self.overlay.hwnd(), self._root_hwnd()}
             if fg not in own and not is_game_window(fg):
                 reason = f"aktives Fenster ist {describe_window(fg)}"
-        self._log_visibility(reason, (gx, gy, gw, gh))
+        if not forced:
+            self._log_visibility(reason, (gx, gy, gw, gh))
         if reason:
             self.overlay.hide()
             self.worker.overlay_rect = None
