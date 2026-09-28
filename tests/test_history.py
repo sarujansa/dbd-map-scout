@@ -96,3 +96,21 @@ def test_role_filter_and_waiting_times():
     assert h.wait_by(rs, "weekday") == [(0, 2, 120.0, 60), (1, 1, 30.0, 30)]
     assert h.wait_by(rs, "hour") == [(9, 1, 30.0, 30), (18, 1, 60.0, 60), (21, 1, 180.0, 180)]
     assert h.wait_by(rs, "region") == [("eu-central-1", 2, 45.0, 30), ("eu-west-2", 1, 180.0, 180)]
+
+
+def test_role_can_be_corrected(tmp_path):
+    p = str(tmp_path / h.FILE)
+    h.append(p, h.Round(t=100.5, seconds=600, map_id="a", map="A", wait=90.0, role="survivor"))
+    h.append(p, h.Round(t=200.25, seconds=600, map_id="b", map="B", role="killer"))
+    assert h.set_role(p, 100.5, "killer").map == "A"
+    assert [r.role for r in h.load(p)] == ["killer", "killer"]
+    h.set_role(p, 100.5, "custom")
+    a = h.load(p)[0]
+    assert (a.custom, a.role, a.wait) == (True, "", 90.0)             # wait kept: undo-able, ignored while custom
+    assert h.wait_summary(h.load(p))["count"] == 0
+    h.set_role(p, 100.5, "survivor")
+    assert (h.load(p)[0].custom, h.load(p)[0].role) == (False, "survivor")
+    assert h.set_role(p, 999.0, "killer") is None
+    import pytest
+    with pytest.raises(ValueError):
+        h.set_role(p, 100.5, "hacker")
