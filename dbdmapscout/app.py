@@ -65,7 +65,7 @@ class App:
                 self.root.iconbitmap(default=ico)
             except tk.TclError:
                 pass
-        self.root.minsize(470, 600)
+        self.root.minsize(470, 420)                  # tabs scroll when the window is small
         self.root.protocol("WM_DELETE_WINDOW", self.quit)
         self.root.report_callback_exception = self._tk_error
 
@@ -200,10 +200,74 @@ class App:
 
         self._apply_theme()
         tooltip.attach_all(self.root, self._tip_lookup)
+        for seq in ("<MouseWheel>", "<Button-4>", "<Button-5>"):     # Windows / Linux
+            self.root.bind_all(seq, self._on_wheel, add="+")
+        # pages scroll vertically only: never narrower than the widest page (and the tab row)
+        self.root.update_idletasks()
+        widest = max([p["inner"].winfo_reqwidth() for p in self._pages] + [self.nb.winfo_reqwidth() - 20])
+        self.root.minsize(max(470, widest + 40), 420)
+
+    # ------------------------------------------------------------ scrollable tabs
+    def _scroll_tab(self):
+        """(outer, inner): the tab page scrolls vertically when its content is taller than the window.
+        When there is room, inner fills the page, so lists and the log still grow with the window."""
+        outer = ttk.Frame(self.nb)
+        canvas = tk.Canvas(outer, highlightthickness=0, borderwidth=0, yscrollincrement=8)
+        sb = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+        inner = ttk.Frame(canvas, padding=8)
+        item = canvas.create_window(0, 0, window=inner, anchor="nw")
+        canvas.configure(yscrollcommand=sb.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        page = {"canvas": canvas, "sb": sb, "inner": inner, "item": item, "size": None}
+        self._pages = getattr(self, "_pages", [])
+        self._pages.append(page)
+        canvas.bind("<Configure>", lambda e: self._layout_page(page))
+        return outer, inner
+
+    def _layout_page(self, page):
+        c, inner = page["canvas"], page["inner"]
+        w, h = c.winfo_width(), c.winfo_height()
+        need = inner.winfo_reqheight()
+        if w <= 1 or h <= 1 or page["size"] == (w, h, need):
+            return
+        page["size"] = (w, h, need)
+        c.itemconfigure(page["item"], width=w, height=max(h, need))
+        c.configure(scrollregion=(0, 0, w, max(h, need)))
+        if need > h + 1:
+            if not page["sb"].winfo_manager():
+                page["sb"].pack(side="right", fill="y", before=c)
+        else:
+            c.yview_moveto(0)
+            if page["sb"].winfo_manager():
+                page["sb"].pack_forget()
+
+    def _layout_pages(self):
+        """Content can grow later (advanced options, hints): checked with the overlay tick."""
+        for page in getattr(self, "_pages", []):
+            self._layout_page(page)
+
+    def _on_wheel(self, e):
+        """Mouse wheel scrolls the tab page under the pointer – lists, the log and choice boxes keep
+        their own scrolling."""
+        try:
+            w = self.root.winfo_containing(e.x_root, e.y_root)
+        except (tk.TclError, KeyError):
+            return
+        pages = {str(p["canvas"]): p for p in getattr(self, "_pages", [])}
+        while w is not None:
+            if isinstance(w, (ttk.Treeview, tk.Text, tk.Listbox, ttk.Combobox)):
+                return
+            page = pages.get(str(w))
+            if page:
+                if page["sb"].winfo_manager():
+                    step = -1 if (getattr(e, "num", 0) == 4 or getattr(e, "delta", 0) > 0) else 1
+                    page["canvas"].yview_scroll(step * 6, "units")
+                return
+            w = w.master
 
     # ------------------------------------------------------------ tab: maps
     def _tab_maps(self):
-        f = ttk.Frame(self.nb, padding=8)
+        outer, f = self._scroll_tab()
         srow = ttk.Frame(f)
         srow.pack(fill="x", pady=(0, 6))
         ttk.Label(srow, text=_("Suche")).pack(side="left")
@@ -229,7 +293,7 @@ class App:
         ttk.Label(prow, text=_("eigenes Bild für eine Map (Hintergrund wird entfernt)"), style="Dim.TLabel").pack(
             side="left", padx=8)
         self._fill_list()
-        return f
+        return outer
 
     # --------------------------------------------------------- tab: overlay
     def _slider(self, parent, label, var, lo, hi, cmd, fmt="{:.0f} %"):
@@ -247,7 +311,7 @@ class App:
         return val
 
     def _tab_overlay(self):
-        f = ttk.Frame(self.nb, padding=8)
+        outer, f = self._scroll_tab()
         o = self.settings["overlay"]
         pos = ttk.LabelFrame(f, text=_("Position"), padding=8)
         pos.pack(fill="x")
@@ -289,11 +353,11 @@ class App:
                           (N_("Verbundenen Server unter der Karte anzeigen (Tab Server)"), self.server_show_var),
                           (N_("Transparenter Rand um die Karte"), self.transp_var)):
             ttk.Checkbutton(look, text=_(text), variable=var, command=self._overlay_flags_changed).pack(anchor="w", pady=1)
-        return f
+        return outer
 
     # ------------------------------------------------------- tab: detection
     def _tab_detect(self):
-        f = ttk.Frame(self.nb, padding=8)
+        outer, f = self._scroll_tab()
         auto = ttk.LabelFrame(f, text=_("Automatik"), padding=8)
         auto.pack(fill="x")
         self.auto_var = tk.BooleanVar(value=self.settings["auto_detect"])
@@ -342,7 +406,7 @@ class App:
         ttk.Button(r, text=_("Bildschirm jetzt scannen"), command=self.scan_now).pack(side="left")
         ttk.Button(r, text=_("Diagnose kopieren"), command=self.show_diagnose).pack(side="left", padx=6)
         self._show_advanced()
-        return f
+        return outer
 
     def _toggle_advanced(self):
         self.adv_open.set(not self.adv_open.get())
@@ -360,14 +424,14 @@ class App:
 
     # ----------------------------------------------------------- tab: server
     def _tab_server(self):
-        f = ttk.Frame(self.nb, padding=8)
+        outer, f = self._scroll_tab()
         conn = ttk.LabelFrame(f, text=_("Verbundener Spielserver"), padding=8)
         conn.pack(fill="x")
         self.conn_show_var = tk.BooleanVar(value=bool(self.settings.get("show_connection")))
         ttk.Checkbutton(conn, text=_("Anzeigen, mit welchem Server DBD verbunden ist"),
                         variable=self.conn_show_var, command=self._conn_toggled).pack(anchor="w")
         self.conn_tab_var = tk.StringVar(value="")
-        ttk.Label(conn, textvariable=self.conn_tab_var, style="Big.TLabel").pack(anchor="w", pady=(2, 0))
+        ttk.Label(conn, textvariable=self.conn_tab_var, style="Big.TLabel", wraplength=540).pack(anchor="w", pady=(2, 0))
 
         reg = ttk.LabelFrame(f, text=_("Serverregionen"), padding=8)
         reg.pack(fill="both", expand=True, pady=(8, 0))
@@ -412,7 +476,7 @@ class App:
                                   "auf eigene Verantwortung."), style="Dim.TLabel", wraplength=440).pack(
             anchor="w", pady=(6, 0))
         self._srv_render()
-        return f_outer
+        return outer
 
     # ---------------------------------------------------------- connected server
     def _conn_toggled(self):
@@ -672,7 +736,7 @@ class App:
 
     # -------------------------------------------------------------- tab: log
     def _tab_log(self):
-        f = ttk.Frame(self.nb, padding=8)
+        outer, f = self._scroll_tab()
         top = ttk.Frame(f)
         top.pack(fill="x", pady=(0, 6))
         ttk.Label(top, text=_("Anzeigen:")).pack(side="left")
@@ -696,11 +760,11 @@ class App:
         ttk.Button(bottom, text=_("Leeren"), command=self._clear_log).pack(side="left")
         ttk.Button(bottom, text=_("Log-Datei öffnen"), command=self._open_logfile).pack(side="left", padx=6)
         ttk.Button(bottom, text=_("Diagnose kopieren"), command=self.show_diagnose).pack(side="left")
-        return f
+        return outer
 
     # --------------------------------------------------------- tab: settings
     def _tab_settings(self):
-        f = ttk.Frame(self.nb, padding=8)
+        outer, f = self._scroll_tab()
         look = ttk.LabelFrame(f, text=_("Sprache und Darstellung"), padding=8)
         look.pack(fill="x")
         lr = ttk.Frame(look)
@@ -780,7 +844,7 @@ class App:
                    command=lambda: self._open(os.path.join(self.root_dir, "maps"))).pack(side="left", padx=6)
         ttk.Label(f, text=f"DbD Map Scout {__version__} · " + _("liest nur Bildschirmpixel, sendet keine Eingaben ans Spiel."),
                   style="Dim.TLabel", wraplength=430).pack(anchor="w", pady=(10, 0))
-        return f
+        return outer
 
     def _ui_lang_changed(self):
         code = next((c for c, lbl in self._ui_langs if lbl == self.ui_lang_var.get()), "auto")
@@ -1336,6 +1400,7 @@ class App:
             self._report_once("verbindung", traceback.format_exc())
         try:
             self._update_state()
+            self._layout_pages()
         except Exception:
             self._report_once("status", traceback.format_exc())
         try:
@@ -1827,6 +1892,10 @@ class App:
         tooltip.Tooltip.colours = (("#2b2d31", "#e3e5e8", "#50535a") if dark else
                                    ("#ffffe1", "#1b1b1b", "#8a8a8a"))
         theme.apply(self.root, dark, text_widgets=(self.log_text,))
+        page_bg = theme.DARK["bg"] if dark else (ttk.Style(self.root).lookup("TFrame", "background")
+                                                 or self.root.cget("background"))
+        for page in getattr(self, "_pages", []):
+            page["canvas"].configure(background=page_bg)
         colors = theme.LOG_COLORS[dark]
         self.log_text.tag_configure("ts", foreground=colors["ts"])
         for c in CATS:
