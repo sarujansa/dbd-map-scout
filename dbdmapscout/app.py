@@ -780,6 +780,7 @@ class App:
             self._log(f"Bild konnte nicht geladen werden: {path} ({e})", "Fehler")
             return
         was_on = self._map_on()
+        self._test_map = False                   # a real/manual choice replaces the test picture
         self.current = (map_id, shown)
         self.source = source
         self.overlay.set_map(path, m.label(shown))
@@ -872,6 +873,7 @@ class App:
             first = next(iter(self._list_items.values()), None)
             if first:
                 self.show_map(first[0], first[1], "manual", "Testanzeige")
+                self._test_map = True            # loaded only for the test: hidden again when it ends
         self._force_until = time.time() + 10
         self._log("Test: Overlay 10 s lang in der Bildschirmmitte – jetzt zu DBD wechseln "
                   "(nochmal drücken beendet den Test).", "Overlay")
@@ -1257,6 +1259,11 @@ class App:
             return
         if getattr(self, "_pos_forced", False):
             self._pos_forced = False
+            if getattr(self, "_test_map", False):
+                self._test_map = False
+                self.user_visible = False
+                self._round_ended(time.time())
+                self._update_toggle_text()
             self._log("Test beendet.", "Overlay")
         if (time.time() >= getattr(self, "_force_until", 0) and hasattr(self, "test_btn")
                 and self.test_btn.cget("text") != "Overlay testen"):
