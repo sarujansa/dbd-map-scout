@@ -28,6 +28,7 @@ DEFAULTS = {
         "only_when_game_focused": True,
         "show_caption": False,          # the map pictures already carry their name
         "show_timer": True,             # round timer below the map (map shown -> map gone)
+        "show_server": True,            # connected server region below the timer (needs the Server tab option)
         "transparent": True,            # transparent area around the map (off = dark rectangle)
     },
     "hotkeys": {
