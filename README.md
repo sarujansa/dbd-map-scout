@@ -9,6 +9,8 @@ Map-Overlay für Dead by Daylight. Beim Match-Start wird der Map-Name automatisc
 3. **`start.bat`** doppelklicken. Beim ersten Start wird eine eigene Python-Umgebung (`.venv`) angelegt und die Pakete werden installiert (ca. 1–2 Minuten, rund 250 MB). Danach startet das Programm direkt.
 4. Optional: **`verknuepfung_erstellen.bat`** doppelklicken. Das legt „DbD Map Scout“ mit eigenem Symbol auf den Desktop; die Verknüpfung startet das Programm als Administrator (nötig für „Verbunden mit“) ohne Konsolenfenster. Rechtsklick → „An Taskleiste anheften“ geht auch.
 
+**Updates** kommen automatisch: Beim Start über `start.bat` bzw. die Desktop-Verknüpfung holt das Programm den neuen Stand von GitHub (nur wenn der Ordner ein Git-Klon auf `main` ist und du keine Programmdateien selbst geändert hast) und installiert geänderte Pakete nach. Offline oder bei eigenen Änderungen startet einfach die vorhandene Version. Was neu ist, steht danach im Log. Abschaltbar unter **Einstellungen → Updates**.
+
 In DBD unter **Einstellungen → Grafik** den Anzeigemodus **„Fenster-Vollbild“** verwenden. Im exklusiven Vollbild kann Windows kein Fenster über dem Spiel anzeigen.
 
 ## Benutzung
