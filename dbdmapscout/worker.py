@@ -20,7 +20,8 @@ from .matchend import MatchEndTracker, Signals
 from .ocr import Recognizer
 
 log = logging.getLogger("dbdmapscout")
-END_CHECK_INTERVAL = 0.5          # seconds between two looks for result screen / lobby / loading screen
+END_CHECK_INTERVAL = 0.5          # seconds between two looks for result screen / lobby / loading screen …
+END_IDLE_INTERVAL = 1.0           # … and while nothing points to the end yet (whole-screen grab: ~14 MB each)
 IN_MATCH_RATE = 1.0               # scans per second while a detected map is being played (banner only at the start)
 LOBBY_INTERVAL = 1.0              # seconds between two looks at the lobby button (never during a match)
 LOBBY_RATE = 1.0                  # banner scans per second while the lobby button is on screen: the banner
@@ -287,15 +288,15 @@ class DetectionWorker(threading.Thread):
                             pointer = vis and (window.left <= cx < window.left + window.width
                                                and window.top <= cy < window.top + window.height)
                 obs = full = look = None
-                if sep is None and tick - last_end_check >= END_CHECK_INTERVAL and (game or source is not None):
+                interval = END_CHECK_INTERVAL if tracker.candidate else END_IDLE_INTERVAL
+                if sep is None and tick - last_end_check >= interval and (game or source is not None):
                     last_end_check = tick
                     try:
-                        full = grab((0, 0, fw, fh))
-                        look = full
+                        full = look = grab((0, 0, fw, fh))
+                        ignore = None
                         if source is None and via["screen"] and self.overlay_rect:
-                            look = full.copy()
-                            self._mask_overlay(look, origin[0], origin[1])
-                        obs = out_of_match.observe(look)
+                            ignore = self._mask_overlay(look, origin[0], origin[1])   # in place: no 14 MB copy
+                        obs = out_of_match.observe(look, ignore)
                     except Exception:
                         self._report("Rundenende-Prüfung", traceback.format_exc())
                 events = tracker.update(Signals(t=tick, game=game, foreground=foreground, cursor=pointer,
@@ -414,6 +415,8 @@ class DetectionWorker(threading.Thread):
         x0, y0, x1, y1 = max(0, x0), max(0, y0), min(w, x1), min(h, y1)
         if x1 > x0 and y1 > y0:
             img[y0:y1, x0:x1] = 0
+            return x0, y0, x1, y1                    # the blacked-out part, in picture coordinates
+        return None
 
     def _save_frame(self, frame, tag):
         """Debug: downscaled screenshots while a map is shown (folder debug/frames)."""

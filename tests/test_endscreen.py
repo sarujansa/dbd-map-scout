@@ -61,3 +61,28 @@ def test_region_reaches_window_edge_only_on_full_width_screens():
     assert full.shape[1] == W - x_start and x_start <= 3150
     cur = _right_region(f, 0.62, 0.0, 0.12, full_width=True)
     assert W - cur.shape[1] <= 2795                              # currency counters from x≈2795
+
+
+def test_our_big_overlay_in_the_left_bar_does_not_hide_a_full_width_screen():
+    f = menu_frame()
+    f[17:1000, 17:423] = 0                       # a tall map (keep-in-bar off) blacked out before looking
+    assert not fills_bars(f)                     # without knowing it, the left bar looks empty …
+    assert fills_bars(f, ignore=(17, 17, 423, 1000))   # … its area simply does not count
+    t = trial_frame()
+    t[17:1000, 17:423] = 0
+    assert not fills_bars(t, ignore=(17, 17, 423, 1000))   # trial: the other bar is black too
+
+
+def test_no_currency_ocr_in_a_trial_on_ultrawide():
+    from dbdmapscout.detector import OutOfMatchWatcher, has_bars
+    calls = []
+    w = OutOfMatchWatcher.__new__(OutOfMatchWatcher)
+    w._thumb = None
+    w._continue_fit = lambda img, h: (None, "")
+    w._currency = lambda img, h: calls.append(img.shape) or (0, 0, "")
+    w.observe(trial_frame())
+    assert calls == [] and has_bars(trial_frame())         # black bars: score events are not read
+    w.observe(menu_frame())
+    assert len(calls) == 1                                  # lobby/menus: counters are read
+    w.observe(np.full((1440, 2560, 3), 60, np.uint8))
+    assert len(calls) == 2                                  # 16:9 monitor: no bars to tell, always read
