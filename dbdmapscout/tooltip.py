@@ -29,6 +29,8 @@ TIPS = {
     "Kartenbild hinzufügen …": "Eigenes Bild für eine Map wählen: vorhandenes Bild ersetzen oder neue Map "
                                "anlegen. Rand und Hintergrund werden automatisch entfernt.",
     # overlay tab
+    "Für diese Map zurücksetzen": "Entfernt die eigene Grösse der angezeigten Map – danach gilt wieder der "
+                                  "Schieberegler für alle Maps.",
     "Zurücksetzen": "Position wieder auf „automatisch“ stellen (auf Ultrawide im linken schwarzen Rand).",
     "Karte im schwarzen Rand halten (Ultrawide: nie ins Spielbild ragen)":
         "Auf breiten Monitoren bleibt die Karte im schwarzen Balken, in dem sie liegt, und wird bei Bedarf "
