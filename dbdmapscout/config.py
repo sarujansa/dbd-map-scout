@@ -15,6 +15,7 @@ DEFAULTS = {
     "scans_per_second": 5,
     "hide_after_match": True,
     "pause_in_menus": True,             # hide the overlay while a DBD menu is open (mouse pointer visible)
+    "window_capture": True,             # DBD in the background: picture via Windows Graphics Capture (like OBS)
     "show_connection": False,           # Server tab: show the connected game server (elevated netwatch helper)
     "overlay": {
         "anchor": "auto",              # auto | top-left | top-right | bottom-left | bottom-right | custom

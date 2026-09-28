@@ -2,7 +2,7 @@
 setlocal
 cd /d "%~dp0"
 set "VENV=%~dp0.venv"
-if exist "%VENV%\installed.ok" goto run
+if exist "%VENV%\installed.ok" goto extras
 
 echo === DbD Map Scout: Ersteinrichtung (einmalig, ca. 1-2 Minuten) ===
 set "PY="
@@ -16,6 +16,15 @@ if errorlevel 1 goto nopython
 "%VENV%\Scripts\python.exe" -m pip install -r requirements.txt
 if errorlevel 1 goto piperror
 echo ok> "%VENV%\installed.ok"
+
+:extras
+rem Zusatzpaket fuer die Fensteraufnahme (ohne Abhaengigkeiten, siehe requirements-extra.txt).
+rem Einmalig, auch fuer bestehende Installationen. Schlaegt es fehl, laeuft das Programm wie bisher.
+if not exist "%VENV%\extras-1.ok" (
+  echo Installiere Zusatzpaket fuer die Fensteraufnahme ...
+  "%VENV%\Scripts\python.exe" -m pip install --no-deps -r requirements-extra.txt
+  if not errorlevel 1 echo ok> "%VENV%\extras-1.ok"
+)
 
 :run
 if /i "%~1"=="debug" (
