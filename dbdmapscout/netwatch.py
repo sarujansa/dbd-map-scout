@@ -50,11 +50,20 @@ def parse(pkt: bytes):
     return socket.inet_ntoa(pkt[12:16]), socket.inet_ntoa(pkt[16:20]), sport, dport
 
 
+_PUBLIC = {}                 # ip -> is_global; the same few partners come again thousands of times per second
+
+
 def is_public(ip: str) -> bool:
-    try:
-        return ipaddress.ip_address(ip).is_global
-    except ValueError:
-        return False
+    r = _PUBLIC.get(ip)
+    if r is None:
+        try:
+            r = ipaddress.ip_address(ip).is_global
+        except ValueError:
+            r = False
+        if len(_PUBLIC) > 4096:          # bounded (port scans, torrents …)
+            _PUBLIC.clear()
+        _PUBLIC[ip] = r
+    return r
 
 
 class FlowTable:

@@ -7,6 +7,9 @@ Map-Overlay für Dead by Daylight. Beim Match-Start wird der Map-Name automatisc
 1. **Python installieren** (falls noch nicht vorhanden): <https://www.python.org/downloads/>, Version 3.12 oder neuer. Im Installer **„Add python.exe to PATH“** anhaken.
 2. Ordner entpacken, z. B. nach `C:\Tools\dbd-map-scout`.
 3. **`start.bat`** doppelklicken. Beim ersten Start wird eine eigene Python-Umgebung (`.venv`) angelegt und die Pakete werden installiert (ca. 1–2 Minuten, rund 250 MB). Danach startet das Programm direkt.
+4. Optional: **`verknuepfung_erstellen.bat`** doppelklicken. Das legt „DbD Map Scout“ mit eigenem Symbol auf den Desktop; die Verknüpfung startet das Programm als Administrator (nötig für „Verbunden mit“) ohne Konsolenfenster. Rechtsklick → „An Taskleiste anheften“ geht auch.
+
+**Updates** kommen automatisch: Beim Start über `start.bat` bzw. die Desktop-Verknüpfung holt das Programm den neuen Stand von GitHub (nur wenn der Ordner ein Git-Klon auf `main` ist und du keine Programmdateien selbst geändert hast) und installiert geänderte Pakete nach. Offline oder bei eigenen Änderungen startet einfach die vorhandene Version. Was neu ist, steht danach im Log. Abschaltbar unter **Einstellungen → Updates**.
 
 In DBD unter **Einstellungen → Grafik** den Anzeigemodus **„Fenster-Vollbild“** verwenden. Im exklusiven Vollbild kann Windows kein Fenster über dem Spiel anzeigen.
 
@@ -78,6 +81,7 @@ Mit dem Häkchen **Verbundenen Spielserver anzeigen** im Tab Server zeigt das Pr
 - **Was gelesen wird:** Nur die Kopfdaten der Netzwerkpakete (IP-Adressen und Ports), nie deren Inhalt. Es kommt nur der Verkehr deines eigenen PCs an: Die Netzwerkkarte wird nicht in den Promiscuous-Modus versetzt, der auch fremde Pakete im Netz annimmt. Unterstützt Windows das nicht, bleibt die Anzeige aus, statt auf diesen Modus auszuweichen. Es wird nichts gesendet, nichts verändert und nichts gespeichert. Das Spiel wird dabei nicht angefasst, und es braucht keinen Zusatztreiber wie Npcap.
 - **Wie der Server erkannt wird:** Ein laufendes Match tauscht ständig viele UDP-Pakete mit seinem Server aus. Die Region steht im Namen, den AWS für die Server-Adresse vergibt (Reverse-DNS, z. B. `…eu-central-1.compute.amazonaws.com`). Andere Programme mit viel UDP-Verkehr wie Sprachchat werden ignoriert, weil sie nicht auf AWS-Servern laufen.
 - **Ping:** Gemessen wird wie im Tab Server und wie DBD selbst: alle 5 Sekunden ein kleines UDP-Paket an den GameLift-Ping-Beacon der verbundenen Region, angezeigt wird der Mittelwert (Median) der letzten drei Messungen. Der Spielserver selbst bekommt keine Pakete. Er steht im selben Rechenzentrum, der Wert entspricht also praktisch dem Spiel-Ping.
+- **Sparsam:** Läuft DBD 30 Sekunden nicht (z. B. während eines Downloads), pausiert der Mitschnitt und startet automatisch wieder, sobald DBD läuft – nur wenn das Programm als Administrator läuft, sonst würde jeder Neustart eine Windows-Abfrage auslösen.
 - **Grenzen:** Mit VPN kann die Anzeige fehlen. Ohne Administratorrechte, zum Beispiel bei einer abgelehnten Windows-Abfrage, bleibt sie aus.
 - **Am sichersten:** Das Programm normal starten statt als Administrator, dann läuft nur der kleine Mitschnitt-Helfer mit Adminrechten (eine Windows-Abfrage pro Start). Wer ganz auf Nummer sicher gehen will, lässt das Häkchen aus – für Map-Erkennung und Overlay wird der Mitschnitt nicht gebraucht.
 
