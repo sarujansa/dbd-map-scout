@@ -575,6 +575,9 @@
     "pt-BR": "Teatro de Tratamento",
     "tr": "Tedavi Tiyatrosu"
    },
+   "aliases": [
+    "Treatment Theater"
+   ],
    "variants": {
     "1": "Other/Lerys.webp"
    }

@@ -73,6 +73,16 @@ def test_catalog_variants_and_images():
     assert shown == 1 and path.endswith("Family Residence.webp")
 
 
+def test_both_spellings_of_treatment_theatre():
+    """The game shows "TREATMENT THEATER" (US spelling), the catalogue name is British – both must match."""
+    cat = Catalog(ROOT, ["en"])
+    keys = {(h.map_id, h.name_key) for h in cat.hypotheses}
+    assert ("treatment-theatre", "TREATMENTTHEATRE") in keys
+    assert ("treatment-theatre", "TREATMENTTHEATER") in keys
+    alias = next(h for h in cat.hypotheses if h.name_key == "TREATMENTTHEATER")
+    assert fold("Léry's Memorial Institute") in alias.realm_keys
+
+
 def test_accumulator_prefers_consistent_evidence():
     acc = Accumulator()
     good = FrameResult(scores={("a", 1): -1.0, ("a", 2): -4.0, ("b", 1): -60.0}, best=("a", 1), name_fit=-0.5)
