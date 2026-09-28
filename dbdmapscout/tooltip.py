@@ -35,6 +35,9 @@ TIPS = {
     "Karte im schwarzen Rand halten (Ultrawide: nie ins Spielbild ragen)":
         "Auf breiten Monitoren bleibt die Karte im schwarzen Balken, in dem sie liegt, und wird bei Bedarf "
         "verkleinert. Mitten über dem Spiel platziert gilt keine Begrenzung.",
+    "Karte anzeigen (aus: nur Timer, Ort und Ping)": "Aus: Das Overlay zeigt nur Rundentimer, Serverregion und Ping – "
+                                                     "ohne Karte. Erkennung, Rundenende und Statistik laufen wie "
+                                                     "gewohnt.",
     "Nur zeigen, wenn DBD das aktive Fenster ist": "Karte ausblenden, solange ein anderes Fenster "
                                                    "(Browser, Discord …) im Vordergrund ist.",
     "Map-Namen über der Karte anzeigen": "Zusätzliche Namenszeile über der Karte – die meisten Kartenbilder "
