@@ -62,6 +62,8 @@ Das Steuerfenster ist in Tabs aufgeteilt. Passt ein Tab nicht ins Fenster, ersch
 
 **Nur Infos ohne Karte:** Im Tab Overlay „Karte anzeigen“ ausschalten – dann zeigt das Overlay bei Rundenbeginn nur Rundentimer, Serverregion und Ping (an derselben Stelle, im selben Stil). Erkennung, Ausblenden nach der Runde, Menü-Pause und Statistik laufen unverändert weiter.
 
+**Karte drehen:** Knopf **Drehen ↻** im Hauptfenster oder `Strg+Alt+R` dreht die angezeigte Karte um 90° im Uhrzeigersinn, damit sie so liegt, wie du dir die Map vorstellst. Die Drehung wird pro Map gemerkt (Tab Overlay: „Für diese Map zurücksetzen“). Der Map-Name über der Karte bleibt aufrecht; die Zahlen und Beschriftungen in der Karte drehen sich mit, weil sie Teil des Bildes sind. Eine Karte, die sich automatisch mit der Kamera dreht, gibt es nicht: Den Blickwinkel kennt nur das Spiel selbst, und dessen Speicher wird nicht gelesen.
+
 **Im schwarzen Rand halten** (Tab Overlay, standardmäßig an): Auf Ultrawide bleibt die Karte bei jeder Position im Balken, in dem sie liegt – „oben/unten links“ im linken, „oben/unten rechts“ im rechten Balken, eine eigene Position in dem Balken, in dem sie beginnt. Ist sie zu breit, wird sie verkleinert, statt ins Spielbild zu ragen. Eine bewusst mitten über dem Spiel platzierte Karte bleibt unverändert. Abschalten, wenn die Karte grösser sein darf als der Rand.
 
 Das Overlay ist ein eigenes, natives Windows-Fenster: immer im Vordergrund, durchklickbar, und es nimmt dem Spiel nie den Fokus weg.
@@ -76,6 +78,7 @@ Das Overlay ist ein eigenes, natives Windows-Fenster: immer im Vordergrund, durc
 | `Strg+Alt+←` / `→` | vorherige / nächste Map |
 | `Strg+Alt+↑` / `↓` | Overlay grösser / kleiner – gilt für die angezeigte Map und wird pro Map gemerkt (Tab Overlay: „Für diese Map zurücksetzen“; der Schieberegler „Grösse“ ist die Standardgrösse für alle anderen) |
 | `Strg+Alt+P` | Position ändern (Overlay mit der Maus ziehen, Mausrad = Grösse, nochmals drücken = fertig) |
+| `Strg+Alt+R` | angezeigte Karte um 90° drehen (pro Map gemerkt) |
 
 Hotkeys lassen sich unter **Einstellungen → Hotkeys** ändern: Feld anklicken und die neue Kombination drücken (Esc bricht ab, Entf schaltet den Hotkey aus, „Standard“ stellt alle zurück). Buchstaben und Ziffern brauchen Strg oder Alt, damit der Hotkey nicht das normale Tippen blockiert; doppelt belegte Kombinationen werden abgelehnt. Alle Einstellungen landen in `settings.json`.
 

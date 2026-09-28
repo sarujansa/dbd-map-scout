@@ -18,6 +18,8 @@ WRAP = 320
 # German label -> German info text (buttons/checkboxes with a fixed label); both translated via i18n
 TIPS = {
     # main window
+    "Drehen ↻": "Dreht die angezeigte Karte um 90° im Uhrzeigersinn (für jede Map gemerkt). Der Map-Name "
+                "darüber bleibt aufrecht, die Zahlen in der Karte drehen sich mit.",
     "Scannen": "Sucht sofort auf dem ganzen Bildschirm nach einem Map- oder Realm-Namen – falls die "
                "automatische Erkennung das Banner verpasst hat.",
     "Bild hinzufügen …": "Eigenes Kartenbild für diese unbekannte Map anlegen – Name und Realm sind schon "
@@ -29,8 +31,8 @@ TIPS = {
     "Kartenbild hinzufügen …": "Eigenes Bild für eine Map wählen: vorhandenes Bild ersetzen oder neue Map "
                                "anlegen. Rand und Hintergrund werden automatisch entfernt.",
     # overlay tab
-    "Für diese Map zurücksetzen": "Entfernt die eigene Grösse der angezeigten Map – danach gilt wieder der "
-                                  "Schieberegler für alle Maps.",
+    "Für diese Map zurücksetzen": "Entfernt eigene Grösse und Drehung der angezeigten Map – danach gilt wieder "
+                                  "der Schieberegler für alle Maps.",
     "Zurücksetzen": "Position wieder auf „automatisch“ stellen (auf Ultrawide im linken schwarzen Rand).",
     "Karte im schwarzen Rand halten (Ultrawide: nie ins Spielbild ragen)":
         "Auf breiten Monitoren bleibt die Karte im schwarzen Balken, in dem sie liegt, und wird bei Bedarf "

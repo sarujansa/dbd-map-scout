@@ -322,9 +322,9 @@ class Win32Overlay:
         return _u.CallWindowProcW(self._old_proc, hwnd, msg, wp, lp)
 
     # ------------------------------------------------------------ content
-    def set_map(self, path, caption: str = ""):
+    def set_map(self, path, caption: str = "", rotation: int = 0):
         self._stop_anim()
-        self._frames = load_frames(path) if path else []
+        self._frames = load_frames(path, rotation) if path else []
         self._caption = caption
         self._base_key = self._key = None
 

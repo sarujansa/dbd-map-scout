@@ -8,6 +8,7 @@ import tkinter as tk
 from PIL import Image, ImageSequence, ImageTk
 
 from .capture import is_above
+from .mapimage import rotate_frames
 
 IS_WIN = sys.platform == "win32"
 KEY = "#ff00fe"                 # colour that Windows makes fully transparent
@@ -45,8 +46,8 @@ if IS_WIN:
     SWP_NOSIZE, SWP_NOMOVE, SWP_NOACTIVATE, SWP_FRAMECHANGED = 0x1, 0x2, 0x10, 0x20
 
 
-def load_frames(path: str):
-    """[(PIL RGBA image, duration ms)] – several for animated GIFs."""
+def load_frames(path: str, rotation: int = 0):
+    """[(PIL RGBA image, duration ms)] – several for animated GIFs; ``rotation``: map turned clockwise (°)."""
     im = Image.open(path)
     frames = []
     if getattr(im, "is_animated", False):
@@ -55,7 +56,7 @@ def load_frames(path: str):
             frames.append((fr.convert("RGBA"), max(40, int(d))))
     else:
         frames.append((im.convert("RGBA"), 0))
-    return frames
+    return rotate_frames(frames, rotation)
 
 
 def _prepare(img: Image.Image, height: int, transparent: bool = True) -> Image.Image:
@@ -129,9 +130,9 @@ class Overlay:
         self.win.bind("<MouseWheel>", self._wheel)
 
     # ------------------------------------------------------------- content
-    def set_map(self, path: str | None, caption: str = ""):
+    def set_map(self, path: str | None, caption: str = "", rotation: int = 0):
         self._stop_anim()
-        self._frames = load_frames(path) if path else []
+        self._frames = load_frames(path, rotation) if path else []
         self._height = 0
         self.caption.configure(text=caption)
         if self.show_caption and caption and self.show_map:

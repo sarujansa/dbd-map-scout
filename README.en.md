@@ -62,6 +62,8 @@ The control window has these tabs. If a tab does not fit into the window, a scro
 
 **Info only, without the map:** switch off "Show the map" in the Overlay tab – the overlay then shows only the round timer, server region and ping when a round starts (same place, same style). Detection, hiding after the round, menu pause and statistics keep working as usual.
 
+**Rotate the map:** the **Rotate ↻** button in the main window or `Ctrl+Alt+R` turns the map on display by 90° clockwise, so it lies the way you picture the map. The rotation is remembered per map (Overlay tab: "Reset for this map"). The map name above the map stays upright; numbers and labels inside the map turn with it because they are part of the picture. A map that turns with the camera by itself is not possible: only the game knows the camera angle, and its memory is never read.
+
 **Keep in the black bar** (Overlay tab, on by default): on ultrawide the map stays inside the bar it is in, whatever the position – "top/bottom left" in the left bar, "top/bottom right" in the right one, a custom position in the bar where it starts. If it is too wide, it is made smaller instead of reaching into the game picture. A map placed over the middle of the game on purpose stays as it is. Switch it off if the map may be bigger than the bar.
 
 The overlay is a native Windows window of its own: always on top, click-through, and it never takes the focus away from the game.
@@ -76,6 +78,7 @@ The overlay is a native Windows window of its own: always on top, click-through,
 | `Ctrl+Alt+←` / `→` | previous / next map |
 | `Ctrl+Alt+↑` / `↓` | overlay bigger / smaller – applies to the map on display and is remembered per map (Overlay tab: "Reset for this map"; the "Size" slider is the default size for all others) |
 | `Ctrl+Alt+P` | change position (drag the overlay with the mouse, mouse wheel = size, press again = done) |
+| `Ctrl+Alt+R` | turn the map on display by 90° (remembered per map) |
 
 Hotkeys can be changed under **Settings → Hotkeys**: click the field and press the new combination (Esc cancels, Delete switches the hotkey off, "Defaults" resets all). Letters and digits need Ctrl or Alt so the hotkey does not block normal typing; combinations used twice are refused. All settings are stored in `settings.json`.
 
