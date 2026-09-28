@@ -181,6 +181,10 @@ class Overlay:
     def has_map(self) -> bool:
         return bool(self._frames)
 
+    def map_size(self):
+        """Size of the map picture as loaded (w, h) – to fit it without rendering it first."""
+        return self._frames[0][0].size if self._frames else (0, 0)
+
     def _render(self, height: int):
         if height == self._height and self._photos:
             return
