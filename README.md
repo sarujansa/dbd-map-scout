@@ -55,7 +55,7 @@ Das Steuerfenster ist in Tabs aufgeteilt. Passt ein Tab nicht ins Fenster, ersch
 | **Erkennung** | Automatik, Ausblenden nach der Runde, Pause in Menüs, Spielsprache; eingeklappt unter „Erweitert“: Fensteraufnahme, Scans pro Sekunde, Live-Status, Debug-Bilder, Diagnose |
 | **Server** | oben der verbundene Spielserver, darunter Serverregionen mit Ping, per hosts-Datei sperren oder freigeben (siehe unten) |
 | **Log** | Meldungen mit Kategorien *Erkennung*, *Overlay*, *System*, *Fehler*, einzeln ein-/ausblendbar |
-| **Statistik** | deine Runden: Anzahl, Ø Dauer, Gesamtzeit; pro Map Runden, Ø und längste Dauer (Spalten anklickbar zum Sortieren); die letzten 100 Runden mit Datum, Dauer und Serverregion. Gezählt wird vom erkannten Map-Banner bis zum erkannten Rundenende (ab 1 Minute; ohne erkanntes Ende wird die Runde nicht gezählt). Nur lokal in `rounds.jsonl`, „Verlauf löschen“ entfernt alles |
+| **Statistik** | deine Runden, filterbar nach Zeitraum (heute, diese Woche, dieser Monat, dieses Jahr) und Serverregion: Anzahl, Ø Dauer, Gesamtzeit; pro Map Runden, Ø und längste Dauer (Spalten anklickbar zum Sortieren); pro Serverregion Runden, Ø Dauer und Anteil; die letzten 100 Runden mit Datum, Dauer und Serverregion. Gezählt wird vom erkannten Map-Banner bis zum erkannten Rundenende (ab 1 Minute; ohne erkanntes Ende wird die Runde nicht gezählt). Nur lokal in `rounds.jsonl`, „Verlauf löschen“ entfernt alles |
 | **Einstellungen** | Sprache, Dark Mode, Hotkeys ändern, Start/Infobereich, Updates, eigene Zuordnungen, Ordner öffnen |
 
 **Position „automatisch“:** Läuft DBD mit 16:9-Bild auf einem breiteren Monitor (z. B. 3440×1440 mit schwarzen Rändern), landet die Karte im linken schwarzen Rand und wird so skaliert, dass sie hineinpasst. Sonst erscheint sie oben links. Sobald du einen Positions-Regler bewegst oder die Karte mit der Maus verschiebst, gilt „eigene Position“. „Zurücksetzen“ stellt wieder „automatisch“ ein.
@@ -72,7 +72,7 @@ Das Overlay ist ein eigenes, natives Windows-Fenster: immer im Vordergrund, durc
 | `Strg+Alt+V` | Layout-Variante wechseln (z. B. Coal Tower ↔ Coal Tower II) |
 | `Strg+Alt+S` | Bildschirm scannen (falls die automatische Erkennung den Banner verpasst hat) |
 | `Strg+Alt+←` / `→` | vorherige / nächste Map |
-| `Strg+Alt+↑` / `↓` | Overlay grösser / kleiner |
+| `Strg+Alt+↑` / `↓` | Overlay grösser / kleiner – gilt für die angezeigte Map und wird pro Map gemerkt (Tab Overlay: „Für diese Map zurücksetzen“; der Schieberegler „Grösse“ ist die Standardgrösse für alle anderen) |
 | `Strg+Alt+P` | Position ändern (Overlay mit der Maus ziehen, Mausrad = Grösse, nochmals drücken = fertig) |
 
 Hotkeys lassen sich unter **Einstellungen → Hotkeys** ändern: Feld anklicken und die neue Kombination drücken (Esc bricht ab, Entf schaltet den Hotkey aus, „Standard“ stellt alle zurück). Buchstaben und Ziffern brauchen Strg oder Alt, damit der Hotkey nicht das normale Tippen blockiert; doppelt belegte Kombinationen werden abgelehnt. Alle Einstellungen landen in `settings.json`.
