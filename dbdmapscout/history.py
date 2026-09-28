@@ -26,6 +26,7 @@ class Round:
     role: str = ""          # killer | survivor | "" (unknown)
     custom: bool = False    # custom game (no queue)
     ping: float | None = None   # median ping (ms) to the server region during the round
+    killer: str = ""        # own killer, read in the lobby ("The Nurse"); counts only while role == killer
 
 
 def should_record(seconds: float) -> bool:
@@ -105,7 +106,8 @@ def load(path: str) -> list:
                                      role=str(d.get("role") or "") if d.get("role") in ROLES else "",
                                      custom=bool(d.get("custom")),
                                      ping=float(d["ping"]) if isinstance(d.get("ping"), (int, float))
-                                     and d["ping"] >= 0 else None))
+                                     and d["ping"] >= 0 else None,
+                                     killer=str(d.get("killer") or "")))
                 except (ValueError, KeyError, TypeError):
                     continue
     except OSError:
@@ -158,10 +160,13 @@ ROLES = ("killer", "survivor")
 ROLE_FILTERS = ("all", "killer", "survivor", "custom")
 
 
-def select(rounds, since=None, region=None, role="all") -> list:
+def select(rounds, since=None, region=None, role="all", killer=None) -> list:
     """Rounds from ``since`` on; ``region``: None = all, NO_REGION = rounds without a known server;
-    ``role``: all | killer | survivor | custom (custom games only)."""
+    ``role``: all | killer | survivor | custom (custom games only); ``killer``: None = all, else only
+    killer rounds with this killer."""
     out = [r for r in rounds if since is None or r.t >= since]
+    if killer:
+        out = [r for r in out if r.killer == killer and r.role == "killer" and not r.custom]
     if role == "custom":
         out = [r for r in out if r.custom]
     elif role in ROLES:
@@ -180,6 +185,28 @@ def regions_used(rounds) -> list:
         if r.region:
             counts[r.region] = counts.get(r.region, 0) + 1
     return sorted(counts, key=lambda c: (-counts[c], c))
+
+
+def killers_used(rounds) -> list:
+    """Killers of the killer rounds, most rounds first (for the filter list)."""
+    counts = {}
+    for r in rounds:
+        if r.killer and r.role == "killer" and not r.custom:
+            counts[r.killer] = counts.get(r.killer, 0) + 1
+    return sorted(counts, key=lambda k: (-counts[k], k))
+
+
+def per_killer(rounds) -> list:
+    """[(killer, rounds, average s, most played map)] of the killer rounds, most rounds first."""
+    groups = {}
+    for r in rounds:
+        if r.killer and r.role == "killer" and not r.custom:
+            groups.setdefault(r.killer, []).append(r)
+    rows = []
+    for k, rs in groups.items():
+        top = per_map(rs)[0][0]
+        rows.append((k, len(rs), sum(r.seconds for r in rs) / len(rs), top))
+    return sorted(rows, key=lambda row: (-row[1], row[0]))
 
 
 def per_region(rounds) -> list:

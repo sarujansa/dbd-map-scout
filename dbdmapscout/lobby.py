@@ -10,7 +10,9 @@ the top (y) of the window in units of the 16:9 picture width.
     CANCEL, below "00:34" (no EST.)        lobby, ready pressed
     READY,  nothing below                  custom game (no queue, no countdown)
 
-Killers see their killer's name left below the button (searching and lobby), survivors never do.
+Killers see their killer's name left below the button (searching and lobby), survivors never do. The
+name is matched against KILLERS (lexicon fit, like the button word); a name not on the list (a new
+killer) is kept as read instead of being forced onto a wrong one.
 After the match the result screen names the four categories – BRUTALITY … for killers,
 OBJECTIVES … for survivors – which confirms the role (also in custom games).
 
@@ -26,6 +28,15 @@ from .textnorm import fold
 
 BUTTON_WORDS = ("PLAY", "CANCEL", "READY")
 BUTTON_OK = -2.0          # fit of the button word (0 = perfect); other screens score -7 and worse
+# as the English game shows them below the button (new killers: add here; unknown ones are kept as read)
+KILLERS = ("The Trapper", "The Wraith", "The Hillbilly", "The Nurse", "The Shape", "The Hag", "The Doctor",
+           "The Huntress", "The Cannibal", "The Nightmare", "The Pig", "The Clown", "The Spirit", "The Legion",
+           "The Plague", "The Ghost Face", "The Demogorgon", "The Oni", "The Deathslinger", "The Executioner",
+           "The Blight", "The Twins", "The Trickster", "The Nemesis", "The Cenobite", "The Artist", "The Onryō",
+           "The Dredge", "The Mastermind", "The Knight", "The Skull Merchant", "The Singularity", "The Xenomorph",
+           "The Good Guy", "The Unknown", "The Lich", "The Dark Lord", "The Houndmaster", "The Ghoul",
+           "The Animatronic", "The Krasue", "The First", "Murderous Grizzly")
+KILLER_OK = -3.0          # listed killers fit about +1, a killer missing from the list -22 and worse
 KILLER_CATEGORIES = ("BRUTALITY", "DEVIOUSNESS", "HUNTER", "SACRIFICE")
 SURVIVOR_CATEGORIES = ("OBJECTIVES", "SURVIVAL", "ALTRUISM", "BOLDNESS")
 
@@ -46,6 +57,17 @@ def _right_box(zone, W, H):
     vw = _vw(W, H)
     x0, x1 = int(W - r0 * vw), int(W - r1 * vw)
     return x0, int(y0 * H), max(1, x1 - x0), max(1, int(y1 * H) - int(y0 * H))
+
+
+def plain_name(text: str) -> str:
+    """A name not on the list, as read: letters and spaces only, "THE FOO" -> "The Foo"."""
+    words = re.sub(r"[^A-Za-z' ]+", " ", text or "").split()
+    return " ".join(w.capitalize() for w in words)
+
+
+def killer_label(name: str) -> str:
+    """Short form for tables: "The Nurse" -> "Nurse"."""
+    return name[4:] if name.startswith("The ") else name
 
 
 def corner_box(W: int, H: int):
@@ -71,6 +93,7 @@ class LobbyView:
     fit: float | None = None
     name: str = ""                  # text left below the button (killer name)
     time_text: str = ""             # text right below the button (waited time + EST. / countdown)
+    killer: str = ""                # name from KILLERS, or the name as read if it is not on the list
 
     @property
     def has_name(self) -> bool:
@@ -126,6 +149,7 @@ class LobbyReader:
     def __init__(self, recognizer):
         self.rec = recognizer
         self.scorer = LexiconScorer([fold(w) for w in BUTTON_WORDS])
+        self.killers = LexiconScorer([fold(k) for k in KILLERS])
 
     def read(self, corner, W: int, H: int) -> LobbyView:
         """``corner``: the picture of corner_box(W, H)."""
@@ -151,8 +175,17 @@ class LobbyReader:
             for zone, attr in ((NAME_ZONE, "name"), (TIME_ZONE, "time_text")):
                 img = crop(zone)
                 if img.size:
-                    setattr(view, attr, self.rec.text(self.rec.probs(img)).strip())
+                    p = self.rec.probs(img)
+                    setattr(view, attr, self.rec.text(p).strip())
+                    if attr == "name" and view.has_name:
+                        view.killer = self.killer_name(self.rec.groups(p), view.name)
         return view
+
+    def killer_name(self, groups, text: str) -> str:
+        s = self.killers.score(groups)
+        if len(s) and float(s.max() - best_path_logp(groups)) >= KILLER_OK:
+            return KILLERS[int(s.argmax())]
+        return plain_name(text)
 
     def result_role(self, img) -> str | None:
         """Role from the category headers of the result screen (picture of result_box)."""
@@ -175,6 +208,7 @@ class Found:
     wait: float | None               # seconds from starting the search to the lobby (None: custom game)
     role: str | None
     custom: bool = False
+    killer: str = ""                 # the own killer (role killer only)
 
 
 @dataclass
@@ -194,6 +228,11 @@ class QueueTracker:
     _pending: tuple | None = None     # (kind, count, first t)
     _reminded: bool = False
     _starts: list = field(default_factory=list)
+    _killers: dict = field(default_factory=dict)   # name -> looks (the most read one wins)
+
+    @property
+    def killer(self) -> str:
+        return max(self._killers, key=self._killers.get) if self.role == "killer" and self._killers else ""
 
     def update(self, view: LobbyView | None, t: float) -> list:
         """Returns events: ("search",) ("cancel",) ("found", Found) ("role", role) ("remind", seconds left)."""
@@ -204,6 +243,8 @@ class QueueTracker:
                 self._reset()
             return events
         role = view.role
+        if role == "killer" and view.killer:
+            self._killers[view.killer] = self._killers.get(view.killer, 0) + 1
         if role and role != self.role and kind in ("search", "lobby"):
             self.role = role
             events.append(("role", role))
@@ -233,7 +274,7 @@ class QueueTracker:
             if self.state == "search" and self.search_start is not None:
                 start = sorted(self._starts)[len(self._starts) // 2] if self._starts else self.search_start
                 wait = max(0.0, first - start)
-            self.found = Found(first, wait, self.role)
+            self.found = Found(first, wait, self.role, killer=self.killer)
             self.state = "lobby"
             self._reminded = False
             self._starts = []
@@ -242,7 +283,7 @@ class QueueTracker:
             self.found = Found(first, None, None, custom=True)
             self.state = "custom"
             self.role = None
-            self._starts = []
+            self._starts, self._killers = [], {}
             events.append(("found", self.found))
         elif kind == "play":
             if self.state == "search":
@@ -255,7 +296,7 @@ class QueueTracker:
         return {"play": "idle"}.get(kind, kind)
 
     def _reset(self):
-        self.state, self.search_start, self._starts, self.role = "idle", None, [], None
+        self.state, self.search_start, self._starts, self.role, self._killers = "idle", None, [], None, {}
 
     def searching_since(self, t: float) -> float | None:
         return t - self.search_start if self.state == "search" and self.search_start is not None else None

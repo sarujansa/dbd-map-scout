@@ -11,6 +11,7 @@ from tkinter import messagebox, ttk
 
 from . import history, regions
 from .i18n import N_, _
+from .lobby import killer_label
 from .textnorm import fmt_duration
 
 log = logging.getLogger("dbdmapscout")
@@ -51,6 +52,15 @@ class StatsTab:
                           state="readonly", width=13)
         cb.pack(side="left", padx=6)
         cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
+        fr = ttk.Frame(f)                                    # second row: the filter row is already the widest
+        fr.pack(fill="x", pady=(0, 6))
+        ttk.Label(fr, text=_("Killer")).pack(side="left")
+        self._stats_killers = [(None, _("Alle Killer"))]
+        self.stats_killer_var = tk.StringVar(value=self._stats_killers[0][1])
+        self.stats_killer_cb = ttk.Combobox(fr, textvariable=self.stats_killer_var, state="readonly", width=14,
+                                            values=[lbl for _k, lbl in self._stats_killers])
+        self.stats_killer_cb.pack(side="left", padx=6)
+        self.stats_killer_cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
         self.stats_var = tk.StringVar(value="")
         ttk.Label(f, textvariable=self.stats_var, style="Big.TLabel", wraplength=540).pack(anchor="w")
         self.stats_lost_var = tk.StringVar(value="")
@@ -62,6 +72,14 @@ class StatsTab:
         box.pack(fill="both", expand=True)
         self.stats_maps = self._stats_tree(box, (("map", _("Map"), 230, "w"), ("n", _("Runden"), 70, "e"),
                                                  ("avg", _("Ø Dauer"), 80, "e"), ("max", _("Längste"), 80, "e")), 9)
+        box_k = ttk.LabelFrame(f, text=_("Killer"), padding=6)
+        box_k.pack(fill="both", expand=True, pady=(8, 0))
+        self.stats_kill = self._stats_tree(box_k, (("killer", _("Killer"), 150, "w"), ("n", _("Runden"), 70, "e"),
+                                                   ("avg", _("Ø Dauer"), 80, "e"), ("map", _("Häufigste Map"), 160, "w")),
+                                           5)
+        ttk.Label(box_k, text=_("Name unter dem Lobby-Knopf, nur wenn du Killer spielst. Killer auswählen (oben) zeigt "
+                                "Maps und Dauer nur für ihn."), style="Dim.TLabel", wraplength=520).pack(anchor="w",
+                                                                                                       pady=(4, 0))
         box_r = ttk.LabelFrame(f, text=_("Serverregionen"), padding=6)
         box_r.pack(fill="both", expand=True, pady=(8, 0))
         self.stats_regs = self._stats_tree(box_r, (("reg", _("Region"), 190, "w"), ("n", _("Runden"), 65, "e"),
@@ -89,9 +107,9 @@ class StatsTab:
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         box2 = ttk.LabelFrame(f, text=_("Letzte Runden"), padding=6)
         box2.pack(fill="both", expand=True, pady=(8, 0))
-        self.stats_last = self._stats_tree(box2, (("when", _("Wann"), 110, "w"), ("map", _("Map"), 135, "w"),
+        self.stats_last = self._stats_tree(box2, (("when", _("Wann"), 110, "w"), ("map", _("Map"), 120, "w"),
                                                   ("dur", _("Dauer"), 55, "e"), ("wait", _("Warten"), 55, "e"),
-                                                  ("role", _("Rolle"), 70, "w"), ("srv", _("Server"), 105, "w")), 9,
+                                                  ("role", _("Rolle"), 90, "w"), ("srv", _("Server"), 105, "w")), 9,
                                            select=True)
         self.stats_last.bind("<<TreeviewSelect>>", lambda e: self._stats_role_buttons())
         rr = ttk.Frame(box2)
@@ -147,8 +165,15 @@ class StatsTab:
         self.stats_region_var.set(dict(self._stats_regions)[wanted])
         period = next((k for k, lbl in self._stats_periods if lbl == self.stats_period_var.get()), "all")
         role = next((k for k, lbl in self._stats_roles if lbl == self.stats_role_var.get()), "all")
+        killer = next((k for k, lbl in self._stats_killers if lbl == self.stats_killer_var.get()), None)
+        self._stats_killers = [(None, _("Alle Killer"))] + [(k, killer_label(k))
+                                                             for k in history.killers_used(all_rounds)]
+        if killer not in [k for k, _lbl in self._stats_killers]:
+            killer = None
+        self.stats_killer_cb.configure(values=[lbl for _k, lbl in self._stats_killers])
+        self.stats_killer_var.set(dict(self._stats_killers)[killer])
         since = history.period_start(period, time.time())
-        rounds = history.select(all_rounds, since=since, region=wanted, role=role)
+        rounds = history.select(all_rounds, since=since, region=wanted, role=role, killer=killer)
         s = history.summary(rounds)
         lost = [x for x in history.load_lost(self._hist_path()) if since is None or x[0] >= since]
         self.stats_lost_var.set(_("⚠ Nicht gezählt: {n} × Rundenende nicht erkannt (die nächste Map kam, bevor das Ende "
@@ -170,6 +195,10 @@ class StatsTab:
         t.delete(*t.get_children())
         for name, n, avg, longest in rows:
             t.insert("", "end", values=(name, n, fmt_duration(avg), fmt_duration(longest)))
+        t = self.stats_kill
+        t.delete(*t.get_children())
+        for name, n, avg, top in history.per_killer(rounds):
+            t.insert("", "end", values=(killer_label(name), n, fmt_duration(avg), top))
         t = self.stats_regs
         t.delete(*t.get_children())
         pings = history.ping_by_region(rounds)
@@ -197,7 +226,8 @@ class StatsTab:
         keep = t.selection()                     # the marked round stays marked (e.g. after changing its role)
         t.delete(*t.get_children())
         for r in sorted(rounds, key=lambda r: r.t, reverse=True)[:100]:
-            role = _("Custom Game") if r.custom else self._role_name(r.role) or "–"
+            role = _("Custom Game") if r.custom else (killer_label(r.killer) if r.role == "killer" and r.killer
+                                                      else self._role_name(r.role) or "–")
             t.insert("", "end", iid=repr(r.t), values=(time.strftime("%d.%m.%y %H:%M", time.localtime(r.t)), r.map,
                                                        fmt_duration(r.seconds),
                                                        fmt_duration(r.wait) if r.wait is not None else "–", role,
@@ -256,7 +286,7 @@ class StatsTab:
                       "region": "", "source": source}
         f = self._queue.get("found")                  # the lobby this match came from (once, max. 15 min old)
         if f is not None and 0 <= now - f.t <= 900:
-            self._hist.update(wait=f.wait, role=f.role or "", custom=f.custom)
+            self._hist.update(wait=f.wait, role=f.role or "", custom=f.custom, killer=f.killer)
             self._queue = dict(self._queue, found=None, used=f)
 
     def _hist_close(self, t, role=None):

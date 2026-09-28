@@ -142,3 +142,21 @@ def test_lost_rounds_are_kept_apart(tmp_path, monkeypatch):
     monkeypatch.setattr(os.path, "getsize", lambda _p: 10 ** 9)
     h._tidy(p)
     assert [r.map for r in h.load(p)] == ["Hawkins"] and h.load_lost(p) == [(4.0, "Ormond", "quit")]
+
+
+def test_killer_per_round(tmp_path):
+    p = str(tmp_path / h.FILE)
+    h.append(p, h.Round(t=1.0, seconds=600, map_id="a", map="A", role="killer", killer="The Nurse"))
+    h.append(p, h.Round(t=2.0, seconds=300, map_id="b", map="B", role="killer", killer="The Nurse"))
+    h.append(p, h.Round(t=3.0, seconds=900, map_id="b", map="B", role="killer", killer="The Hillbilly"))
+    h.append(p, h.Round(t=4.0, seconds=500, map_id="b", map="B", role="killer", killer="The Hillbilly"))
+    h.append(p, h.Round(t=5.0, seconds=700, map_id="c", map="C", role="survivor"))
+    rs = h.load(p)
+    assert [r.killer for r in rs] == ["The Nurse", "The Nurse", "The Hillbilly", "The Hillbilly", ""]
+    assert [r.map for r in h.select(rs, killer="The Nurse")] == ["A", "B"]
+    assert h.killers_used(rs) == ["The Hillbilly", "The Nurse"]                    # tie: by name
+    assert h.per_killer(rs) == [("The Hillbilly", 2, 700.0, "B"), ("The Nurse", 2, 450.0, "A")]
+    h.set_role(p, 1.0, "survivor")                                             # corrected: no killer round any more
+    rs = h.load(p)
+    assert [r.map for r in h.select(rs, killer="The Nurse")] == ["B"] and rs[0].killer == "The Nurse"   # undo-able
+    assert h.select(rs, role="survivor", killer="The Nurse") == []
