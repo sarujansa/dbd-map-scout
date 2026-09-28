@@ -15,7 +15,7 @@ from tkinter import messagebox, ttk
 
 from PIL import Image, ImageTk
 
-from . import __version__, layout, regions, theme
+from . import __version__, layout, regions, theme, tooltip
 from .capture import IS_WIN, describe_window, find_game_window, foreground_root, is_game_window
 from .catalog import Catalog
 from .config import Settings
@@ -157,8 +157,11 @@ class App:
         btns.pack(fill="x", padx=10, pady=(2, 6))
         self.toggle_btn = ttk.Button(btns, text="Overlay ausblenden", command=self.toggle_overlay)
         self.toggle_btn.pack(side="left")
-        ttk.Button(btns, text="Layout ▸", command=self.next_variant).pack(side="left", padx=4)
-        ttk.Button(btns, text="Scannen", command=self.scan_now).pack(side="left")
+        # only shown for maps with several layouts (7 of 45), labelled with the one on display
+        self.layout_btn = ttk.Button(btns, text="Layout ▸", command=self.next_variant)
+        self._layout_unsure = False
+        self.scan_btn = ttk.Button(btns, text="Scannen", command=self.scan_now)
+        self.scan_btn.pack(side="left", padx=(4, 0))
         self.test_btn = ttk.Button(btns, text="Overlay testen", command=self.test_overlay)
         self.test_btn.pack(side="left", padx=4)
 
@@ -189,6 +192,7 @@ class App:
         self.nb.bind("<<NotebookTabChanged>>", lambda e: self._tab_changed())
 
         self._apply_theme()
+        tooltip.attach_all(self.root, self._tip_lookup)
 
     # ------------------------------------------------------------ tab: maps
     def _tab_maps(self):
@@ -791,6 +795,7 @@ class App:
             return
         was_on = self._map_on()
         self._test_map = False                   # a real/manual choice replaces the test picture
+        self._layout_unsure = False
         self.current = (map_id, shown)
         self.source = source
         self.overlay.set_map(path, m.label(shown))
@@ -811,6 +816,7 @@ class App:
         self._thumb = ImageTk.PhotoImage(bg)
         self.thumb_label.configure(image=self._thumb)
         self._update_toggle_text()
+        self._update_layout_btn()
         if source == "manual":
             self._log(f"Map gewählt: {m.label(shown)}", "Overlay")
         self._tick_overlay(reschedule=False)
@@ -848,6 +854,58 @@ class App:
     def _update_toggle_text(self):
         on = self.user_visible and not self.hidden_after_match and not self.menu_paused
         self.toggle_btn.configure(text="Overlay ausblenden" if on else "Overlay einblenden")
+
+    def _layouts(self):
+        """Layouts with a picture of the map on display ([] without a map)."""
+        m = self.catalog.maps.get(self.current[0]) if self.current else None
+        return [v for v in sorted(m.variants) if m.variants[v]] if m else []
+
+    def _update_layout_btn(self):
+        vs = self._layouts()
+        if len(vs) < 2:
+            self.layout_btn.pack_forget()
+            return
+        text = f"Layout {roman(self.current[1])} von {roman(vs[-1])} ▸"
+        self.layout_btn.configure(text=text + (" (unsicher)" if self._layout_unsure else ""))
+        if not self.layout_btn.winfo_manager():
+            self.layout_btn.pack(side="left", padx=(4, 0), before=self.scan_btn)
+
+    def _hk_hint(self, name):
+        combo = (self.settings.get("hotkeys") or {}).get(name)
+        return f" Hotkey: {pretty(combo)}" if combo else ""
+
+    def _tip_lookup(self, w):
+        """Tooltips for buttons whose label changes or repeats (the rest: tooltip.TIPS by label)."""
+        hk = {b: k for k, b in self.hk_buttons.items()}
+        if w is self.toggle_btn:
+            return lambda: ("Karte ausblenden (die automatische Erkennung läuft weiter)."
+                            if self.toggle_btn.cget("text") == "Overlay ausblenden" else
+                            "Karte wieder einblenden.") + self._hk_hint("toggle_overlay")
+        if w is self.layout_btn:
+            return lambda: ("Die Erkennung war beim Layout nicht sicher – stimmt es nicht, hier weiterschalten. "
+                            if self._layout_unsure else "") + \
+                "Wechselt zum nächsten Layout dieser Map (z. B. Coal Tower ↔ Coal Tower II). Die Layouts ab II " \
+                "gibt es seit Patch 8.6.0 nur noch in Custom Games." + self._hk_hint("next_variant")
+        if w is self.test_btn:
+            return lambda: ("Test sofort beenden." if self.test_btn.cget("text") == "Test beenden" else
+                            "Zeigt die Karte 10 s an ihrer normalen Position – auch wenn sie gerade ausgeblendet "
+                            "wäre. Nochmal drücken beendet den Test.")
+        if w is self.adv_btn:
+            return "Technische Optionen für die Fehlersuche ein- oder ausklappen."
+        if w is self.edit_btn:
+            return lambda: ("Verschieben beenden." if self.edit_btn.cget("text") == "Fertig" else
+                            "Karte direkt mit der Maus ziehen, Mausrad ändert die Grösse."
+                            + self._hk_hint("edit_position"))
+        if w in hk:
+            return ("Klicken und die neue Tastenkombination drücken (Strg/Alt + Taste oder F-Taste). "
+                    "Esc bricht ab, Entf schaltet den Hotkey aus.")
+        text = str(w.cget("text"))
+        if text in dict(LANGS).values():
+            return ("Map-Namen in dieser Spielsprache erkennen. Nur die Sprachen anhaken, in denen du spielst – "
+                    "weniger Sprachen, weniger Verwechslungen.")
+        if text in CATS:
+            return f"Meldungen der Art „{text}“ im Log anzeigen."
+        return None
 
     def next_variant(self):
         if not self.current:
@@ -1002,6 +1060,8 @@ class App:
                 self._log(f"Erkannt: {m.label(d['variant'])} – gelesen „{d['name_text']}“ / „{d['realm_text']}“",
                           "Erkennung")
                 if len(m.variants) > 1 and vp < 0.8:
+                    self._layout_unsure = True
+                    self._update_layout_btn()
                     self._log(f"Layout unsicher – falls falsch: {pretty(self.settings['hotkeys']['next_variant'])}.",
                               "Erkennung")
         elif k == "unknown":
@@ -1612,6 +1672,7 @@ class App:
         ttk.Button(row, text="Abbrechen", command=dlg.destroy).pack(side="right", padx=6)
         dlg.bind("<Return>", lambda e: ok())
         dlg.bind("<Escape>", lambda e: dlg.destroy())
+        tooltip.attach_all(dlg)
         cb.focus_set()
         dlg.grab_set()
 
@@ -1680,6 +1741,8 @@ class App:
 
     def _apply_theme(self):
         dark = bool(self.dark_var.get())
+        tooltip.Tooltip.colours = (("#2b2d31", "#e3e5e8", "#50535a") if dark else
+                                   ("#ffffe1", "#1b1b1b", "#8a8a8a"))
         theme.apply(self.root, dark, text_widgets=(self.log_text,))
         colors = theme.LOG_COLORS[dark]
         self.log_text.tag_configure("ts", foreground=colors["ts"])
