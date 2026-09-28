@@ -775,18 +775,16 @@ class App:
         ttk.Label(fr, text=_("Region")).pack(side="left")
         self._stats_regions = [(None, _("Alle Regionen"))]
         self.stats_region_var = tk.StringVar(value=self._stats_regions[0][1])
-        self.stats_region_cb = ttk.Combobox(fr, textvariable=self.stats_region_var, state="readonly", width=24,
+        self.stats_region_cb = ttk.Combobox(fr, textvariable=self.stats_region_var, state="readonly", width=18,
                                             values=[lbl for _c, lbl in self._stats_regions])
-        self.stats_region_cb.pack(side="left", padx=6)
+        self.stats_region_cb.pack(side="left", padx=(6, 14))
         self.stats_region_cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
-        fr2 = ttk.Frame(f)
-        fr2.pack(fill="x", pady=(0, 6))
-        ttk.Label(fr2, text=_("Rolle")).pack(side="left")
+        ttk.Label(fr, text=_("Rolle")).pack(side="left")
         self._stats_roles = [(k, _(label)) for k, label in STATS_ROLES]
         self.stats_role_var = tk.StringVar(value=self._stats_roles[0][1])
-        cb = ttk.Combobox(fr2, textvariable=self.stats_role_var, values=[lbl for _k, lbl in self._stats_roles],
-                          state="readonly", width=14)
-        cb.pack(side="left", padx=(6, 14))
+        cb = ttk.Combobox(fr, textvariable=self.stats_role_var, values=[lbl for _k, lbl in self._stats_roles],
+                          state="readonly", width=13)
+        cb.pack(side="left", padx=6)
         cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
         self.stats_var = tk.StringVar(value="")
         ttk.Label(f, textvariable=self.stats_var, style="Big.TLabel", wraplength=540).pack(anchor="w")
@@ -823,19 +821,30 @@ class App:
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         box2 = ttk.LabelFrame(f, text=_("Letzte Runden"), padding=6)
         box2.pack(fill="both", expand=True, pady=(8, 0))
-        self.stats_last = self._stats_tree(box2, (("when", _("Wann"), 115, "w"), ("map", _("Map"), 150, "w"),
+        self.stats_last = self._stats_tree(box2, (("when", _("Wann"), 110, "w"), ("map", _("Map"), 135, "w"),
                                                   ("dur", _("Dauer"), 55, "e"), ("wait", _("Warten"), 55, "e"),
-                                                  ("srv", _("Server"), 145, "w")), 9)
+                                                  ("role", _("Rolle"), 70, "w"), ("srv", _("Server"), 105, "w")), 9,
+                                           select=True)
+        self.stats_last.bind("<<TreeviewSelect>>", lambda e: self._stats_role_buttons())
+        rr = ttk.Frame(box2)
+        rr.pack(fill="x", pady=(6, 0))
+        ttk.Label(rr, text=_("Rolle der markierten Runde:")).pack(side="left")
+        self.stats_role_btns = []
+        for role, label in (("killer", N_("Killer")), ("survivor", N_("Survivor")), ("custom", N_("Custom Game"))):
+            b = ttk.Button(rr, text=_(label), command=lambda r=role: self._stats_set_role(r), state="disabled")
+            b.pack(side="left", padx=(6, 0))
+            self.stats_role_btns.append(b)
         row = ttk.Frame(f)
         row.pack(fill="x", pady=(8, 0))
         ttk.Button(row, text=_("Verlauf löschen"), command=self._stats_clear).pack(side="left")
         self._stats_sort = ("n", True)
         return outer
 
-    def _stats_tree(self, parent, cols, height):
+    def _stats_tree(self, parent, cols, height, select=False):
         tf = ttk.Frame(parent)
         tf.pack(fill="both", expand=True)
-        t = ttk.Treeview(tf, columns=[c[0] for c in cols], show="headings", height=height, selectmode="none")
+        t = ttk.Treeview(tf, columns=[c[0] for c in cols], show="headings", height=height,
+                         selectmode="browse" if select else "none")
         for key, title, width, anchor in cols:
             t.heading(key, text=title, anchor=anchor, command=lambda k=key, tr=t: self._stats_sort_by(tr, k))
             t.column(key, width=width, anchor=anchor, stretch=key in ("map", "reg"))
@@ -908,12 +917,38 @@ class App:
                 label = self._stats_region_name(key)
             t.insert("", "end", values=(label, n, fmt_duration(avg), fmt_duration(shortest)))
         t = self.stats_last
+        keep = t.selection()                     # the marked round stays marked (e.g. after changing its role)
         t.delete(*t.get_children())
         for r in sorted(rounds, key=lambda r: r.t, reverse=True)[:100]:
-            t.insert("", "end", values=(time.strftime("%d.%m.%y %H:%M", time.localtime(r.t)), r.map,
-                                        fmt_duration(r.seconds),
-                                        fmt_duration(r.wait) if r.wait is not None else "–",
-                                        _(regions.NAMES.get(r.region, r.region)) if r.region else "–"))
+            role = _("Custom Game") if r.custom else self._role_name(r.role) or "–"
+            t.insert("", "end", iid=repr(r.t), values=(time.strftime("%d.%m.%y %H:%M", time.localtime(r.t)), r.map,
+                                                       fmt_duration(r.seconds),
+                                                       fmt_duration(r.wait) if r.wait is not None else "–", role,
+                                                       _(regions.NAMES.get(r.region, r.region)) if r.region else "–"))
+        if keep and t.exists(keep[0]):
+            t.selection_set(keep[0])
+        self._stats_role_buttons()
+
+    def _stats_role_buttons(self):
+        state = "normal" if self.stats_last.selection() else "disabled"
+        for b in self.stats_role_btns:
+            b.configure(state=state)
+
+    def _stats_set_role(self, role):
+        """Correct the role of the round marked in "Letzte Runden" (detection wrong or unknown)."""
+        sel = self.stats_last.selection()
+        if not sel:
+            return
+        try:
+            r = history.set_role(self._hist_path(), float(sel[0]), role)
+        except OSError as e:
+            self._log(_("Rolle konnte nicht gespeichert werden: {error}", error=e), "Fehler")
+            return
+        if r is not None:
+            self._log(_("Rolle für {map} ({when}) auf {role} geändert.", map=r.map,
+                        when=time.strftime("%d.%m.%y %H:%M", time.localtime(r.t)),
+                        role=_("Custom Game") if role == "custom" else self._role_name(role)), "System")
+        self._stats_render()
 
     def _stats_clear(self):
         if not os.path.exists(self._hist_path()):
