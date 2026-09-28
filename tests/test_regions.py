@@ -5,6 +5,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dbdmapscout import hostsedit, regions  # noqa: E402
+from conftest import only_linux_hosts  # noqa: E402
 
 WIN_DEFAULT = (
     "# Copyright (c) 1993-2009 Microsoft Corp.\r\n#\r\n# This is a sample HOSTS file used by Microsoft TCP/IP for Windows.\r\n"
@@ -62,6 +63,7 @@ def test_missing_end_marker_is_repaired():
     assert hostsedit.BEGIN not in new and "gamelift" not in new
 
 
+@only_linux_hosts
 def test_run_job_writes_file_and_backup(tmp_path, monkeypatch):
     f = tmp_path / "hosts"
     f.write_bytes(WIN_DEFAULT.encode("latin-1"))
@@ -76,6 +78,7 @@ def test_run_job_writes_file_and_backup(tmp_path, monkeypatch):
     assert res["ok"] and not res["changed"]
 
 
+@only_linux_hosts
 def test_helper_only_touches_gamelift_names(tmp_path, monkeypatch):
     f = tmp_path / "hosts"
     f.write_bytes(WIN_DEFAULT.encode("latin-1"))
