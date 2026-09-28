@@ -103,6 +103,7 @@ class App:
         self._log(f"Bereit. {len(self.catalog.maps)} Maps geladen, Spielsprachen: "
                   f"{', '.join(self.settings['languages'])}.", "System")
         self._srv_refresh(log_summary=True)
+        self._show_update_status()
         if self.settings.get("show_connection"):
             self.root.after(1500, self._conn_start)
         if not IS_WIN and not simulate:
@@ -664,6 +665,14 @@ class App:
         ttk.Button(r, text="Übernehmen", command=self._apply_hotkeys).pack(side="left")
         self.hk_status = tk.StringVar(value="Format: ctrl+alt+m, shift+f8, ctrl+alt+up …")
         ttk.Label(r, textvariable=self.hk_status, style="Dim.TLabel", wraplength=300).pack(side="left", padx=8)
+
+        upd = ttk.LabelFrame(f, text="Updates", padding=8)
+        upd.pack(fill="x", pady=(8, 0))
+        self.update_var = tk.BooleanVar(value=self.settings.get("auto_update", True))
+        ttk.Checkbutton(upd, text="Beim Start nach Updates suchen und installieren (GitHub)",
+                        variable=self.update_var, command=self._update_flag_changed).pack(anchor="w")
+        ttk.Label(upd, text="nur über start.bat bzw. die Desktop-Verknüpfung; eigene Änderungen werden nie "
+                            "überschrieben", style="Dim.TLabel", wraplength=400).pack(anchor="w", padx=(22, 0))
 
         own = ttk.LabelFrame(f, text="Eigene Map-Zuordnungen", padding=8)
         own.pack(fill="x", pady=(8, 0))
@@ -1265,6 +1274,24 @@ class App:
             self._tick_overlay(reschedule=False)
         self.settings.set("save_debug_images", bool(self.debug_var.get()))
         self._save_soon()
+
+    # ---------------------------------------------------------- updates (done by start.bat)
+    def _update_flag_changed(self):
+        self.settings.set("auto_update", bool(self.update_var.get()))
+        self.settings.save()                      # start.bat reads it at the next start
+
+    def _show_update_status(self):
+        """What start.bat / update.py did before this start (update installed, skipped, packages)."""
+        path = os.path.join(self.root_dir, ".venv", "update_status.txt")
+        try:
+            with open(path, encoding="utf-8") as fh:
+                text = fh.read().strip()
+            os.remove(path)
+        except OSError:
+            return
+        for line in text.splitlines():
+            if line.strip():
+                self._log(line.rstrip(), "System")
 
     # ---------------------------------------------------------- own map assignments
     def _hide_unknown(self):

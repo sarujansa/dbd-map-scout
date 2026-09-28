@@ -2,7 +2,7 @@
 setlocal
 cd /d "%~dp0"
 set "VENV=%~dp0.venv"
-if exist "%VENV%\installed.ok" goto extras
+if exist "%VENV%\installed.ok" goto update
 
 echo === DbD Map Scout: Ersteinrichtung (einmalig, ca. 1-2 Minuten) ===
 set "PY="
@@ -17,14 +17,15 @@ if errorlevel 1 goto nopython
 if errorlevel 1 goto piperror
 echo ok> "%VENV%\installed.ok"
 
-:extras
-rem Zusatzpaket fuer die Fensteraufnahme (ohne Abhaengigkeiten, siehe requirements-extra.txt).
-rem Einmalig, auch fuer bestehende Installationen. Schlaegt es fehl, laeuft das Programm wie bisher.
-if not exist "%VENV%\extras-1.ok" (
-  echo Installiere Zusatzpaket fuer die Fensteraufnahme ...
-  "%VENV%\Scripts\python.exe" -m pip install --no-deps -r requirements-extra.txt
-  if not errorlevel 1 echo ok> "%VENV%\extras-1.ok"
-)
+:update
+rem Neuen Stand von GitHub holen (dbdmapscout\update.py: nur auf main, nur ohne eigene Aenderungen,
+rem nur Nachziehen). Exit-Code 3 = aktualisiert. Weil cmd diese Datei waehrend der Ausfuehrung
+rem weiterliest, das Update sie aber geaendert haben kann, startet sie sich IN DERSELBEN ZEILE neu.
+if not defined DBDMS_UPDATED ("%VENV%\Scripts\python.exe" "%~dp0dbdmapscout\update.py" & if errorlevel 3 (set "DBDMS_UPDATED=1" & cmd /c ""%~f0" %*" & exit /b))
+
+rem Pakete nachinstallieren, wenn sich requirements.txt / requirements-extra.txt geaendert haben
+rem (Zusatzpaket ohne Abhaengigkeiten, siehe requirements-extra.txt). Fehlschlag: Start trotzdem.
+"%VENV%\Scripts\python.exe" "%~dp0dbdmapscout\update.py" --deps
 
 :run
 if /i "%~1"=="debug" (
