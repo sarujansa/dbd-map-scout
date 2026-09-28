@@ -73,6 +73,34 @@ def is_admin() -> bool:
         return False
 
 
+class IdlePause:
+    """Pause the capture while DBD is not running (pure logic, testable).
+
+    Only used when restarting costs nothing (program runs as administrator: capture thread
+    in this process, no UAC prompt). Returns "pause" / "resume" / None per update."""
+    AFTER = 30.0            # DBD gone this long -> pause
+
+    def __init__(self):
+        self.paused = False
+        self._gone_since = None
+
+    def update(self, t: float, game_running: bool, capturing: bool, can_pause: bool):
+        if game_running:
+            self._gone_since = None
+            if self.paused:
+                self.paused = False
+                return "resume"
+            return None
+        self._gone_since = self._gone_since if self._gone_since is not None else t
+        if capturing and can_pause and not self.paused and t - self._gone_since >= self.AFTER:
+            self.paused = True
+            return "pause"
+        return None
+
+    def reset(self):
+        self.paused, self._gone_since = False, None
+
+
 class ConnectionWatch:
     def __init__(self):
         self.proc = None               # helper process handle, or the capture thread when already admin
@@ -95,6 +123,11 @@ class ConnectionWatch:
     @property
     def running(self) -> bool:
         return self.proc is not None
+
+    @property
+    def in_process(self) -> bool:
+        """Capture runs as a thread of this program (started as administrator): restarting is free."""
+        return isinstance(self.proc, threading.Thread)
 
     # --------------------------------------------------------------- start/stop
     def start(self, hwnd=None) -> dict | None:

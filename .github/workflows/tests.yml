@@ -1,0 +1,31 @@
+# Runs the test suite on every pull request and push to main (Linux; the tests need no Windows).
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Schriften für die Overlay-Tests
+        run: sudo apt-get install -y --no-install-recommends fonts-dejavu-core
+      - name: Pakete
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest pyflakes
+      - name: pyflakes
+        run: python -m pyflakes dbdmapscout tests
+      - name: pytest
+        run: python -m pytest -q tests
