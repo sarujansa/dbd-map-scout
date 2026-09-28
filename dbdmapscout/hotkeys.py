@@ -41,6 +41,61 @@ def parse(combo: str):
     return mods, vk
 
 
+# Tk keysym -> our key names (for recording a hotkey by pressing it)
+_TK_KEYS = {"Left": "left", "Right": "right", "Up": "up", "Down": "down", "Prior": "pageup", "Next": "pagedown",
+            "Home": "home", "End": "end", "Insert": "insert", "Delete": "delete", "space": "space",
+            "Tab": "tab", "plus": "plus", "minus": "minus", "comma": "comma", "period": "period",
+            "KP_Add": "numpadplus", "KP_Subtract": "numpadminus", "Pause": "pause", "Scroll_Lock": "scrolllock"}
+_TK_KEYS.update({f"KP_{i}": f"numpad{i}" for i in range(10)})
+_TK_MODS = {"Control_L": "ctrl", "Control_R": "ctrl", "Alt_L": "alt", "Alt_R": "alt",
+            "Shift_L": "shift", "Shift_R": "shift"}
+
+
+def modifier_name(keysym: str):
+    """'Control_L' -> 'ctrl' (None if not a modifier we use)."""
+    return _TK_MODS.get(keysym)
+
+
+_VK_NAME = {v: k for k, v in VK.items()}
+
+
+def _key_from_vk(vk):
+    """Windows virtual-key code (Tk's event.keycode on Windows) -> our key name; layout independent."""
+    if vk is None:
+        return None
+    if 0x30 <= vk <= 0x39 or 0x41 <= vk <= 0x5A:
+        return chr(vk).lower()
+    return _VK_NAME.get(vk)
+
+
+def combo_from_keys(mods, keysym: str, keycode=None):
+    """Held modifiers + pressed key (Tk keysym, Windows keycode) -> ('ctrl+alt+m', None) or (None, reason).
+
+    A global hotkey swallows its keys in every program, DBD included – so letters, digits and the
+    like need Ctrl or Alt (Shift alone would steal capital letters in the chat). F-keys may use
+    any modifier; F13–F24 (no normal keyboard has them) may stand alone."""
+    ks = keysym or ""
+    if ks in _TK_MODS:
+        return None, None                                # still holding modifiers
+    if len(ks) == 1 and ks.isalnum():
+        key = ks.lower()
+    elif ks[:1] == "F" and ks[1:].isdigit() and 1 <= int(ks[1:]) <= 24:
+        key = ks.lower()
+    else:
+        key = _TK_KEYS.get(ks) or _key_from_vk(keycode)   # e.g. Shift+1 gives keysym "exclam"
+    if key is None:
+        return None, f"Taste „{ks}“ geht nicht als Hotkey"
+    order = [m for m in ("ctrl", "alt", "shift") if m in mods]
+    is_f = key.startswith("f") and key[1:].isdigit()
+    if not order and not (is_f and int(key[1:]) >= 13):
+        return None, "Bitte mit Strg und/oder Alt kombinieren"
+    if not is_f and not ({"ctrl", "alt"} & set(order)):
+        return None, "Bitte mit Strg und/oder Alt kombinieren"
+    combo = "+".join(order + [key])
+    parse(combo)                                          # must be registrable
+    return combo, None
+
+
 def pretty(combo: str) -> str:
     names = {"ctrl": "Strg", "control": "Strg", "strg": "Strg", "alt": "Alt", "shift": "Shift", "win": "Win",
              "left": "←", "right": "→", "up": "↑", "down": "↓"}
