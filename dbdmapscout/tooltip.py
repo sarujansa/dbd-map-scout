@@ -21,6 +21,13 @@ TIPS = {
     "Map-Namen oben einfügen (wie bei den mitgelieferten Karten)":
         "Schreibt den Map-Namen weiss mit Schatten über die Karte, im Stil der mitgelieferten Karten. Hat das Bild "
         "oben schon einen Namen, passiert nichts. Beim Drehen bleibt der Name aufrecht.",
+    "Ton und Meldung, wenn eine Lobby gefunden wurde":
+        "Spielt einen Hinweiston und zeigt eine Windows-Meldung, sobald DBD eine Lobby gefunden hat – praktisch, "
+        "wenn du während der Suche etwas anderes machst.",
+    "Erinnern, wenn der Lobby-Countdown abläuft und READY noch nicht gedrückt ist":
+        "Noch einmal melden, wenn der Countdown der Lobby unter 15 s fällt und du READY nicht gedrückt hast.",
+    "Nur wenn DBD nicht das aktive Fenster ist":
+        "Keine Meldung, solange DBD im Vordergrund ist – dann siehst du die Lobby ja selbst.",
     "Killer": "Diese Runde als Killer-Runde zählen (falls die Erkennung falsch lag).",
     "Survivor": "Diese Runde als Survivor-Runde zählen (falls die Erkennung falsch lag).",
     "Custom Game": "Diese Runde als Custom Game zählen – sie fliesst dann nicht in die Wartezeit ein.",

@@ -55,6 +55,9 @@ DEFAULTS = {
     "save_debug_images": False,
     "show_advanced": False,             # detection tab: technical options unfolded
     "tray": True,                       # minimise into the notification area
+    "lobby_notify": True,               # sound + notification when a lobby was found
+    "lobby_remind": True,               # … and when its countdown runs out while READY is not pressed
+    "notify_background_only": True,     # only while DBD is not the active window
     "auto_update": True,                # start.bat: pull the newest state from GitHub before starting
     "user_aliases": {},                 # own assignments of unknown banner texts: {map_id: [text, ...]}
 }
