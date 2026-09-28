@@ -19,7 +19,8 @@ from . import __version__, regions, theme
 from .capture import IS_WIN, describe_window, find_game_window, foreground_root, is_game_window
 from .catalog import Catalog
 from .config import Settings
-from .connwatch import ConnectionWatch, IdlePause
+from . import autostart
+from .connwatch import ConnectionWatch, IdlePause, is_admin
 from .hotkeys import HotkeyThread, parse, pretty
 from .overlay import load_frames
 from .overlay_win32 import make_overlay
@@ -40,7 +41,7 @@ log = logging.getLogger("dbdmapscout")
 
 
 class App:
-    def __init__(self, root_dir: str, simulate: str | None = None):
+    def __init__(self, root_dir: str, simulate: str | None = None, start_in_tray: bool = False):
         self.root_dir = root_dir
         self.simulate = simulate
         self.settings = Settings(os.path.join(root_dir, "settings.json"))
@@ -108,6 +109,19 @@ class App:
             self.root.after(1500, self._conn_start)
         if not IS_WIN and not simulate:
             self._log("Kein Windows: Fenstersuche, Hotkeys und Click-Through sind nur unter Windows aktiv.", "System")
+
+        # notification area icon; "minimise" hides the window there
+        from .tray import Tray
+        self.tray = Tray(lambda action: self.events.put(("tray", action)))
+        if IS_WIN and self.settings.get("tray", True):
+            self._tray_start()
+        self.root.bind("<Unmap>", self._on_unmap)
+        if start_in_tray:                                 # autostart with Windows
+            if self.tray.active:
+                self.root.withdraw()
+            else:
+                self.root.iconify()
+        threading.Thread(target=self._read_autostart, daemon=True, name="autostart").start()
 
     # ================================================================== UI
     def _build_ui(self):
@@ -666,6 +680,20 @@ class App:
         self.hk_status = tk.StringVar(value="Format: ctrl+alt+m, shift+f8, ctrl+alt+up …")
         ttk.Label(r, textvariable=self.hk_status, style="Dim.TLabel", wraplength=300).pack(side="left", padx=8)
 
+        st = ttk.LabelFrame(f, text="Start und Infobereich", padding=8)
+        st.pack(fill="x", pady=(8, 0))
+        self.tray_var = tk.BooleanVar(value=self.settings.get("tray", True))
+        ttk.Checkbutton(st, text="Beim Minimieren in den Infobereich (neben der Uhr)", variable=self.tray_var,
+                        command=self._tray_flag_changed).pack(anchor="w")
+        self.autostart_var = tk.BooleanVar(value=False)
+        self.autostart_cb = ttk.Checkbutton(st, text="Mit Windows starten (im Infobereich, ohne Windows-Abfrage)",
+                                            variable=self.autostart_var, command=self._autostart_changed)
+        self.autostart_cb.pack(anchor="w", pady=(2, 0))
+        self.autostart_cb.state(["disabled"])
+        self.autostart_info = tk.StringVar(value="")
+        ttk.Label(st, textvariable=self.autostart_info, style="Dim.TLabel", wraplength=400).pack(
+            anchor="w", padx=(22, 0))
+
         upd = ttk.LabelFrame(f, text="Updates", padding=8)
         upd.pack(fill="x", pady=(8, 0))
         self.update_var = tk.BooleanVar(value=self.settings.get("auto_update", True))
@@ -740,6 +768,7 @@ class App:
         self.menu_paused = False
         self._watch(source)
         self.map_var.set(m.label(shown))
+        self.tray.set_title(f"DbD Map Scout – {m.label(shown)}")
         self.realm_var.set(self.catalog.realm_display(m))
         self.detail_var.set(detail or {"manual": "manuell gewählt", "scan": "per Scan gefunden"}.get(source, ""))
         thumb = frames[0][0].copy()
@@ -882,6 +911,13 @@ class App:
                                   "Fehler")
                         self.srv_status.set("Achtung: Firewall-Regeln von Make Your Choice aktiv (siehe Log).  "
                                             + self.srv_status.get())
+                elif isinstance(ev, tuple) and ev[0] == "tray":
+                    {"open": self._show_window, "toggle": self.toggle_overlay,
+                     "quit": self.quit}.get(ev[1], lambda: None)()
+                elif isinstance(ev, tuple) and ev[0] == "autostart":
+                    self._autostart_state(*ev[1:])
+                elif isinstance(ev, tuple) and ev[0] == "status_log":
+                    self._log(ev[1], "System")
                 elif isinstance(ev, tuple) and ev[0] == "conn_started":
                     self._conn_started(ev[1])
                 elif isinstance(ev, tuple) and ev[0] == "srv_job":
@@ -1275,6 +1311,67 @@ class App:
         self.settings.set("save_debug_images", bool(self.debug_var.get()))
         self._save_soon()
 
+    # ---------------------------------------------------------- tray and autostart
+    def _tray_start(self):
+        if not self.tray.active and not self.tray.start():
+            self._log(f"Symbol im Infobereich nicht verfügbar ({self.tray.error}) – Minimieren wie gewohnt.",
+                      "Fehler")
+
+    def _tray_flag_changed(self):
+        on = bool(self.tray_var.get())
+        self.settings.set("tray", on)
+        self._save_soon()
+        if on and IS_WIN:
+            self._tray_start()
+        elif not on:
+            self.tray.stop()
+
+    def _on_unmap(self, e):
+        # <Unmap> also arrives for child widgets (bindtags); only the main window being minimised counts
+        if e.widget is self.root and self.tray.active and self.settings.get("tray", True):
+            self.root.after(10, lambda: self.root.state() == "iconic" and self.root.withdraw())
+
+    def _show_window(self):
+        self.root.deiconify()
+        self.root.state("normal")
+        self.root.lift()
+        try:
+            self.root.focus_force()
+        except tk.TclError:
+            pass
+
+    def _read_autostart(self):
+        """Runs in a thread: does the logon task exist, may we change it (administrator)?"""
+        if not IS_WIN:
+            self.events.put(("autostart", None, False, "Nur unter Windows."))
+            return
+        exists = autostart.task_exists(autostart.TASK_AUTO)
+        admin = is_admin()
+        info = ("" if admin else "Änderbar, wenn das Programm über die Desktop-Verknüpfung gestartet wurde "
+                                 "(verknuepfung_erstellen.bat einmal ausführen).")
+        self.events.put(("autostart", exists, admin, info))
+
+    def _autostart_state(self, exists, can_change, info):
+        self.autostart_var.set(bool(exists))
+        self.autostart_cb.state(["!disabled"] if can_change else ["disabled"])
+        self.autostart_info.set(info)
+
+    def _autostart_changed(self):
+        on = bool(self.autostart_var.get())
+        self.autostart_cb.state(["disabled"])
+        self.autostart_info.set("Wird eingerichtet …")
+        root_dir = self.root_dir
+
+        def work():
+            ok, out = autostart.set_autostart(root_dir, on)
+            if ok:
+                msg = ("Startet ab jetzt mit Windows im Infobereich." if on else "Startet nicht mehr mit Windows.")
+            else:
+                msg = f"Fehlgeschlagen: {out}"
+            self.events.put(("autostart", on if ok else not on, True, msg))
+            self.events.put(("status_log", msg))
+        threading.Thread(target=work, daemon=True, name="autostart").start()
+
     # ---------------------------------------------------------- updates (done by start.bat)
     def _update_flag_changed(self):
         self.settings.set("auto_update", bool(self.update_var.get()))
@@ -1511,6 +1608,7 @@ class App:
             if self.root.state() == "normal":
                 self.settings.set("window_geometry", self.root.geometry())
             self.settings.save()
+            self.tray.stop()
             self.conn.stop()
             self.worker.stop()
             self.hotkeys.stop()

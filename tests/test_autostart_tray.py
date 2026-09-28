@@ -1,0 +1,118 @@
+"""Task Scheduler start (no UAC prompt), autostart, desktop shortcut and the tray icon."""
+import base64
+import os
+import sys
+import types
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from dbdmapscout import autostart as au  # noqa: E402
+from dbdmapscout.tray import Tray  # noqa: E402
+
+ROOT = r"C:\Users\saruj\Desktop\dbd-map-scout"
+
+
+# ------------------------------------------------------------------ tasks
+def test_on_demand_task_runs_start_bat_elevated_without_trigger():
+    s = au.task_script(ROOT, au.TASK, False)
+    assert "-RunLevel Highest" in s and "-LogonType Interactive" in s
+    assert "New-ScheduledTaskTrigger" not in s and "-Trigger" not in s
+    assert "start \"\" /min \"" in s and "start.bat\"'" in s                    # updates/packages keep working
+    assert " tray'" not in s
+    assert f"-TaskName '{au.TASK}'" in s and "-MultipleInstances IgnoreNew" in s
+
+
+def test_autostart_task_at_logon_in_tray():
+    s = au.task_script(ROOT, au.TASK_AUTO, True)
+    assert "New-ScheduledTaskTrigger -AtLogOn -User $user" in s and "$t.Delay = 'PT20S'" in s
+    assert "start.bat\" tray'" in s and "-Trigger $t" in s
+
+
+def test_paths_with_quotes_stay_one_literal():
+    s = au.task_script(r"C:\Users\O'Brien\dbd", au.TASK, False)
+    assert "O''Brien" in s                                    # PowerShell single-quote escaping
+
+
+def test_remove_only_existing_task():
+    s = au.remove_script(au.TASK_AUTO)
+    assert "Get-ScheduledTask" in s and "Unregister-ScheduledTask" in s and "-Confirm:$false" in s
+
+
+def test_shortcut_runs_the_task():
+    s = au.shortcut_script(ROOT, ROOT + r"\dbdmapscout.ico")
+    assert "schtasks.exe" in s and "'/run /tn \"DbD Map Scout\"'" in s
+    assert "$s.WindowStyle = 7" in s and "dbdmapscout.ico,0'" in s
+    assert "GetFolderPath('Desktop')" in s
+
+
+def test_powershell_is_encoded(monkeypatch):
+    seen = {}
+
+    def fake_run(args, **kw):
+        seen["args"] = args
+        return types.SimpleNamespace(returncode=0, stdout="ok\n", stderr="")
+    monkeypatch.setattr(au.subprocess, "run", fake_run)
+    ok, out = au.powershell("Write-Output 'ä \" $x'")
+    assert ok and out == "ok"
+    enc = seen["args"][seen["args"].index("-EncodedCommand") + 1]
+    assert base64.b64decode(enc).decode("utf-16-le") == "Write-Output 'ä \" $x'"
+    assert "-NonInteractive" in seen["args"]
+
+
+# ------------------------------------------------------------------ tray
+class _FakePystray:
+    def __init__(self):
+        lib = self
+        self.icons = []
+
+        class MenuItem:
+            def __init__(self, text, action, default=False):
+                self.text, self.action, self.default = text, action, default
+
+        class Menu:
+            SEPARATOR = object()
+
+            def __init__(self, *items):
+                self.items = items
+
+        class Icon:
+            def __init__(self, name, image, title, menu):
+                self.name, self.image, self.title, self.menu = name, image, title, menu
+                self.running = False
+                lib.icons.append(self)
+
+            def run_detached(self):
+                self.running = True
+
+            def stop(self):
+                self.running = False
+
+        self.module = types.SimpleNamespace(MenuItem=MenuItem, Menu=Menu, Icon=Icon)
+
+
+def test_tray_menu_posts_actions_to_the_ui_thread(monkeypatch):
+    fake = _FakePystray()
+    monkeypatch.setitem(sys.modules, "pystray", fake.module)
+    posted = []
+    t = Tray(posted.append)
+    assert t.start() and t.active
+    icon = fake.icons[0]
+    assert icon.running and icon.image.size == (64, 64)
+    items = [i for i in icon.menu.items if i is not fake.module.Menu.SEPARATOR]
+    assert [i.text for i in items] == ["Fenster öffnen", "Overlay ein/aus", "Beenden"]
+    assert items[0].default                                          # double click opens the window
+    for i in items:
+        i.action(icon, i)
+    assert posted == ["open", "toggle", "quit"]                       # only posted, never Tk from this thread
+    t.set_title("DbD Map Scout – " + "x" * 200)
+    assert len(icon.title) == 127
+    t.stop()
+    assert not icon.running and not t.active
+
+
+def test_tray_without_package(monkeypatch):
+    monkeypatch.setitem(sys.modules, "pystray", None)
+    t = Tray(lambda a: None)
+    assert not t.start() and not t.active and t.error
+    t.set_title("x")                                                 # harmless
+    t.stop()
