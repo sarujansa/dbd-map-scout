@@ -12,7 +12,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from PIL import Image, ImageTk
 
-from . import mapimage as mi
+from . import mapimage as mi, tooltip
 from .textnorm import fold
 
 PREVIEW_H = 220
@@ -126,6 +126,7 @@ class PictureDialog:
         ttk.Button(br, text="Abbrechen", command=d.destroy).pack(side="right", padx=6)
         d.bind("<Escape>", lambda e: d.destroy())
         self._mode_changed()
+        tooltip.attach_all(d)
         d.grab_set()
 
     # ---------------------------------------------------------------- helpers
