@@ -10,7 +10,8 @@ runs elevated when started through the task.
 Tasks:
   "DbD Map Scout"               on demand; the desktop shortcut runs it (schtasks /run)
   "DbD Map Scout (Autostart)"   at logon (20 s delay), starts in the notification area ("tray")
-Both run: cmd /c start "" /min "<folder>\\start.bat" [tray]   – so updates and packages keep working.
+Both run: cmd /c start "" /min cmd /c ""<folder>\\start.bat" [tray]"  – so updates and packages keep
+working, and the minimised console closes again (start alone would use cmd /K and leave it open).
 """
 from __future__ import annotations
 
@@ -19,7 +20,7 @@ import os
 import subprocess
 import sys
 
-SETUP_VERSION = 1           # raise when task, shortcut or icon change: the program then renews them itself
+SETUP_VERSION = 2           # raise when task, shortcut or icon change: the program then renews them itself
 TASK = "DbD Map Scout"
 TASK_AUTO = "DbD Map Scout (Autostart)"
 LINK_NAME = "DbD Map Scout.lnk"
@@ -35,7 +36,9 @@ def task_script(root: str, name: str, at_logon: bool) -> str:
     """PowerShell that (re)creates one task for the current user, run level highest."""
     root = os.path.abspath(root)
     bat = os.path.join(root, "start.bat")
-    arg = f'/c start "" /min "{bat}"' + (" tray" if at_logon else "")
+    # "start" alone would run the .bat with cmd /K – its (minimised) console would stay open afterwards.
+    # Explicit cmd /c closes it. Quoting: cmd /c strips the outer pair of ""…"".
+    arg = f'/c start "" /min cmd /c ""{bat}"' + (" tray" if at_logon else "") + '"'
     lines = [
         "$ErrorActionPreference = 'Stop'",
         "$user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name",
