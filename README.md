@@ -21,6 +21,8 @@ Programm starten und DBD spielen. Wenn beim Match-Start unten links der Map-Name
 - dem Ladebildschirm der nächsten Runde,
 - einem geschlossenen DBD.
 
+Auf Ultrawide-Monitoren zeigt DBD Ergebnisbildschirm und Menüs in voller Breite, das Match aber in 16:9 mit schwarzen Balken. Das Programm erkennt das und sucht CONTINUE und Währungsanzeige dann bis zum echten Bildschirmrand; im Match bleiben die Balken außen vor.
+
 **In Menüs pausiert das Overlay.** DBD zeigt den Mauszeiger nur in Menüs (ESC-Menü, Ergebnisbildschirm, Lobby). Ist er ein paar Sekunden lang über dem DBD-Fenster sichtbar, blendet sich die Karte aus. Verschwindet er wieder, kommt sie zurück. Ist der Mauszeiger insgesamt eine Minute lang in einem Menü sichtbar, gilt die Runde als beendet.
 
 **Rundentimer.** Der Timer läuft, solange eine Karte eingeblendet ist. Erscheint eine Karte (automatisch erkannt, manuell gewählt oder per Hotkey eingeblendet), beginnt er bei 00:00. Verschwindet sie (Rundenende erkannt oder manuell ausgeblendet), stoppt er. Er steht im Steuerfenster unter dem Map-Namen („Runde läuft: 07:32“, danach „Letzte Runde: 12:04“) und im Overlay groß und mittig direkt unter der Karte, gestaltet wie der Kartentitel: weiße Ziffern mit Schatten, ohne Kasten (abschaltbar im Tab Overlay). Beim Rundenende zählt der erste Hinweis darauf als Endzeit, z. B. das Erscheinen des Mauszeigers auf dem Ergebnisbildschirm, nicht erst der Moment, in dem die Erkennung sicher ist. Das kurze Ausblenden im ESC-Menü oder wenn ein anderes Fenster aktiv ist, hält den Timer nicht an, weil das Match weiterläuft. Ein Layout- oder Map-Wechsel bei eingeblendeter Karte setzt ihn nicht zurück. Ein neues Map-Banner startet immer eine neue Runde, auch wenn das Ende der vorigen nicht erkannt wurde.

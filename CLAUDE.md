@@ -63,7 +63,7 @@ start_debug.bat           :: mit Konsole
   - Screen-Hinweise brauchen 2 Blicke in Folge (CONTINUE mit sehr gutem Fit: 1), Ladebildschirm 3 Blicke **und** stilles Bild (sonst lösen Reparatur-/Heilbalken aus).
   - Mauszeiger-Hinweis erst nutzen, wenn beim Map-Banner der Zeiger nachweislich versteckt war (`cursor_proven`).
   - Menü-Latch zählt nur Zeit, in der DBD aktiv und der Zeiger sichtbar ist (60 s).
-  - Regionen nie in die schwarzen Balken ausdehnen (FPS-Anzeigen, Benachrichtigungen).
+  - Regionen nie in die schwarzen Balken ausdehnen (FPS-Anzeigen, Benachrichtigungen). Ausnahme: `detector.fills_bars()` – Ergebnisbildschirm, Lobby und Menüs nutzen auf Ultrawide die **volle Fensterbreite** (CONTINUE und Währung sitzen am echten rechten Rand, x ≈ 2800–3300). Nur wenn beide Balken selbst Bild enthalten (im Match sind sie schwarz), reichen CONTINUE-/Währungsregion bis zum Fensterrand.
   - Eigenes Overlay wird vor jeder Auswertung aus dem Bild geschwärzt (`worker._mask_overlay`).
 - Events mit `gen` (Map-Generation) – veraltete `menu`/`match_end` für eine alte Map werden ignoriert.
 - hosts-Datei: latin-1 lesen/schreiben (byte-genau), nur an LF splitten, Backup `hosts.dbdmapscout-backup` vor der ersten Änderung, Fremdeinträge (Make Your Choice) werden ersetzt. Ergebnisdatei wird vom normalen Prozess vorab angelegt (sonst nach Admin-Schreiben nicht lesbar).
