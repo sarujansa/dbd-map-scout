@@ -7,7 +7,11 @@ Map-Overlay für Dead by Daylight. Beim Match-Start wird der Map-Name automatisc
 1. **Python installieren** (falls noch nicht vorhanden): <https://www.python.org/downloads/>, Version 3.12 oder neuer. Im Installer **„Add python.exe to PATH“** anhaken.
 2. Ordner entpacken, z. B. nach `C:\Tools\dbd-map-scout`.
 3. **`start.bat`** doppelklicken. Beim ersten Start wird eine eigene Python-Umgebung (`.venv`) angelegt und die Pakete werden installiert (ca. 1–2 Minuten, rund 250 MB). Danach startet das Programm direkt.
-4. Optional: **`verknuepfung_erstellen.bat`** doppelklicken. Das legt „DbD Map Scout“ mit eigenem Symbol auf den Desktop; die Verknüpfung startet das Programm als Administrator (nötig für „Verbunden mit“) ohne Konsolenfenster. Rechtsklick → „An Taskleiste anheften“ geht auch.
+4. Empfohlen: **`verknuepfung_erstellen.bat`** doppelklicken (Windows fragt einmal nach Administratorrechten). Das legt in der Windows-Aufgabenplanung die Aufgabe „DbD Map Scout“ an und „DbD Map Scout“ mit eigenem Symbol auf den Desktop: Die Verknüpfung startet das Programm als Administrator (nötig für „Verbunden mit“) **ohne Windows-Abfrage** und ohne Konsolenfenster. Rechtsklick → „An Taskleiste anheften“ geht auch.
+
+**Infobereich und Autostart.** Minimiert verschwindet das Steuerfenster in den Infobereich neben der Uhr (Doppelklick öffnet es, Rechtsklick: Overlay ein/aus, Beenden). Unter **Einstellungen → Start und Infobereich** lässt sich einschalten, dass das Programm mit Windows startet – still im Infobereich, ohne Abfrage; es wartet dann einfach auf DBD. Das Umschalten geht, wenn das Programm über die Desktop-Verknüpfung läuft.
+
+*Zur Sicherheit:* Eine Aufgabe „mit höchsten Rechten“ umgeht die Windows-Abfrage absichtlich – was im Programmordner liegt (auch per Update geholter Code), läuft dann ohne Nachfrage als Administrator. Wer das strenger will, legt den Ordner an einen Ort, in den nur Administratoren schreiben dürfen (z. B. unter `C:\Program Files`).
 
 **Updates** kommen automatisch: Beim Start über `start.bat` bzw. die Desktop-Verknüpfung holt das Programm den neuen Stand von GitHub (nur wenn der Ordner ein Git-Klon auf `main` ist und du keine Programmdateien selbst geändert hast) und installiert geänderte Pakete nach. Offline oder bei eigenen Änderungen startet einfach die vorhandene Version. Was neu ist, steht danach im Log. Abschaltbar unter **Einstellungen → Updates**.
 

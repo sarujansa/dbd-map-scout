@@ -84,6 +84,7 @@ def main():
     ap.add_argument("--simulate", help="Screenshots statt Bildschirm verwenden (Datei oder Ordner)")
     ap.add_argument("--test", nargs="+", help="Nur testen: Screenshots auswerten und Ergebnis ausgeben")
     ap.add_argument("--lang", default="en,de", help="Sprachen für --test, z.B. en,de")
+    ap.add_argument("--tray", action="store_true", help="im Infobereich starten (Autostart mit Windows)")
     args = ap.parse_args()
 
     if args.test:
@@ -97,7 +98,7 @@ def main():
     enable_dpi_awareness()
     try:
         from .app import App
-        App(ROOT, simulate=args.simulate).run()
+        App(ROOT, simulate=args.simulate, start_in_tray=args.tray).run()
     except Exception:
         text = traceback.format_exc()
         logging.getLogger("dbdmapscout").error(text)
