@@ -9,7 +9,7 @@ Das Programm muss „regelkonform“ zu Dead by Daylight bleiben. Konkret:
 - **Keine Eingaben ans Spiel** (kein SendInput, keine Tastatur-/Maus-Simulation, keine Automatisierung).
 - **Kein Zugriff auf den Spielprozess** – nicht einmal `OpenProcess`, kein Speicherlesen, keine Injection, keine Modul-/Handle-Abfragen mit PID.
 - **Keine Spieldateien** lesen oder schreiben (auch nicht `GameUserSettings.ini`, Splash-Screen, Movies).
-- Erlaubt sind nur: **Bildschirmpixel** (mss/BitBlt), Fensterinfos (Titel, Klasse `UnrealWindow`, Position über EnumWindows), **Mauszeiger-Status** (`GetCursorInfo`, wie OBS), die **Windows-hosts-Datei** (nur Tab „Server“, nur GameLift-Namen) und **Paketköpfe des Netzwerkverkehrs** (nur Tab „Server“, Anzeige „Verbunden mit“; vom Nutzer ausdrücklich gewünscht, wie in Make Your Choice). Beim Mitschnitt: nur IPv4/UDP-Kopffelder (Adressen, Ports) lesen, **nie Paketinhalte**, nichts senden, nichts speichern außer der temporären Ergebnisdatei (Server-IP **nicht** ins Logfile, nur die Region), kein Treiber (Raw-Socket `SIO_RCVALL`), **nur Modus `RCVALL_IPLEVEL`** (eigener Verkehr; nie `RCVALL_ON`/Promiscuous, auch nicht als Rückfall), keine Zuordnung über die PID des Spiels.
+- Erlaubt sind nur: **Bildschirmpixel** (mss/BitBlt) und – nur solange DBD im Hintergrund ist – die **Fensteraufnahme per Windows Graphics Capture** (wie OBS „Fensteraufnahme“, Bild kommt vom Windows-Compositor; `wincapture.py`, Bibliothek windows-capture **2.0.1 fest**, geprüft: importiert kein OpenProcess/GetWindowThreadProcessId/Hooks/Eingaben – bei Versionswechsel erneut prüfen; nie `PrintWindow`, das schickt Nachrichten ans Spiel), Fensterinfos (Titel, Klasse `UnrealWindow`, Position über EnumWindows), **Mauszeiger-Status** (`GetCursorInfo`, wie OBS), die **Windows-hosts-Datei** (nur Tab „Server“, nur GameLift-Namen) und **Paketköpfe des Netzwerkverkehrs** (nur Tab „Server“, Anzeige „Verbunden mit“; vom Nutzer ausdrücklich gewünscht, wie in Make Your Choice). Beim Mitschnitt: nur IPv4/UDP-Kopffelder (Adressen, Ports) lesen, **nie Paketinhalte**, nichts senden, nichts speichern außer der temporären Ergebnisdatei (Server-IP **nicht** ins Logfile, nur die Region), kein Treiber (Raw-Socket `SIO_RCVALL`), **nur Modus `RCVALL_IPLEVEL`** (eigener Verkehr; nie `RCVALL_ON`/Promiscuous, auch nicht als Rückfall), keine Zuordnung über die PID des Spiels.
 - Map-Erkennung und Overlay bauen **keine Internetverbindung** auf; nur der Server-Tab pingt AWS-GameLift (UDP 7770 / ICMP) und löst DNS auf (auch Reverse-DNS der Spielserver-Adresse). Während „Verbunden mit“ läuft, alle 5 s ein Ping an den Beacon der verbundenen Region (`gamelift-ping.<region>.api.aws`) – **nie Pakete an den Spielserver selbst**.
 - Neue Features, die gegen diese Regeln verstoßen würden: nicht umsetzen, sondern nachfragen.
 
@@ -32,7 +32,8 @@ start_debug.bat           :: mit Konsole
 .venv\Scripts\python -m pytest -q tests
 ```
 
-- Tests immer laufen lassen nach Änderungen an `detector.py`, `matchend.py`, `hostsedit.py`, `regions.py`, `netwatch.py`, `connwatch.py`, `roundtimer.py`.
+- Tests immer laufen lassen nach Änderungen an `detector.py`, `matchend.py`, `hostsedit.py`, `regions.py`, `netwatch.py`, `connwatch.py`, `roundtimer.py`, `wincapture.py`.
+- `requirements-extra.txt` (windows-capture) wird von `start.bat` einmalig mit `--no-deps` installiert (Marker `.venv\extras-1.ok`): das Paket verlangt `opencv-python`, das Projekt nutzt `opencv-python-headless` – beide zusammen zerstören `cv2`. Neue Zusatzpakete → Marker hochzählen.
 - Tests dürfen **niemals die echte hosts-Datei** anfassen. `hostsedit.hosts_path()` ignoriert die Test-Variable `DBDMS_HOSTS_FILE` unter Windows absichtlich (Sicherheit des Admin-Helfers) – Schreibtests laufen daher nur über `hostsedit.build()` / `apply_job` mit reinen Text-/Temp-Dateien bzw. unter Linux/CI. Nicht „reparieren“.
 - `settings.json`, `dbdmapscout.log`, `diagnose.txt`, `debug/` sind Laufzeitdateien, nicht committen.
 
@@ -49,6 +50,7 @@ start_debug.bat           :: mit Konsole
 | `ocr.py` | PP-OCRv4-Erkennungsnetz (ONNX) + `LexiconScorer` (CTC-Forward über alle Kandidaten) |
 | `catalog.py`, `maps.json`, `textnorm.py` | Map-/Realm-Namen (9 Sprachen), Varianten, Bildpfade. Aliasse aus `maps.json` plus eigene Zuordnungen des Nutzers (`settings.json` → `user_aliases`, Dialog „Zuordnen …“ nach einem `unknown`-Event; `alias_problem()` verhindert Konflikte, Realm-Prüfung bleibt) |
 | `capture.py` | DBD-Fenster finden, mss-Aufnahme, `cursor_state()`; öffnet nie den Spielprozess |
+| `wincapture.py` | Fensteraufnahme (WGC) für DBD im Hintergrund: `CapturePolicy` (reine Logik: an, sobald DBD nicht aktiv; aus nach 5 s aktiv), `WindowCapture` (kopiert nur die angefragte Region im Rückruf; falsche Bildgröße/keine Bilder → `None` → Worker nimmt mss). Bilder daraus enthalten das eigene Overlay nicht → kein Ausschwärzen |
 | `overlay_win32.py` / `overlay.py` | natives Layered-Window-Overlay (WS_EX_TRANSPARENT/NOACTIVATE) / Tk-Fallback |
 | `regions.py` | Server-Tab: Regionstabelle (Namen), Ping (UDP-Beacon, DNS ohne hosts), `run_job()` startet Helfer per UAC |
 | `hostsedit.py` | Admin-Helfer (UAC): schreibt nur den eigenen markierten Abschnitt der hosts-Datei. Nur Standardbibliothek, gestartet mit `pythonw -I -S`. Erlaubt nur Namen aus `MANAGED` (fest codiert) |

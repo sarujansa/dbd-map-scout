@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 import cv2
 
-from .capture import ImageSource, ScreenGrabber, cursor_state, find_game_window, foreground_root
+from .capture import IS_WIN, ImageSource, ScreenGrabber, cursor_state, find_game_window, foreground_root
 from .detector import ROI, Accumulator, BannerReader, OutOfMatchWatcher
 from .matchend import MatchEndTracker, Signals
 from .ocr import Recognizer
@@ -42,6 +42,7 @@ class DetectionWorker(threading.Thread):
         self.watch_gen = None            # set by the UI: (number, source) of the map on display
         self.overlay_rect = None         # set by the UI: overlay position on screen (x, y, w, h) or None
         self.watch_status = "keine Map angezeigt"
+        self.capture_info = "Bildschirm"                     # where the pictures come from (diagnosis)
         self.end_history = collections.deque(maxlen=80)     # for the diagnosis
         self._scanner = None
         self._reported = set()
@@ -85,6 +86,12 @@ class DetectionWorker(threading.Thread):
         out_of_match = OutOfMatchWatcher(rec)
         source = ImageSource(self.simulate) if self.simulate else None
         grabber = None if source else ScreenGrabber()
+        from .wincapture import CapturePolicy, WindowCapture, describe
+        policy = CapturePolicy()          # window capture (WGC) while DBD is in the background
+        wcap = None
+        wcap_failed = None                # hwnd the window capture could not be started for
+        wcap_told = False
+        via = {"screen": True}            # last picture came from the screen (-> our overlay is in it)
 
         window, window_checked = None, 0.0
         session, last_seen, session_frames = False, 0.0, []
@@ -110,7 +117,7 @@ class DetectionWorker(threading.Thread):
                         if self._scanner:
                             self._scanner = None
                     if cmd[0] == "scan":
-                        self._manual_scan(rec, grabber, source, window)
+                        self._manual_scan(rec, grabber, source, window, wcap)
             except queue.Empty:
                 pass
 
@@ -141,7 +148,39 @@ class DetectionWorker(threading.Thread):
                     ml, mt, mw, mh = grabber.primary_monitor()
                     origin, fw, fh = (ml, mt), mw, mh
                     status = "DBD-Fenster nicht gefunden – beobachte Hauptbildschirm"
-                grab = lambda box: grabber.grab(origin[0] + box[0], origin[1] + box[1], box[2], box[3])
+                # ---- DBD in the background: take its picture from Windows instead of the screen
+                win_ok = source is None and window is not None and not window.minimized and window.width > 100
+                fg_now = win_ok and foreground_root() == window.hwnd
+                if policy.update(tick, IS_WIN and bool(self.settings.get("window_capture", True)), win_ok, fg_now):
+                    if wcap is not None and (wcap.hwnd != window.hwnd or wcap.closed):
+                        if wcap.closed and wcap.hwnd == window.hwnd:
+                            wcap_failed = window.hwnd           # ended by itself: do not restart every tick
+                        wcap.stop()
+                        wcap = None
+                    if wcap is None and wcap_failed != window.hwnd:
+                        wcap = WindowCapture(window.hwnd)
+                        if wcap.start():
+                            if not wcap_told:
+                                wcap_told = True
+                                self.post("watch_info", text="DBD im Hintergrund – Fensteraufnahme aktiv: die Map "
+                                                             "wird auch erkannt, wenn andere Fenster darüber liegen.")
+                        else:
+                            self.post("warn", text=f"Fensteraufnahme nicht möglich, nutze Bildschirmaufnahme "
+                                                   f"({wcap.error})")
+                            wcap_failed, wcap = window.hwnd, None
+                elif wcap is not None:
+                    wcap.stop()
+                    wcap = None
+                self.capture_info = describe(wcap, policy.active)
+
+                def grab(box, _o=origin, _size=(fw, fh), _cap=wcap):
+                    if _cap is not None:
+                        img = _cap.grab(box[0], box[1], box[2], box[3], expect_size=_size)
+                        if img is not None:
+                            via["screen"] = False
+                            return img
+                    via["screen"] = True
+                    return grabber.grab(_o[0] + box[0], _o[1] + box[1], box[2], box[3])
 
             if not self.settings.get("auto_detect", True):
                 status = "Automatische Erkennung ist aus"
@@ -169,7 +208,7 @@ class DetectionWorker(threading.Thread):
                 else:
                     black_since = None
 
-                if source is None and self.overlay_rect:
+                if source is None and via["screen"] and self.overlay_rect:
                     self._mask_overlay(img, origin[0] + box[0], origin[1] + box[1])
                 sep, res = reader.read(img, fw, fh)
                 if sep is not None:
@@ -222,7 +261,7 @@ class DetectionWorker(threading.Thread):
                     try:
                         full = grab((0, 0, fw, fh))
                         look = full
-                        if source is None and self.overlay_rect:
+                        if source is None and via["screen"] and self.overlay_rect:
                             look = full.copy()
                             self._mask_overlay(look, origin[0], origin[1])
                         obs = out_of_match.observe(look)
@@ -278,13 +317,15 @@ class DetectionWorker(threading.Thread):
                 pass
         if grabber:
             grabber.close()
+        if wcap is not None:
+            wcap.stop()
 
     def _status(self, text, last):
         if text != last:
             self.post("status", text=text)
 
     # ---------------------------------------------------------- full scan
-    def _manual_scan(self, rec, grabber, source, window):
+    def _manual_scan(self, rec, grabber, source, window, wcap=None):
         from .fullscan import FullScanner, TextDetector
         t0 = time.time()
         try:
@@ -295,7 +336,11 @@ class DetectionWorker(threading.Thread):
             if source is not None:
                 frame = source.current()
             elif window is not None and not window.minimized:
-                frame = grabber.grab(window.left, window.top, window.width, window.height)
+                frame = None
+                if wcap is not None:
+                    frame = wcap.grab(0, 0, window.width, window.height, expect_size=(window.width, window.height))
+                if frame is None:
+                    frame = grabber.grab(window.left, window.top, window.width, window.height)
             else:
                 frame = grabber.grab(*grabber.primary_monitor())
             hits = self._scanner.scan(frame)
