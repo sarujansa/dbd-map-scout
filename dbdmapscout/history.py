@@ -189,3 +189,22 @@ def wait_by(rounds, by: str) -> list:
     if by == "region":
         return sorted(rows, key=lambda row: (row[0] == NO_REGION, row[2]))
     return sorted(rows)
+
+
+def set_role(path: str, t: float, role: str):
+    """Correct the role of the round that started at ``t`` (role: killer | survivor | custom).
+    Rewrites the file; returns the changed round or None."""
+    if role not in ROLES + ("custom",):
+        raise ValueError(role)
+    rounds = load(path)
+    hit = next((r for r in rounds if abs(r.t - t) < 1e-6), None)
+    if hit is None:
+        return None
+    hit.custom = role == "custom"
+    hit.role = "" if hit.custom else role       # the waiting time stays (ignored for custom games): undo-able
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        for r in rounds:
+            fh.write(json.dumps(asdict(r), ensure_ascii=False) + "\n")
+    os.replace(tmp, path)
+    return hit

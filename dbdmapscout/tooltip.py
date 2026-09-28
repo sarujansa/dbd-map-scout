@@ -21,6 +21,9 @@ TIPS = {
     "Map-Namen oben einfügen (wie bei den mitgelieferten Karten)":
         "Schreibt den Map-Namen weiss mit Schatten über die Karte, im Stil der mitgelieferten Karten. Hat das Bild "
         "oben schon einen Namen, passiert nichts. Beim Drehen bleibt der Name aufrecht.",
+    "Killer": "Diese Runde als Killer-Runde zählen (falls die Erkennung falsch lag).",
+    "Survivor": "Diese Runde als Survivor-Runde zählen (falls die Erkennung falsch lag).",
+    "Custom Game": "Diese Runde als Custom Game zählen – sie fliesst dann nicht in die Wartezeit ein.",
     "Drehen ↻": "Dreht die angezeigte Karte um 90° im Uhrzeigersinn (für jede Map gemerkt). Der Map-Name "
                 "darüber bleibt aufrecht, die Zahlen in der Karte drehen sich mit.",
     "Scannen": "Sucht sofort auf dem ganzen Bildschirm nach einem Map- oder Realm-Namen – falls die "
