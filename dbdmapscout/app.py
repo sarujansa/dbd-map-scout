@@ -39,6 +39,11 @@ HOTKEY_LABELS = [("toggle_overlay", N_("Overlay ein/aus")), ("next_variant", N_(
                  ("next_map", N_("Nächste Map")), ("bigger", N_("Grösser")), ("smaller", N_("Kleiner")),
                  ("edit_position", N_("Mit Maus verschieben")), ("rotate_map", N_("Karte drehen"))]
 CATS = [N_("Erkennung"), N_("Overlay"), N_("System"), N_("Fehler")]
+STATS_ROLES = [("all", N_("Alle Rollen")), ("killer", N_("Killer")), ("survivor", N_("Survivor")),
+               ("custom", N_("Custom Games"))]
+STATS_WAIT_GROUPS = [("weekday", N_("nach Wochentag")), ("hour", N_("nach Uhrzeit")), ("region", N_("nach Region"))]
+WEEKDAYS = [N_("Montag"), N_("Dienstag"), N_("Mittwoch"), N_("Donnerstag"), N_("Freitag"), N_("Samstag"),
+            N_("Sonntag")]
 STATS_PERIODS = [("all", N_("Alle")), ("day", N_("Heute")), ("week", N_("Diese Woche")), ("month", N_("Dieser Monat")),
                  ("year", N_("Dieses Jahr"))]      # log categories (keys; shown translated)
 
@@ -79,6 +84,7 @@ class App:
         self._watch_gen = 0
         self.round = RoundTimer()        # runs while a map is on display
         self._hist = None                # round for the statistics: detected map -> detected end of the match
+        self._queue = {"state": "idle"}  # lobby (worker "queue" events): search since / role / found lobby
         self.game = None
         self._game_checked = 0.0
         self._save_job = None
@@ -162,6 +168,8 @@ class App:
         ttk.Label(info, textvariable=self.timer_var).pack(anchor="w")
         self.conn_var = tk.StringVar(value="")
         ttk.Label(info, textvariable=self.conn_var).pack(anchor="w")
+        self.queue_var = tk.StringVar(value="")
+        ttk.Label(info, textvariable=self.queue_var, style="Dim.TLabel").pack(anchor="w")
 
         btns = ttk.Frame(self.root)
         btns.pack(fill="x", padx=10, pady=(2, 6))
@@ -771,6 +779,15 @@ class App:
                                             values=[lbl for _c, lbl in self._stats_regions])
         self.stats_region_cb.pack(side="left", padx=6)
         self.stats_region_cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
+        fr2 = ttk.Frame(f)
+        fr2.pack(fill="x", pady=(0, 6))
+        ttk.Label(fr2, text=_("Rolle")).pack(side="left")
+        self._stats_roles = [(k, _(label)) for k, label in STATS_ROLES]
+        self.stats_role_var = tk.StringVar(value=self._stats_roles[0][1])
+        cb = ttk.Combobox(fr2, textvariable=self.stats_role_var, values=[lbl for _k, lbl in self._stats_roles],
+                          state="readonly", width=14)
+        cb.pack(side="left", padx=(6, 14))
+        cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
         self.stats_var = tk.StringVar(value="")
         ttk.Label(f, textvariable=self.stats_var, style="Big.TLabel", wraplength=540).pack(anchor="w")
         ttk.Label(f, text=_("Gezählt werden Runden mit automatisch erkannter Map, vom Map-Banner bis zum erkannten "
@@ -786,10 +803,29 @@ class App:
                                                    ("avg", _("Ø Dauer"), 80, "e"), ("share", _("Anteil"), 80, "e")), 5)
         ttk.Label(box_r, text=_("Region nur bekannt, wenn im Tab Server „Verbundener Spielserver“ an war."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
+        box_w = ttk.LabelFrame(f, text=_("Wartezeit in der Lobby"), padding=6)
+        box_w.pack(fill="both", expand=True, pady=(8, 0))
+        wr = ttk.Frame(box_w)
+        wr.pack(fill="x", pady=(0, 4))
+        self.stats_wait_var = tk.StringVar(value="")
+        ttk.Label(wr, textvariable=self.stats_wait_var, wraplength=360).pack(side="left")
+        self._stats_wait_groups = [(k, _(label)) for k, label in STATS_WAIT_GROUPS]
+        self.stats_wait_by_var = tk.StringVar(value=self._stats_wait_groups[0][1])
+        cb = ttk.Combobox(wr, textvariable=self.stats_wait_by_var, values=[lbl for _k, lbl in self._stats_wait_groups],
+                          state="readonly", width=16)
+        cb.pack(side="right")
+        cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
+        self.stats_wait = self._stats_tree(box_w, (("grp", _("Wann/Wo"), 230, "w"), ("n", _("Runden"), 70, "e"),
+                                                   ("avg", _("Ø Wartezeit"), 90, "e"), ("min", _("Kürzeste"), 80, "e")),
+                                           7)
+        ttk.Label(box_w, text=_("Gemessen von „CANCEL“ (Suche läuft) bis zur gefundenen Lobby – nur wenn das Programm "
+                                "die Suche gesehen hat. Custom Games haben keine Wartezeit."),
+                  style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         box2 = ttk.LabelFrame(f, text=_("Letzte Runden"), padding=6)
         box2.pack(fill="both", expand=True, pady=(8, 0))
-        self.stats_last = self._stats_tree(box2, (("when", _("Wann"), 115, "w"), ("map", _("Map"), 170, "w"),
-                                                  ("dur", _("Dauer"), 60, "e"), ("srv", _("Server"), 175, "w")), 9)
+        self.stats_last = self._stats_tree(box2, (("when", _("Wann"), 115, "w"), ("map", _("Map"), 150, "w"),
+                                                  ("dur", _("Dauer"), 55, "e"), ("wait", _("Warten"), 55, "e"),
+                                                  ("srv", _("Server"), 145, "w")), 9)
         row = ttk.Frame(f)
         row.pack(fill="x", pady=(8, 0))
         ttk.Button(row, text=_("Verlauf löschen"), command=self._stats_clear).pack(side="left")
@@ -833,7 +869,8 @@ class App:
         self.stats_region_cb.configure(values=[lbl for _c, lbl in self._stats_regions])
         self.stats_region_var.set(dict(self._stats_regions)[wanted])
         period = next((k for k, lbl in self._stats_periods if lbl == self.stats_period_var.get()), "all")
-        rounds = history.select(all_rounds, since=history.period_start(period, time.time()), region=wanted)
+        role = next((k for k, lbl in self._stats_roles if lbl == self.stats_role_var.get()), "all")
+        rounds = history.select(all_rounds, since=history.period_start(period, time.time()), region=wanted, role=role)
         s = history.summary(rounds)
         if not all_rounds:
             self.stats_var.set(_("Noch keine Runden gespeichert."))
@@ -854,11 +891,28 @@ class App:
         t.delete(*t.get_children())
         for code, n, avg, share in history.per_region(rounds):
             t.insert("", "end", values=(self._stats_region_name(code), n, fmt_duration(avg), f"{share:.0%}"))
+        ws = history.wait_summary(rounds)
+        self.stats_wait_var.set(_("Ø {avg} · Median {median} · kürzeste {min} · längste {max} ({n} Runden)",
+                                  avg=fmt_duration(ws["avg"]), median=fmt_duration(ws["median"]),
+                                  min=fmt_duration(ws["min"]), max=fmt_duration(ws["max"]), n=ws["count"])
+                                if ws["count"] else _("Noch keine Wartezeiten in dieser Auswahl."))
+        by = next((k for k, lbl in self._stats_wait_groups if lbl == self.stats_wait_by_var.get()), "weekday")
+        t = self.stats_wait
+        t.delete(*t.get_children())
+        for key, n, avg, shortest in history.wait_by(rounds, by):
+            if by == "weekday":
+                label = _(WEEKDAYS[key])
+            elif by == "hour":
+                label = f"{key:02d}–{key + history.HOUR_BLOCK:02d} " + _("Uhr")
+            else:
+                label = self._stats_region_name(key)
+            t.insert("", "end", values=(label, n, fmt_duration(avg), fmt_duration(shortest)))
         t = self.stats_last
         t.delete(*t.get_children())
         for r in sorted(rounds, key=lambda r: r.t, reverse=True)[:100]:
             t.insert("", "end", values=(time.strftime("%d.%m.%y %H:%M", time.localtime(r.t)), r.map,
                                         fmt_duration(r.seconds),
+                                        fmt_duration(r.wait) if r.wait is not None else "–",
                                         _(regions.NAMES.get(r.region, r.region)) if r.region else "–"))
 
     def _stats_clear(self):
@@ -1404,9 +1458,14 @@ class App:
                 self._unknown = (txt, d.get("realm_text") or "")
                 self.unknown_var.set(_("Unbekannte Map gelesen: „{text}“", text=txt))
                 self.unknown_bar.pack(fill="x", padx=10, pady=(0, 6), before=self.nb)
+        elif k == "queue":
+            self._queue_event(d)
         elif k == "match_end":
             self._round_ended(d.get("t") or time.time())
-            self._hist_close(d.get("t") or time.time())
+            if d.get("role"):
+                self._log(_("Ergebnisbildschirm: gespielt als {role}.", role=self._role_name(d["role"])), "Erkennung")
+                self._queue = dict(self._queue, role=d["role"])
+            self._hist_close(d.get("t") or time.time(), d.get("role"))
             if self.overlay.has_map() and not self.hidden_after_match:
                 was_visible = self.user_visible
                 self.hidden_after_match = True
@@ -1444,13 +1503,20 @@ class App:
         """A map was detected: a round starts. An open round whose end was never detected is dropped
         (its length would be wrong)."""
         m = self.catalog.maps.get(map_id)
-        self._hist = {"t": time.time(), "map_id": map_id, "map": m.label(variant) if m else map_id,
+        now = time.time()
+        self._hist = {"t": now, "map_id": map_id, "map": m.label(variant) if m else map_id,
                       "region": "", "source": source}
+        f = self._queue.get("found")                  # the lobby this match came from (once, max. 15 min old)
+        if f is not None and 0 <= now - f.t <= 900:
+            self._hist.update(wait=f.wait, role=f.role or "", custom=f.custom)
+            self._queue = dict(self._queue, found=None, used=f)
 
-    def _hist_close(self, t):
+    def _hist_close(self, t, role=None):
         rec, self._hist = self._hist, None
         if rec is None:
             return
+        if role in history.ROLES:
+            rec["role"] = role                        # the result screen is the surest source
         seconds = max(0.0, t - rec["t"])
         if not history.should_record(seconds):
             return
@@ -1485,7 +1551,52 @@ class App:
             text, overlay_text = _("Letzte Runde: {time}", time=fmt_duration(r.elapsed(0))), ""
         if text != self.timer_var.get():
             self.timer_var.set(text)
+        q = self._queue_text(time.time())
+        if q != self.queue_var.get():
+            self.queue_var.set(q)
         self.overlay.set_timer(overlay_text if self.settings["overlay"].get("show_timer", True) else "")
+
+    # ---------------------------------------------------------- lobby: search, waiting time, role
+    def _role_name(self, role):
+        return {"killer": _("Killer"), "survivor": _("Survivor")}.get(role, "")
+
+    def _queue_text(self, now):
+        q = self._queue
+        role = self._role_name(q.get("role"))
+        if q["state"] == "search" and q.get("since"):
+            text = _("Suche läuft: {time}", time=fmt_duration(max(0.0, now - q["since"])))
+            return text + (f" · {role}" if role else "")
+        f = q.get("found") or q.get("used")          # lobby found / the round it led to
+        if q["state"] == "custom" or (f is not None and f.custom):
+            return _("Custom Game")
+        if f is not None:
+            parts = ([_("Rolle: {role}", role=role)] if role else []) + \
+                ([_("Wartezeit {time}", time=fmt_duration(f.wait))] if f.wait is not None else [])
+            return " · ".join(parts)
+        return ""
+
+    def _queue_event(self, d):
+        prev, what = self._queue, d.get("what")
+        if what == "search":
+            self._queue = {"state": "search", "since": d.get("since"), "role": d.get("role") or prev.get("role")}
+            if prev.get("state") != "search":
+                self._log(_("Suche nach einem Match gestartet."), "Erkennung")
+        elif what == "cancel":
+            self._queue = {"state": "idle"}
+            self._log(_("Suche abgebrochen."), "Erkennung")
+        elif what == "found" and d.get("found") is not None:
+            f = d["found"]
+            self._queue = {"state": "custom" if f.custom else "lobby", "role": f.role, "found": f}
+            if f.custom:
+                self._log(_("Custom Game – keine Wartezeit."), "Erkennung")
+            elif f.wait is not None:
+                self._log(_("Lobby gefunden nach {time}{role}.", time=fmt_duration(f.wait),
+                            role=f" ({self._role_name(f.role)})" if f.role else ""), "Erkennung")
+            else:
+                self._log(_("Lobby gefunden{role}.", role=f" ({self._role_name(f.role)})" if f.role else ""),
+                          "Erkennung")
+        else:
+            self._queue = dict(prev, role=d.get("role") or prev.get("role"))
 
     def _set_status(self, text):
         """Technical status from the worker: goes to the log; the status line shows a plain summary."""
