@@ -174,3 +174,11 @@ def test_convert_adds_a_name_only_when_missing(tmp_path):
     assert again.size == mi.convert(got, remove_bg=False).size
     plain = mi.convert(Image.open(src))
     assert mi.title_split(plain) is None
+
+
+def test_oversized_pictures_shrink_on_load():
+    from dbdmapscout import overlay
+    frames = overlay.load_frames(os.path.join(ROOT, "maps", "Other", "Midwich.gif"))
+    assert len(frames) > 1 and all(img.height == overlay.MAX_LOAD_H for img, _d in frames)
+    small = overlay.load_frames(os.path.join(ROOT, "maps", "McMillan", "Coal Tower.webp"))
+    assert small[0][0].height == 1280                       # normal pictures stay as they are
