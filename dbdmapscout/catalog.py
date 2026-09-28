@@ -4,6 +4,10 @@ maps.json lists every map with its realm, localized names and the image file
 per layout variant. Images that are in the maps folder but not listed in
 maps.json are added automatically (file name = map name, folder = realm), so
 new maps can be added by just dropping a picture into the folder.
+
+Own pictures live in ``user_maps/`` (gitignored, written by "Kartenbild hinzufügen …"):
+a picture with the same relative path as a listed one (any extension) replaces it,
+every other picture becomes a map of its own, just like unlisted files in ``maps/``.
 """
 from __future__ import annotations
 
@@ -11,6 +15,7 @@ import json
 import os
 from dataclasses import dataclass, field
 
+from .mapimage import USER_DIR
 from .textnorm import fold, name_forms, roman
 
 IMAGE_EXT = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp")
@@ -62,6 +67,7 @@ class Catalog:
         added to the aliases from maps.json."""
         self.root = root
         self.maps_dir = os.path.join(root, "maps")
+        self.user_dir = os.path.join(root, USER_DIR)
         self.languages = [l for l in languages] or ["en"]
         self.maps: dict[str, MapEntry] = {}
         self.realms: dict[str, dict] = {}
@@ -81,14 +87,20 @@ class Catalog:
                 data = json.load(fh)
         self.realms = data.get("realms", {})
         used = set()
+        own = {_stem_key(rel): os.path.join(self.user_dir, rel) for rel in _pictures(self.user_dir)}
         for m in data.get("maps", []):
             variants = {}
             for k, v in (m.get("variants") or {"1": None}).items():
-                if v and not os.path.exists(os.path.join(self.maps_dir, v)):
-                    v = None
-                variants[int(k)] = v
                 if v:
-                    used.add(os.path.normcase(os.path.normpath(v)))
+                    stem = _stem_key(v)
+                    if stem in own:                   # own picture replaces the supplied one
+                        used.add(stem)
+                        v = own[stem]
+                    elif not os.path.exists(os.path.join(self.maps_dir, v)):
+                        v = None
+                    else:
+                        used.add(stem)
+                variants[int(k)] = v
             realm = m.get("realm", "")
             entry = MapEntry(
                 id=m["id"], realm=realm, names=dict(m.get("names", {})), variants=variants,
@@ -96,24 +108,31 @@ class Catalog:
                 aliases=list(m.get("aliases", [])),
             )
             self.maps[entry.id] = entry
-        # images nobody listed -> custom maps (file name = map name)
-        if os.path.isdir(self.maps_dir):
-            for dirpath, _, files in os.walk(self.maps_dir):
-                for f in sorted(files):
-                    if not f.lower().endswith(IMAGE_EXT):
-                        continue
-                    rel = os.path.relpath(os.path.join(dirpath, f), self.maps_dir)
-                    if os.path.normcase(os.path.normpath(rel)) in used:
-                        continue
-                    stem = os.path.splitext(f)[0]
-                    folder = os.path.basename(dirpath) if os.path.normpath(dirpath) != os.path.normpath(self.maps_dir) else ""
-                    realm_key = self._known_realm(folder)
-                    mid = "custom:" + rel.replace("\\", "/")
-                    self.maps[mid] = MapEntry(
-                        id=mid, realm=realm_key or folder, names={"en": stem}, variants={1: rel.replace("\\", "/")},
-                        # only a folder named like a real realm constrains the realm line
-                        realm_names=dict(self.realms[realm_key]) if realm_key else {}, custom=True,
-                    )
+        # images nobody listed -> custom maps (file name = map name); an own picture with the
+        # same path (any extension) replaces a supplied one
+        custom_ids = {}                               # stem -> id of a supplied unlisted picture
+        for base in (self.maps_dir, self.user_dir):
+            for rel in _pictures(base):
+                stem = _stem_key(rel)
+                if stem in used:
+                    continue
+                path = rel.replace("\\", "/") if base == self.maps_dir else os.path.join(base, rel)
+                if base == self.user_dir and stem in custom_ids:
+                    self.maps[custom_ids[stem]].variants[1] = path     # own picture replaces it, same id
+                    continue
+                folder = os.path.dirname(rel).replace("\\", "/").split("/")[-1]
+                realm_key = self._known_realm(folder)
+                mid = "custom:" + rel.replace("\\", "/")
+                if base == self.maps_dir:
+                    custom_ids[stem] = mid
+                elif mid in self.maps:
+                    mid = "custom:user/" + rel.replace("\\", "/")
+                self.maps[mid] = MapEntry(
+                    id=mid, realm=realm_key or folder, names={"en": os.path.splitext(os.path.basename(rel))[0]},
+                    variants={1: path},
+                    # only a folder named like a real realm constrains the realm line
+                    realm_names=dict(self.realms[realm_key]) if realm_key else {}, custom=True,
+                )
 
     def _known_realm(self, folder: str):
         f = fold(folder)
@@ -123,6 +142,24 @@ class Catalog:
             if f == fold(key) or any(f == fold(n) for n in names.values()):
                 return key
         return None
+
+    def is_own(self, map_id: str, variant: int = 1) -> bool:
+        """Is the picture shown for this map one of the user's own (user_maps/)?"""
+        path, _ = self.image_path(map_id, variant)
+        return bool(path) and os.path.normcase(os.path.abspath(path)).startswith(
+            os.path.normcase(os.path.abspath(self.user_dir)) + os.sep)
+
+    def own_stem(self, map_id: str, variant: int = 1):
+        """Relative path (no extension) an own picture for this map must have to replace it."""
+        m = self.maps.get(map_id)
+        if not m:
+            return None
+        v = m.variants.get(variant) or ""
+        if not v:
+            return None
+        if os.path.isabs(v):
+            return os.path.splitext(os.path.relpath(v, self.user_dir))[0].replace("\\", "/")
+        return os.path.splitext(v)[0].replace("\\", "/")
 
     # ----------------------------------------------------------- hypotheses
     def _build_hypotheses(self):
@@ -219,3 +256,19 @@ class Catalog:
             if not q or any(q in k for k in keys):
                 res.append(m)
         return res
+
+
+def _stem_key(rel: str) -> str:
+    return os.path.normcase(os.path.normpath(os.path.splitext(rel)[0]))
+
+
+def _pictures(base: str):
+    """Relative paths of all pictures below ``base`` (sorted, stable)."""
+    out = []
+    if os.path.isdir(base):
+        for dirpath, dirs, files in os.walk(base):
+            dirs.sort()
+            for f in sorted(files):
+                if f.lower().endswith(IMAGE_EXT):
+                    out.append(os.path.relpath(os.path.join(dirpath, f), base))
+    return out
