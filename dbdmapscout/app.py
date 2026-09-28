@@ -159,7 +159,8 @@ class App:
         self.toggle_btn.pack(side="left")
         ttk.Button(btns, text="Layout ▸", command=self.next_variant).pack(side="left", padx=4)
         ttk.Button(btns, text="Scannen", command=self.scan_now).pack(side="left")
-        ttk.Button(btns, text="Overlay testen", command=self.test_overlay).pack(side="left", padx=4)
+        self.test_btn = ttk.Button(btns, text="Overlay testen", command=self.test_overlay)
+        self.test_btn.pack(side="left", padx=4)
 
         # shown when a banner matched no map: assign the read name to a map with one click
         self.unknown_bar = ttk.Frame(self.root)
@@ -861,13 +862,20 @@ class App:
         self.worker.request_scan()
 
     def test_overlay(self):
-        """Show the overlay in the middle of the game/screen for 10 s, ignoring all filters."""
+        """Show the overlay in the middle of the game/screen for 10 s, ignoring all filters.
+        Pressing the button again during the test ends it at once."""
+        if time.time() < getattr(self, "_force_until", 0):
+            self._force_until = 0
+            self._tick_overlay(reschedule=False)
+            return
         if not self.overlay.has_map():
             first = next(iter(self._list_items.values()), None)
             if first:
                 self.show_map(first[0], first[1], "manual", "Testanzeige")
         self._force_until = time.time() + 10
-        self._log("Test: Overlay 10 s lang in der Bildschirmmitte – jetzt zu DBD wechseln.", "Overlay")
+        self._log("Test: Overlay 10 s lang in der Bildschirmmitte – jetzt zu DBD wechseln "
+                  "(nochmal drücken beendet den Test).", "Overlay")
+        self.test_btn.configure(text="Test beenden")
         self._tick_overlay(reschedule=False)
 
     def show_diagnose(self):
@@ -1250,6 +1258,9 @@ class App:
         if getattr(self, "_pos_forced", False):
             self._pos_forced = False
             self._log("Test beendet.", "Overlay")
+        if (time.time() >= getattr(self, "_force_until", 0) and hasattr(self, "test_btn")
+                and self.test_btn.cget("text") != "Overlay testen"):
+            self.test_btn.configure(text="Overlay testen")
         reason = None
         if not self.overlay.has_map():
             reason = "keine Map"
