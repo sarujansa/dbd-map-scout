@@ -103,3 +103,46 @@ def test_own_picture_of_a_new_map(tmp_path):
     assert cat.is_own(m.id) and cat.own_stem(m.id) == "The MacMillan Estate/Night Harbor"
     h = [h for h in cat.hypotheses if h.map_id == m.id][0]
     assert h.name_key == "NIGHTHARBOR" and "THEMACMILLANESTATE" in h.realm_keys
+
+
+def titled(w=120, name_h=20, gap=16, body_h=100):
+    """Name on top, transparent gap, map below – like the supplied callout pictures."""
+    img = Image.new("RGBA", (w, name_h + gap + body_h), (0, 0, 0, 0))
+    a = np.array(img)
+    a[:name_h, 30:90] = (255, 255, 255, 255)                     # the name
+    a[name_h + gap:, :] = FLOOR + (255,)                         # the map
+    a[name_h + gap:name_h + gap + 10, :10] = (255, 0, 0, 255)      # marker top left of the map
+    return Image.fromarray(a)
+
+
+def test_title_is_found_and_stays_upright():
+    img = titled()
+    assert mi.title_split(img) == (0, 20, 36, 136)
+    out = mi.rotate(img, 90)
+    a = np.asarray(out)
+    assert out.size == (100, 20 + 16 + 120)                      # body 120x100 -> 100x120, name stays 60 wide
+    assert (a[:20, 20:80, 3] == 255).all() and (a[:20, :20, 3] == 0).all()   # name upright, centred on top
+    assert (a[36:, :, 3] == 255).all()                           # turned map below
+    assert tuple(a[36, 99][:3]) == (255, 0, 0)                   # top-left marker now top right (clockwise)
+    assert mi.rotate(img, 0) is img and mi.rotate(img, 360) is img
+
+
+def test_picture_without_name_turns_as_a_whole():
+    img = Image.new("RGBA", (40, 20), FLOOR + (255,))
+    assert mi.title_split(img) is None
+    assert mi.rotate(img, 90).size == (20, 40) and mi.rotate(img, 180).size == (40, 20)
+
+
+def test_all_frames_use_the_same_split():
+    a, b = titled(), titled()
+    frames = mi.rotate_frames([(a, 50), (b, 60)], 270)
+    assert [f[1] for f in frames] == [50, 60] and frames[0][0].size == frames[1][0].size
+    assert mi.rotate_frames([(a, 0)], 0)[0][0] is a
+
+
+def test_supplied_maps_keep_their_name_on_top():
+    import glob
+    from dbdmapscout.overlay import load_frames
+    split = [p for p in glob.glob(os.path.join(ROOT, "maps", "*", "*.webp"))
+             if mi.title_split(load_frames(p)[0][0])]
+    assert len(split) >= 45                                      # all callout maps with a name above them
