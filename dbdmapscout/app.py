@@ -1600,6 +1600,7 @@ class App:
         try:
             self._update_state()
             self._layout_pages()
+            self._to_tray_if_minimised()
         except Exception:
             self._report_once("status", traceback.format_exc())
         try:
@@ -1841,8 +1842,17 @@ class App:
 
     def _on_unmap(self, e):
         # <Unmap> also arrives for child widgets (bindtags); only the main window being minimised counts
-        if e.widget is self.root and self.tray.active and self.settings.get("tray", True):
-            self.root.after(10, lambda: self.root.state() == "iconic" and self.root.withdraw())
+        if e.widget is self.root:
+            self.root.after(10, self._to_tray_if_minimised)
+
+    def _to_tray_if_minimised(self):
+        """Minimised -> hide in the notification area. Also checked with the overlay tick, because not every
+        way of minimising (taskbar click, Win+Down, "show desktop") sends <Unmap> reliably."""
+        try:
+            if self.tray.active and self.settings.get("tray", True) and self.root.state() == "iconic":
+                self.root.withdraw()
+        except tk.TclError:
+            pass
 
     def _show_window(self):
         self.root.deiconify()
