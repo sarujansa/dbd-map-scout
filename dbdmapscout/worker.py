@@ -15,12 +15,14 @@ import cv2
 from .capture import IS_WIN, ImageSource, ScreenGrabber, cursor_state, find_game_window, foreground_root
 from .i18n import _
 from .detector import ROI, Accumulator, BannerReader, OutOfMatchWatcher
+from .lobby import LobbyReader, QueueTracker, corner_box, result_box
 from .matchend import MatchEndTracker, Signals
 from .ocr import Recognizer
 
 log = logging.getLogger("dbdmapscout")
 END_CHECK_INTERVAL = 0.5          # seconds between two looks for result screen / lobby / loading screen
 IN_MATCH_RATE = 1.0               # scans per second while a detected map is being played (banner only at the start)
+LOBBY_INTERVAL = 1.0              # seconds between two looks at the lobby button (never during a match)
 
 
 @dataclass
@@ -45,6 +47,8 @@ class DetectionWorker(threading.Thread):
         self.watch_status = _("keine Map angezeigt")
         self.capture_info = "Bildschirm"                     # where the pictures come from (diagnosis)
         self.end_history = collections.deque(maxlen=80)     # for the diagnosis
+        self.queue = QueueTracker()                          # lobby: search / waiting time / role
+        self.lobby_info = "–"                                # last look at the lobby button (diagnosis)
         self._scanner = None
         self._reported = set()
         self._last_frame_save = 0.0
@@ -85,6 +89,8 @@ class DetectionWorker(threading.Thread):
         reader = BannerReader(rec, self.catalog)
         acc = Accumulator()
         out_of_match = OutOfMatchWatcher(rec)
+        lobby_reader = LobbyReader(rec)
+        last_lobby = 0.0
         source = ImageSource(self.simulate) if self.simulate else None
         grabber = None if source else ScreenGrabber()
         from .wincapture import CapturePolicy, WindowCapture, describe
@@ -234,6 +240,24 @@ class DetectionWorker(threading.Thread):
                         best = max(session_frames, key=lambda f: f[2])
                         self.post("unknown", name_text=best[0], realm_text=best[1])
 
+            # ------------------------------------- lobby: searching / found / role (never in a match)
+            if (self.settings.get("auto_detect", True) and sep is None and not session
+                    and tick - last_lobby >= LOBBY_INTERVAL and (source is not None or window is not None)
+                    and not (self.map_on_screen and tracker.in_trial)):
+                last_lobby = tick
+                try:
+                    cb = corner_box(fw, fh)
+                    corner = grab(cb)
+                    if source is None and via["screen"] and self.overlay_rect:
+                        self._mask_overlay(corner, origin[0] + cb[0], origin[1] + cb[1])
+                    view = lobby_reader.read(corner, fw, fh)
+                    self.lobby_info = (f"{view.button or '–'} ({'–' if view.fit is None else f'{view.fit:.1f}'}) "
+                                       f"„{view.name}“ „{view.time_text}“ → {view.kind or '–'}")
+                    for ev in self.queue.update(view, tick):
+                        self._queue_event(ev, tick)
+                except Exception:
+                    self._report("Lobby-Erkennung", traceback.format_exc())
+
             # ------------------------------------- left the trial? -> hide map
             gen = self.watch_gen
             if gen != tracker_gen:
@@ -257,7 +281,7 @@ class DetectionWorker(threading.Thread):
                             vis, cx, cy = cur
                             pointer = vis and (window.left <= cx < window.left + window.width
                                                and window.top <= cy < window.top + window.height)
-                obs = full = None
+                obs = full = look = None
                 if sep is None and tick - last_end_check >= END_CHECK_INTERVAL and (game or source is not None):
                     last_end_check = tick
                     try:
@@ -293,7 +317,14 @@ class DetectionWorker(threading.Thread):
                     if ev[0] == "menu":
                         self.post("menu", on=ev[1], gen=tracker.generation)
                     elif ev[0] == "match_end":
-                        self.post("match_end", reason=ev[1], gen=tracker.generation, t=tracker.end_t)
+                        role = None
+                        if look is not None and ev[1] == "Ergebnisbildschirm":
+                            try:     # categories BRUTALITY … / OBJECTIVES … (our overlay blacked out: 2 of 4 words do)
+                                rx, ry, rw, rh = result_box(fw, fh)
+                                role = lobby_reader.result_role(look[ry:ry + rh, rx:rx + rw])
+                            except Exception:
+                                self._report("Rolle", traceback.format_exc())
+                        self.post("match_end", reason=ev[1], gen=tracker.generation, t=tracker.end_t, role=role)
                     elif ev[0] == "armed" and tracker.source != "auto":
                         self.post("watch_info", text=_("Rundenende-Erkennung für die gewählte Map ist jetzt aktiv."))
                     elif ev[0] == "cursor_unreliable":
@@ -321,6 +352,17 @@ class DetectionWorker(threading.Thread):
             grabber.close()
         if wcap is not None:
             wcap.stop()
+
+    def _queue_event(self, ev, tick):
+        """QueueTracker events -> UI: what=search | cancel | role | found."""
+        if ev[0] == "search":
+            self.post("queue", what="search", since=self.queue.search_start, role=self.queue.role)
+        elif ev[0] == "cancel":
+            self.post("queue", what="cancel")
+        elif ev[0] == "role":
+            self.post("queue", what="role", role=ev[1])
+        elif ev[0] == "found":
+            self.post("queue", what="found", found=ev[1], role=ev[1].role)
 
     def _status(self, text, last):
         if text != last:
