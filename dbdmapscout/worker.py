@@ -19,6 +19,7 @@ from .ocr import Recognizer
 
 log = logging.getLogger("dbdmapscout")
 END_CHECK_INTERVAL = 0.5          # seconds between two looks for result screen / lobby / loading screen
+IN_MATCH_RATE = 1.0               # scans per second while a detected map is being played (banner only at the start)
 
 
 @dataclass
@@ -266,6 +267,10 @@ class DetectionWorker(threading.Thread):
                                      else "keine Map angezeigt")
 
             rate = max(1.0, float(self.settings.get("scans_per_second", 5)))
+            if self.map_on_screen and tracker.in_trial and not session:
+                rate = min(rate, IN_MATCH_RATE)          # in the match: save CPU for the game
+                if watching and "Scan/s" not in self.watch_status:
+                    self.watch_status += f" · {IN_MATCH_RATE:.0f} Scan/s"
             try:
                 cmd = self.commands.get(timeout=max(0.02, 1.0 / rate - (time.time() - tick)))
                 self.commands.put(cmd)          # handled at the top of the next loop
