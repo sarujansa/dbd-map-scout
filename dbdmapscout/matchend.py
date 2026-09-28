@@ -22,6 +22,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .i18n import N_, _
+
 
 @dataclass
 class Signals:
@@ -109,7 +111,7 @@ class MatchEndTracker:
         elif self.game_seen:
             self.missing_since = self.missing_since if self.missing_since is not None else s.t
             if self.armed and s.t - self.missing_since > self.GAME_GONE:
-                return self._end("DBD wurde geschlossen", events, self.missing_since)
+                return self._end(N_("DBD wurde geschlossen"), events, self.missing_since)
 
         # ---- pointer while the banner is up tells whether the pointer cue works here
         if s.banner and s.foreground and s.cursor is not None:
@@ -185,7 +187,7 @@ class MatchEndTracker:
             if menu_now:
                 self.menu_visible += dt
             if self.menu_visible >= self.SOFT_LATCH and menu_now and self.use_end:
-                return self._end("Menü/Lobby (Mauszeiger lange sichtbar)", events, self.menu_start)
+                return self._end(N_("Menü/Lobby (Mauszeiger lange sichtbar)"), events, self.menu_start)
             if self.hid_since is not None and s.t - self.hid_since >= self.SOFT_RELEASE:
                 self.menu = False
                 self.menu_since = None
@@ -197,28 +199,28 @@ class MatchEndTracker:
     def describe(self) -> str:
         """Short state text for the UI."""
         if not self.active:
-            return "keine Map angezeigt"
+            return _("keine Map angezeigt")
         if self.ended:
-            return f"Runde vorbei ({self.end_reason})"
+            return _("Runde vorbei ({reason})", reason=_(self.end_reason or ""))
         if not self.armed:
-            return "wartet, bis du im Match bist (Map manuell gewählt)"
+            return _("wartet, bis du im Match bist (Map manuell gewählt)")
         parts = []
         if self.menu:
-            parts.append("Menü offen – Overlay pausiert")
+            parts.append(_("Menü offen – Overlay pausiert"))
         elif self.candidate:
-            parts.append(f"{self.candidate}? ({self.streak}/2)")
+            parts.append(f"{_(self.candidate)}? ({self.streak}/2)")
         else:
-            parts.append("im Match")
+            parts.append(_("im Match"))
         if not self.use_end:
-            parts.append("Ausblenden nach der Runde aus")
+            parts.append(_("Ausblenden nach der Runde aus"))
         if not self.use_cursor:
             pass
         elif not self.cursor_ok:
-            parts.append("Mauszeiger-Hinweis aus")
+            parts.append(_("Mauszeiger-Hinweis aus"))
         elif not self.cursor_proven:
-            parts.append("Mauszeiger-Hinweis ab dem nächsten Map-Banner")
+            parts.append(_("Mauszeiger-Hinweis ab dem nächsten Map-Banner"))
         elif self.cursor_now is None:
-            parts.append("Mauszeiger: –")
+            parts.append(_("Mauszeiger: –"))
         else:
-            parts.append("Mauszeiger sichtbar" if self.cursor_now else "Mauszeiger verborgen")
+            parts.append(_("Mauszeiger sichtbar") if self.cursor_now else _("Mauszeiger verborgen"))
         return " · ".join(parts)

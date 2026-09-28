@@ -43,6 +43,7 @@ DEFAULTS = {
         "smaller": "ctrl+alt+down",
         "edit_position": "ctrl+alt+p",
     },
+    "ui_language": "auto",            # auto (Windows language) | de | en
     "dark_mode": True,
     "window_geometry": "",
     "log_categories": ["Erkennung", "Overlay", "System", "Fehler"],

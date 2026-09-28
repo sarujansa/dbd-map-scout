@@ -20,6 +20,8 @@ import os
 import subprocess
 import sys
 
+from .i18n import _
+
 SETUP_VERSION = 2           # raise when task, shortcut or icon change: the program then renews them itself
 TASK = "DbD Map Scout"
 TASK_AUTO = "DbD Map Scout (Autostart)"
@@ -131,7 +133,7 @@ def ensure(root: str, saved_version, saved_root):
     if ok and task_exists(TASK_AUTO):
         ok2, out = set_autostart(root, True)
         if not ok2:
-            msg += f" (Autostart nicht erneuert: {out})"
+            msg += " " + _("(Autostart nicht erneuert: {error})", error=out)
     return ok, msg
 
 
@@ -145,11 +147,11 @@ def install(root: str):
         icon = ""
     ok, out = powershell(task_script(root, TASK, False))
     if not ok:
-        return False, f"Aufgabe konnte nicht angelegt werden: {out}"
+        return False, _("Aufgabe konnte nicht angelegt werden: {error}", error=out)
     ok, out = powershell(shortcut_script(root, icon))
     if not ok:
-        return False, f"Verknüpfung konnte nicht angelegt werden: {out}"
-    return True, f"Verknüpfung erstellt: {out}"
+        return False, _("Verknüpfung konnte nicht angelegt werden: {error}", error=out)
+    return True, _("Verknüpfung erstellt: {path}", path=out)
 
 
 def main(argv) -> int:
