@@ -73,3 +73,11 @@ def test_still_holding_modifiers_and_unknown_keys():
 def test_shift_digit_uses_the_windows_key_code():
     assert combo_from_keys({"ctrl", "shift"}, "exclam", keycode=0x31) == ("ctrl+shift+1", None)
     assert combo_from_keys({"ctrl", "alt"}, "adiaeresis", keycode=0x41 + 25)[0] == "ctrl+alt+z"
+
+
+def test_tooltip_texts_by_label():
+    from dbdmapscout import tooltip
+    assert "Bildschirm" in tooltip.tip_for_label("Scannen")
+    assert "#282a42" in tooltip.tip_for_label("Hintergrund entfernen (irgendein Zusatz)")   # prefix match
+    assert tooltip.tip_for_label("gibt es nicht") is None
+    assert all(t and len(t) > 10 for t in tooltip.TIPS.values())
