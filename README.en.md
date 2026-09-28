@@ -55,6 +55,7 @@ The control window has these tabs. If a tab does not fit into the window, a scro
 | **Detection** | automatic mode, hiding after the round, pause in menus, game language; folded under "Advanced": window capture, scans per second, live status, debug pictures, diagnostics |
 | **Server** | the connected game server at the top, below it server regions with ping, blocked or allowed through the hosts file (see below) |
 | **Log** | messages in the categories *Detection*, *Overlay*, *System*, *Error*, each can be shown or hidden |
+| **Statistics** | your rounds: count, average length, total time; per map rounds, average and longest length (click a column to sort); the last 100 rounds with date, length and server region. Counted from the detected map banner to the detected end of the round (from 1 minute; without a detected end the round is not counted). Stored only locally in `rounds.jsonl`, "Delete history" removes everything |
 | **Settings** | language, dark mode, hotkeys, start/notification area, updates, own assignments, folders |
 
 **Position "automatic":** if DBD runs with a 16:9 picture on a wider monitor (e.g. 3440×1440 with black bars), the map goes into the left black bar and is scaled to fit. Otherwise it appears at the top left. As soon as you move a position slider or drag the map with the mouse, "custom position" applies. "Reset" sets "automatic" again.

@@ -15,7 +15,7 @@ from tkinter import messagebox, ttk
 
 from PIL import Image, ImageTk
 
-from . import __version__, i18n, layout, regions, theme, tooltip
+from . import __version__, history, i18n, layout, regions, theme, tooltip
 from .capture import IS_WIN, describe_window, find_game_window, foreground_root, is_game_window
 from .catalog import Catalog
 from .config import Settings
@@ -76,6 +76,7 @@ class App:
         self.menu_paused = False         # a DBD menu is open (pointer visible) -> hidden for now
         self._watch_gen = 0
         self.round = RoundTimer()        # runs while a map is on display
+        self._hist = None                # round for the statistics: detected map -> detected end of the match
         self.game = None
         self._game_checked = 0.0
         self._save_job = None
@@ -189,12 +190,14 @@ class App:
         self.tab_detect = self._tab_detect()
         self.tab_server = self._tab_server()
         self.tab_log = self._tab_log()
+        self.tab_stats = self._tab_stats()
         self.tab_settings = self._tab_settings()
         self.nb.add(self.tab_maps, text="Maps")
         self.nb.add(self.tab_overlay, text=_("Overlay"))
         self.nb.add(self.tab_detect, text=_("Erkennung"))
         self.nb.add(self.tab_server, text=_("Server"))
         self.nb.add(self.tab_log, text="Log")
+        self.nb.add(self.tab_stats, text=_("Statistik"))
         self.nb.add(self.tab_settings, text=_("Einstellungen"))
         self.nb.bind("<<NotebookTabChanged>>", lambda e: self._tab_changed())
 
@@ -539,6 +542,8 @@ class App:
         if was_running and not self.conn.running and self.conn.error:
             self._log(_("Spielserver-Anzeige beendet: {error}", error=self.conn.error), "Fehler")
         srv = self.conn.server
+        if srv and self._hist is not None:
+            self._hist["region"] = srv["region"]           # region only, never the address
         key = (srv["ip"], srv["region"]) if srv else None
         if key != self._conn_last:
             self._conn_last = key
@@ -733,6 +738,80 @@ class App:
             err = res.get("error") or _("unbekannter Fehler")
             self._log(_("Serverregionen: {text}", text=err), "System" if res.get("cancelled") else "Fehler")
             self.srv_status.set(err)
+
+    # -------------------------------------------------------------- tab: statistics
+    def _tab_stats(self):
+        outer, f = self._scroll_tab()
+        self.stats_var = tk.StringVar(value="")
+        ttk.Label(f, textvariable=self.stats_var, style="Big.TLabel", wraplength=540).pack(anchor="w")
+        ttk.Label(f, text=_("Gezählt werden Runden mit automatisch erkannter Map, vom Map-Banner bis zum erkannten "
+                            "Rundenende (mindestens 1 Minute). Gespeichert nur lokal in rounds.jsonl."),
+                  style="Dim.TLabel", wraplength=540).pack(anchor="w", pady=(2, 6))
+        box = ttk.LabelFrame(f, text=_("Maps"), padding=6)
+        box.pack(fill="both", expand=True)
+        self.stats_maps = self._stats_tree(box, (("map", _("Map"), 230, "w"), ("n", _("Runden"), 70, "e"),
+                                                 ("avg", _("Ø Dauer"), 80, "e"), ("max", _("Längste"), 80, "e")), 9)
+        box2 = ttk.LabelFrame(f, text=_("Letzte Runden"), padding=6)
+        box2.pack(fill="both", expand=True, pady=(8, 0))
+        self.stats_last = self._stats_tree(box2, (("when", _("Wann"), 120, "w"), ("map", _("Map"), 200, "w"),
+                                                  ("dur", _("Dauer"), 70, "e"), ("srv", _("Server"), 130, "w")), 9)
+        row = ttk.Frame(f)
+        row.pack(fill="x", pady=(8, 0))
+        ttk.Button(row, text=_("Verlauf löschen"), command=self._stats_clear).pack(side="left")
+        self._stats_sort = ("n", True)
+        return outer
+
+    def _stats_tree(self, parent, cols, height):
+        tf = ttk.Frame(parent)
+        tf.pack(fill="both", expand=True)
+        t = ttk.Treeview(tf, columns=[c[0] for c in cols], show="headings", height=height, selectmode="none")
+        for key, title, width, anchor in cols:
+            t.heading(key, text=title, anchor=anchor, command=lambda k=key, tr=t: self._stats_sort_by(tr, k))
+            t.column(key, width=width, anchor=anchor, stretch=key == "map")
+        sb = ttk.Scrollbar(tf, orient="vertical", command=t.yview)
+        t.configure(yscrollcommand=sb.set)
+        t.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+        return t
+
+    def _stats_sort_by(self, tree, key):
+        if tree is not self.stats_maps:
+            return
+        col, desc = self._stats_sort
+        self._stats_sort = (key, not desc if col == key else key != "map")
+        self._stats_render()
+
+    def _stats_render(self):
+        rounds = history.load(self._hist_path())
+        s = history.summary(rounds)
+        if not s["count"]:
+            self.stats_var.set(_("Noch keine Runden gespeichert."))
+        else:
+            self.stats_var.set(_("{n} Runden · Ø {avg} · gesamt {total}", n=s["count"], avg=fmt_duration(s["avg"]),
+                                 total=fmt_duration(s["total"])))
+        rows = history.per_map(rounds)
+        col, desc = self._stats_sort
+        idx = {"map": 0, "n": 1, "avg": 2, "max": 3}[col]
+        rows.sort(key=lambda r: r[idx].lower() if idx == 0 else r[idx], reverse=desc)
+        t = self.stats_maps
+        t.delete(*t.get_children())
+        for name, n, avg, longest in rows:
+            t.insert("", "end", values=(name, n, fmt_duration(avg), fmt_duration(longest)))
+        t = self.stats_last
+        t.delete(*t.get_children())
+        for r in reversed(rounds[-100:]):
+            t.insert("", "end", values=(time.strftime("%d.%m. %H:%M", time.localtime(r.t)), r.map,
+                                        fmt_duration(r.seconds),
+                                        _(regions.NAMES.get(r.region, r.region)) if r.region else "–"))
+
+    def _stats_clear(self):
+        if not os.path.exists(self._hist_path()):
+            return
+        if not messagebox.askokcancel(_("Verlauf löschen"), _("Alle gespeicherten Runden löschen?"), parent=self.root):
+            return
+        history.clear(self._hist_path())
+        self._stats_render()
+        self._log(_("Rundenverlauf gelöscht."), "System")
 
     # -------------------------------------------------------------- tab: log
     def _tab_log(self):
@@ -1156,8 +1235,11 @@ class App:
             detail = _("automatisch erkannt ({p})", p=f"{d['probability']:.0%}")
             if len(m.variants) > 1:
                 detail += " · " + _("Layout {n} ({p})", n=roman(d["variant"]), p=f"{vp:.0%}")
-            if self.round.detected(time.time()):
+            restarted = self.round.detected(time.time())
+            if restarted:
                 self._log(_("Rundentimer gestartet."), "Erkennung")
+            if restarted or self._hist is None:
+                self._hist_open(d["map_id"], d["variant"], "auto")
             if not same:
                 self.show_map(d["map_id"], d["variant"], "auto", detail, keep_timer=True)
                 self._log(_("Erkannt: {map} – gelesen „{name}“ / „{realm}“", map=m.label(d["variant"]),
@@ -1177,6 +1259,7 @@ class App:
                 self.unknown_bar.pack(fill="x", padx=10, pady=(0, 6), before=self.nb)
         elif k == "match_end":
             self._round_ended(d.get("t") or time.time())
+            self._hist_close(d.get("t") or time.time())
             if self.overlay.has_map() and not self.hidden_after_match:
                 was_visible = self.user_visible
                 self.hidden_after_match = True
@@ -1208,6 +1291,32 @@ class App:
             self._log(_("Die Erkennung ist abgestürzt – Details in dbdmapscout.log"), "Fehler")
             log.error(d["text"])
             messagebox.showerror("DbD Map Scout", _("Die Erkennung ist abgestürzt:") + "\n\n" + d["text"][-1500:])
+
+    # ---------------------------------------------------------- round history (tab Statistik)
+    def _hist_open(self, map_id, variant, source):
+        """A map was detected: a round starts. An open round whose end was never detected is dropped
+        (its length would be wrong)."""
+        m = self.catalog.maps.get(map_id)
+        self._hist = {"t": time.time(), "map_id": map_id, "map": m.label(variant) if m else map_id,
+                      "region": "", "source": source}
+
+    def _hist_close(self, t):
+        rec, self._hist = self._hist, None
+        if rec is None:
+            return
+        seconds = max(0.0, t - rec["t"])
+        if not history.should_record(seconds):
+            return
+        try:
+            history.append(self._hist_path(), history.Round(seconds=seconds, **rec))
+        except OSError as e:
+            self._report_once("history", f"{e}")
+            return
+        if self.nb.select() == str(self.tab_stats):
+            self._stats_render()
+
+    def _hist_path(self):
+        return os.path.join(self.root_dir, history.FILE)
 
     # ---------------------------------------------------------- round timer
     def _round_started(self, t):
@@ -1257,6 +1366,8 @@ class App:
             h = maps[0]
             m = self.catalog.maps[h.map_id]
             self.show_map(h.map_id, h.variant, "scan", _("per Scan gefunden: „{text}“", text=h.text))
+            if self._hist is None:
+                self._hist_open(h.map_id, h.variant, "scan")
             self._log(_("Scan ({s} s): {map}", s=f"{d['seconds']:.1f}", map=m.label(h.variant)), "Erkennung")
             return
         realms = [h for h in hits if h.kind == "realm" and h.realm]
@@ -1960,6 +2071,8 @@ class App:
         self._render_log()
 
     def _tab_changed(self):
+        if self.nb.select() == str(self.tab_stats):
+            self._stats_render()
         if self.nb.select() == str(self.tab_log):
             self.nb.tab(self.tab_log, text="Log")
         if self.nb.select() == str(self.tab_server):
