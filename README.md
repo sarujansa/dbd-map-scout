@@ -126,7 +126,7 @@ Die synthetischen Tests ersetzen keinen Praxistest. Wenn eine Map in echten Rund
 
 ## Wenn etwas nicht klappt
 
-- **Karte ist nicht zu sehen:** Im Steuerfenster „Overlay testen“ drücken. Die Karte erscheint dann 10 Sekunden lang in der Bildschirmmitte. Bleibt sie unsichtbar, „Diagnose kopieren“ drücken und den Text weitergeben. Er enthält Fensterposition, Fensterstil und Z-Reihenfolge gegenüber DBD.
+- **Karte ist nicht zu sehen:** Im Steuerfenster „Overlay testen“ drücken. Die Karte erscheint dann 10 Sekunden lang in der Bildschirmmitte (nochmal drücken – „Test beenden“ – blendet sie sofort wieder aus). Bleibt sie unsichtbar, „Diagnose kopieren“ drücken und den Text weitergeben. Er enthält Fensterposition, Fensterstil und Z-Reihenfolge gegenüber DBD.
 - **Map wird nicht erkannt:** Im Steuerfenster „Debug-Bilder speichern“ aktivieren und ein Match starten. Im Ordner `debug/` landen dann die Bilder, die das Programm gesehen hat, samt gelesenem Text.
 - **Karte verschwindet nach der Runde nicht:** Im Tab Erkennung auf die Zeile „Rundenende-Erkennung“ schauen. Direkt danach „Diagnose kopieren“ drücken: Der Text enthält die letzten Prüfungen (was bei „CONTINUE“, Währung und Ladebalken gelesen wurde und ob der Mauszeiger sichtbar war). Mit „Debug-Bilder speichern“ landen während der Runde außerdem verkleinerte Bildschirmfotos in `debug/frames/`.
 - **Eigene Screenshots testen:** Screenshots mit sichtbarem Map-Banner (Win+Druck) auf `screenshot_testen.bat` ziehen. Das Fenster zeigt dann, was erkannt wird.
