@@ -758,6 +758,13 @@ class App:
                         variable=self.update_var, command=self._update_flag_changed).pack(anchor="w")
         ttk.Label(upd, text=_("nur über start.bat bzw. die Desktop-Verknüpfung; eigene Änderungen werden nie "
                               "überschrieben"), style="Dim.TLabel", wraplength=400).pack(anchor="w", padx=(22, 0))
+        ur = ttk.Frame(upd)
+        ur.pack(fill="x", pady=(6, 0))
+        self.upd_btn = ttk.Button(ur, text=_("Jetzt nach Updates suchen"), command=self.check_update)
+        self.upd_btn.pack(side="left")
+        self.upd_apply_btn = ttk.Button(ur, text=_("Aktualisieren und neu starten"), command=self.apply_update)
+        self.upd_status = tk.StringVar(value="")
+        ttk.Label(upd, textvariable=self.upd_status, wraplength=420, justify="left").pack(anchor="w", pady=(4, 0))
 
         own = ttk.LabelFrame(f, text=_("Eigene Map-Zuordnungen"), padding=8)
         own.pack(fill="x", pady=(8, 0))
@@ -1051,6 +1058,8 @@ class App:
                     self._log(ev[1], "System")
                 elif isinstance(ev, tuple) and ev[0] == "conn_started":
                     self._conn_started(ev[1])
+                elif isinstance(ev, tuple) and ev[0] == "upd_check":
+                    self._update_checked(*ev[1:])
                 elif isinstance(ev, tuple) and ev[0] == "srv_job":
                     self._srv_job_done(ev[1], ev[2])
                 else:
@@ -1635,6 +1644,41 @@ class App:
         threading.Thread(target=work, daemon=True, name="autostart").start()
 
     # ---------------------------------------------------------- updates (done by start.bat)
+    def check_update(self):
+        """Button: ask GitHub (git fetch) whether there is something new – only on this click."""
+        from . import update
+        self.upd_btn.state(["disabled"])
+        self.upd_apply_btn.pack_forget()
+        self.upd_status.set(_("Suche nach Updates …"))
+
+        def work():
+            try:
+                res = update.check(self.root_dir)
+            except Exception as e:
+                res = ("error", f"{type(e).__name__}: {e}", False)
+            self.events.put(("upd_check",) + tuple(res))
+        threading.Thread(target=work, daemon=True, name="update-check").start()
+
+    def _update_checked(self, state, msg, can_apply):
+        self.upd_btn.state(["!disabled"])
+        self.upd_status.set(msg)
+        self._log(msg.splitlines()[0] if msg else "", "System")
+        if state == "available" and can_apply:
+            self.upd_apply_btn.pack(side="left", padx=6)
+
+    def apply_update(self):
+        from . import restart
+        try:
+            ok = restart.spawn_helper(self.root_dir)
+        except OSError as e:
+            self.upd_status.set(_("Neustart nicht möglich: {error}", error=e))
+            return
+        if not ok:
+            self.upd_status.set(_("Nur unter Windows: bitte das Programm über start.bat neu starten."))
+            return
+        self._log(_("Programm startet neu und installiert das Update …"), "System")
+        self.quit()
+
     def _update_flag_changed(self):
         self.settings.set("auto_update", bool(self.update_var.get()))
         self.settings.save()                      # start.bat reads it at the next start
