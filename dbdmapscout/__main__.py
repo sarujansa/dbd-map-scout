@@ -32,7 +32,8 @@ def _single_instance() -> bool:
     k32 = ctypes.WinDLL("kernel32", use_last_error=True)
     k32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
     k32.CreateMutexW.restype = wintypes.HANDLE
-    _mutex = k32.CreateMutexW(None, False, "Local\\DbDMapScout.SingleInstance")
+    from .restart import MUTEX_NAME
+    _mutex = k32.CreateMutexW(None, False, MUTEX_NAME)
     if ctypes.get_last_error() == 183:          # ERROR_ALREADY_EXISTS
         try:
             import tkinter as tk
@@ -88,7 +89,13 @@ def main():
     ap.add_argument("--test", nargs="+", help="Nur testen: Screenshots auswerten und Ergebnis ausgeben")
     ap.add_argument("--lang", default="en,de", help="Sprachen für --test, z.B. en,de")
     ap.add_argument("--tray", action="store_true", help="im Infobereich starten (Autostart mit Windows)")
+    ap.add_argument("--restart", action="store_true", help=argparse.SUPPRESS)   # helper of the update button
     args = ap.parse_args()
+
+    if args.restart:
+        from .restart import wait_and_start
+        wait_and_start(ROOT)
+        return
 
     if args.test:
         run_test(args.test, [l.strip() for l in args.lang.split(",") if l.strip()])

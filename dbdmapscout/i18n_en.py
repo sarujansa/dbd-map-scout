@@ -247,6 +247,18 @@ EN = {
     "nur über start.bat bzw. die Desktop-Verknüpfung; eigene Änderungen werden nie überschrieben":
         "only via start.bat or the desktop shortcut; your own changes are never overwritten",
     "Eigene Map-Zuordnungen": "Own map assignments",
+    "Jetzt nach Updates suchen": "Check for updates now",
+    "Aktualisieren und neu starten": "Update and restart",
+    "Suche nach Updates …": "Checking for updates …",
+    "Neustart nicht möglich: {error}": "Restart not possible: {error}",
+    "Nur unter Windows: bitte das Programm über start.bat neu starten.": "Windows only: please restart the program via start.bat.",
+    "Programm startet neu und installiert das Update …": "The program restarts and installs the update …",
+    "Fragt GitHub, ob es eine neue Version gibt (nur bei diesem Klick). Installiert wird erst mit „Aktualisieren "
+    "und neu starten“.":
+        "Asks GitHub whether there is a new version (only on this click). It is installed only with “Update and "
+        "restart”.",
+    "Beendet das Programm und startet es über start.bat neu – dabei wird das Update installiert.":
+        "Closes the program and starts it again via start.bat – the update is installed on the way.",
     "Alle löschen": "Delete all",
     "Ordner": "Folders",
     "Programmordner öffnen": "Open program folder",

@@ -163,3 +163,38 @@ def test_run_as_script_like_start_bat(repos):
     assert "1.0.0 → 2.0.0" in status and "Große Änderung" in status
     r = subprocess.run([sys.executable, str(script)], capture_output=True)
     assert r.returncode == up.NOTHING                                   # restarted start.bat: nothing more to do
+
+
+# ------------------------------------------------------------------ "Nach Updates suchen" button
+def test_check_changes_nothing(repos):
+    user, release = repos
+    state, msg, can = up.check(str(user))
+    assert state == "current" and "1.0.0" in msg and not can
+    release("1.2.0", "Knopf für Updates")
+    before = head(user)
+    state, msg, can = up.check(str(user))
+    assert state == "available" and can and "1.0.0 → 1.2.0" in msg and "Knopf für Updates" in msg
+    assert head(user) == before and (user / "start.bat").read_text() == "echo old\n"     # only looked
+
+
+def test_check_reports_own_changes(repos):
+    user, release = repos
+    release()
+    write(user / "start.bat", "echo mine\n")
+    state, msg, can = up.check(str(user))
+    assert state == "available" and not can and "eigene Änderungen" in msg
+
+
+def test_check_other_branch(repos):
+    user, _ = repos
+    git(user, "switch", "-c", "test-branch")
+    assert up.check(str(user))[0] == "error"
+
+
+def test_button_update_works_even_if_start_update_is_off(repos, monkeypatch):
+    user, release = repos
+    release()
+    write(user / "settings.json", json.dumps({"auto_update": False}))
+    assert up.update(str(user))[0] == up.SKIPPED
+    monkeypatch.setenv("DBDMS_FORCE_UPDATE", "1")                    # set by "Aktualisieren und neu starten"
+    assert up.update(str(user))[0] == up.UPDATED

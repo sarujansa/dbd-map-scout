@@ -80,6 +80,10 @@ TIPS = {
     "Beim Start nach Updates suchen und installieren (GitHub)":
         "Holt beim Start über die Verknüpfung den neuen Stand von GitHub. Eigene Änderungen werden nie "
         "überschrieben.",
+    "Jetzt nach Updates suchen": "Fragt GitHub, ob es eine neue Version gibt (nur bei diesem Klick). Installiert "
+                                 "wird erst mit „Aktualisieren und neu starten“.",
+    "Aktualisieren und neu starten": "Beendet das Programm und startet es über start.bat neu – dabei wird das "
+                                     "Update installiert.",
     "Alle löschen": "Alle eigenen Map-Zuordnungen löschen (die Namen werden dann wieder als unbekannt "
                     "gemeldet).",
     "Programmordner öffnen": "Öffnet den Ordner des Programms im Explorer.",
