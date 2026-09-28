@@ -27,8 +27,10 @@ def test_every_module_imports():
         importlib.import_module(f"dbdmapscout.{name}")
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def root():
+    """One Tk for all tests (like the program): a second Tk interpreter in the same process does not
+    find its message catalogue on the Windows runner."""
     tk = pytest.importorskip("tkinter")
     r = tk.Tk()
     r.withdraw()
