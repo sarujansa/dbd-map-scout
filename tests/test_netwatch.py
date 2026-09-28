@@ -288,3 +288,28 @@ def test_ping_shown_in_text(monkeypatch):
     assert w.text() == f"Frankfurt ({SERVER})"
     w.ping_ms = 23.4
     assert w.text() == f"Frankfurt ({SERVER}) · 23 ms"
+
+
+def test_idle_pause_while_dbd_not_running():
+    p = connwatch.IdlePause()
+    assert p.update(0.0, True, True, True) is None                    # DBD running: nothing
+    assert p.update(10.0, False, True, True) is None                  # just closed
+    assert p.update(10.0 + p.AFTER - 0.1, False, True, True) is None
+    assert p.update(10.0 + p.AFTER, False, True, True) == "pause"
+    assert p.paused
+    assert p.update(100.0, False, False, True) is None                # stays paused
+    assert p.update(200.0, True, False, True) == "resume"             # DBD back: start again
+    assert not p.paused
+
+
+def test_idle_pause_only_when_restart_is_free():
+    p = connwatch.IdlePause()
+    assert p.update(0.0, False, True, False) is None
+    assert p.update(1000.0, False, True, False) is None               # helper via UAC: keep it running
+
+
+def test_public_check_is_cached():
+    netwatch._PUBLIC.clear()
+    assert netwatch.is_public("3.120.19.250") and not netwatch.is_public("192.168.1.20")
+    assert netwatch._PUBLIC == {"3.120.19.250": True, "192.168.1.20": False}
+    assert not netwatch.is_public("not an ip")

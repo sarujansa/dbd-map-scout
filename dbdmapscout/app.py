@@ -19,7 +19,7 @@ from . import __version__, regions, theme
 from .capture import IS_WIN, describe_window, find_game_window, foreground_root, is_game_window
 from .catalog import Catalog
 from .config import Settings
-from .connwatch import ConnectionWatch
+from .connwatch import ConnectionWatch, IdlePause
 from .hotkeys import HotkeyThread, parse, pretty
 from .overlay import load_frames
 from .overlay_win32 import make_overlay
@@ -78,6 +78,7 @@ class App:
         self._conn_busy = False
         self._conn_next = 0.0
         self._conn_last = None
+        self._conn_idle = IdlePause()    # capture paused while DBD is not running
 
         self.overlay = make_overlay(self.root, prefer_native=self.settings["overlay"].get("native_window", True))
         self.overlay.game_hwnd = lambda: self.game.hwnd if self.game else None
@@ -361,6 +362,7 @@ class App:
             self._conn_start()
         else:
             self.conn.stop()
+            self._conn_idle.reset()
             self._log("Anzeige des Spielservers beendet.", "System")
             self._conn_tick(force=True)
 
@@ -400,6 +402,13 @@ class App:
         if not force and now < self._conn_next:
             return
         self._conn_next = now + 1.0
+        if self.conn_show_var.get() and not self._conn_busy:
+            act = self._conn_idle.update(now, self.game is not None, self.conn.running, self.conn.in_process)
+            if act == "pause":
+                self.conn.stop()
+                self._log("Spielserver-Anzeige pausiert – DBD läuft nicht (startet automatisch mit DBD).", "System")
+            elif act == "resume" and not self.conn.running:
+                self._conn_start()
         was_running = self.conn.running
         self.conn.poll(now)
         if was_running and not self.conn.running and self.conn.error:
@@ -416,6 +425,8 @@ class App:
         text = self.conn.text()
         if self._conn_busy:
             text = "Warte auf Windows (Administratorrechte) …"
+        elif self._conn_idle.paused:
+            text = "pausiert, bis DBD läuft"
         self.conn_tab_var.set(f"Verbunden mit: {text}" if text and self.conn.running else text)
         show = self.settings["overlay"].get("show_server", True)
         self.overlay.set_server(regions.NAMES.get(srv["region"], srv["region"]) if srv and show else "",
