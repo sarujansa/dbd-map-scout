@@ -60,6 +60,8 @@ Das Steuerfenster ist in Tabs aufgeteilt. Passt ein Tab nicht ins Fenster, ersch
 
 **Position „automatisch“:** Läuft DBD mit 16:9-Bild auf einem breiteren Monitor (z. B. 3440×1440 mit schwarzen Rändern), landet die Karte im linken schwarzen Rand und wird so skaliert, dass sie hineinpasst. Sonst erscheint sie oben links. Sobald du einen Positions-Regler bewegst oder die Karte mit der Maus verschiebst, gilt „eigene Position“. „Zurücksetzen“ stellt wieder „automatisch“ ein.
 
+**Nur Infos ohne Karte:** Im Tab Overlay „Karte anzeigen“ ausschalten – dann zeigt das Overlay bei Rundenbeginn nur Rundentimer, Serverregion und Ping (an derselben Stelle, im selben Stil). Erkennung, Ausblenden nach der Runde, Menü-Pause und Statistik laufen unverändert weiter.
+
 **Im schwarzen Rand halten** (Tab Overlay, standardmäßig an): Auf Ultrawide bleibt die Karte bei jeder Position im Balken, in dem sie liegt – „oben/unten links“ im linken, „oben/unten rechts“ im rechten Balken, eine eigene Position in dem Balken, in dem sie beginnt. Ist sie zu breit, wird sie verkleinert, statt ins Spielbild zu ragen. Eine bewusst mitten über dem Spiel platzierte Karte bleibt unverändert. Abschalten, wenn die Karte grösser sein darf als der Rand.
 
 Das Overlay ist ein eigenes, natives Windows-Fenster: immer im Vordergrund, durchklickbar, und es nimmt dem Spiel nie den Fokus weg.

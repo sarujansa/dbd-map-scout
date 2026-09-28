@@ -87,6 +87,15 @@ EN = {
         "Keep the map in the black bar (ultrawide: never over the game picture)",
     "Darstellung": "Appearance",
     "Grösse": "Size",
+    "Karte anzeigen (aus: nur Timer, Ort und Ping)": "Show the map (off: only timer, location and ping)",
+    "Karte im Overlay eingeblendet.": "Map shown in the overlay.",
+    "Karte im Overlay aus – es werden nur Timer, Ort und Ping angezeigt.":
+        "Map in the overlay off – only timer, location and ping are shown.",
+    "nichts anzuzeigen": "nothing to show",
+    "Aus: Das Overlay zeigt nur Rundentimer, Serverregion und Ping – ohne Karte. Erkennung, Rundenende und "
+    "Statistik laufen wie gewohnt.":
+        "Off: the overlay shows only the round timer, server region and ping – without the map. Detection, end of "
+        "round and statistics work as usual.",
     "Für diese Map zurücksetzen": "Reset for this map",
     "{map}: eigene Grösse {n} % (Hotkeys/Mausrad)": "{map}: own size {n} % (hotkeys/mouse wheel)",
     "Eigene Grösse für {map} entfernt – es gilt wieder der Schieberegler.":

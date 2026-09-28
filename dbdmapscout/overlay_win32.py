@@ -269,6 +269,7 @@ class Win32Overlay:
         self.opacity = 0.85
         self.transparent = True
         self.show_caption = True
+        self.show_map = True            # off: only timer, server and ping ("nur Infos")
         self.on_moved = None
         self.on_wheel = None
         self.game_hwnd = None
@@ -341,7 +342,14 @@ class Win32Overlay:
 
     def map_size(self):
         """Size of the map picture as loaded (w, h) – to fit it without rendering it first."""
-        return self._frames[0][0].size if self._frames else (0, 0)
+        return self._frames[0][0].size if self._frames and self.show_map else (0, 0)
+
+    def has_info(self) -> bool:
+        return bool(self._timer or self._server)
+
+    def set_show_map(self, on: bool):
+        self.show_map = bool(on)
+        self._base_key = self._key = None
 
     def set_transparent(self, on: bool):
         self.transparent = bool(on)
@@ -352,11 +360,16 @@ class Win32Overlay:
         if not self._frames:
             return 0, 0
         height = max(40, int(height))
-        base_key = (height, self._caption if self.show_caption else "", self.transparent)
+        if not self.show_map and not self.has_info():
+            return 0, 0                   # nothing to show without the map
+        base_key = (height, self._caption if self.show_caption else "", self.transparent, self.show_map)
         new_base = base_key != self._base_key
         if new_base:                      # scaling is the slow part: done once per size, not per timer tick
-            self._base = [(compose(img, height, base_key[1], self.transparent, False), dur)
-                          for img, dur in self._frames]
+            if self.show_map:
+                self._base = [(compose(img, height, base_key[1], self.transparent, False), dur)
+                              for img, dur in self._frames]
+            else:                         # info only: an empty picture, the info block is drawn below it
+                self._base = [(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), 0)]
             self._base_key = base_key
         key = (base_key, self._editing, self._timer, self._server, self._ping)
         if key != self._key:
