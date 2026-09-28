@@ -99,6 +99,14 @@ EN = {
     "Für diese Map zurücksetzen": "Reset for this map",
     "eigene Grösse {n} % (Hotkeys/Mausrad)": "own size {n} % (hotkeys/mouse wheel)",
     "gedreht um {deg}°": "turned by {deg}°",
+    "Map-Namen oben einfügen (wie bei den mitgelieferten Karten)":
+        "Put the map name on top (like the supplied maps)",
+    "Das Bild hat oben schon einen Namen – es wird keiner hinzugefügt.":
+        "The picture already has a name on top – none is added.",
+    "Schreibt den Map-Namen weiss mit Schatten über die Karte, im Stil der mitgelieferten Karten. Hat das Bild "
+    "oben schon einen Namen, passiert nichts. Beim Drehen bleibt der Name aufrecht.":
+        "Writes the map name in white with a shadow above the map, in the style of the supplied maps. If the "
+        "picture already has a name on top, nothing happens. The name stays upright when the map is rotated.",
     "Drehen ↻": "Rotate ↻",
     "Karte drehen": "Rotate map",
     "{map} um {deg}° gedreht.": "{map} turned by {deg}°.",
