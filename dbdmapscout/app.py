@@ -24,7 +24,7 @@ from .hotkeys import HotkeyThread, parse, pretty
 from .overlay import load_frames
 from .overlay_win32 import make_overlay
 from .roundtimer import RoundTimer
-from .textnorm import fmt_duration, roman
+from .textnorm import fmt_duration, fold, roman
 from .worker import DetectionWorker
 
 LANGS = [("en", "EN"), ("de", "DE"), ("fr", "FR"), ("es", "ES"), ("es-MX", "ES-MX"), ("it", "IT"),
@@ -44,7 +44,8 @@ class App:
         self.root_dir = root_dir
         self.simulate = simulate
         self.settings = Settings(os.path.join(root_dir, "settings.json"))
-        self.catalog = Catalog(root_dir, self.settings["languages"])
+        self.catalog = Catalog(root_dir, self.settings["languages"], self.settings.get("user_aliases"))
+        self._unknown = None             # (name text, realm text) of the last banner that matched no map
         self.events: queue.Queue = queue.Queue()
 
         self.root = tk.Tk()
@@ -135,6 +136,13 @@ class App:
         ttk.Button(btns, text="Layout ▸", command=self.next_variant).pack(side="left", padx=4)
         ttk.Button(btns, text="Scannen", command=self.scan_now).pack(side="left")
         ttk.Button(btns, text="Overlay testen", command=self.test_overlay).pack(side="left", padx=4)
+
+        # shown when a banner matched no map: assign the read name to a map with one click
+        self.unknown_bar = ttk.Frame(self.root)
+        self.unknown_var = tk.StringVar(value="")
+        ttk.Button(self.unknown_bar, text="✕", width=3, command=self._hide_unknown).pack(side="right")
+        ttk.Button(self.unknown_bar, text="Zuordnen …", command=self.assign_unknown).pack(side="right", padx=4)
+        ttk.Label(self.unknown_bar, textvariable=self.unknown_var, wraplength=300).pack(side="left", fill="x")
 
         # ------------------------------------------------------- tab menu
         self.nb = ttk.Notebook(self.root)
@@ -405,7 +413,8 @@ class App:
             text = "Warte auf Windows (Administratorrechte) …"
         self.conn_tab_var.set(f"Verbunden mit: {text}" if text and self.conn.running else text)
         show = self.settings["overlay"].get("show_server", True)
-        self.overlay.set_server(regions.NAMES.get(srv["region"], srv["region"]) if srv and show else "")
+        self.overlay.set_server(regions.NAMES.get(srv["region"], srv["region"]) if srv and show else "",
+                                self.conn.ping_ms)
         main = f"Verbunden mit: {text}" if self.conn.running else ""
         if main != self.conn_var.get():
             self.conn_var.set(main)
@@ -633,6 +642,13 @@ class App:
         ttk.Button(r, text="Übernehmen", command=self._apply_hotkeys).pack(side="left")
         self.hk_status = tk.StringVar(value="Format: ctrl+alt+m, shift+f8, ctrl+alt+up …")
         ttk.Label(r, textvariable=self.hk_status, style="Dim.TLabel", wraplength=300).pack(side="left", padx=8)
+
+        own = ttk.LabelFrame(f, text="Eigene Map-Zuordnungen", padding=8)
+        own.pack(fill="x", pady=(8, 0))
+        self.alias_var = tk.StringVar(value="")
+        ttk.Label(own, textvariable=self.alias_var, style="Dim.TLabel", wraplength=300).pack(side="left", fill="x")
+        ttk.Button(own, text="Alle löschen", command=self._clear_aliases).pack(side="right")
+        self._show_aliases()
 
         folders = ttk.LabelFrame(f, text="Ordner", padding=8)
         folders.pack(fill="x", pady=(8, 0))
@@ -880,7 +896,12 @@ class App:
                               "Erkennung")
         elif k == "unknown":
             txt = d.get("name_text") or "?"
-            self._log(f"Banner gesehen, aber keine bekannte Map: „{txt}“. Map manuell wählen.", "Erkennung")
+            self._log(f"Banner gesehen, aber keine bekannte Map: „{txt}“. Map manuell wählen "
+                      "oder mit „Zuordnen …“ dauerhaft zuordnen.", "Erkennung")
+            if len(fold(txt)) >= self.catalog.MIN_ALIAS:
+                self._unknown = (txt, d.get("realm_text") or "")
+                self.unknown_var.set(f"Unbekannte Map gelesen: „{txt}“")
+                self.unknown_bar.pack(fill="x", padx=10, pady=(0, 6), before=self.nb)
         elif k == "match_end":
             self._round_ended(d.get("t") or time.time())
             if self.overlay.has_map() and not self.hidden_after_match:
@@ -1222,10 +1243,93 @@ class App:
         self.settings.set("save_debug_images", bool(self.debug_var.get()))
         self._save_soon()
 
+    # ---------------------------------------------------------- own map assignments
+    def _hide_unknown(self):
+        self.unknown_bar.pack_forget()
+        self._unknown = None
+
+    def assign_unknown(self):
+        """Dialog: which map was the banner that matched nothing? Saves the read text as an alias."""
+        if not self._unknown:
+            return
+        name, realm = self._unknown
+        entries = [m for m in self.catalog.sorted_entries() if not m.custom]
+        labels = [f"{m.name} ({self.catalog.realm_display(m)})" for m in entries]
+        guess = self.catalog.suggest(name, realm)
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Map zuordnen")
+        dlg.transient(self.root)
+        dlg.resizable(False, False)
+        body = ttk.Frame(dlg, padding=12)
+        body.pack(fill="both", expand=True)
+        ttk.Label(body, text=f"Gelesen: „{name}“" + (f" / „{realm}“" if realm else ""),
+                  wraplength=380).pack(anchor="w")
+        ttk.Label(body, text="Welche Map war das? Der Name wird künftig automatisch erkannt.",
+                  style="Dim.TLabel", wraplength=380).pack(anchor="w", pady=(2, 8))
+        var = tk.StringVar(value=labels[[m.id for m in entries].index(guess)] if guess in
+                           [m.id for m in entries] else "")
+        cb = ttk.Combobox(body, textvariable=var, values=labels, state="readonly", width=44, height=18)
+        cb.pack(fill="x")
+        msg = tk.StringVar(value="")
+        ttk.Label(body, textvariable=msg, style="Dim.TLabel", wraplength=380).pack(anchor="w", pady=(6, 0))
+
+        def ok():
+            if var.get() not in labels:
+                msg.set("Bitte eine Map auswählen.")
+                return
+            m = entries[labels.index(var.get())]
+            problem = self.catalog.alias_problem(name, m.id)
+            if problem:
+                msg.set(problem)
+                return
+            aliases = self.settings.get("user_aliases") or {}
+            aliases.setdefault(m.id, [])
+            if name not in aliases[m.id]:
+                aliases[m.id].append(name)
+            self.settings.set("user_aliases", aliases)
+            self._save_soon()
+            self._reload_catalog()
+            dlg.destroy()
+            self._hide_unknown()
+            self._log(f"„{name}“ wird jetzt als {m.name} erkannt (eigene Zuordnung).", "Erkennung")
+            self.show_map(m.id, 1, "manual", f"zugeordnet: „{name}“")
+
+        row = ttk.Frame(body)
+        row.pack(fill="x", pady=(10, 0))
+        ttk.Button(row, text="Zuordnen", command=ok).pack(side="right")
+        ttk.Button(row, text="Abbrechen", command=dlg.destroy).pack(side="right", padx=6)
+        dlg.bind("<Return>", lambda e: ok())
+        dlg.bind("<Escape>", lambda e: dlg.destroy())
+        cb.focus_set()
+        dlg.grab_set()
+
+    def _reload_catalog(self):
+        self.catalog = Catalog(self.root_dir, self.settings["languages"], self.settings.get("user_aliases"))
+        self.worker.set_catalog(self.catalog)
+        self._fill_list()
+        self._show_aliases()
+
+    def _show_aliases(self):
+        aliases = self.settings.get("user_aliases") or {}
+        items = [f"„{t}“ → {self.catalog.maps[mid].name}" for mid, ts in aliases.items() if mid in self.catalog.maps
+                 for t in ts]
+        self.alias_var.set("; ".join(items) if items else
+                           "Keine. Unbekannte Map-Namen lassen sich nach dem Match im Hauptfenster zuordnen.")
+
+    def _clear_aliases(self):
+        if not self.settings.get("user_aliases"):
+            return
+        if not messagebox.askokcancel("Eigene Zuordnungen", "Alle eigenen Map-Zuordnungen löschen?", parent=self.root):
+            return
+        self.settings.set("user_aliases", {})
+        self._save_soon()
+        self._reload_catalog()
+        self._log("Eigene Map-Zuordnungen gelöscht.", "System")
+
     def _langs_changed(self):
         langs = [c for c, _ in LANGS if self.lang_vars[c].get()] or ["en"]
         self.settings.set("languages", langs)
-        self.catalog = Catalog(self.root_dir, langs)
+        self.catalog = Catalog(self.root_dir, langs, self.settings.get("user_aliases"))
         self.worker.set_catalog(self.catalog)
         self._fill_list()
         self._save_soon()

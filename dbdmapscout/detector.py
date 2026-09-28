@@ -473,13 +473,42 @@ def _region(frame, x0, y0, x1, y1):
     return frame[int(y0 * H):int(y1 * H), int(vx + x0 * vw):int(vx + x1 * vw)]
 
 
-def _right_region(frame, x0, y0, y1):
+def _right_region(frame, x0, y0, y1, full_width=False):
     """From ``x0`` (fraction of the 16:9 viewport) to the right edge of the 16:9 picture
-    (+1 %). The black bars of an ultrawide window are left out: only other programs
-    (FPS counters, notifications) draw there."""
+    (+1 %). The black bars of an ultrawide window are left out: in a trial only other
+    programs (FPS counters, notifications) draw there.
+
+    ``full_width``: the screen fills the whole window (result screen, lobby and menus do
+    on ultrawide, their buttons sit at the real window edge) – then the region reaches
+    the window edge, measured the same way from there."""
     H, W = frame.shape[:2]
     vx, vw = viewport(W, H)
-    return frame[int(y0 * H):int(y1 * H), int(vx + x0 * vw):min(W, int(vx + 1.01 * vw))]
+    x_start, x_end = int(vx + x0 * vw), min(W, int(vx + 1.01 * vw))
+    if full_width:
+        x_start, x_end = min(x_start, int(W - (1.0 - x0) * vw)), W
+    return frame[int(y0 * H):int(y1 * H), x_start:x_end]
+
+
+BAR_FILLED = 0.6        # share of non-black pixels for a side bar to count as "picture"
+
+
+def fills_bars(frame) -> bool:
+    """Does the picture extend into the side bars of an ultrawide window?
+
+    In a trial DBD draws 16:9 with black bars; result screen, lobby and menus use the
+    full width. The top and bottom 15 % are ignored (FPS counters, notifications), and
+    our own overlay is blacked out before the check, so one side only needs to be
+    partly filled."""
+    H, W = frame.shape[:2]
+    vx, _ = viewport(W, H)
+    bar = int(vx * 0.9)
+    if bar < 40:
+        return False                                      # no bars (16:9 or narrower)
+    y0, y1 = int(0.15 * H), int(0.85 * H)
+    g = cv2.cvtColor(frame[y0:y1], cv2.COLOR_BGR2GRAY)
+    left = float((g[:, :bar] > 8).mean())
+    right = float((g[:, W - bar:] > 8).mean())
+    return max(left, right) >= BAR_FILLED and min(left, right) >= BAR_FILLED / 2
 
 
 def has_loading_bar(frame) -> bool:
@@ -518,6 +547,7 @@ class EndObservation:
     currency_text: str = ""
     loading: bool = False
     static: bool = False                   # upper picture unchanged since the previous look
+    full_width: bool = False               # picture fills the ultrawide bars (menus, result screen)
     reason: str | None = None
     sure: bool = False
     ms: float = 0.0
@@ -528,7 +558,7 @@ class EndObservation:
         if self.currency_text:
             cur += f" „{self.currency_text}“"
         bar = ("ja, Bild still" if self.static else "ja, Bild bewegt") if self.loading else "nein"
-        out = f"CONTINUE {cont} · Währung {cur} · Ladebalken {bar}"
+        out = f"CONTINUE {cont} · Währung {cur} · Ladebalken {bar}" + (" · volle Breite" if self.full_width else "")
         return out + (f" → {self.reason}{' (sicher)' if self.sure else ''}" if self.reason else " → –")
 
 
@@ -566,11 +596,12 @@ class OutOfMatchWatcher:
         if frame is None or frame.size == 0:
             return ob
         H = frame.shape[0]
-        ob.continue_fit, ob.continue_text = self._continue_fit(_right_region(frame, 0.78, 0.86, 0.99), H)
+        ob.full_width = full = fills_bars(frame)
+        ob.continue_fit, ob.continue_text = self._continue_fit(_right_region(frame, 0.78, 0.86, 0.99, full), H)
         if ob.continue_fit is not None and ob.continue_fit >= self.CONTINUE_OK:
             ob.reason, ob.sure = "Ergebnisbildschirm", ob.continue_fit >= self.CONTINUE_SURE
         ob.currency_groups, ob.currency_digits, ob.currency_text = self._currency(
-            _right_region(frame, 0.62, 0.0, 0.12), H)
+            _right_region(frame, 0.62, 0.0, 0.12, full), H)
         if ob.reason is None and ob.currency_groups >= 2 and ob.currency_digits >= 6:
             ob.reason = "Lobby/Menü"
         ob.static = self._still(frame)
