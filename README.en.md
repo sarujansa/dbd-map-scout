@@ -46,7 +46,7 @@ The top of the control window always says where things stand: **Waiting for DBD*
 
 **Layout button:** only appears for maps with several layouts (Coal Tower, Groaning Storehouse, Ironworks of Misery, Shelter Woods, Suffocation Pit, Mount Ormond Resort, Badham Preschool) and shows the layout on display, e.g. "Layout II of V ▸". A click switches to the next one. If detection was unsure about the layout, "(unsure)" is added.
 
-The control window has these tabs:
+The control window has these tabs. If a tab does not fit into the window, a scrollbar appears on the right (mouse wheel works too), so the window can be made as small or large as you like:
 
 | Tab | Content |
 |---|---|

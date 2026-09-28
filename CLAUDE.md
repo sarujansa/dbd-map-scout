@@ -44,7 +44,7 @@ start_debug.bat           :: mit Konsole
 | Datei | Aufgabe |
 |---|---|
 | `__main__.py` | Start, Single-Instance-Mutex, Logging, `--simulate`/`--test` |
-| `app.py` | Tk-Steuerfenster (Tabs Maps/Overlay/Erkennung/Server/Log/Einstellungen), verbindet alles; Events kommen über `self.events` (Queue) im `_poll` an |
+| `app.py` | Tk-Steuerfenster (Tabs Maps/Overlay/Erkennung/Server/Log/Einstellungen), verbindet alles; Events kommen über `self.events` (Queue) im `_poll` an. Jeder Tab steckt in `_scroll_tab()` (Canvas + Scrollbar, nur vertikal; innen mindestens Fensterhöhe, damit Listen/Log mitwachsen; Mausrad scrollt den Tab, außer über Treeview/Text/Combobox). Mindestbreite = breitester Tab-Inhalt – lange Texte daher immer mit `wraplength` |
 | `worker.py` | Hintergrund-Thread: Aufnahme → Banner-Erkennung → Rundenende; postet Events (`detected`, `unknown`, `menu`, `match_end`, `watch_info`, `warn`, …). Im Match (`tracker.in_trial`, kein Banner) gedrosselt auf `IN_MATCH_RATE` = 1 Scan/s |
 | `detector.py` | Banner: Trennlinie finden → Text ausschneiden → OCR-Scoring gegen Katalog → `Accumulator`. Rundenende: `OutOfMatchWatcher.observe()` (CONTINUE, Währung, Ladebalken) |
 | `matchend.py` | `MatchEndTracker` – reine Logik (testbar): Menü-Pause per Mauszeiger, Rundenende-Latch, Scharfschalten bei manueller Map |
