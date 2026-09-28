@@ -378,6 +378,11 @@ EN = {
     "Dieser Monat": "This month",
     "Dieses Jahr": "This year",
     "Alle Regionen": "All regions",
+    "Alle Killer": "All killers",
+    "Häufigste Map": "Most frequent map",
+    "Name unter dem Lobby-Knopf, nur wenn du Killer spielst. Killer auswählen (oben) zeigt Maps und Dauer nur für ihn.":
+        "Name below the lobby button, only when you play killer. Picking a killer (above) shows maps and durations "
+        "for that killer only.",
     "ohne Region": "no region",
     "Anteil": "Share",
     "Region nur bekannt, wenn im Tab Server „Verbundener Spielserver“ an war.":

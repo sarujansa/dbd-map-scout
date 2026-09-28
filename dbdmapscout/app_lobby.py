@@ -7,6 +7,7 @@ import logging
 
 from .capture import IS_WIN, foreground_root, is_game_window
 from .i18n import _
+from .lobby import killer_label
 from .textnorm import fmt_duration
 
 log = logging.getLogger("dbdmapscout")
@@ -44,6 +45,8 @@ class LobbyInfo:
     def _queue_text(self, now):
         q = self._queue
         role = self._role_name(q.get("role"))
+        if q.get("role") == "killer" and q.get("killer"):
+            role = killer_label(q["killer"])                 # "Nurse" says more than "Killer"
         if q["state"] == "search" and q.get("since"):
             text = _("Suche läuft: {time}", time=fmt_duration(max(0.0, now - q["since"])))
             return text + (f" · {role}" if role else "")
@@ -59,7 +62,8 @@ class LobbyInfo:
     def _queue_event(self, d):
         prev, what = self._queue, d.get("what")
         if what == "search":
-            self._queue = {"state": "search", "since": d.get("since"), "role": d.get("role") or prev.get("role")}
+            self._queue = {"state": "search", "since": d.get("since"), "role": d.get("role") or prev.get("role"),
+                           "killer": d.get("killer") or prev.get("killer", "")}
             if prev.get("state") != "search":
                 self._log(_("Suche nach einem Match gestartet."), "Erkennung")
         elif what == "cancel":
@@ -67,22 +71,23 @@ class LobbyInfo:
             self._log(_("Suche abgebrochen."), "Erkennung")
         elif what == "found" and d.get("found") is not None:
             f = d["found"]
-            self._queue = {"state": "custom" if f.custom else "lobby", "role": f.role, "found": f}
+            self._queue = {"state": "custom" if f.custom else "lobby", "role": f.role, "killer": f.killer, "found": f}
             if not f.custom and self.settings.get("lobby_notify", True):
                 self._notify(_("Lobby gefunden"), (_("nach {time}", time=fmt_duration(f.wait)) + " – "
                                                    if f.wait is not None else "") + _("READY drücken."))
             if f.custom:
                 self._log(_("Custom Game – keine Wartezeit."), "Erkennung")
-            elif f.wait is not None:
-                self._log(_("Lobby gefunden nach {time}{role}.", time=fmt_duration(f.wait),
-                            role=f" ({self._role_name(f.role)})" if f.role else ""), "Erkennung")
             else:
-                self._log(_("Lobby gefunden{role}.", role=f" ({self._role_name(f.role)})" if f.role else ""),
-                          "Erkennung")
+                who = f" ({self._role_name(f.role)}{', ' + f.killer if f.killer else ''})" if f.role else ""
+                if f.wait is not None:
+                    self._log(_("Lobby gefunden nach {time}{role}.", time=fmt_duration(f.wait), role=who), "Erkennung")
+                else:
+                    self._log(_("Lobby gefunden{role}.", role=who), "Erkennung")
         elif what == "remind":
             if self.settings.get("lobby_remind", True):
                 self._notify(_("Lobby startet gleich"), _("Noch {n} s – READY ist noch nicht gedrückt.",
                                                            n=int(d.get("seconds") or 0)))
                 self._log(_("Lobby-Countdown läuft ab, READY ist noch nicht gedrückt."), "Erkennung")
         else:
-            self._queue = dict(prev, role=d.get("role") or prev.get("role"))
+            self._queue = dict(prev, role=d.get("role") or prev.get("role"),
+                               killer=d.get("killer") or prev.get("killer", ""))

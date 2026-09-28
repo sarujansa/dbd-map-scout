@@ -364,11 +364,12 @@ class DetectionWorker(threading.Thread):
     def _queue_event(self, ev, tick):
         """QueueTracker events -> UI: what=search | cancel | role | found."""
         if ev[0] == "search":
-            self.post("queue", what="search", since=self.queue.search_start, role=self.queue.role)
+            self.post("queue", what="search", since=self.queue.search_start, role=self.queue.role,
+                      killer=self.queue.killer)
         elif ev[0] == "cancel":
             self.post("queue", what="cancel")
         elif ev[0] == "role":
-            self.post("queue", what="role", role=ev[1])
+            self.post("queue", what="role", role=ev[1], killer=self.queue.killer)
         elif ev[0] == "found":
             self.post("queue", what="found", found=ev[1], role=ev[1].role)
         elif ev[0] == "remind":

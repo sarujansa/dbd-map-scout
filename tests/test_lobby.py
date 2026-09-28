@@ -180,3 +180,42 @@ def test_reminder_when_countdown_runs_out_without_ready():
     ev2 = run(q2, [(0, lob(59)), (1, lob(58)), (2, LobbyView("cancel", 0, "", "00:10"))])
     assert not [e for e in ev2 if e[0] == "remind"]
     assert LobbyView("ready", 0, "", "00:53").countdown == 53 and LobbyView("play", 0).countdown is None
+
+
+# ------------------------------------------------------------------ own killer
+@pytest.mark.parametrize("name, killer", [("k_search_hb", "The Hillbilly"), ("k_search_nurse", "The Nurse"),
+                                          ("k_search_loadout", "The Hillbilly"), ("k_ready", "The Hillbilly"),
+                                          ("k_search_grizzly", "Murderous Grizzly"), ("s_search", ""),
+                                          ("s_ready", ""), ("custom_ready", ""), ("k_play", "")])
+def test_killer_name(reader, name, killer):
+    assert view(reader, name).killer == killer
+
+
+def test_killer_missing_from_the_list_is_kept_as_read(reader, monkeypatch):
+    """A new killer must never be taken for a listed one (like unknown maps)."""
+    monkeypatch.setattr(lobby, "KILLERS", tuple(k for k in lobby.KILLERS if k != "The Nurse"))
+    r = lobby.LobbyReader(reader.rec)
+    assert view(r, "k_search_nurse").killer == "The Nurse"                  # read text, not the lexicon
+    assert r.killers.strings and "THENURSE" not in r.killers.strings
+    assert lobby.plain_name("THE  NEW-ONE!") == "The New One"
+    assert lobby.killer_label("The Nurse") == "Nurse" and lobby.killer_label("Murderous Grizzly") == "Murderous Grizzly"
+
+
+def K(kind, name, elapsed=None):
+    """A killer's LobbyView with the name as the reader matched it."""
+    v = V(kind, "killer", elapsed)
+    v.name, v.killer = name.upper(), name
+    return v
+
+
+def test_found_lobby_carries_the_killer():
+    q = QueueTracker()
+    ev = run(q, [(0, K("search", "The Nurse", 0)), (1, K("search", "The Nurse", 1)),
+                 (2, K("search", "The Nurce", 2)),                                  # one misread: majority wins
+                 (60, K("lobby", "The Nurse")), (61, K("lobby", "The Nurse"))])
+    assert [e[1] for e in ev if e[0] == "found"][0].killer == "The Nurse"
+    run(q, [(100, V("play")), (101, V("play"))])
+    assert q.killer == ""                                                    # next search starts fresh
+    q2 = QueueTracker()                                                      # survivor: never a killer
+    ev2 = run(q2, [(0, V("search", "survivor", 0)), (1, V("search", "survivor", 1)), (9, V("lobby")), (10, V("lobby"))])
+    assert [e[1] for e in ev2 if e[0] == "found"][0].killer == ""
