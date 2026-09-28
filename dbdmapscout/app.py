@@ -37,7 +37,7 @@ ANCHORS = [("auto", N_("automatisch")), ("top-left", N_("oben links")), ("top-ri
 HOTKEY_LABELS = [("toggle_overlay", N_("Overlay ein/aus")), ("next_variant", N_("Layout-Variante")),
                  ("scan_now", N_("Bildschirm scannen")), ("prev_map", N_("Vorherige Map")),
                  ("next_map", N_("Nächste Map")), ("bigger", N_("Grösser")), ("smaller", N_("Kleiner")),
-                 ("edit_position", N_("Mit Maus verschieben"))]
+                 ("edit_position", N_("Mit Maus verschieben")), ("rotate_map", N_("Karte drehen"))]
 CATS = [N_("Erkennung"), N_("Overlay"), N_("System"), N_("Fehler")]
 STATS_PERIODS = [("all", N_("Alle")), ("day", N_("Heute")), ("week", N_("Diese Woche")), ("month", N_("Dieser Monat")),
                  ("year", N_("Dieses Jahr"))]      # log categories (keys; shown translated)
@@ -170,6 +170,8 @@ class App:
         # only shown for maps with several layouts (7 of 45), labelled with the one on display
         self.layout_btn = ttk.Button(btns, text="Layout ▸", command=self.next_variant)
         self._layout_unsure = False
+        self.rotate_btn = ttk.Button(btns, text=_("Drehen ↻"), command=self.rotate_map)
+        self.rotate_btn.pack(side="left", padx=(4, 0))
         self.scan_btn = ttk.Button(btns, text=_("Scannen"), command=self.scan_now)
         self.scan_btn.pack(side="left", padx=(4, 0))
         self.test_btn = ttk.Button(btns, text=_("Overlay testen"), command=self.test_overlay)
@@ -344,7 +346,8 @@ class App:
         self.size_label = self._slider(look, _("Grösse"), self.size_var, 15, 90, self._size_changed)
         self.map_size_row = ttk.Frame(look)
         self.map_size_var = tk.StringVar(value="")
-        ttk.Label(self.map_size_row, textvariable=self.map_size_var, style="Dim.TLabel").pack(side="left")
+        ttk.Label(self.map_size_row, textvariable=self.map_size_var, style="Dim.TLabel", wraplength=330).pack(
+            side="left")
         ttk.Button(self.map_size_row, text=_("Für diese Map zurücksetzen"), command=self._reset_map_size).pack(
             side="right")
         self._size_row_after = self.size_label.master
@@ -1022,8 +1025,9 @@ class App:
         if path is None:
             self._log(_("Für „{map}“ gibt es kein Bild.", map=m.label(variant)), "Overlay")
             return
+        rotation = self._map_rotation(map_id)
         try:
-            frames = load_frames(path)
+            frames = load_frames(path, rotation)
         except Exception as e:
             self._log(_("Bild konnte nicht geladen werden: {path} ({error})", path=path, error=e), "Fehler")
             return
@@ -1032,7 +1036,7 @@ class App:
         self._layout_unsure = False
         self.current = (map_id, shown)
         self.source = source
-        self.overlay.set_map(path, m.label(shown))
+        self.overlay.set_map(path, m.label(shown), rotation)
         if not was_on and not keep_timer:
             self._round_started(time.time())     # map appears -> timer from zero (a switch while on keeps it)
         self.user_visible = True
@@ -1043,18 +1047,21 @@ class App:
         self.tray.set_title(f"DbD Map Scout – {m.label(shown)}")
         self.realm_var.set(self.catalog.realm_display(m))
         self.detail_var.set(detail or {"manual": _("manuell gewählt"), "scan": _("per Scan gefunden")}.get(source, ""))
-        thumb = frames[0][0].copy()
-        thumb.thumbnail((88, 88))
-        bg = Image.new("RGBA", thumb.size, (40, 40, 44, 255))
-        bg.alpha_composite(thumb)
-        self._thumb = ImageTk.PhotoImage(bg)
-        self.thumb_label.configure(image=self._thumb)
+        self._set_thumb(frames[0][0])
         self._update_toggle_text()
         self._show_map_size()
         self._update_layout_btn()
         if source == "manual":
             self._log(_("Map gewählt: {map}", map=m.label(shown)), "Overlay")
         self._tick_overlay(reschedule=False)
+
+    def _set_thumb(self, img):
+        thumb = img.copy()
+        thumb.thumbnail((88, 88))
+        bg = Image.new("RGBA", thumb.size, (40, 40, 44, 255))
+        bg.alpha_composite(thumb)
+        self._thumb = ImageTk.PhotoImage(bg)
+        self.thumb_label.configure(image=self._thumb)
 
     def toggle_overlay(self):
         if not self.overlay.has_map():
@@ -1103,7 +1110,7 @@ class App:
         text = _("Layout {n} von {total}", n=roman(self.current[1]), total=roman(vs[-1])) + " ▸"
         self.layout_btn.configure(text=text + (" " + _("(unsicher)") if self._layout_unsure else ""))
         if not self.layout_btn.winfo_manager():
-            self.layout_btn.pack(side="left", padx=(4, 0), before=self.scan_btn)
+            self.layout_btn.pack(side="left", padx=(4, 0), before=self.rotate_btn)
 
     def _hk_hint(self, name):
         combo = (self.settings.get("hotkeys") or {}).get(name)
@@ -1121,6 +1128,8 @@ class App:
                             + " " if self._layout_unsure else "") + \
                 _("Wechselt zum nächsten Layout dieser Map (z. B. Coal Tower ↔ Coal Tower II). Die Layouts ab II "
                   "gibt es seit Patch 8.6.0 nur noch in Custom Games.") + self._hk_hint("next_variant")
+        if w is self.rotate_btn:
+            return lambda: tooltip.tip_for_label(self.rotate_btn.cget("text")) + self._hk_hint("rotate_map")
         if w is self.test_btn:
             return lambda: (_("Test sofort beenden.") if self.test_btn.cget("text") == _("Test beenden") else
                             _("Zeigt die Karte 10 s an ihrer normalen Position – auch wenn sie gerade ausgeblendet "
@@ -1241,26 +1250,76 @@ class App:
         self._save_soon()
         self._tick_overlay(reschedule=False)
 
+    def _map_rotation(self, map_id=None):
+        """Degrees (0/90/180/270) the map is turned clockwise – remembered per map."""
+        map_id = map_id or (self.current[0] if self.current else None)
+        deg = (self.settings["overlay"].get("map_rotations") or {}).get(map_id, 0) if map_id else 0
+        return deg if deg in (0, 90, 180, 270) else 0
+
+    def rotate_map(self):
+        """Button/hotkey: turn the map on display by 90° clockwise (the name above it stays upright)."""
+        if not self.current:
+            self._log(_("Noch keine Map gewählt."), "Overlay")
+            return
+        deg = (self._map_rotation() + 90) % 360
+        rots = self.settings["overlay"].setdefault("map_rotations", {})
+        if deg:
+            rots[self.current[0]] = deg
+        else:
+            rots.pop(self.current[0], None)
+        self._reload_picture()
+        m = self.catalog.maps.get(self.current[0])
+        self._log(_("{map} um {deg}° gedreht.", map=m.name if m else self.current[0], deg=deg), "Overlay")
+        self._show_map_size()
+        self._save_soon()
+
+    def _reload_picture(self):
+        """Load the map on display again (rotation/caption changed) without touching visibility or timer."""
+        if not self.current:
+            return
+        m = self.catalog.maps[self.current[0]]
+        path, _v = self.catalog.image_path(*self.current)
+        if path is None:
+            return
+        rotation = self._map_rotation()
+        try:
+            frames = load_frames(path, rotation)
+        except Exception as e:
+            self._log(_("Bild konnte nicht geladen werden: {path} ({error})", path=path, error=e), "Fehler")
+            return
+        self.overlay.set_map(path, m.label(self.current[1]), rotation)
+        self._set_thumb(frames[0][0])
+        self._tick_overlay(reschedule=False)
+
     def _show_map_size(self):
-        """Hint below the size slider when the map on display has a size of its own."""
-        own = (self.settings["overlay"].get("map_heights") or {}).get(self.current[0]) if self.current else None
-        if own:
+        """Hint below the size slider when the map on display has a size or rotation of its own."""
+        o = self.settings["overlay"]
+        own = (o.get("map_heights") or {}).get(self.current[0]) if self.current else None
+        deg = self._map_rotation()
+        if own or deg:
             m = self.catalog.maps.get(self.current[0])
-            self.map_size_var.set(_("{map}: eigene Grösse {n} % (Hotkeys/Mausrad)", map=m.name if m else "",
-                                    n=f"{own * 100:.0f}"))
+            parts = ([_("eigene Grösse {n} % (Hotkeys/Mausrad)", n=f"{own * 100:.0f}")] if own else []) + \
+                ([_("gedreht um {deg}°", deg=deg)] if deg else [])
+            self.map_size_var.set((m.name if m else "") + ": " + " · ".join(parts))
             if not self.map_size_row.winfo_manager():
                 self.map_size_row.pack(fill="x", pady=(0, 3), after=self._size_row_after)
         elif self.map_size_row.winfo_manager():
             self.map_size_row.pack_forget()
 
     def _reset_map_size(self):
-        if self.current and (self.settings["overlay"].get("map_heights") or {}).pop(self.current[0], None):
-            m = self.catalog.maps.get(self.current[0])
-            self._log(_("Eigene Grösse für {map} entfernt – es gilt wieder der Schieberegler.",
-                        map=m.name if m else self.current[0]), "Overlay")
-            self._show_map_size()
-            self._save_soon()
-            self._tick_overlay(reschedule=False)
+        if not self.current:
+            return
+        o = self.settings["overlay"]
+        m = self.catalog.maps.get(self.current[0])
+        name = m.name if m else self.current[0]
+        if (o.get("map_heights") or {}).pop(self.current[0], None):
+            self._log(_("Eigene Grösse für {map} entfernt – es gilt wieder der Schieberegler.", map=name), "Overlay")
+        if (o.get("map_rotations") or {}).pop(self.current[0], None):
+            self._log(_("Drehung für {map} entfernt.", map=name), "Overlay")
+            self._reload_picture()
+        self._show_map_size()
+        self._save_soon()
+        self._tick_overlay(reschedule=False)
 
     # ============================================================= events
     def _poll(self):
@@ -1303,7 +1362,7 @@ class App:
         {"toggle_overlay": self.toggle_overlay, "next_variant": self.next_variant, "scan_now": self.scan_now,
          "next_map": lambda: self.step_map(1), "prev_map": lambda: self.step_map(-1),
          "bigger": lambda: self._resize(0.03), "smaller": lambda: self._resize(-0.03),
-         "edit_position": self.toggle_edit}.get(name, lambda: None)()
+         "edit_position": self.toggle_edit, "rotate_map": self.rotate_map}.get(name, lambda: None)()
 
     def _event(self, ev):
         k, d = ev.kind, ev.data
@@ -1806,10 +1865,8 @@ class App:
             o["transparent"] = bool(self.transp_var.get())
             self.overlay.set_transparent(o["transparent"])
         if self.current:
-            m = self.catalog.maps[self.current[0]]
-            path, _v = self.catalog.image_path(*self.current)
             self.overlay.show_caption = o["show_caption"]
-            self.overlay.set_map(path, m.label(self.current[1]))
+            self._reload_picture()
         self._save_soon()
         self._tick_overlay(reschedule=False)
 

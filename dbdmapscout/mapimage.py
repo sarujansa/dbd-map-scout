@@ -86,3 +86,70 @@ def save(src: str, dest: str, remove_bg: bool = True) -> str:
         with Image.open(src) as im:
             convert(im, remove_bg).save(dest, "WEBP", quality=90, method=4)
     return dest
+
+
+# ------------------------------------------------------------------ rotation (overlay, per map)
+ROTATIONS = (0, 90, 180, 270)
+TITLE_ZONE = (0.04, 0.25)   # the gap below the map name starts within this share of the height
+MIN_GAP = 8                 # px of fully transparent rows between name and map
+
+
+def title_split(img: Image.Image):
+    """Rows (title_top, gap_top, body_top, body_bottom) if the picture has its name on top, separated from
+    the map by fully transparent rows (the supplied callout maps); None otherwise (then all of it rotates)."""
+    a = np.asarray(img.convert("RGBA"))[..., 3] > 24
+    rows = a.any(axis=1)
+    filled = np.flatnonzero(rows)
+    if not len(filled):
+        return None
+    h = img.height
+    best = None
+    i = int(filled[0])
+    while i <= int(filled[-1]):
+        if rows[i]:
+            i += 1
+            continue
+        j = i
+        while j < h and not rows[j]:
+            j += 1
+        if TITLE_ZONE[0] * h <= i <= TITLE_ZONE[1] * h and j - i >= MIN_GAP and (best is None or j - i > best[1] - best[0]):
+            best = (i, j)
+        i = j
+    if best is None:
+        return None
+    return int(filled[0]), best[0], best[1], int(filled[-1]) + 1
+
+
+def _crop_cols(img: Image.Image) -> Image.Image:
+    box = img.getchannel("A").point(lambda v: 255 if v > 24 else 0).getbbox()
+    return img.crop((box[0], 0, box[2], img.height)) if box else img
+
+
+def rotate(img: Image.Image, degrees: int, split=None) -> Image.Image:
+    """Turn the map clockwise by ``degrees`` (multiple of 90); a name above the map stays upright on top.
+    ``split``: result of title_split() (computed once for all frames of a GIF, so the frames do not jump)."""
+    turns = (int(degrees) // 90) % 4
+    if not turns:
+        return img
+    img = img.convert("RGBA")
+    method = {1: Image.ROTATE_270, 2: Image.ROTATE_180, 3: Image.ROTATE_90}[turns]
+    if split is None:
+        split = title_split(img)
+    if split is None:
+        return img.transpose(method)
+    top, gap, body_top, bottom = split
+    title = _crop_cols(img.crop((0, top, img.width, gap)))
+    body = img.crop((0, body_top, img.width, bottom)).transpose(method)
+    space = body_top - gap
+    out = Image.new("RGBA", (max(title.width, body.width), title.height + space + body.height), (0, 0, 0, 0))
+    out.alpha_composite(title, ((out.width - title.width) // 2, 0))
+    out.alpha_composite(body, ((out.width - body.width) // 2, title.height + space))
+    return out
+
+
+def rotate_frames(frames, degrees: int):
+    """[(image, duration)] turned by ``degrees``; the name/map split of the first frame is used for all."""
+    if not frames or not (int(degrees) // 90) % 4:
+        return frames
+    split = title_split(frames[0][0])
+    return [(rotate(img, degrees, split), d) for img, d in frames]

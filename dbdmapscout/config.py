@@ -32,8 +32,9 @@ DEFAULTS = {
         "show_server": True,            # connected server region below the timer (needs the Server tab option)
         "transparent": True,            # transparent area around the map (off = dark rectangle)
         "keep_in_bar": True,            # ultrawide: shrink/move the map so it stays inside the black bar
-        "map_heights": {},
-        "show_map": True,               # off: overlay shows only timer, server and ping              # map id -> own size (hotkeys / mouse wheel with that map on display)
+        "map_heights": {},              # map id -> own size (hotkeys / mouse wheel with that map on display)
+        "map_rotations": {},            # map id -> map turned clockwise by 90/180/270° (button / hotkey)
+        "show_map": True,               # off: overlay shows only timer, server and ping
     },
     "hotkeys": {
         "toggle_overlay": "ctrl+alt+m",
@@ -44,6 +45,7 @@ DEFAULTS = {
         "bigger": "ctrl+alt+up",
         "smaller": "ctrl+alt+down",
         "edit_position": "ctrl+alt+p",
+        "rotate_map": "ctrl+alt+r",
     },
     "ui_language": "auto",            # auto (Windows language) | de | en
     "dark_mode": True,
