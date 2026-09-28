@@ -1,0 +1,5 @@
+# Wird von start.bat OHNE Abhängigkeiten installiert (pip install --no-deps -r requirements-extra.txt):
+# windows-capture verlangt opencv-python, das Projekt nutzt opencv-python-headless (beide liefern cv2,
+# zusammen installiert gehen sie kaputt). numpy und cv2 sind über requirements.txt schon da.
+# Version bewusst fest: 2.0.1 wurde geprüft (importiert kein OpenProcess, keine Hooks/Eingaben).
+windows-capture==2.0.1; sys_platform == "win32"

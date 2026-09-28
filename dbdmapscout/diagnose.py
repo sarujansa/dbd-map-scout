@@ -96,6 +96,8 @@ def collect(app) -> str:
     if w is not None:
         lines.append(f"Rundenende-Erkennung: {w.watch_status}  (Menü pausiert={getattr(app, 'menu_paused', None)}, "
                      f"Überwachung={w.watch_gen}, Overlay-Rechteck={w.overlay_rect})")
+        lines.append(f"Aufnahme: {getattr(w, 'capture_info', '?')}  (Fensteraufnahme erlaubt="
+                     f"{app.settings.get('window_capture', True)})")
         hist = list(getattr(w, "end_history", []))
         lines.append(f"Letzte Prüfungen ({len(hist)}):" if hist else "Letzte Prüfungen: keine")
         lines.extend("  " + h for h in hist[-40:])
