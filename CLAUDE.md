@@ -102,7 +102,7 @@ start_debug.bat           :: mit Konsole
 
 Etagen-Hotkey (Midwich), Autostart mit DBD + Tray-Icon, .exe-Build (vorerst verworfen: Updates per git pull, Virenscanner-Fehlalarme, Admin-Helfer bräuchten Umbau – Desktop-Verknüpfung reicht), Ausblenden im Zuschauermodus, „Match Details“ als zweite Erkennungsquelle.
 
-Wartezeit und Rolle sind seit 1.25.0 drin (`lobby.py`), Lobby-Meldung (Ton + Tray-Meldung, Countdown-Erinnerung ≤ 15 s bei READY; `App._notify`, Einstellungen `lobby_notify`/`lobby_remind`/`notify_background_only`) und Ping je Runde (`Round.ping` = Median von `conn.ping_ms` während der Runde) seit 1.26.0.
+Wartezeit und Rolle sind seit 1.25.0 drin (`lobby.py`), Lobby-Meldung (Ton + eigenes Hinweisfenster `toast.py` – nicht Windows-/Tray-Meldungen, die schluckt „Nicht stören“, das Windows beim Spielen selbst einschaltet; WS_EX_NOACTIVATE, unten rechts über der Taskleiste; Countdown-Erinnerung ≤ 15 s bei READY; `App._notify`, Einstellungen `lobby_notify`/`lobby_remind`/`notify_background_only`) und Ping je Runde (`Round.ping` = Median von `conn.ping_ms` während der Runde) seit 1.26.0.
 
 Vom Nutzer verworfen: Overlay-Einstellungen pro Rolle; Kill-/Escape-Rate pro Map aus dem Ergebnisbildschirm (müsste man jedes Mal umblättern → lückenhafte Statistik); Karte automatisch mit der Kamera drehen; Halten-zum-Anzeigen-Taste.
 
