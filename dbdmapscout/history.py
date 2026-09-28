@@ -46,23 +46,57 @@ def _tidy(path: str) -> None:
         rounds = load(path)
         if len(rounds) <= KEEP:
             return
-        tmp = path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as fh:
-            for r in rounds[-KEEP:]:
-                fh.write(json.dumps(asdict(r), ensure_ascii=False) + "\n")
-        os.replace(tmp, path)
+        kept = rounds[-KEEP:]
+        _rewrite(path, kept, [x for x in load_lost(path) if x[0] >= kept[0].t])
     except OSError:
         pass
 
 
-def load(path: str) -> list:
-    """All rounds, oldest first; broken lines are skipped."""
+def _rewrite(path: str, rounds, lost) -> None:
+    """Write rounds and lost-round lines back in time order (atomic)."""
+    lines = [(r.t, json.dumps(asdict(r), ensure_ascii=False)) for r in rounds] + \
+        [(t, json.dumps({"lost": True, "t": t, "map": m, "reason": why}, ensure_ascii=False)) for t, m, why in lost]
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        for _t, line in sorted(lines, key=lambda x: x[0]):
+            fh.write(line + "\n")
+    os.replace(tmp, path)
+
+
+def append_lost(path: str, t: float, map_label: str, reason: str) -> None:
+    """A round whose end was not detected (not counted): kept as its own line so the statistics can
+    say how many rounds are missing. load() skips these lines."""
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps({"lost": True, "t": t, "map": map_label, "reason": reason}, ensure_ascii=False) + "\n")
+
+
+def load_lost(path: str) -> list:
+    """[(t, map label, reason)] of the rounds that were not counted, oldest first."""
     out = []
     try:
         with open(path, encoding="utf-8") as fh:
             for line in fh:
                 try:
                     d = json.loads(line)
+                    if isinstance(d, dict) and d.get("lost"):
+                        out.append((float(d["t"]), str(d.get("map") or ""), str(d.get("reason") or "")))
+                except (ValueError, KeyError, TypeError):
+                    continue
+    except OSError:
+        return []
+    return out
+
+
+def load(path: str) -> list:
+    """All rounds, oldest first; broken lines and lines of lost rounds are skipped."""
+    out = []
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                try:
+                    d = json.loads(line)
+                    if d.get("lost"):
+                        continue
                     wait = d.get("wait")
                     out.append(Round(t=float(d["t"]), seconds=float(d["seconds"]), map_id=str(d["map_id"]),
                                      map=str(d.get("map") or d["map_id"]), region=str(d.get("region") or ""),
@@ -205,11 +239,7 @@ def set_role(path: str, t: float, role: str):
         return None
     hit.custom = role == "custom"
     hit.role = "" if hit.custom else role       # the waiting time stays (ignored for custom games): undo-able
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        for r in rounds:
-            fh.write(json.dumps(asdict(r), ensure_ascii=False) + "\n")
-    os.replace(tmp, path)
+    _rewrite(path, rounds, load_lost(path))
     return hit
 
 
