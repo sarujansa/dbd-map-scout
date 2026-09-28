@@ -44,3 +44,26 @@ def test_file_is_tidied(tmp_path, monkeypatch):
     got = h.load(p)
     assert len(got) <= 30 and got[-1].seconds == 129                # newest kept
     assert len(got) >= 10
+
+
+def test_periods_are_calendar_based():
+    import datetime
+    now = datetime.datetime(2026, 9, 30, 15, 30).timestamp()            # a Wednesday
+    ts = lambda *a: datetime.datetime(*a).timestamp()                   # noqa: E731
+    assert h.period_start("all", now) is None
+    assert h.period_start("day", now) == ts(2026, 9, 30)
+    assert h.period_start("week", now) == ts(2026, 9, 28)              # Monday
+    assert h.period_start("month", now) == ts(2026, 9, 1)
+    assert h.period_start("year", now) == ts(2026, 1, 1)
+
+
+def test_select_and_per_region():
+    rs = [rnd("A", 100, 10, "eu-central-1"), rnd("B", 300, 20, "eu-central-1"), rnd("C", 200, 30, "eu-west-2"),
+          rnd("D", 400, 40)]
+    assert [r.map for r in h.select(rs, since=25)] == ["C", "D"]
+    assert [r.map for r in h.select(rs, region="eu-central-1")] == ["A", "B"]
+    assert [r.map for r in h.select(rs, region=h.NO_REGION)] == ["D"]
+    assert h.regions_used(rs) == ["eu-central-1", "eu-west-2"]
+    assert h.per_region(rs) == [("eu-central-1", 2, 200, 0.5), ("eu-west-2", 1, 200, 0.25),
+                                (h.NO_REGION, 1, 400, 0.25)]
+    assert h.per_region([]) == []

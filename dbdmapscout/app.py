@@ -38,7 +38,9 @@ HOTKEY_LABELS = [("toggle_overlay", N_("Overlay ein/aus")), ("next_variant", N_(
                  ("scan_now", N_("Bildschirm scannen")), ("prev_map", N_("Vorherige Map")),
                  ("next_map", N_("Nächste Map")), ("bigger", N_("Grösser")), ("smaller", N_("Kleiner")),
                  ("edit_position", N_("Mit Maus verschieben"))]
-CATS = [N_("Erkennung"), N_("Overlay"), N_("System"), N_("Fehler")]      # log categories (keys; shown translated)
+CATS = [N_("Erkennung"), N_("Overlay"), N_("System"), N_("Fehler")]
+STATS_PERIODS = [("all", N_("Alle")), ("day", N_("Heute")), ("week", N_("Diese Woche")), ("month", N_("Dieser Monat")),
+                 ("year", N_("Dieses Jahr"))]      # log categories (keys; shown translated)
 
 
 def anchor_label(key: str) -> str:
@@ -340,6 +342,12 @@ class App:
         look.pack(fill="x", pady=(8, 0))
         self.size_var = tk.DoubleVar(value=o["height"] * 100)
         self.size_label = self._slider(look, _("Grösse"), self.size_var, 15, 90, self._size_changed)
+        self.map_size_row = ttk.Frame(look)
+        self.map_size_var = tk.StringVar(value="")
+        ttk.Label(self.map_size_row, textvariable=self.map_size_var, style="Dim.TLabel").pack(side="left")
+        ttk.Button(self.map_size_row, text=_("Für diese Map zurücksetzen"), command=self._reset_map_size).pack(
+            side="right")
+        self._size_row_after = self.size_label.master
         self.opacity_var = tk.DoubleVar(value=o["opacity"] * 100)
         self._slider(look, _("Deckkraft"), self.opacity_var, 25, 100, self._opacity_changed)
         self.focus_var = tk.BooleanVar(value=o["only_when_game_focused"])
@@ -742,6 +750,22 @@ class App:
     # -------------------------------------------------------------- tab: statistics
     def _tab_stats(self):
         outer, f = self._scroll_tab()
+        fr = ttk.Frame(f)
+        fr.pack(fill="x", pady=(0, 6))
+        ttk.Label(fr, text=_("Zeitraum")).pack(side="left")
+        self._stats_periods = [(k, _(label)) for k, label in STATS_PERIODS]
+        self.stats_period_var = tk.StringVar(value=self._stats_periods[0][1])
+        cb = ttk.Combobox(fr, textvariable=self.stats_period_var, values=[lbl for _k, lbl in self._stats_periods],
+                          state="readonly", width=14)
+        cb.pack(side="left", padx=(6, 14))
+        cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
+        ttk.Label(fr, text=_("Region")).pack(side="left")
+        self._stats_regions = [(None, _("Alle Regionen"))]
+        self.stats_region_var = tk.StringVar(value=self._stats_regions[0][1])
+        self.stats_region_cb = ttk.Combobox(fr, textvariable=self.stats_region_var, state="readonly", width=24,
+                                            values=[lbl for _c, lbl in self._stats_regions])
+        self.stats_region_cb.pack(side="left", padx=6)
+        self.stats_region_cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
         self.stats_var = tk.StringVar(value="")
         ttk.Label(f, textvariable=self.stats_var, style="Big.TLabel", wraplength=540).pack(anchor="w")
         ttk.Label(f, text=_("Gezählt werden Runden mit automatisch erkannter Map, vom Map-Banner bis zum erkannten "
@@ -751,10 +775,16 @@ class App:
         box.pack(fill="both", expand=True)
         self.stats_maps = self._stats_tree(box, (("map", _("Map"), 230, "w"), ("n", _("Runden"), 70, "e"),
                                                  ("avg", _("Ø Dauer"), 80, "e"), ("max", _("Längste"), 80, "e")), 9)
+        box_r = ttk.LabelFrame(f, text=_("Serverregionen"), padding=6)
+        box_r.pack(fill="both", expand=True, pady=(8, 0))
+        self.stats_regs = self._stats_tree(box_r, (("reg", _("Region"), 230, "w"), ("n", _("Runden"), 70, "e"),
+                                                   ("avg", _("Ø Dauer"), 80, "e"), ("share", _("Anteil"), 80, "e")), 5)
+        ttk.Label(box_r, text=_("Region nur bekannt, wenn im Tab Server „Verbundener Spielserver“ an war."),
+                  style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         box2 = ttk.LabelFrame(f, text=_("Letzte Runden"), padding=6)
         box2.pack(fill="both", expand=True, pady=(8, 0))
-        self.stats_last = self._stats_tree(box2, (("when", _("Wann"), 120, "w"), ("map", _("Map"), 200, "w"),
-                                                  ("dur", _("Dauer"), 70, "e"), ("srv", _("Server"), 130, "w")), 9)
+        self.stats_last = self._stats_tree(box2, (("when", _("Wann"), 115, "w"), ("map", _("Map"), 170, "w"),
+                                                  ("dur", _("Dauer"), 60, "e"), ("srv", _("Server"), 175, "w")), 9)
         row = ttk.Frame(f)
         row.pack(fill="x", pady=(8, 0))
         ttk.Button(row, text=_("Verlauf löschen"), command=self._stats_clear).pack(side="left")
@@ -767,7 +797,7 @@ class App:
         t = ttk.Treeview(tf, columns=[c[0] for c in cols], show="headings", height=height, selectmode="none")
         for key, title, width, anchor in cols:
             t.heading(key, text=title, anchor=anchor, command=lambda k=key, tr=t: self._stats_sort_by(tr, k))
-            t.column(key, width=width, anchor=anchor, stretch=key == "map")
+            t.column(key, width=width, anchor=anchor, stretch=key in ("map", "reg"))
         sb = ttk.Scrollbar(tf, orient="vertical", command=t.yview)
         t.configure(yscrollcommand=sb.set)
         t.pack(side="left", fill="both", expand=True)
@@ -781,11 +811,29 @@ class App:
         self._stats_sort = (key, not desc if col == key else key != "map")
         self._stats_render()
 
+    def _stats_region_name(self, code):
+        if not code or code == history.NO_REGION:
+            return _("ohne Region")
+        return _(regions.NAMES.get(code, code))
+
     def _stats_render(self):
-        rounds = history.load(self._hist_path())
+        all_rounds = history.load(self._hist_path())
+        # region filter: the regions that occur (kept selected even if the list changes)
+        wanted = next((c for c, lbl in self._stats_regions if lbl == self.stats_region_var.get()), None)
+        self._stats_regions = [(None, _("Alle Regionen"))] + \
+            [(c, self._stats_region_name(c)) for c in history.regions_used(all_rounds)] + \
+            ([(history.NO_REGION, _("ohne Region"))] if any(not r.region for r in all_rounds) else [])
+        if wanted not in [c for c, _lbl in self._stats_regions]:
+            wanted = None
+        self.stats_region_cb.configure(values=[lbl for _c, lbl in self._stats_regions])
+        self.stats_region_var.set(dict(self._stats_regions)[wanted])
+        period = next((k for k, lbl in self._stats_periods if lbl == self.stats_period_var.get()), "all")
+        rounds = history.select(all_rounds, since=history.period_start(period, time.time()), region=wanted)
         s = history.summary(rounds)
-        if not s["count"]:
+        if not all_rounds:
             self.stats_var.set(_("Noch keine Runden gespeichert."))
+        elif not s["count"]:
+            self.stats_var.set(_("Keine Runden in dieser Auswahl."))
         else:
             self.stats_var.set(_("{n} Runden · Ø {avg} · gesamt {total}", n=s["count"], avg=fmt_duration(s["avg"]),
                                  total=fmt_duration(s["total"])))
@@ -797,10 +845,14 @@ class App:
         t.delete(*t.get_children())
         for name, n, avg, longest in rows:
             t.insert("", "end", values=(name, n, fmt_duration(avg), fmt_duration(longest)))
+        t = self.stats_regs
+        t.delete(*t.get_children())
+        for code, n, avg, share in history.per_region(rounds):
+            t.insert("", "end", values=(self._stats_region_name(code), n, fmt_duration(avg), f"{share:.0%}"))
         t = self.stats_last
         t.delete(*t.get_children())
-        for r in reversed(rounds[-100:]):
-            t.insert("", "end", values=(time.strftime("%d.%m. %H:%M", time.localtime(r.t)), r.map,
+        for r in sorted(rounds, key=lambda r: r.t, reverse=True)[:100]:
+            t.insert("", "end", values=(time.strftime("%d.%m.%y %H:%M", time.localtime(r.t)), r.map,
                                         fmt_duration(r.seconds),
                                         _(regions.NAMES.get(r.region, r.region)) if r.region else "–"))
 
@@ -996,6 +1048,7 @@ class App:
         self._thumb = ImageTk.PhotoImage(bg)
         self.thumb_label.configure(image=self._thumb)
         self._update_toggle_text()
+        self._show_map_size()
         self._update_layout_btn()
         if source == "manual":
             self._log(_("Map gewählt: {map}", map=m.label(shown)), "Overlay")
@@ -1166,13 +1219,46 @@ class App:
         self._set_pos_sliders(o["pos_x"], o["pos_y"])
         self._save_soon()
 
-    def _resize(self, delta):
+    def _map_height(self):
+        """Overlay size: the map's own size if one was set (hotkeys / mouse wheel), else the slider's."""
         o = self.settings["overlay"]
-        o["height"] = min(0.9, max(0.15, o["height"] + delta))
-        self.size_var.set(o["height"] * 100)
-        self.size_label.configure(text=f"{o['height'] * 100:.0f} %")
+        own = (o.get("map_heights") or {}).get(self.current[0]) if self.current else None
+        return own if own else o["height"]
+
+    def _resize(self, delta):
+        """Hotkeys and mouse wheel: size of the map on display (remembered for that map)."""
+        o = self.settings["overlay"]
+        new = round(min(0.9, max(0.15, self._map_height() + delta)), 3)
+        if self.current:
+            o.setdefault("map_heights", {})[self.current[0]] = new
+        else:
+            o["height"] = new
+            self.size_var.set(new * 100)
+            self.size_label.configure(text=f"{new * 100:.0f} %")
+        self._show_map_size()
         self._save_soon()
         self._tick_overlay(reschedule=False)
+
+    def _show_map_size(self):
+        """Hint below the size slider when the map on display has a size of its own."""
+        own = (self.settings["overlay"].get("map_heights") or {}).get(self.current[0]) if self.current else None
+        if own:
+            m = self.catalog.maps.get(self.current[0])
+            self.map_size_var.set(_("{map}: eigene Grösse {n} % (Hotkeys/Mausrad)", map=m.name if m else "",
+                                    n=f"{own * 100:.0f}"))
+            if not self.map_size_row.winfo_manager():
+                self.map_size_row.pack(fill="x", pady=(0, 3), after=self._size_row_after)
+        elif self.map_size_row.winfo_manager():
+            self.map_size_row.pack_forget()
+
+    def _reset_map_size(self):
+        if self.current and (self.settings["overlay"].get("map_heights") or {}).pop(self.current[0], None):
+            m = self.catalog.maps.get(self.current[0])
+            self._log(_("Eigene Grösse für {map} entfernt – es gilt wieder der Schieberegler.",
+                        map=m.name if m else self.current[0]), "Overlay")
+            self._show_map_size()
+            self._save_soon()
+            self._tick_overlay(reschedule=False)
 
     # ============================================================= events
     def _poll(self):
@@ -1578,7 +1664,7 @@ class App:
             return                                           # user is dragging
         self.overlay.opacity = o["opacity"]
         margin = int(gh * o["margin"])
-        height = int(gh * o["height"])
+        height = int(gh * self._map_height())
         a = o["anchor"]
         bar = layout.bar_width(gw, gh)          # black bar left/right of a 16:9 picture (ultrawide)
         if a == "auto" and bar < layout.MIN_BAR:
