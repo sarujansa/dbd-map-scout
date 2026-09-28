@@ -145,4 +145,32 @@ def test_supplied_maps_keep_their_name_on_top():
     from dbdmapscout.overlay import load_frames
     split = [p for p in glob.glob(os.path.join(ROOT, "maps", "*", "*.webp"))
              if mi.title_split(load_frames(p)[0][0])]
-    assert len(split) >= 45                                      # all callout maps with a name above them
+    webp = glob.glob(os.path.join(ROOT, "maps", "*", "*.webp"))
+    assert len(split) == len(webp) >= 55                         # every picture has its name above the map
+
+
+def test_name_is_added_above_the_map():
+    body = Image.new("RGBA", (600, 586), FLOOR + (255,))            # half the size of a supplied map
+    out = mi.add_title(body, "Freddy Fazbear's Pizza")
+    top, gap, body_top, bottom = mi.title_split(out)
+    assert out.width == 600 and bottom == out.height and out.height - body_top == 586
+    assert 30 <= gap - top <= 45 and body_top - gap >= mi.MIN_GAP  # ~half of the 75 px of the originals
+    a = np.asarray(out)
+    assert (a[:gap, ..., 3] > 0).any() and (a[:gap, :, :3].min(axis=2) > 250).any()   # white letters + shadow
+    assert mi.title_text("Freddy Fazbear's Pizza") == "FREDDY FAZBEAR’S PIZZA"
+
+
+def test_long_name_on_narrow_map_is_made_smaller():
+    out = mi.add_title(Image.new("RGBA", (200, 586), FLOOR + (255,)), "Father Campbell's Chapel")
+    assert out.width == 200 and mi.title_split(out) is not None
+
+
+def test_convert_adds_a_name_only_when_missing(tmp_path):
+    src = str(tmp_path / "karte.png")
+    original().save(src)
+    got = mi.convert(Image.open(src), title="Neue Map")
+    assert mi.title_split(got) is not None and got.height == mi.HEIGHT
+    again = mi.convert(got, remove_bg=False, title="Neue Map")    # already has one: no second name
+    assert again.size == mi.convert(got, remove_bg=False).size
+    plain = mi.convert(Image.open(src))
+    assert mi.title_split(plain) is None

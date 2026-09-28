@@ -4,7 +4,8 @@ Same steps as the usual preparation of callout maps (own implementation, Pillow 
 trim the uniform border, make the two background colours of the community maps transparent
 (dark blue #282a42, grey violet #535781, 10 % tolerance), scale to 1280 px height, save as WebP.
 Animated GIFs are copied unchanged. Works only on the file the user picked – no game files,
-no network.
+no network. ``add_title`` puts the map name on top in the style of the supplied pictures (Fira Sans
+ExtraBold, white with a dark drop shadow – dbdmapscout/fonts, SIL Open Font License).
 """
 from __future__ import annotations
 
@@ -13,7 +14,7 @@ import re
 import shutil
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 BACKGROUNDS = ((0x28, 0x2A, 0x42), (0x53, 0x57, 0x81))
 FUZZ = 0.10                 # colour distance (Euclidean RGB, 0..1) still counted as background
@@ -44,11 +45,19 @@ def remove_background(img: Image.Image, colours=BACKGROUNDS, fuzz: float = FUZZ)
     return Image.fromarray(a, "RGBA")
 
 
-def convert(img: Image.Image, remove_bg: bool = True, height: int = HEIGHT) -> Image.Image:
-    """Trim, (optionally) remove the background, scale to ``height``."""
+def prepare(img: Image.Image, remove_bg: bool = True) -> Image.Image:
+    """Trim and (optionally) remove the background – the slow part, done once per picture in the dialog."""
     out = trim(img)
-    if remove_bg:
-        out = remove_background(out)
+    return remove_background(out) if remove_bg else out
+
+
+def convert(img: Image.Image, remove_bg: bool = True, height: int = HEIGHT, title: str = "",
+            prepared: bool = False) -> Image.Image:
+    """Trim, (optionally) remove the background, add the name on top (unless there is one), scale to ``height``.
+    ``prepared``: ``img`` already went through prepare()."""
+    out = img if prepared else prepare(img, remove_bg)
+    if title and title_split(out) is None:
+        out = add_title(out, title)
     if out.height != height and out.height > 0:
         out = out.resize((max(1, round(out.width * height / out.height)), height), Image.LANCZOS)
     return out
@@ -73,7 +82,7 @@ def target_path(root: str, rel_stem: str, animated: bool) -> str:
     return os.path.join(root, USER_DIR, rel_stem + (".gif" if animated else ".webp"))
 
 
-def save(src: str, dest: str, remove_bg: bool = True) -> str:
+def save(src: str, dest: str, remove_bg: bool = True, title: str = "") -> str:
     """Convert ``src`` and write it to ``dest`` (older own pictures of the same map are replaced)."""
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     stem = os.path.splitext(dest)[0]
@@ -84,7 +93,7 @@ def save(src: str, dest: str, remove_bg: bool = True) -> str:
         shutil.copyfile(src, dest)
     else:
         with Image.open(src) as im:
-            convert(im, remove_bg).save(dest, "WEBP", quality=90, method=4)
+            convert(im, remove_bg, title=title).save(dest, "WEBP", quality=90, method=4)
     return dest
 
 
@@ -153,3 +162,47 @@ def rotate_frames(frames, degrees: int):
         return frames
     split = title_split(frames[0][0])
     return [(rotate(img, degrees, split), d) for img, d in frames]
+
+
+# ------------------------------------------------------------------ map name on top
+FONT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts", "FiraSans-ExtraBold.ttf")
+# measured on the supplied pictures (1280 px high, map ~1172 px below the name): letters 67 px high,
+# shadow 6/7 px to the lower right, 33 px free space between name and map
+REF_MAP_H = 1172
+FONT_SIZE, SHADOW, GAP, TRACK = 92, (6, 7), 33, 1.6
+WHITE, SHADE = (255, 255, 255, 255), (12, 11, 16, 230)
+
+
+def title_text(name: str) -> str:
+    return name.upper().replace("'", "’")
+
+
+def add_title(img: Image.Image, name: str, font_path: str = FONT) -> Image.Image:
+    """``img`` with ``name`` above it, centred, as on the supplied callout pictures (scaled to the map)."""
+    img = img.convert("RGBA")
+    k = img.height / REF_MAP_H
+    text = title_text(name)
+    size = max(8, round(FONT_SIZE * k))
+    while True:
+        font = ImageFont.truetype(font_path, size)
+        track = TRACK * size / FONT_SIZE
+        xs = [font.getlength(text[:i]) + i * track for i in range(len(text))]    # keeps kerning, adds spacing
+        box = font.getbbox(text)
+        width = round(box[2] - box[0] + track * (len(text) - 1))
+        if width <= img.width * 0.96 or size <= 8:                  # long name on a narrow map: smaller
+            break
+        size -= 1
+    sx, sy = max(1, round(SHADOW[0] * k)), max(1, round(SHADOW[1] * k))
+    tw, th = width + sx, box[3] - box[1] + sy
+    gap = max(MIN_GAP + 2, round(GAP * k))
+    # a name made smaller still has to end inside title_split()'s zone, or it would turn with the map
+    pad = max(0, int(TITLE_ZONE[0] * (th + gap + img.height)) + 2 - th)
+    w = max(img.width, tw)
+    out = Image.new("RGBA", (w, pad + th + gap + img.height), (0, 0, 0, 0))
+    d = ImageDraw.Draw(out)
+    x0, y = (w - tw) // 2 - box[0], pad - box[1]
+    for dx, dy, colour in ((sx, sy, SHADE), (0, 0, WHITE)):
+        for ch, x in zip(text, xs):
+            d.text((x0 + x + dx, y + dy), ch, font=font, fill=colour)
+    out.alpha_composite(img, ((w - img.width) // 2, pad + th + gap))
+    return out
