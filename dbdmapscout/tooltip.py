@@ -84,6 +84,7 @@ TIPS = {
                                  "wird erst mit „Aktualisieren und neu starten“.",
     "Aktualisieren und neu starten": "Beendet das Programm und startet es über start.bat neu – dabei wird das "
                                      "Update installiert.",
+    "Verlauf löschen": "Löscht alle gespeicherten Runden (Datei rounds.jsonl).",
     "Alle löschen": "Alle eigenen Map-Zuordnungen löschen (die Namen werden dann wieder als unbekannt "
                     "gemeldet).",
     "Programmordner öffnen": "Öffnet den Ordner des Programms im Explorer.",
