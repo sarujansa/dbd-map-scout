@@ -17,7 +17,8 @@ def test_on_demand_task_runs_start_bat_elevated_without_trigger():
     s = au.task_script(ROOT, au.TASK, False)
     assert "-RunLevel Highest" in s and "-LogonType Interactive" in s
     assert "New-ScheduledTaskTrigger" not in s and "-Trigger" not in s
-    assert "start \"\" /min \"" in s and "start.bat\"'" in s                    # updates/packages keep working
+    # via start.bat (updates/packages keep working), explicit cmd /c so the minimised console closes again
+    assert 'start "" /min cmd /c ""' in s and "start.bat\"\"'" in s
     assert " tray'" not in s
     assert f"-TaskName '{au.TASK}'" in s and "-MultipleInstances IgnoreNew" in s
 
@@ -25,7 +26,7 @@ def test_on_demand_task_runs_start_bat_elevated_without_trigger():
 def test_autostart_task_at_logon_in_tray():
     s = au.task_script(ROOT, au.TASK_AUTO, True)
     assert "New-ScheduledTaskTrigger -AtLogOn -User $user" in s and "$t.Delay = 'PT20S'" in s
-    assert "start.bat\" tray'" in s and "-Trigger $t" in s
+    assert "start.bat\" tray\"'" in s and "-Trigger $t" in s
 
 
 def test_paths_with_quotes_stay_one_literal():
@@ -142,3 +143,14 @@ def test_ensure_renews_autostart_only_if_it_was_on(monkeypatch):
     present[au.TASK_AUTO] = True
     assert au.ensure(ROOT, au.SETUP_VERSION - 1, ROOT)[0]
     assert calls == ["install", ("autostart", True)]                          # autostart kept, renewed
+
+
+def test_task_command_line_quoting():
+    """cmd /c strips the outer quotes: the inner command must end up as "…\\start.bat" [tray]."""
+    import re
+    for at_logon, tail in ((False, ""), (True, " tray")):
+        arg = re.search(r"-Argument '([^']*)'", au.task_script(ROOT, au.TASK, at_logon)).group(1)
+        inner = arg.split("cmd /c ", 1)[1]
+        assert inner.startswith('""') and inner.endswith('"')
+        bat = os.path.join(os.path.abspath(ROOT), "start.bat")         # same as the code on this platform
+        assert inner[1:-1] == f'"{bat}"{tail}'
