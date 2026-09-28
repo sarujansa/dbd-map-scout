@@ -1293,7 +1293,6 @@ class App:
         self.overlay.opacity = o["opacity"]
         margin = int(gh * o["margin"])
         height = int(gh * o["height"])
-        w, h = self.overlay.render(height)
         a = o["anchor"]
         bar = layout.bar_width(gw, gh)          # black bar left/right of a 16:9 picture (ultrawide)
         if a == "auto" and bar < layout.MIN_BAR:
@@ -1307,17 +1306,19 @@ class App:
             return (gx + margin if a.endswith("left") else gx + gw - w - margin,
                     gy + margin if a.startswith("top") else gy + gh - h - margin)
 
-        x, y = place(w, h)
-        side = (layout.bar_side(a, x, w, gx, gw, bar)
+        # Fit before rendering: only the final size may reach the screen (render() shows it at once).
+        iw, ih = self.overlay.map_size()
+        w_est = round(iw * height / ih) if ih else 0
+        side = (layout.bar_side(a, place(w_est, 0)[0], w_est, gx, gw, bar)
                 if a == "auto" or o.get("keep_in_bar", True) else None)
+        avail = layout.max_width(bar, margin)
         if side:
-            avail = layout.max_width(bar, margin)
-            for _ in range(2):                  # shrink until it fits into the bar (info block: not linear)
-                if w <= avail:
-                    break
-                height = max(80, int(height * avail / w))
-                w, h = self.overlay.render(height)
-            x, y = place(w, h)
+            height = layout.fit_height(height, avail, iw, ih)
+        w, h = self.overlay.render(height)
+        if side and w > avail:                  # info block below is wider than the map (rare)
+            w, h = self.overlay.render(max(80, int(height * avail / w)))
+        x, y = place(w, h)
+        if side:
             x = layout.clamp_x(side, x, w, gx, gw, bar, margin)
         self.overlay.show_at(int(x), int(y))
         self._last_place = (int(x), int(y), w, h)
