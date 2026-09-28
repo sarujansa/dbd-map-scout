@@ -10,7 +10,7 @@ Das Programm muss „regelkonform“ zu Dead by Daylight bleiben. Konkret:
 - **Kein Zugriff auf den Spielprozess** – nicht einmal `OpenProcess`, kein Speicherlesen, keine Injection, keine Modul-/Handle-Abfragen mit PID.
 - **Keine Spieldateien** lesen oder schreiben (auch nicht `GameUserSettings.ini`, Splash-Screen, Movies).
 - Erlaubt sind nur: **Bildschirmpixel** (mss/BitBlt), Fensterinfos (Titel, Klasse `UnrealWindow`, Position über EnumWindows), **Mauszeiger-Status** (`GetCursorInfo`, wie OBS), die **Windows-hosts-Datei** (nur Tab „Server“, nur GameLift-Namen) und **Paketköpfe des Netzwerkverkehrs** (nur Tab „Server“, Anzeige „Verbunden mit“; vom Nutzer ausdrücklich gewünscht, wie in Make Your Choice). Beim Mitschnitt: nur IPv4/UDP-Kopffelder (Adressen, Ports) lesen, **nie Paketinhalte**, nichts senden, nichts speichern außer der temporären Ergebnisdatei (Server-IP **nicht** ins Logfile, nur die Region), kein Treiber (Raw-Socket `SIO_RCVALL`), **nur Modus `RCVALL_IPLEVEL`** (eigener Verkehr; nie `RCVALL_ON`/Promiscuous, auch nicht als Rückfall), keine Zuordnung über die PID des Spiels.
-- Map-Erkennung und Overlay bauen **keine Internetverbindung** auf; nur der Server-Tab pingt AWS-GameLift (UDP 7770 / ICMP) und löst DNS auf (auch Reverse-DNS der Spielserver-Adresse).
+- Map-Erkennung und Overlay bauen **keine Internetverbindung** auf; nur der Server-Tab pingt AWS-GameLift (UDP 7770 / ICMP) und löst DNS auf (auch Reverse-DNS der Spielserver-Adresse). Während „Verbunden mit“ läuft, alle 5 s ein Ping an den Beacon der verbundenen Region (`gamelift-ping.<region>.api.aws`) – **nie Pakete an den Spielserver selbst**.
 - Neue Features, die gegen diese Regeln verstoßen würden: nicht umsetzen, sondern nachfragen.
 
 ## Setup des Nutzers (wichtig für Tests und Schwellenwerte)
@@ -42,18 +42,18 @@ start_debug.bat           :: mit Konsole
 |---|---|
 | `__main__.py` | Start, Single-Instance-Mutex, Logging, `--simulate`/`--test` |
 | `app.py` | Tk-Steuerfenster (Tabs Maps/Overlay/Erkennung/Server/Log/Einstellungen), verbindet alles; Events kommen über `self.events` (Queue) im `_poll` an |
-| `worker.py` | Hintergrund-Thread: Aufnahme → Banner-Erkennung → Rundenende; postet Events (`detected`, `menu`, `match_end`, `watch_info`, `warn`, …) |
+| `worker.py` | Hintergrund-Thread: Aufnahme → Banner-Erkennung → Rundenende; postet Events (`detected`, `unknown`, `menu`, `match_end`, `watch_info`, `warn`, …). Im Match (`tracker.in_trial`, kein Banner) gedrosselt auf `IN_MATCH_RATE` = 1 Scan/s |
 | `detector.py` | Banner: Trennlinie finden → Text ausschneiden → OCR-Scoring gegen Katalog → `Accumulator`. Rundenende: `OutOfMatchWatcher.observe()` (CONTINUE, Währung, Ladebalken) |
 | `matchend.py` | `MatchEndTracker` – reine Logik (testbar): Menü-Pause per Mauszeiger, Rundenende-Latch, Scharfschalten bei manueller Map |
 | `roundtimer.py` | `RoundTimer` – reine Logik: läuft, solange eine Karte eingeblendet ist; neue Map-Erkennung startet neu (außer dasselbe Banner < 90 s) |
 | `ocr.py` | PP-OCRv4-Erkennungsnetz (ONNX) + `LexiconScorer` (CTC-Forward über alle Kandidaten) |
-| `catalog.py`, `maps.json`, `textnorm.py` | Map-/Realm-Namen (9 Sprachen), Varianten, Bildpfade |
+| `catalog.py`, `maps.json`, `textnorm.py` | Map-/Realm-Namen (9 Sprachen), Varianten, Bildpfade. Aliasse aus `maps.json` plus eigene Zuordnungen des Nutzers (`settings.json` → `user_aliases`, Dialog „Zuordnen …“ nach einem `unknown`-Event; `alias_problem()` verhindert Konflikte, Realm-Prüfung bleibt) |
 | `capture.py` | DBD-Fenster finden, mss-Aufnahme, `cursor_state()`; öffnet nie den Spielprozess |
 | `overlay_win32.py` / `overlay.py` | natives Layered-Window-Overlay (WS_EX_TRANSPARENT/NOACTIVATE) / Tk-Fallback |
 | `regions.py` | Server-Tab: Regionstabelle (Namen), Ping (UDP-Beacon, DNS ohne hosts), `run_job()` startet Helfer per UAC |
 | `hostsedit.py` | Admin-Helfer (UAC): schreibt nur den eigenen markierten Abschnitt der hosts-Datei. Nur Standardbibliothek, gestartet mit `pythonw -I -S`. Erlaubt nur Namen aus `MANAGED` (fest codiert) |
 | `netwatch.py` | Admin-Teil „Verbunden mit“: Raw-Socket (`RCVALL_IPLEVEL`, kein Rückfall), zählt UDP-Pakete je öffentlicher Gegenstelle, schreibt jede Sekunde die aktivsten in eine Ergebnisdatei. Nur Standardbibliothek. Läuft als Thread, wenn das Programm schon Admin ist, sonst als Helfer per UAC (`pythonw -I -S`). Beendet sich, wenn die Steuerdatei fehlt, „stop“ sagt oder 20 s nicht aufgefrischt wurde |
-| `connwatch.py` | startet `netwatch`, liest die Ergebnisdatei, wählt den Spielserver (≥ 10 Pakete/s, Reverse-DNS = AWS EC2) und bestimmt die Region aus dem DNS-Namen |
+| `connwatch.py` | startet `netwatch`, liest die Ergebnisdatei, wählt den Spielserver (≥ 10 Pakete/s, Reverse-DNS = AWS EC2), bestimmt die Region aus dem DNS-Namen und misst den Ping zum Beacon dieser Region (Median der letzten 3, alle 5 s) |
 | `fullscan.py`, `hotkeys.py`, `diagnose.py`, `theme.py`, `config.py` | Vollbild-Scan, globale Hotkeys, Diagnose-Text, Dark Mode, Einstellungen (+ Migrationen, `SETTINGS_VERSION`) |
 
 ## Wichtige Designentscheidungen (nicht ohne Grund ändern)
@@ -63,7 +63,7 @@ start_debug.bat           :: mit Konsole
   - Screen-Hinweise brauchen 2 Blicke in Folge (CONTINUE mit sehr gutem Fit: 1), Ladebildschirm 3 Blicke **und** stilles Bild (sonst lösen Reparatur-/Heilbalken aus).
   - Mauszeiger-Hinweis erst nutzen, wenn beim Map-Banner der Zeiger nachweislich versteckt war (`cursor_proven`).
   - Menü-Latch zählt nur Zeit, in der DBD aktiv und der Zeiger sichtbar ist (60 s).
-  - Regionen nie in die schwarzen Balken ausdehnen (FPS-Anzeigen, Benachrichtigungen).
+  - Regionen nie in die schwarzen Balken ausdehnen (FPS-Anzeigen, Benachrichtigungen). Ausnahme: `detector.fills_bars()` – Ergebnisbildschirm, Lobby und Menüs nutzen auf Ultrawide die **volle Fensterbreite** (CONTINUE und Währung sitzen am echten rechten Rand, x ≈ 2800–3300). Nur wenn beide Balken selbst Bild enthalten (im Match sind sie schwarz), reichen CONTINUE-/Währungsregion bis zum Fensterrand.
   - Eigenes Overlay wird vor jeder Auswertung aus dem Bild geschwärzt (`worker._mask_overlay`).
 - Events mit `gen` (Map-Generation) – veraltete `menu`/`match_end` für eine alte Map werden ignoriert.
 - hosts-Datei: latin-1 lesen/schreiben (byte-genau), nur an LF splitten, Backup `hosts.dbdmapscout-backup` vor der ersten Änderung, Fremdeinträge (Make Your Choice) werden ersetzt. Ergebnisdatei wird vom normalen Prozess vorab angelegt (sonst nach Admin-Schreiben nicht lesbar).
@@ -78,7 +78,7 @@ start_debug.bat           :: mit Konsole
 
 ## Offene Ideen (vom Nutzer noch nicht entschieden)
 
-Halten-zum-Anzeigen-Taste, Scans im Match drosseln, Etagen-Hotkey (Midwich), „Bild für unbekannte Map hinzufügen“, Autostart mit DBD + Tray-Icon, .exe-Build, Ausblenden im Zuschauermodus, „Match Details“ als zweite Erkennungsquelle.
+Halten-zum-Anzeigen-Taste, Etagen-Hotkey (Midwich), „Bild für unbekannte Map hinzufügen“ (Namen zuordnen gibt es seit 1.8.0, neue Karten-Bilder noch nicht), Autostart mit DBD + Tray-Icon, .exe-Build, Ausblenden im Zuschauermodus, „Match Details“ als zweite Erkennungsquelle.
 
 ## Arbeitsweise
 

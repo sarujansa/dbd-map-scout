@@ -57,13 +57,19 @@ class Hypothesis:
 
 
 class Catalog:
-    def __init__(self, root: str, languages=("en", "de")):
+    def __init__(self, root: str, languages=("en", "de"), aliases=None):
+        """``aliases``: the user's own assignments {map_id: [banner text, ...]} (settings.json),
+        added to the aliases from maps.json."""
         self.root = root
         self.maps_dir = os.path.join(root, "maps")
         self.languages = [l for l in languages] or ["en"]
         self.maps: dict[str, MapEntry] = {}
         self.realms: dict[str, dict] = {}
         self._load()
+        for mid, texts in (aliases or {}).items():
+            m = self.maps.get(mid)
+            if m:
+                m.aliases.extend(t for t in texts if fold(t) and t not in m.aliases)
         self._build_hypotheses()
 
     # ------------------------------------------------------------------ load
@@ -164,6 +170,39 @@ class Catalog:
             return None, variant
         rel, shown = m.image_for(variant)
         return (os.path.join(self.maps_dir, rel) if rel else None), shown
+
+    # ----------------------------------------------------- user assignments
+    MIN_ALIAS = 4                    # letters/digits a banner text needs to be assigned to a map
+
+    def alias_problem(self, text: str, map_id: str) -> str | None:
+        """Why ``text`` cannot become an alias of ``map_id`` (None = fine)."""
+        k = fold(text)
+        if len(k) < self.MIN_ALIAS:
+            return "Der gelesene Text ist zu kurz."
+        if map_id not in self.maps:
+            return "Unbekannte Map."
+        other = {h.map_id for h in self.hypotheses if h.name_key == k} - {map_id}
+        if other:
+            return f"„{text}“ ist schon der Name von {self.maps[sorted(other)[0]].name}."
+        return None
+
+    def suggest(self, name_text: str, realm_text: str = "") -> str | None:
+        """Best guess for a banner that matched no map: similar name, realm read as well.
+        Only a preselection for the user – never used for detection."""
+        import difflib
+        n, r = fold(name_text), fold(realm_text)
+        best, best_score = None, 0.0
+        for m in self.maps.values():
+            if m.custom:
+                continue
+            ns = max((difflib.SequenceMatcher(None, n, fold(x)).ratio() for x in list(m.names.values()) + m.aliases),
+                     default=0.0)
+            rs = max((difflib.SequenceMatcher(None, r, fold(x)).ratio() for x in m.realm_names.values()),
+                     default=0.0) if r else 0.0
+            score = ns + 0.5 * rs
+            if score > best_score:
+                best, best_score = m.id, score
+        return best
 
     def sorted_entries(self):
         return sorted(self.maps.values(), key=lambda m: (m.realm.lower(), m.name.lower()))

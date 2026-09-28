@@ -46,6 +46,7 @@ DEFAULTS = {
     "log_categories": ["Erkennung", "Overlay", "System", "Fehler"],
     "ocr_threads": 2,
     "save_debug_images": False,
+    "user_aliases": {},                 # own assignments of unknown banner texts: {map_id: [text, ...]}
 }
 
 

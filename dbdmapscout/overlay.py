@@ -93,6 +93,9 @@ class Overlay:
                                font=("Segoe UI", 11, "bold"), padx=6, pady=2)
         self._timer_text = ""
         self._server_text = ""
+        self.ping = tk.Label(self.win, text="", fg="#b2b8f8", bg="#141416", anchor="center",
+                             font=("Segoe UI", 11, "bold"), padx=6, pady=1)
+        self._ping_text = ""
         self._frames = []           # raw frames
         self._photos = []           # prepared PhotoImages for the current size
         self._frame_i = 0
@@ -143,22 +146,27 @@ class Overlay:
         self.timer.configure(text=text)
         self._pack_info()
 
-    def set_server(self, text: str):
+    def set_server(self, text: str, ping: float | None = None):
         text = text or ""
-        if text == self._server_text:
+        ping_text = f"PING {ping:.0f} MS" if ping is not None and text else ""
+        if text == self._server_text and ping_text == self._ping_text:
             return
-        self._server_text = text
+        self._server_text, self._ping_text = text, ping_text
         self.server.configure(text=f"●  {text.upper()}" if text else "")
+        if ping is not None:
+            from .overlay_win32 import ping_colour
+            self.ping.configure(text=ping_text, fg="#%02x%02x%02x" % ping_colour(ping)[:3])
         self._pack_info()
 
     def _pack_info(self):
-        """Timer (big, centred) and server region below the map, in this order."""
-        self.timer.pack_forget()
-        self.server.pack_forget()
-        if self._timer_text:
-            self.timer.pack(side="top", fill="x", after=self.pic)
-        if self._server_text:
-            self.server.pack(side="top", fill="x", after=self.timer if self._timer_text else self.pic)
+        """Timer (big, centred), server region and ping below the map, in this order."""
+        last = self.pic
+        for label, shown in ((self.timer, self._timer_text), (self.server, self._server_text),
+                             (self.ping, self._ping_text)):
+            label.pack_forget()
+            if shown:
+                label.pack(side="top", fill="x", after=last)
+                last = label
 
     def set_transparent(self, on: bool):
         """Colour-key transparency around the map (off = dark rectangle behind it)."""
