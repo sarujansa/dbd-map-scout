@@ -38,6 +38,10 @@ Im Tab **Erkennung** zeigt die Zeile „Rundenende-Erkennung: …“ jederzeit, 
 
 Oben im Steuerfenster steht immer, woran das Programm gerade ist: **Wartet auf DBD**, **Wartet auf das nächste Match**, **Im Match: …**, **Im Menü – Karte pausiert** oder **Runde vorbei** (Probleme wie ein schwarzes Bild stehen dort in Rot). Technische Einzelheiten stehen im Tab Log.
 
+**Hinweistexte:** Bleibt die Maus kurz auf einem Knopf oder Häkchen, erklärt ein kleiner Text, was er tut (samt Hotkey).
+
+**Layout-Knopf:** Erscheint nur bei Maps mit mehreren Layouts (Coal Tower, Groaning Storehouse, Ironworks of Misery, Shelter Woods, Suffocation Pit, Mount Ormond Resort, Badham Preschool) und zeigt das angezeigte Layout, z. B. „Layout II von V ▸“. Ein Klick schaltet weiter. War die Erkennung beim Layout unsicher, steht „(unsicher)“ dahinter.
+
 Das Steuerfenster ist in Tabs aufgeteilt:
 
 | Tab | Inhalt |
@@ -103,7 +107,7 @@ Mit dem Häkchen **Verbundenen Spielserver anzeigen** im Tab Server zeigt das Pr
 
 **Unbekannte Map zuordnen.** Liest das Programm einen Map-Namen, den es nicht kennt (z. B. nach einem DBD-Update oder bei anderer Schreibweise), erscheint im Hauptfenster „Unbekannte Map gelesen: „…““ mit dem Knopf **Zuordnen …**. Dort die richtige Map wählen (ein Vorschlag ist vorausgewählt) – der gelesene Name wird ab sofort erkannt. Die Zuordnungen stehen in `settings.json` und bleiben bei Updates erhalten; der Realm wird weiterhin geprüft. Löschen unter **Einstellungen → Eigene Map-Zuordnungen**.
 
-Hinweis zu Varianten: Seit Patch 8.6.0 sind die II/III-Layouts (MacMillan II, Ormond II/III, Badham II–V) nur noch in Custom Games spielbar. Bei unsicherer Lesung wird deshalb leicht das Standard-Layout bevorzugt. `Strg+Alt+V` wechselt manuell.
+Hinweis zu Varianten: Seit Patch 8.6.0 sind die II/III-Layouts (MacMillan II, Ormond II/III, Badham II–V) nur noch in Custom Games spielbar. Bei unsicherer Lesung wird deshalb leicht das Standard-Layout bevorzugt. `Strg+Alt+V` oder der Layout-Knopf wechselt manuell.
 
 ### Wie gut ist die Erkennung?
 
