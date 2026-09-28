@@ -112,6 +112,7 @@ class Overlay:
         self.last_error = ""
         self._alpha = None
         self.show_caption = True
+        self.show_map = True            # off: only timer, server and ping ("nur Infos")
         self._top_job = None
         self.game_hwnd = None           # callable -> HWND of the game (for the Z-order check)
         self.raised_over_game = 0
@@ -133,7 +134,7 @@ class Overlay:
         self._frames = load_frames(path) if path else []
         self._height = 0
         self.caption.configure(text=caption)
-        if self.show_caption and caption:
+        if self.show_caption and caption and self.show_map:
             self.caption.pack(side="top", anchor="w", before=self.pic)
         else:
             self.caption.pack_forget()
@@ -160,12 +161,15 @@ class Overlay:
 
     def _pack_info(self):
         """Timer (big, centred), server region and ping below the map, in this order."""
-        last = self.pic
+        last = self.pic if self.pic.winfo_manager() else None      # info only: no picture above
         for label, shown in ((self.timer, self._timer_text), (self.server, self._server_text),
                              (self.ping, self._ping_text)):
             label.pack_forget()
             if shown:
-                label.pack(side="top", fill="x", after=last)
+                if last is not None:
+                    label.pack(side="top", fill="x", after=last)
+                else:
+                    label.pack(side="top", fill="x")
                 last = label
 
     def set_transparent(self, on: bool):
@@ -183,7 +187,20 @@ class Overlay:
 
     def map_size(self):
         """Size of the map picture as loaded (w, h) – to fit it without rendering it first."""
-        return self._frames[0][0].size if self._frames else (0, 0)
+        return self._frames[0][0].size if self._frames and self.show_map else (0, 0)
+
+    def has_info(self) -> bool:
+        return bool(self._timer_text or self._server_text)
+
+    def set_show_map(self, on: bool):
+        self.show_map = bool(on)
+        if self.show_map:
+            self.pic.pack(side="top", anchor="w")
+        else:
+            self.pic.pack_forget()
+            self.caption.pack_forget()
+        self._pack_info()
+        self._height = 0
 
     def _render(self, height: int):
         if height == self._height and self._photos:

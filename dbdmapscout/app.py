@@ -356,9 +356,11 @@ class App:
         self.timer_show_var = tk.BooleanVar(value=o.get("show_timer", True))
         self.server_show_var = tk.BooleanVar(value=o.get("show_server", True))
         self.keep_bar_var = tk.BooleanVar(value=o.get("keep_in_bar", True))
+        self.show_map_var = tk.BooleanVar(value=o.get("show_map", True))
         ttk.Checkbutton(pos, text=_("Karte im schwarzen Rand halten (Ultrawide: nie ins Spielbild ragen)"),
                         variable=self.keep_bar_var, command=self._overlay_flags_changed).pack(anchor="w", pady=(4, 0))
-        for text, var in ((N_("Nur zeigen, wenn DBD das aktive Fenster ist"), self.focus_var),
+        for text, var in ((N_("Karte anzeigen (aus: nur Timer, Ort und Ping)"), self.show_map_var),
+                          (N_("Nur zeigen, wenn DBD das aktive Fenster ist"), self.focus_var),
                           (N_("Map-Namen über der Karte anzeigen"), self.caption_var),
                           (N_("Rundentimer unter der Karte anzeigen"), self.timer_show_var),
                           (N_("Verbundenen Server unter der Karte anzeigen (Tab Server)"), self.server_show_var),
@@ -1648,6 +1650,8 @@ class App:
             reason = _("ausgeblendet")
         elif self.menu_paused and not self.overlay.editing:
             reason = _("Menü offen")
+        elif not o.get("show_map", True) and not self.overlay.has_info() and not self.overlay.editing:
+            reason = _("nichts anzuzeigen")          # info only, but no timer/server yet
         elif (o["only_when_game_focused"] and IS_WIN and not self.overlay.editing and not self.simulate
               and self.game is not None):
             fg = foreground_root()
@@ -1703,7 +1707,7 @@ class App:
         if reason == _("keine Map"):
             self._vis_state = reason
             return
-        if reason == _("Menü offen"):                     # already logged by the menu event
+        if reason in (_("Menü offen"), _("nichts anzuzeigen")):                     # already logged by the menu event
             self._vis_state = reason
             return
         state = reason or "sichtbar"
@@ -1733,6 +1737,7 @@ class App:
         self.overlay.opacity = o["opacity"]
         self.overlay.show_caption = o["show_caption"]
         self.overlay.set_transparent(o.get("transparent", True))
+        self.overlay.set_show_map(o.get("show_map", True))
 
     def _anchor_changed(self):
         rev = {_(v): k for k, v in ANCHORS}
@@ -1791,6 +1796,11 @@ class App:
         o["show_timer"] = bool(self.timer_show_var.get())
         o["show_server"] = bool(self.server_show_var.get())
         o["keep_in_bar"] = bool(self.keep_bar_var.get())
+        if bool(self.show_map_var.get()) != o.get("show_map", True):
+            o["show_map"] = bool(self.show_map_var.get())
+            self.overlay.set_show_map(o["show_map"])
+            self._log(_("Karte im Overlay eingeblendet.") if o["show_map"] else
+                      _("Karte im Overlay aus – es werden nur Timer, Ort und Ping angezeigt."), "Overlay")
         if bool(self.transp_var.get()) != o.get("transparent", True):
             o["transparent"] = bool(self.transp_var.get())
             self.overlay.set_transparent(o["transparent"])
