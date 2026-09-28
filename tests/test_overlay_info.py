@@ -66,3 +66,13 @@ def test_ping_row_below_server_and_coloured():
     green = ow.PING_COLOURS[0][:3]
     rows = with_ping.crop((0, without.height - 10, with_ping.width, with_ping.height)).convert("RGB")
     assert green in {c for _, c in rows.getcolors(1 << 20)}           # value drawn in its quality colour
+
+
+def test_program_icon(tmp_path):
+    from dbdmapscout.icon import SIZES, draw, save_ico
+    path = tmp_path / "x.ico"
+    save_ico(str(path))
+    ico = Image.open(path)
+    assert sorted(ico.info["sizes"]) == [(n, n) for n in SIZES]
+    small = draw(16)
+    assert small.size == (16, 16) and small.getpixel((8, 8))[3] == 255     # visible even at 16 px

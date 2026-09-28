@@ -50,6 +50,12 @@ class App:
 
         self.root = tk.Tk()
         self.root.title(f"DbD Map Scout {__version__}")
+        ico = os.path.join(root_dir, "dbdmapscout.ico")        # made by verknuepfung_erstellen.bat
+        if IS_WIN and os.path.exists(ico):
+            try:
+                self.root.iconbitmap(default=ico)
+            except tk.TclError:
+                pass
         self.root.minsize(470, 600)
         self.root.protocol("WM_DELETE_WINDOW", self.quit)
         self.root.report_callback_exception = self._tk_error
