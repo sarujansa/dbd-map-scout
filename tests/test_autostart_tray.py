@@ -116,3 +116,29 @@ def test_tray_without_package(monkeypatch):
     assert not t.start() and not t.active and t.error
     t.set_title("x")                                                 # harmless
     t.stop()
+
+
+# ------------------------------------------------------------------ automatic setup
+def test_setup_needed_on_first_run_move_update_or_missing_task():
+    v = au.SETUP_VERSION
+    assert au.needs_setup(None, None, ROOT, False)                       # first run
+    assert not au.needs_setup(v, ROOT, ROOT, True)                       # all in place: nothing to do
+    assert au.needs_setup(v - 1, ROOT, ROOT, True)                        # update changed the setup
+    assert au.needs_setup(v, ROOT + "-old", ROOT, True)                  # folder moved
+    assert au.needs_setup(v, ROOT, ROOT, False)                          # task removed
+
+
+def test_ensure_renews_autostart_only_if_it_was_on(monkeypatch):
+    monkeypatch.setattr(au, "IS_WIN", True)
+    calls = []
+    monkeypatch.setattr(au, "install", lambda root: calls.append("install") or (True, "ok"))
+    monkeypatch.setattr(au, "set_autostart", lambda root, on: calls.append(("autostart", on)) or (True, ""))
+    present = {au.TASK: False, au.TASK_AUTO: False}
+    monkeypatch.setattr(au, "task_exists", lambda name: present[name])
+    assert au.ensure(ROOT, None, None) == (True, "ok") and calls == ["install"]
+    present[au.TASK] = True
+    calls.clear()
+    assert au.ensure(ROOT, au.SETUP_VERSION, ROOT) is None and calls == []    # nothing to do
+    present[au.TASK_AUTO] = True
+    assert au.ensure(ROOT, au.SETUP_VERSION - 1, ROOT)[0]
+    assert calls == ["install", ("autostart", True)]                          # autostart kept, renewed
