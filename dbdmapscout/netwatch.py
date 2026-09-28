@@ -3,9 +3,11 @@
 Started by the program with administrator rights (Windows asks via UAC):
     pythonw.exe -I -S netwatch.py <control.json> <result.json>
 
-How: a Windows raw socket with SIO_RCVALL on the network interface of the
-default route. Only the IPv4/UDP headers are looked at (addresses, ports);
-packet contents are never read or stored. Nothing is sent, nothing is
+How: a Windows raw socket with SIO_RCVALL in IP-level mode on the network
+interface of the default route: only this computer's own traffic arrives,
+the network card is not switched to promiscuous mode (and there is no
+fallback to it). Only the IPv4/UDP headers are looked at (addresses,
+ports); packet contents are never read or stored. Nothing is sent, nothing is
 changed, and the game process is not touched. Once a second the busiest
 UDP partners on public addresses are written to the result file; the
 program decides which one is the game server.
@@ -30,6 +32,7 @@ STALE = 20.0             # control file not refreshed for this long -> the progr
 WINDOW = 5.0             # packet rates are averaged over this many seconds
 WRITE_EVERY = 1.0
 REBIND_EVERY = 10.0      # the default-route interface may change (VPN on/off)
+RCVALL_IPLEVEL = getattr(socket, "RCVALL_IPLEVEL", 3)   # own traffic only; RCVALL_ON (1) = promiscuous, never used
 # not a game server: DNS, NTP, QUIC/HTTP3, GameLift ping beacons, mDNS, SSDP, NetBIOS
 IGNORE_PORTS = frozenset({53, 123, 137, 138, 443, 1900, 5353, 7770})
 
@@ -133,7 +136,13 @@ def watch(control: str, result: str) -> None:
         try:
             s.bind((local, 0))
             s.setsockopt(socket.IPPROTO_IP, socket.IP_HDRINCL, 1)
-            s.ioctl(socket.SIO_RCVALL, socket.RCVALL_ON)
+            try:
+                s.ioctl(socket.SIO_RCVALL, RCVALL_IPLEVEL)
+            except PermissionError:
+                raise                                    # no administrator rights: reported as such
+            except OSError as e:
+                raise OSError(f"Windows unterstützt den Mitschnitt nur des eigenen Verkehrs (RCVALL_IPLEVEL) "
+                              f"hier nicht ({e}). Der Promiscuous-Modus wird bewusst nicht verwendet.") from e
             s.settimeout(0.5)
             next_write = next_check = 0.0
             rebind_at = time.time() + REBIND_EVERY
