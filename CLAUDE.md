@@ -10,7 +10,7 @@ Das Programm muss „regelkonform“ zu Dead by Daylight bleiben. Konkret:
 - **Kein Zugriff auf den Spielprozess** – nicht einmal `OpenProcess`, kein Speicherlesen, keine Injection, keine Modul-/Handle-Abfragen mit PID.
 - **Keine Spieldateien** lesen oder schreiben (auch nicht `GameUserSettings.ini`, Splash-Screen, Movies).
 - Erlaubt sind nur: **Bildschirmpixel** (mss/BitBlt) und – nur solange DBD im Hintergrund ist – die **Fensteraufnahme per Windows Graphics Capture** (wie OBS „Fensteraufnahme“, Bild kommt vom Windows-Compositor; `wincapture.py`, Bibliothek windows-capture **2.0.1 fest**, geprüft: importiert kein OpenProcess/GetWindowThreadProcessId/Hooks/Eingaben – bei Versionswechsel erneut prüfen; nie `PrintWindow`, das schickt Nachrichten ans Spiel), Fensterinfos (Titel, Klasse `UnrealWindow`, Position über EnumWindows), **Mauszeiger-Status** (`GetCursorInfo`, wie OBS), die **Windows-hosts-Datei** (nur Tab „Server“, nur GameLift-Namen) und **Paketköpfe des Netzwerkverkehrs** (nur Tab „Server“, Anzeige „Verbunden mit“; vom Nutzer ausdrücklich gewünscht, wie in Make Your Choice). Beim Mitschnitt: nur IPv4/UDP-Kopffelder (Adressen, Ports) lesen, **nie Paketinhalte**, nichts senden, nichts speichern außer der temporären Ergebnisdatei (Server-IP **nicht** ins Logfile, nur die Region), kein Treiber (Raw-Socket `SIO_RCVALL`), **nur Modus `RCVALL_IPLEVEL`** (eigener Verkehr; nie `RCVALL_ON`/Promiscuous, auch nicht als Rückfall), keine Zuordnung über die PID des Spiels.
-- Map-Erkennung und Overlay bauen **keine Internetverbindung** auf; nur der Server-Tab pingt AWS-GameLift (UDP 7770 / ICMP) und löst DNS auf (auch Reverse-DNS der Spielserver-Adresse). Während „Verbunden mit“ läuft, alle 5 s ein Ping an den Beacon der verbundenen Region (`gamelift-ping.<region>.api.aws`) – **nie Pakete an den Spielserver selbst**.
+- Map-Erkennung und Overlay bauen **keine Internetverbindung** auf (Ausnahme nur im Starter: `start.bat` → `update.py` holt per `git fetch` den neuen Stand von GitHub, abschaltbar, auf Wunsch des Nutzers); nur der Server-Tab pingt AWS-GameLift (UDP 7770 / ICMP) und löst DNS auf (auch Reverse-DNS der Spielserver-Adresse). Während „Verbunden mit“ läuft, alle 5 s ein Ping an den Beacon der verbundenen Region (`gamelift-ping.<region>.api.aws`) – **nie Pakete an den Spielserver selbst**.
 - Neue Features, die gegen diese Regeln verstoßen würden: nicht umsetzen, sondern nachfragen.
 
 ## Setup des Nutzers (wichtig für Tests und Schwellenwerte)
@@ -33,7 +33,9 @@ start_debug.bat           :: mit Konsole
 ```
 
 - Tests immer laufen lassen nach Änderungen an `detector.py`, `matchend.py`, `hostsedit.py`, `regions.py`, `netwatch.py`, `connwatch.py`, `roundtimer.py`, `wincapture.py`.
-- `requirements-extra.txt` (windows-capture) wird von `start.bat` einmalig mit `--no-deps` installiert (Marker `.venv\extras-1.ok`): das Paket verlangt `opencv-python`, das Projekt nutzt `opencv-python-headless` – beide zusammen zerstören `cv2`. Neue Zusatzpakete → Marker hochzählen.
+- Pakete: `update.py --deps` (von `start.bat` bei jedem Start) installiert `requirements.txt` bzw. `requirements-extra.txt` neu, sobald sich die Datei geändert hat (SHA-256 in `.venv\*.sha256`). `requirements-extra.txt` (windows-capture) immer mit `--no-deps`: das Paket verlangt `opencv-python`, das Projekt nutzt `opencv-python-headless` – beide zusammen zerstören `cv2`.
+- Update beim Start: `update.py` (nur Standardbibliothek, als Skript aufgerufen) zieht auf `main` per Fast-Forward nach – nie bei eigenen Änderungen, anderem Zweig, eigenen Commits, offline. Exit-Code 3 = aktualisiert → `start.bat` startet sich **in derselben Zeile** neu (cmd liest .bat-Dateien während der Ausführung weiter; eine geänderte `start.bat` darf nicht an alter Byte-Position weitergelesen werden). Diese Zeile nicht aufteilen. Ergebnis in `.venv\update_status.txt`, die App zeigt es im Log.
+- GitHub Actions (`.github/workflows/tests.yml`) führt pyflakes + pytest bei jedem PR unter Linux aus – PRs erst mergen, wenn der Haken grün ist.
 - Tests dürfen **niemals die echte hosts-Datei** anfassen. `hostsedit.hosts_path()` ignoriert die Test-Variable `DBDMS_HOSTS_FILE` unter Windows absichtlich (Sicherheit des Admin-Helfers) – Schreibtests laufen daher nur über `hostsedit.build()` / `apply_job` mit reinen Text-/Temp-Dateien bzw. unter Linux/CI. Nicht „reparieren“.
 - `settings.json`, `dbdmapscout.log`, `diagnose.txt`, `debug/` sind Laufzeitdateien, nicht committen.
 
@@ -55,7 +57,9 @@ start_debug.bat           :: mit Konsole
 | `regions.py` | Server-Tab: Regionstabelle (Namen), Ping (UDP-Beacon, DNS ohne hosts), `run_job()` startet Helfer per UAC |
 | `hostsedit.py` | Admin-Helfer (UAC): schreibt nur den eigenen markierten Abschnitt der hosts-Datei. Nur Standardbibliothek, gestartet mit `pythonw -I -S`. Erlaubt nur Namen aus `MANAGED` (fest codiert) |
 | `netwatch.py` | Admin-Teil „Verbunden mit“: Raw-Socket (`RCVALL_IPLEVEL`, kein Rückfall), zählt UDP-Pakete je öffentlicher Gegenstelle, schreibt jede Sekunde die aktivsten in eine Ergebnisdatei. Nur Standardbibliothek. Läuft als Thread, wenn das Programm schon Admin ist, sonst als Helfer per UAC (`pythonw -I -S`). Beendet sich, wenn die Steuerdatei fehlt, „stop“ sagt oder 20 s nicht aufgefrischt wurde |
-| `connwatch.py` | startet `netwatch`, liest die Ergebnisdatei, wählt den Spielserver (≥ 10 Pakete/s, Reverse-DNS = AWS EC2), bestimmt die Region aus dem DNS-Namen und misst den Ping zum Beacon dieser Region (Median der letzten 3, alle 5 s) |
+| `connwatch.py` | startet `netwatch`, liest die Ergebnisdatei, wählt den Spielserver (≥ 10 Pakete/s, Reverse-DNS = AWS EC2), bestimmt die Region aus dem DNS-Namen und misst den Ping zum Beacon dieser Region (Median der letzten 3, alle 5 s). `IdlePause`: läuft DBD 30 s nicht, pausiert der Mitschnitt (nur als Admin, da Neustart dann ohne UAC) und startet mit DBD neu |
+| `update.py` | Update beim Start + Paket-Abgleich (siehe „Starten, Testen“); Tests mit echten Git-Repos in `tests/test_update.py` |
+| `icon.py` | Programmsymbol, gezeichnet (kein Binärfile im Repo): `python -m dbdmapscout.icon PFAD.ico`; `verknuepfung_erstellen.bat/.ps1` erzeugt damit `dbdmapscout.ico` (gitignored) und die Desktop-Verknüpfung auf `start.bat` (minimiert, „Als Administrator“ über LinkFlags-Bit) |
 | `fullscan.py`, `hotkeys.py`, `diagnose.py`, `theme.py`, `config.py` | Vollbild-Scan, globale Hotkeys, Diagnose-Text, Dark Mode, Einstellungen (+ Migrationen, `SETTINGS_VERSION`) |
 
 ## Wichtige Designentscheidungen (nicht ohne Grund ändern)
@@ -80,7 +84,7 @@ start_debug.bat           :: mit Konsole
 
 ## Offene Ideen (vom Nutzer noch nicht entschieden)
 
-Halten-zum-Anzeigen-Taste, Etagen-Hotkey (Midwich), „Bild für unbekannte Map hinzufügen“ (Namen zuordnen gibt es seit 1.8.0, neue Karten-Bilder noch nicht), Autostart mit DBD + Tray-Icon, .exe-Build, Ausblenden im Zuschauermodus, „Match Details“ als zweite Erkennungsquelle.
+Halten-zum-Anzeigen-Taste, Etagen-Hotkey (Midwich), „Bild für unbekannte Map hinzufügen“ (Namen zuordnen gibt es seit 1.8.0, neue Karten-Bilder noch nicht), Autostart mit DBD + Tray-Icon, .exe-Build (vorerst verworfen: Updates per git pull, Virenscanner-Fehlalarme, Admin-Helfer bräuchten Umbau – Desktop-Verknüpfung reicht), Ausblenden im Zuschauermodus, „Match Details“ als zweite Erkennungsquelle.
 
 ## Arbeitsweise
 

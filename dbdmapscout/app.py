@@ -19,7 +19,7 @@ from . import __version__, regions, theme
 from .capture import IS_WIN, describe_window, find_game_window, foreground_root, is_game_window
 from .catalog import Catalog
 from .config import Settings
-from .connwatch import ConnectionWatch
+from .connwatch import ConnectionWatch, IdlePause
 from .hotkeys import HotkeyThread, parse, pretty
 from .overlay import load_frames
 from .overlay_win32 import make_overlay
@@ -50,6 +50,12 @@ class App:
 
         self.root = tk.Tk()
         self.root.title(f"DbD Map Scout {__version__}")
+        ico = os.path.join(root_dir, "dbdmapscout.ico")        # made by verknuepfung_erstellen.bat
+        if IS_WIN and os.path.exists(ico):
+            try:
+                self.root.iconbitmap(default=ico)
+            except tk.TclError:
+                pass
         self.root.minsize(470, 600)
         self.root.protocol("WM_DELETE_WINDOW", self.quit)
         self.root.report_callback_exception = self._tk_error
@@ -78,6 +84,7 @@ class App:
         self._conn_busy = False
         self._conn_next = 0.0
         self._conn_last = None
+        self._conn_idle = IdlePause()    # capture paused while DBD is not running
 
         self.overlay = make_overlay(self.root, prefer_native=self.settings["overlay"].get("native_window", True))
         self.overlay.game_hwnd = lambda: self.game.hwnd if self.game else None
@@ -96,6 +103,7 @@ class App:
         self._log(f"Bereit. {len(self.catalog.maps)} Maps geladen, Spielsprachen: "
                   f"{', '.join(self.settings['languages'])}.", "System")
         self._srv_refresh(log_summary=True)
+        self._show_update_status()
         if self.settings.get("show_connection"):
             self.root.after(1500, self._conn_start)
         if not IS_WIN and not simulate:
@@ -361,6 +369,7 @@ class App:
             self._conn_start()
         else:
             self.conn.stop()
+            self._conn_idle.reset()
             self._log("Anzeige des Spielservers beendet.", "System")
             self._conn_tick(force=True)
 
@@ -400,6 +409,13 @@ class App:
         if not force and now < self._conn_next:
             return
         self._conn_next = now + 1.0
+        if self.conn_show_var.get() and not self._conn_busy:
+            act = self._conn_idle.update(now, self.game is not None, self.conn.running, self.conn.in_process)
+            if act == "pause":
+                self.conn.stop()
+                self._log("Spielserver-Anzeige pausiert – DBD läuft nicht (startet automatisch mit DBD).", "System")
+            elif act == "resume" and not self.conn.running:
+                self._conn_start()
         was_running = self.conn.running
         self.conn.poll(now)
         if was_running and not self.conn.running and self.conn.error:
@@ -416,6 +432,8 @@ class App:
         text = self.conn.text()
         if self._conn_busy:
             text = "Warte auf Windows (Administratorrechte) …"
+        elif self._conn_idle.paused:
+            text = "pausiert, bis DBD läuft"
         self.conn_tab_var.set(f"Verbunden mit: {text}" if text and self.conn.running else text)
         show = self.settings["overlay"].get("show_server", True)
         self.overlay.set_server(regions.NAMES.get(srv["region"], srv["region"]) if srv and show else "",
@@ -647,6 +665,14 @@ class App:
         ttk.Button(r, text="Übernehmen", command=self._apply_hotkeys).pack(side="left")
         self.hk_status = tk.StringVar(value="Format: ctrl+alt+m, shift+f8, ctrl+alt+up …")
         ttk.Label(r, textvariable=self.hk_status, style="Dim.TLabel", wraplength=300).pack(side="left", padx=8)
+
+        upd = ttk.LabelFrame(f, text="Updates", padding=8)
+        upd.pack(fill="x", pady=(8, 0))
+        self.update_var = tk.BooleanVar(value=self.settings.get("auto_update", True))
+        ttk.Checkbutton(upd, text="Beim Start nach Updates suchen und installieren (GitHub)",
+                        variable=self.update_var, command=self._update_flag_changed).pack(anchor="w")
+        ttk.Label(upd, text="nur über start.bat bzw. die Desktop-Verknüpfung; eigene Änderungen werden nie "
+                            "überschrieben", style="Dim.TLabel", wraplength=400).pack(anchor="w", padx=(22, 0))
 
         own = ttk.LabelFrame(f, text="Eigene Map-Zuordnungen", padding=8)
         own.pack(fill="x", pady=(8, 0))
@@ -1248,6 +1274,24 @@ class App:
             self._tick_overlay(reschedule=False)
         self.settings.set("save_debug_images", bool(self.debug_var.get()))
         self._save_soon()
+
+    # ---------------------------------------------------------- updates (done by start.bat)
+    def _update_flag_changed(self):
+        self.settings.set("auto_update", bool(self.update_var.get()))
+        self.settings.save()                      # start.bat reads it at the next start
+
+    def _show_update_status(self):
+        """What start.bat / update.py did before this start (update installed, skipped, packages)."""
+        path = os.path.join(self.root_dir, ".venv", "update_status.txt")
+        try:
+            with open(path, encoding="utf-8") as fh:
+                text = fh.read().strip()
+            os.remove(path)
+        except OSError:
+            return
+        for line in text.splitlines():
+            if line.strip():
+                self._log(line.rstrip(), "System")
 
     # ---------------------------------------------------------- own map assignments
     def _hide_unknown(self):
