@@ -121,7 +121,7 @@ class App:
                 self.root.withdraw()
             else:
                 self.root.iconify()
-        threading.Thread(target=self._read_autostart, daemon=True, name="autostart").start()
+        threading.Thread(target=self._setup_then_read_autostart, daemon=True, name="autostart").start()
 
     # ================================================================== UI
     def _build_ui(self):
@@ -916,6 +916,8 @@ class App:
                      "quit": self.quit}.get(ev[1], lambda: None)()
                 elif isinstance(ev, tuple) and ev[0] == "autostart":
                     self._autostart_state(*ev[1:])
+                elif isinstance(ev, tuple) and ev[0] == "setup_done":
+                    self._setup_done(ev[1], ev[2])
                 elif isinstance(ev, tuple) and ev[0] == "status_log":
                     self._log(ev[1], "System")
                 elif isinstance(ev, tuple) and ev[0] == "conn_started":
@@ -1339,6 +1341,35 @@ class App:
             self.root.focus_force()
         except tk.TclError:
             pass
+
+    def _setup_then_read_autostart(self):
+        """Thread: create/renew task, icon and desktop shortcut if needed (only as administrator,
+        no prompt), then read the autostart state for the settings tab."""
+        if IS_WIN and is_admin():
+            try:
+                res = autostart.ensure(self.root_dir, self.settings.get("setup_version"),
+                                       self.settings.get("setup_root"))
+            except Exception as e:
+                res = (False, f"{type(e).__name__}: {e}")
+            if res is not None:
+                self.events.put(("setup_done", res[0], res[1]))
+        elif IS_WIN and not autostart.task_exists(autostart.TASK):
+            self.events.put(("setup_done", None, "Tipp: Einmal als Administrator starten (Rechtsklick auf start.bat → "
+                                                 "„Als Administrator ausführen“) – dann richtet das Programm die "
+                                                 "Desktop-Verknüpfung ein, die künftig ohne Windows-Abfrage startet."))
+        self._read_autostart()
+
+    def _setup_done(self, ok, msg):
+        if ok:
+            self.settings.set("setup_version", autostart.SETUP_VERSION)
+            self.settings.set("setup_root", os.path.abspath(self.root_dir))
+            self._save_soon()
+            self._log("Desktop-Verknüpfung eingerichtet/aktualisiert: startet ab jetzt ohne Windows-Abfrage.",
+                      "System")
+        elif ok is None:
+            self._log(msg, "System")
+        else:
+            self._log(f"Einrichtung der Verknüpfung fehlgeschlagen: {msg}", "Fehler")
 
     def _read_autostart(self):
         """Runs in a thread: does the logon task exist, may we change it (administrator)?"""

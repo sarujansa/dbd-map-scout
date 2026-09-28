@@ -19,6 +19,7 @@ import os
 import subprocess
 import sys
 
+SETUP_VERSION = 1           # raise when task, shortcut or icon change: the program then renews them itself
 TASK = "DbD Map Scout"
 TASK_AUTO = "DbD Map Scout (Autostart)"
 LINK_NAME = "DbD Map Scout.lnk"
@@ -107,6 +108,28 @@ def set_autostart(root: str, on: bool):
     """Create or remove the logon task (needs administrator rights). Returns (ok, message)."""
     ok, out = powershell(task_script(root, TASK_AUTO, True) if on else remove_script(TASK_AUTO))
     return ok, out
+
+
+def needs_setup(saved_version, saved_root, root: str, task_present: bool) -> bool:
+    """Should the program (running as administrator) create or renew task, icon and shortcut?
+    First run, other folder (moved), a newer setup after an update, or the task was removed.
+    A shortcut the user deleted on purpose is not brought back on every start."""
+    same_root = bool(saved_root) and os.path.normcase(os.path.abspath(saved_root)) == \
+        os.path.normcase(os.path.abspath(root))
+    return not (task_present and same_root and saved_version == SETUP_VERSION)
+
+
+def ensure(root: str, saved_version, saved_root):
+    """Called at program start when running as administrator. Returns None (nothing to do) or
+    (ok, message). Also renews the logon task if the user switched autostart on earlier."""
+    if not IS_WIN or not needs_setup(saved_version, saved_root, root, task_exists(TASK)):
+        return None
+    ok, msg = install(root)
+    if ok and task_exists(TASK_AUTO):
+        ok2, out = set_autostart(root, True)
+        if not ok2:
+            msg += f" (Autostart nicht erneuert: {out})"
+    return ok, msg
 
 
 def install(root: str):
