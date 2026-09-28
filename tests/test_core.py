@@ -138,3 +138,32 @@ def test_suggestion_for_unknown_banner():
     assert cat.suggest("GRIM PANTRI", "BACKWATER SWAMP") == "grim-pantry"
     assert cat.suggest("COAL TOWR", "THE MACMILLAN ESTATE") == "coal-tower"
     assert cat.suggest("TREATMENT THEATER", "LERY'S MEMORIAL INSTITUTE") == "treatment-theatre"
+
+
+def test_settings_backup_round_trip(tmp_path):
+    import json
+    from dbdmapscout import config
+    s = config.Settings(str(tmp_path / "settings.json"))
+    s.data["hotkeys"]["rotate_map"] = "ctrl+alt+x"
+    s.data["overlay"]["map_rotations"] = {"coal-tower": 90}
+    s.data["user_aliases"] = {"coal-tower": ["KOHLETURM"]}
+    s.data["setup_root"] = "C:/old/place"
+    backup = str(tmp_path / "backup.json")
+    config.export_settings(s.data, backup)
+    raw = json.load(open(backup, encoding="utf-8"))
+    del raw["overlay"]["show_map"]                                   # older backup without a newer key
+    json.dump(raw, open(backup, "w", encoding="utf-8"))
+    got = config.read_backup(backup, {"setup_root": "D:/new/place", "window_geometry": "800x600"})
+    assert got["hotkeys"]["rotate_map"] == "ctrl+alt+x" and got["overlay"]["map_rotations"] == {"coal-tower": 90}
+    assert got["user_aliases"] == {"coal-tower": ["KOHLETURM"]}
+    assert got["overlay"]["show_map"] is True                        # default filled in
+    assert got["setup_root"] == "D:/new/place" and got["window_geometry"] == "800x600"   # this PC's values
+    bad = tmp_path / "bad.json"
+    bad.write_text('{"foo": 1}', encoding="utf-8")
+    import pytest
+    for path in (str(bad), str(tmp_path / "missing.json")):
+        with pytest.raises(ValueError):
+            config.read_backup(path, {})
+    s.frozen = True                                                  # after an import: no writes until restart
+    s.save()
+    assert not (tmp_path / "settings.json").exists()

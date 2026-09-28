@@ -11,7 +11,7 @@ import threading
 import time
 import tkinter as tk
 import traceback
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
 
 from PIL import Image, ImageTk
 
@@ -792,6 +792,8 @@ class App:
         cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
         self.stats_var = tk.StringVar(value="")
         ttk.Label(f, textvariable=self.stats_var, style="Big.TLabel", wraplength=540).pack(anchor="w")
+        self.stats_lost_var = tk.StringVar(value="")
+        ttk.Label(f, textvariable=self.stats_lost_var, wraplength=540).pack(anchor="w")
         ttk.Label(f, text=_("Gezählt werden Runden mit automatisch erkannter Map, vom Map-Banner bis zum erkannten "
                             "Rundenende (mindestens 1 Minute). Gespeichert nur lokal in rounds.jsonl."),
                   style="Dim.TLabel", wraplength=540).pack(anchor="w", pady=(2, 6))
@@ -884,8 +886,14 @@ class App:
         self.stats_region_var.set(dict(self._stats_regions)[wanted])
         period = next((k for k, lbl in self._stats_periods if lbl == self.stats_period_var.get()), "all")
         role = next((k for k, lbl in self._stats_roles if lbl == self.stats_role_var.get()), "all")
-        rounds = history.select(all_rounds, since=history.period_start(period, time.time()), region=wanted, role=role)
+        since = history.period_start(period, time.time())
+        rounds = history.select(all_rounds, since=since, region=wanted, role=role)
         s = history.summary(rounds)
+        lost = [x for x in history.load_lost(self._hist_path()) if since is None or x[0] >= since]
+        self.stats_lost_var.set(_("⚠ Nicht gezählt: {n} × Rundenende nicht erkannt (die nächste Map kam, bevor das Ende "
+                                  "erkannt wurde). Zuletzt: {map}, {when}.", n=len(lost), map=lost[-1][1],
+                                  when=time.strftime("%d.%m.%y %H:%M", time.localtime(lost[-1][0])))
+                                if lost else "")
         if not all_rounds:
             self.stats_var.set(_("Noch keine Runden gespeichert."))
         elif not s["count"]:
@@ -1088,6 +1096,12 @@ class App:
         ttk.Button(own, text=_("Alle löschen"), command=self._clear_aliases).pack(side="right")
         self._show_aliases()
 
+        bk = ttk.LabelFrame(f, text=_("Sicherung"), padding=8)
+        bk.pack(fill="x", pady=(8, 0))
+        ttk.Button(bk, text=_("Einstellungen exportieren …"), command=self._export_settings).pack(side="left")
+        ttk.Button(bk, text=_("Einstellungen importieren …"), command=self._import_settings).pack(side="left",
+                                                                                                 padx=6)
+
         folders = ttk.LabelFrame(f, text=_("Ordner"), padding=8)
         folders.pack(fill="x", pady=(8, 0))
         ttk.Button(folders, text=_("Programmordner öffnen"), command=lambda: self._open(self.root_dir)).pack(side="left")
@@ -1096,6 +1110,52 @@ class App:
         ttk.Label(f, text=f"DbD Map Scout {__version__} · " + _("liest nur Bildschirmpixel, sendet keine Eingaben ans Spiel."),
                   style="Dim.TLabel", wraplength=430).pack(anchor="w", pady=(10, 0))
         return outer
+
+    def _export_settings(self):
+        path = filedialog.asksaveasfilename(parent=self.root, title=_("Einstellungen exportieren"),
+                                            defaultextension=".json", initialfile="dbdmapscout-einstellungen.json",
+                                            filetypes=[(_("Einstellungen"), "*.json")])
+        if not path:
+            return
+        from .config import export_settings
+        try:
+            export_settings(self.settings.data, path)
+        except OSError as e:
+            self._log(_("Export fehlgeschlagen: {error}", error=e), "Fehler")
+            return
+        self._log(_("Einstellungen gesichert: {path}", path=path), "System")
+
+    def _import_settings(self):
+        path = filedialog.askopenfilename(parent=self.root, title=_("Einstellungen importieren"),
+                                          filetypes=[(_("Einstellungen"), "*.json"), (_("Alle Dateien"), "*.*")])
+        if not path:
+            return
+        from .config import read_backup
+        try:
+            data = read_backup(path, self.settings.data)
+        except ValueError as e:
+            messagebox.showerror(_("Einstellungen importieren"),
+                                 _("Das ist keine Einstellungsdatei von DbD Map Scout ({error}).", error=e),
+                                 parent=self.root)
+            return
+        if not messagebox.askokcancel(_("Einstellungen importieren"),
+                                      _("Alle Einstellungen durch die aus der Datei ersetzen? Das Programm startet "
+                                        "danach neu."), parent=self.root):
+            return
+        self.settings.data = data
+        self.settings.save()
+        self.settings.frozen = True                 # the running program must not write its old values back
+        self._log(_("Einstellungen importiert aus {path}.", path=path), "System")
+        from . import restart
+        try:
+            ok = restart.spawn_helper(self.root_dir)
+        except OSError:
+            ok = False
+        if ok:
+            self.quit()
+        else:
+            messagebox.showinfo(_("Einstellungen importieren"), _("Bitte das Programm jetzt neu starten."),
+                                parent=self.root)
 
     def _notify_flags_changed(self):
         for key, v in self.notify_vars.items():
@@ -1589,6 +1649,14 @@ class App:
         (its length would be wrong)."""
         m = self.catalog.maps.get(map_id)
         now = time.time()
+        old = self._hist
+        if old is not None and history.should_record(now - old["t"]):
+            try:                                     # its end was never detected: note it, do not count it
+                history.append_lost(self._hist_path(), old["t"], old["map"], "banner")
+                self._log(_("Runde auf {map} nicht gezählt: ihr Ende wurde nicht erkannt.", map=old["map"]),
+                          "Erkennung")
+            except OSError:
+                pass
         self._hist = {"t": now, "map_id": map_id, "map": m.label(variant) if m else map_id,
                       "region": "", "source": source}
         f = self._queue.get("found")                  # the lobby this match came from (once, max. 15 min old)

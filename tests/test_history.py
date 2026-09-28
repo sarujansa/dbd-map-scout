@@ -125,3 +125,20 @@ def test_ping_per_round_and_region(tmp_path):
     rs = h.load(p)
     assert [r.ping for r in rs] == [20.0, 30.0, None]
     assert h.ping_by_region(rs) == {"eu-central-1": 25.0}
+
+
+def test_lost_rounds_are_kept_apart(tmp_path, monkeypatch):
+    p = str(tmp_path / h.FILE)
+    h.append(p, rnd("Coal Tower", 600, 1.0))
+    h.append_lost(p, 2.0, "Badham Preschool I", "banner")
+    h.append(p, rnd("Hawkins", 700, 3.0))
+    h.append_lost(p, 4.0, "Ormond", "quit")
+    assert [r.map for r in h.load(p)] == ["Coal Tower", "Hawkins"]            # not counted as rounds
+    assert h.load_lost(p) == [(2.0, "Badham Preschool I", "banner"), (4.0, "Ormond", "quit")]
+    h.set_role(p, 1.0, "killer")                                               # rewriting keeps them
+    assert len(h.load_lost(p)) == 2 and h.load(p)[0].role == "killer"
+    monkeypatch.setattr(h, "KEEP", 1)                                          # tidy: old lost lines go too
+    import os
+    monkeypatch.setattr(os.path, "getsize", lambda _p: 10 ** 9)
+    h._tidy(p)
+    assert [r.map for r in h.load(p)] == ["Hawkins"] and h.load_lost(p) == [(4.0, "Ormond", "quit")]

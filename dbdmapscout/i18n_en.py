@@ -118,6 +118,33 @@ EN = {
     "Wartezeit in der Lobby": "Waiting time in the lobby",
     "Rolle der markierten Runde:": "Role of the selected round:",
     "Benachrichtigungen": "Notifications",
+    "⚠ Nicht gezählt: {n} × Rundenende nicht erkannt (die nächste Map kam, bevor das Ende erkannt wurde). "
+    "Zuletzt: {map}, {when}.":
+        "⚠ Not counted: {n} × end of round not detected (the next map came before the end was detected). "
+        "Last: {map}, {when}.",
+    "Runde auf {map} nicht gezählt: ihr Ende wurde nicht erkannt.":
+        "Round on {map} not counted: its end was not detected.",
+    "Sicherung": "Backup",
+    "Einstellungen exportieren …": "Export settings …",
+    "Einstellungen importieren …": "Import settings …",
+    "Einstellungen exportieren": "Export settings",
+    "Einstellungen importieren": "Import settings",
+    "Export fehlgeschlagen: {error}": "Export failed: {error}",
+    "Einstellungen gesichert: {path}": "Settings saved: {path}",
+    "Das ist keine Einstellungsdatei von DbD Map Scout ({error}).":
+        "This is not a DbD Map Scout settings file ({error}).",
+    "Alle Einstellungen durch die aus der Datei ersetzen? Das Programm startet danach neu.":
+        "Replace all settings with the ones from the file? The program restarts afterwards.",
+    "Einstellungen importiert aus {path}.": "Settings imported from {path}.",
+    "Bitte das Programm jetzt neu starten.": "Please restart the program now.",
+    "Speichert alle Einstellungen in eine Datei: Hotkeys, Grösse und Drehung pro Map, eigene Map-Zuordnungen, "
+    "Overlay, Regionen … Die Statistik (rounds.jsonl) gehört nicht dazu.":
+        "Saves all settings to a file: hotkeys, size and rotation per map, own map assignments, overlay, "
+        "regions … The statistics (rounds.jsonl) are not part of it.",
+    "Lädt eine exportierte Einstellungsdatei und startet das Programm neu. Fehlende Werte (ältere Sicherung) "
+    "bekommen ihren Standard.":
+        "Loads an exported settings file and restarts the program. Missing values (older backup) get their "
+        "default.",
     "Ton und Meldung, wenn eine Lobby gefunden wurde": "Sound and notification when a lobby was found",
     "Erinnern, wenn der Lobby-Countdown abläuft und READY noch nicht gedrückt ist":
         "Remind me when the lobby countdown runs out and READY is not pressed yet",
