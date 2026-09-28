@@ -46,16 +46,27 @@ if IS_WIN:
     SWP_NOSIZE, SWP_NOMOVE, SWP_NOACTIVATE, SWP_FRAMECHANGED = 0x1, 0x2, 0x10, 0x20
 
 
+MAX_LOAD_H = 1440          # the overlay is never taller than the screen (0.9 × 1440): bigger pictures shrink on load
+
+
+def _fit(img: Image.Image) -> Image.Image:
+    if img.height <= MAX_LOAD_H:
+        return img
+    # BOX: fast and clean for this step; the overlay scales down again with LANCZOS anyway
+    return img.resize((max(1, round(img.width * MAX_LOAD_H / img.height)), MAX_LOAD_H), Image.BOX)
+
+
 def load_frames(path: str, rotation: int = 0):
-    """[(PIL RGBA image, duration ms)] – several for animated GIFs; ``rotation``: map turned clockwise (°)."""
+    """[(PIL RGBA image, duration ms)] – several for animated GIFs; ``rotation``: map turned clockwise (°).
+    Pictures taller than MAX_LOAD_H are scaled down (Midwich: 6 × 2000² px = 96 MB otherwise)."""
     im = Image.open(path)
     frames = []
     if getattr(im, "is_animated", False):
         for fr in ImageSequence.Iterator(im):
             d = fr.info.get("duration", 100) or 100
-            frames.append((fr.convert("RGBA"), max(40, int(d))))
+            frames.append((_fit(fr.convert("RGBA")), max(40, int(d))))
     else:
-        frames.append((im.convert("RGBA"), 0))
+        frames.append((_fit(im.convert("RGBA")), 0))
     return rotate_frames(frames, rotation)
 
 
