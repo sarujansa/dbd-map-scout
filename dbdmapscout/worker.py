@@ -23,6 +23,8 @@ log = logging.getLogger("dbdmapscout")
 END_CHECK_INTERVAL = 0.5          # seconds between two looks for result screen / lobby / loading screen
 IN_MATCH_RATE = 1.0               # scans per second while a detected map is being played (banner only at the start)
 LOBBY_INTERVAL = 1.0              # seconds between two looks at the lobby button (never during a match)
+LOBBY_RATE = 1.0                  # banner scans per second while the lobby button is on screen: the banner
+LOBBY_HOLD = 3.0                  # only comes after the loading screen; full rate again 3 s after the button went
 
 
 @dataclass
@@ -91,6 +93,7 @@ class DetectionWorker(threading.Thread):
         out_of_match = OutOfMatchWatcher(rec)
         lobby_reader = LobbyReader(rec)
         last_lobby = 0.0
+        lobby_button_t = -1e9             # last look that saw PLAY / CANCEL / READY
         source = ImageSource(self.simulate) if self.simulate else None
         grabber = None if source else ScreenGrabber()
         from .wincapture import CapturePolicy, WindowCapture, describe
@@ -251,6 +254,8 @@ class DetectionWorker(threading.Thread):
                     if source is None and via["screen"] and self.overlay_rect:
                         self._mask_overlay(corner, origin[0] + cb[0], origin[1] + cb[1])
                     view = lobby_reader.read(corner, fw, fh)
+                    if view.button is not None:
+                        lobby_button_t = tick
                     self.lobby_info = (f"{view.button or '–'} ({'–' if view.fit is None else f'{view.fit:.1f}'}) "
                                        f"„{view.name}“ „{view.time_text}“ → {view.kind or '–'}")
                     for ev in self.queue.update(view, tick):
@@ -343,6 +348,8 @@ class DetectionWorker(threading.Thread):
                 rate = min(rate, IN_MATCH_RATE)          # in the match: save CPU for the game
                 if watching and "Scan/s" not in self.watch_status:
                     self.watch_status += f" · {IN_MATCH_RATE:.0f} Scan/s"
+            elif not session and tick - lobby_button_t < LOBBY_HOLD:
+                rate = min(rate, LOBBY_RATE)             # in the lobby / queue: no banner possible yet
             try:
                 cmd = self.commands.get(timeout=max(0.02, 1.0 / rate - (time.time() - tick)))
                 self.commands.put(cmd)          # handled at the top of the next loop

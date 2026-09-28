@@ -28,6 +28,11 @@ TIPS = {
         "Noch einmal melden, wenn der Countdown der Lobby unter 15 s fällt und du READY nicht gedrückt hast.",
     "Nur wenn DBD nicht das aktive Fenster ist":
         "Keine Meldung, solange DBD im Vordergrund ist – dann siehst du die Lobby ja selbst.",
+    "Einstellungen exportieren …": "Speichert alle Einstellungen in eine Datei: Hotkeys, Grösse und Drehung pro Map, "
+                                   "eigene Map-Zuordnungen, Overlay, Regionen … Die Statistik (rounds.jsonl) gehört "
+                                   "nicht dazu.",
+    "Einstellungen importieren …": "Lädt eine exportierte Einstellungsdatei und startet das Programm neu. Fehlende "
+                                   "Werte (ältere Sicherung) bekommen ihren Standard.",
     "Meldung testen": "Zeigt die Meldung und spielt den Ton – so siehst du, wo sie erscheint.",
     "Killer": "Diese Runde als Killer-Runde zählen (falls die Erkennung falsch lag).",
     "Survivor": "Diese Runde als Survivor-Runde zählen (falls die Erkennung falsch lag).",
