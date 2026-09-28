@@ -5,6 +5,8 @@ import ctypes
 import sys
 import threading
 
+from .i18n import _
+
 IS_WIN = sys.platform == "win32"
 
 MODS = {"alt": 0x0001, "ctrl": 0x0002, "control": 0x0002, "strg": 0x0002,
@@ -84,20 +86,21 @@ def combo_from_keys(mods, keysym: str, keycode=None):
     else:
         key = _TK_KEYS.get(ks) or _key_from_vk(keycode)   # e.g. Shift+1 gives keysym "exclam"
     if key is None:
-        return None, f"Taste „{ks}“ geht nicht als Hotkey"
+        return None, _("Taste „{key}“ geht nicht als Hotkey", key=ks)
     order = [m for m in ("ctrl", "alt", "shift") if m in mods]
     is_f = key.startswith("f") and key[1:].isdigit()
     if not order and not (is_f and int(key[1:]) >= 13):
-        return None, "Bitte mit Strg und/oder Alt kombinieren"
+        return None, _("Bitte mit Strg und/oder Alt kombinieren")
     if not is_f and not ({"ctrl", "alt"} & set(order)):
-        return None, "Bitte mit Strg und/oder Alt kombinieren"
+        return None, _("Bitte mit Strg und/oder Alt kombinieren")
     combo = "+".join(order + [key])
     parse(combo)                                          # must be registrable
     return combo, None
 
 
 def pretty(combo: str) -> str:
-    names = {"ctrl": "Strg", "control": "Strg", "strg": "Strg", "alt": "Alt", "shift": "Shift", "win": "Win",
+    ctrl = _("Strg")
+    names = {"ctrl": ctrl, "control": ctrl, "strg": ctrl, "alt": "Alt", "shift": "Shift", "win": "Win",
              "left": "←", "right": "→", "up": "↑", "down": "↓"}
     return "+".join(names.get(p.lower(), p.upper()) for p in combo.split("+"))
 
@@ -137,7 +140,7 @@ class HotkeyThread(threading.Thread):
             if user32.RegisterHotKey(None, i, mods | MOD_NOREPEAT, vk):
                 ids[i] = name
             else:
-                self.failed.append((name, combo, "schon von einem anderen Programm belegt"))
+                self.failed.append((name, combo, _("schon von einem anderen Programm belegt")))
         self.ready.set()
         msg = wintypes.MSG()
         while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:

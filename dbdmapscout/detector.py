@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 import cv2
 import numpy as np
 
+from .i18n import N_
 from .ocr import LexiconScorer, Recognizer, best_path_logp
 
 # Part of the game frame that is captured for detection (fractions of w/h).
@@ -599,15 +600,15 @@ class OutOfMatchWatcher:
         ob.full_width = full = fills_bars(frame)
         ob.continue_fit, ob.continue_text = self._continue_fit(_right_region(frame, 0.78, 0.86, 0.99, full), H)
         if ob.continue_fit is not None and ob.continue_fit >= self.CONTINUE_OK:
-            ob.reason, ob.sure = "Ergebnisbildschirm", ob.continue_fit >= self.CONTINUE_SURE
+            ob.reason, ob.sure = N_("Ergebnisbildschirm"), ob.continue_fit >= self.CONTINUE_SURE
         ob.currency_groups, ob.currency_digits, ob.currency_text = self._currency(
             _right_region(frame, 0.62, 0.0, 0.12, full), H)
         if ob.reason is None and ob.currency_groups >= 2 and ob.currency_digits >= 6:
-            ob.reason = "Lobby/Menü"
+            ob.reason = N_("Lobby/Menü")
         ob.static = self._still(frame)
         ob.loading = has_loading_bar(frame)
         if ob.reason is None and ob.loading and ob.static:
-            ob.reason = "Ladebildschirm"
+            ob.reason = N_("Ladebildschirm")
         ob.ms = (time.perf_counter() - t0) * 1000
         return ob
 

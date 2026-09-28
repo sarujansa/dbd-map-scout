@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import logging
 
+from .i18n import _
+
 log = logging.getLogger("dbdmapscout")
 
 
@@ -28,10 +30,10 @@ class Tray:
             self.error = f"{type(e).__name__}: {e}"
             return False
         menu = pystray.Menu(
-            pystray.MenuItem("Fenster öffnen", lambda icon, item: self._post("open"), default=True),
-            pystray.MenuItem("Overlay ein/aus", lambda icon, item: self._post("toggle")),
+            pystray.MenuItem(_("Fenster öffnen"), lambda icon, item: self._post("open"), default=True),
+            pystray.MenuItem(_("Overlay ein/aus"), lambda icon, item: self._post("toggle")),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Beenden", lambda icon, item: self._post("quit")),
+            pystray.MenuItem(_("Beenden"), lambda icon, item: self._post("quit")),
         )
         try:
             self._icon = pystray.Icon("dbdmapscout", draw(64), "DbD Map Scout", menu)

@@ -26,28 +26,30 @@ import tempfile
 import time
 
 from . import hostsedit
+from .i18n import N_, _
 
 IS_WIN = sys.platform == "win32"
 
 # code, display name, group
 REGIONS = [
-    ("eu-central-1", "Frankfurt", "Europa"),
-    ("eu-west-1", "Irland", "Europa"),
-    ("eu-west-2", "London", "Europa"),
-    ("us-east-1", "USA Ost (N. Virginia)", "Amerika"),
-    ("us-east-2", "USA Ost (Ohio)", "Amerika"),
-    ("us-west-1", "USA West (N. Kalifornien)", "Amerika"),
-    ("us-west-2", "USA West (Oregon)", "Amerika"),
-    ("ca-central-1", "Kanada (Zentral)", "Amerika"),
-    ("sa-east-1", "Südamerika (São Paulo)", "Amerika"),
-    ("ap-northeast-1", "Tokio", "Asien"),
-    ("ap-northeast-2", "Seoul", "Asien"),
-    ("ap-south-1", "Mumbai", "Asien"),
-    ("ap-southeast-1", "Singapur", "Asien"),
-    ("ap-east-1", "Hongkong", "Asien"),
-    ("ap-southeast-2", "Sydney", "Ozeanien"),
-]
-GROUPS = ["Europa", "Amerika", "Asien", "Ozeanien"]
+    ("eu-central-1", N_("Frankfurt"), N_("Europa")),
+    ("eu-west-1", N_("Irland"), N_("Europa")),
+    ("eu-west-2", N_("London"), N_("Europa")),
+    ("us-east-1", N_("USA Ost (N. Virginia)"), N_("Amerika")),
+    ("us-east-2", N_("USA Ost (Ohio)"), N_("Amerika")),
+    ("us-west-1", N_("USA West (N. Kalifornien)"), N_("Amerika")),
+    ("us-west-2", N_("USA West (Oregon)"), N_("Amerika")),
+    ("ca-central-1", N_("Kanada (Zentral)"), N_("Amerika")),
+    ("sa-east-1", N_("Südamerika (São Paulo)"), N_("Amerika")),
+    ("ap-northeast-1", N_("Tokio"), N_("Asien")),
+    ("ap-northeast-2", N_("Seoul"), N_("Asien")),
+    ("ap-south-1", N_("Mumbai"), N_("Asien")),
+    ("ap-southeast-1", N_("Singapur"), N_("Asien")),
+    ("ap-east-1", N_("Hongkong"), N_("Asien")),
+    ("ap-southeast-2", N_("Sydney"), N_("Ozeanien")),
+]                                         # names and groups are keys, shown with _()
+GROUPS = [N_("Europa"), N_("Amerika"), N_("Asien"), N_("Ozeanien")]
+STATES = [N_("frei"), N_("gesperrt"), N_("gesperrt (fremd)"), N_("umgeleitet (fremd)")]   # hosts state, shown with _()
 NAMES = {c: n for c, n, _ in REGIONS}
 BEACON_PORT = 7770
 
@@ -186,7 +188,7 @@ def measure(code: str, samples: int = 3) -> dict:
     ping_host = hosts_for(code)[1]
     ips = resolve(ping_host)
     if not ips:
-        return {"ms": None, "how": "", "ip": "", "error": "Name nicht auflösbar"}
+        return {"ms": None, "how": "", "ip": "", "error": _("Name nicht auflösbar")}
     ip = ips[0]
     times = []
     for i in range(samples):
@@ -245,7 +247,7 @@ def run_job(job: dict, hwnd: int | None = None, timeout: float = 90.0) -> dict:
         except (OSError, ValueError):
             if exit_code == 0:                      # result not readable, but the helper said "ok"
                 return {"ok": True, "changed": True}
-            return {"ok": False, "error": f"Das Hilfsprogramm hat kein Ergebnis geliefert (Code {exit_code})."}
+            return {"ok": False, "error": _("Das Hilfsprogramm hat kein Ergebnis geliefert (Code {code}).", code=exit_code)}
     finally:
         for f in (job_f, res_f):
             try:
@@ -272,7 +274,7 @@ def _run_elevated(script, job_f, res_f, timeout, hwnd=None):
     code = None
     try:
         if k32.WaitForSingleObject(proc, int(timeout * 1000)) != 0:
-            return {"ok": False, "error": "Zeitüberschreitung beim Schreiben der hosts-Datei."}, None
+            return {"ok": False, "error": _("Zeitüberschreitung beim Schreiben der hosts-Datei.")}, None
         code = exit_code(proc)
     finally:
         k32.CloseHandle(proc)
@@ -328,10 +330,10 @@ def start_elevated(script, args, hwnd=None):
     if not shell.ShellExecuteExW(ctypes.byref(sei)):
         err = ctypes.get_last_error()
         if err == 1223:                             # ERROR_CANCELLED: user said no to UAC
-            return None, {"ok": False, "cancelled": True, "error": "Abgebrochen (keine Administratorrechte erteilt)."}
-        return None, {"ok": False, "error": f"Start mit Administratorrechten fehlgeschlagen (Fehler {err})."}
+            return None, {"ok": False, "cancelled": True, "error": _("Abgebrochen (keine Administratorrechte erteilt).")}
+        return None, {"ok": False, "error": _("Start mit Administratorrechten fehlgeschlagen (Fehler {code}).", code=err)}
     if not sei.hProcess:
-        return None, {"ok": False, "error": "Hilfsprogramm nicht gestartet."}
+        return None, {"ok": False, "error": _("Hilfsprogramm nicht gestartet.")}
     return sei.hProcess, None
 
 

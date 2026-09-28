@@ -15,12 +15,13 @@ from tkinter import messagebox, ttk
 
 from PIL import Image, ImageTk
 
-from . import __version__, layout, regions, theme, tooltip
+from . import __version__, i18n, layout, regions, theme, tooltip
 from .capture import IS_WIN, describe_window, find_game_window, foreground_root, is_game_window
 from .catalog import Catalog
 from .config import Settings
 from . import autostart
 from .connwatch import ConnectionWatch, IdlePause, is_admin
+from .i18n import N_, _
 from .hotkeys import HotkeyThread, combo_from_keys, modifier_name, pretty
 from .overlay import load_frames
 from .overlay_win32 import make_overlay
@@ -31,12 +32,17 @@ from .worker import DetectionWorker
 
 LANGS = [("en", "EN"), ("de", "DE"), ("fr", "FR"), ("es", "ES"), ("es-MX", "ES-MX"), ("it", "IT"),
          ("pl", "PL"), ("pt-BR", "PT"), ("tr", "TR")]
-ANCHORS = [("auto", "automatisch"), ("top-left", "oben links"), ("top-right", "oben rechts"),
-           ("bottom-left", "unten links"), ("bottom-right", "unten rechts"), ("custom", "eigene Position")]
-HOTKEY_LABELS = [("toggle_overlay", "Overlay ein/aus"), ("next_variant", "Layout-Variante"),
-                 ("scan_now", "Bildschirm scannen"), ("prev_map", "Vorherige Map"), ("next_map", "Nächste Map"),
-                 ("bigger", "Grösser"), ("smaller", "Kleiner"), ("edit_position", "Mit Maus verschieben")]
-CATS = ["Erkennung", "Overlay", "System", "Fehler"]
+ANCHORS = [("auto", N_("automatisch")), ("top-left", N_("oben links")), ("top-right", N_("oben rechts")),
+           ("bottom-left", N_("unten links")), ("bottom-right", N_("unten rechts")), ("custom", N_("eigene Position"))]
+HOTKEY_LABELS = [("toggle_overlay", N_("Overlay ein/aus")), ("next_variant", N_("Layout-Variante")),
+                 ("scan_now", N_("Bildschirm scannen")), ("prev_map", N_("Vorherige Map")),
+                 ("next_map", N_("Nächste Map")), ("bigger", N_("Grösser")), ("smaller", N_("Kleiner")),
+                 ("edit_position", N_("Mit Maus verschieben"))]
+CATS = [N_("Erkennung"), N_("Overlay"), N_("System"), N_("Fehler")]      # log categories (keys; shown translated)
+
+
+def anchor_label(key: str) -> str:
+    return _(dict(ANCHORS).get(key, "automatisch"))
 
 log = logging.getLogger("dbdmapscout")
 
@@ -46,6 +52,7 @@ class App:
         self.root_dir = root_dir
         self.simulate = simulate
         self.settings = Settings(os.path.join(root_dir, "settings.json"))
+        i18n.set_language(self.settings.get("ui_language", "auto"))
         self.catalog = Catalog(root_dir, self.settings["languages"], self.settings.get("user_aliases"))
         self._unknown = None             # (name text, realm text) of the last banner that matched no map
         self.events: queue.Queue = queue.Queue()
@@ -102,14 +109,14 @@ class App:
         self.hotkeys = self._start_hotkeys()
         self.root.after(50, self._poll)
         self.root.after(250, self._tick_overlay)
-        self._log(f"Bereit. {len(self.catalog.maps)} Maps geladen, Spielsprachen: "
-                  f"{', '.join(self.settings['languages'])}.", "System")
+        self._log(_("Bereit. {n} Maps geladen, Spielsprachen: {langs}.", n=len(self.catalog.maps),
+                    langs=", ".join(self.settings["languages"])), "System")
         self._srv_refresh(log_summary=True)
         self._show_update_status()
         if self.settings.get("show_connection"):
             self.root.after(1500, self._conn_start)
         if not IS_WIN and not simulate:
-            self._log("Kein Windows: Fenstersuche, Hotkeys und Click-Through sind nur unter Windows aktiv.", "System")
+            self._log(_("Kein Windows: Fenstersuche, Hotkeys und Click-Through sind nur unter Windows aktiv."), "System")
 
         # notification area icon; "minimise" hides the window there
         from .tray import Tray
@@ -132,7 +139,7 @@ class App:
         head.pack(fill="x", padx=10, pady=(8, 2))
         self.dot = ttk.Label(head, text="●", style="DotWarn.TLabel")
         self.dot.pack(side="left")
-        self.status_var = tk.StringVar(value="Starte …")
+        self.status_var = tk.StringVar(value=_("Starte …"))
         self._worker_status = ""
         ttk.Label(head, textvariable=self.status_var, wraplength=430).pack(side="left", padx=(4, 0))
 
@@ -142,9 +149,9 @@ class App:
         self.thumb_label.pack(side="left", padx=(0, 10))
         info = ttk.Frame(card)
         info.pack(side="left", fill="x", expand=True)
-        self.map_var = tk.StringVar(value="Noch keine Map")
+        self.map_var = tk.StringVar(value=_("Noch keine Map"))
         self.realm_var = tk.StringVar(value="")
-        self.detail_var = tk.StringVar(value="Wird beim Match-Start automatisch erkannt.")
+        self.detail_var = tk.StringVar(value=_("Wird beim Match-Start automatisch erkannt."))
         ttk.Label(info, textvariable=self.map_var, style="Big.TLabel").pack(anchor="w")
         ttk.Label(info, textvariable=self.realm_var).pack(anchor="w")
         ttk.Label(info, textvariable=self.detail_var, style="Dim.TLabel", wraplength=320).pack(anchor="w")
@@ -155,23 +162,23 @@ class App:
 
         btns = ttk.Frame(self.root)
         btns.pack(fill="x", padx=10, pady=(2, 6))
-        self.toggle_btn = ttk.Button(btns, text="Overlay ausblenden", command=self.toggle_overlay)
+        self.toggle_btn = ttk.Button(btns, text=_("Overlay ausblenden"), command=self.toggle_overlay)
         self.toggle_btn.pack(side="left")
         # only shown for maps with several layouts (7 of 45), labelled with the one on display
         self.layout_btn = ttk.Button(btns, text="Layout ▸", command=self.next_variant)
         self._layout_unsure = False
-        self.scan_btn = ttk.Button(btns, text="Scannen", command=self.scan_now)
+        self.scan_btn = ttk.Button(btns, text=_("Scannen"), command=self.scan_now)
         self.scan_btn.pack(side="left", padx=(4, 0))
-        self.test_btn = ttk.Button(btns, text="Overlay testen", command=self.test_overlay)
+        self.test_btn = ttk.Button(btns, text=_("Overlay testen"), command=self.test_overlay)
         self.test_btn.pack(side="left", padx=4)
 
         # shown when a banner matched no map: assign the read name to a map with one click
         self.unknown_bar = ttk.Frame(self.root)
         self.unknown_var = tk.StringVar(value="")
         ttk.Button(self.unknown_bar, text="✕", width=3, command=self._hide_unknown).pack(side="right")
-        ttk.Button(self.unknown_bar, text="Bild hinzufügen …",
+        ttk.Button(self.unknown_bar, text=_("Bild hinzufügen …"),
                    command=lambda: self.add_picture(from_unknown=True)).pack(side="right")
-        ttk.Button(self.unknown_bar, text="Zuordnen …", command=self.assign_unknown).pack(side="right", padx=4)
+        ttk.Button(self.unknown_bar, text=_("Zuordnen …"), command=self.assign_unknown).pack(side="right", padx=4)
         ttk.Label(self.unknown_bar, textvariable=self.unknown_var, wraplength=300).pack(side="left", fill="x")
 
         # ------------------------------------------------------- tab menu
@@ -184,11 +191,11 @@ class App:
         self.tab_log = self._tab_log()
         self.tab_settings = self._tab_settings()
         self.nb.add(self.tab_maps, text="Maps")
-        self.nb.add(self.tab_overlay, text="Overlay")
-        self.nb.add(self.tab_detect, text="Erkennung")
-        self.nb.add(self.tab_server, text="Server")
+        self.nb.add(self.tab_overlay, text=_("Overlay"))
+        self.nb.add(self.tab_detect, text=_("Erkennung"))
+        self.nb.add(self.tab_server, text=_("Server"))
         self.nb.add(self.tab_log, text="Log")
-        self.nb.add(self.tab_settings, text="Einstellungen")
+        self.nb.add(self.tab_settings, text=_("Einstellungen"))
         self.nb.bind("<<NotebookTabChanged>>", lambda e: self._tab_changed())
 
         self._apply_theme()
@@ -199,7 +206,7 @@ class App:
         f = ttk.Frame(self.nb, padding=8)
         srow = ttk.Frame(f)
         srow.pack(fill="x", pady=(0, 6))
-        ttk.Label(srow, text="Suche").pack(side="left")
+        ttk.Label(srow, text=_("Suche")).pack(side="left")
         self.search_var = tk.StringVar()
         self.search_var.trace_add("write", lambda *_: self._fill_list())
         entry = ttk.Entry(srow, textvariable=self.search_var)
@@ -214,12 +221,12 @@ class App:
         sb.pack(side="right", fill="y")
         self.tree.bind("<Double-1>", lambda e: self._pick_selected())
         self.tree.bind("<Return>", lambda e: self._pick_selected())
-        ttk.Label(f, text="Doppelklick zeigt die Map. Die Erkennung übernimmt beim nächsten Match wieder.",
+        ttk.Label(f, text=_("Doppelklick zeigt die Map. Die Erkennung übernimmt beim nächsten Match wieder."),
                   style="Dim.TLabel", wraplength=420).pack(anchor="w", pady=(6, 0))
         prow = ttk.Frame(f)
         prow.pack(fill="x", pady=(6, 0))
-        ttk.Button(prow, text="Kartenbild hinzufügen …", command=self.add_picture).pack(side="left")
-        ttk.Label(prow, text="eigenes Bild für eine Map (Hintergrund wird entfernt)", style="Dim.TLabel").pack(
+        ttk.Button(prow, text=_("Kartenbild hinzufügen …"), command=self.add_picture).pack(side="left")
+        ttk.Label(prow, text=_("eigenes Bild für eine Map (Hintergrund wird entfernt)"), style="Dim.TLabel").pack(
             side="left", padx=8)
         self._fill_list()
         return f
@@ -228,7 +235,7 @@ class App:
     def _slider(self, parent, label, var, lo, hi, cmd, fmt="{:.0f} %"):
         row = ttk.Frame(parent)
         row.pack(fill="x", pady=3)
-        ttk.Label(row, text=label, width=11).pack(side="left")
+        ttk.Label(row, text=label, width=12).pack(side="left")
         val = ttk.Label(row, text=fmt.format(var.get()), width=6, anchor="e")
         val.pack(side="right")
 
@@ -242,67 +249,67 @@ class App:
     def _tab_overlay(self):
         f = ttk.Frame(self.nb, padding=8)
         o = self.settings["overlay"]
-        pos = ttk.LabelFrame(f, text="Position", padding=8)
+        pos = ttk.LabelFrame(f, text=_("Position"), padding=8)
         pos.pack(fill="x")
         r = ttk.Frame(pos)
         r.pack(fill="x", pady=(0, 4))
-        ttk.Label(r, text="Vorgabe", width=11).pack(side="left")
-        self.anchor_var = tk.StringVar(value=dict(ANCHORS).get(o["anchor"], "automatisch"))
-        cb = ttk.Combobox(r, textvariable=self.anchor_var, values=[a[1] for a in ANCHORS], state="readonly", width=16)
+        ttk.Label(r, text=_("Vorgabe"), width=12).pack(side="left")
+        self.anchor_var = tk.StringVar(value=anchor_label(o["anchor"]))
+        cb = ttk.Combobox(r, textvariable=self.anchor_var, values=[_(a[1]) for a in ANCHORS], state="readonly", width=16)
         cb.pack(side="left", padx=6)
         cb.bind("<<ComboboxSelected>>", lambda e: self._anchor_changed())
-        ttk.Button(r, text="Zurücksetzen", command=self._reset_position).pack(side="right")
+        ttk.Button(r, text=_("Zurücksetzen"), command=self._reset_position).pack(side="right")
         self.posx_var = tk.DoubleVar(value=o.get("pos_x", 0.0) * 100)
         self.posy_var = tk.DoubleVar(value=o.get("pos_y", 0.0) * 100)
-        self.posx_label = self._slider(pos, "Horizontal", self.posx_var, 0, 100, self._pos_changed)
-        self.posy_label = self._slider(pos, "Vertikal", self.posy_var, 0, 100, self._pos_changed)
+        self.posx_label = self._slider(pos, _("Horizontal"), self.posx_var, 0, 100, self._pos_changed)
+        self.posy_label = self._slider(pos, _("Vertikal"), self.posy_var, 0, 100, self._pos_changed)
         r2 = ttk.Frame(pos)
         r2.pack(fill="x", pady=(4, 0))
-        self.edit_btn = ttk.Button(r2, text="Mit der Maus verschieben", command=self.toggle_edit)
+        self.edit_btn = ttk.Button(r2, text=_("Mit der Maus verschieben"), command=self.toggle_edit)
         self.edit_btn.pack(side="left")
-        ttk.Label(r2, text="0 % = links/oben, 100 % = rechts/unten", style="Dim.TLabel").pack(side="right")
+        ttk.Label(r2, text=_("0 % = links/oben, 100 % = rechts/unten"), style="Dim.TLabel").pack(side="right")
 
-        look = ttk.LabelFrame(f, text="Darstellung", padding=8)
+        look = ttk.LabelFrame(f, text=_("Darstellung"), padding=8)
         look.pack(fill="x", pady=(8, 0))
         self.size_var = tk.DoubleVar(value=o["height"] * 100)
-        self.size_label = self._slider(look, "Grösse", self.size_var, 15, 90, self._size_changed)
+        self.size_label = self._slider(look, _("Grösse"), self.size_var, 15, 90, self._size_changed)
         self.opacity_var = tk.DoubleVar(value=o["opacity"] * 100)
-        self._slider(look, "Deckkraft", self.opacity_var, 25, 100, self._opacity_changed)
+        self._slider(look, _("Deckkraft"), self.opacity_var, 25, 100, self._opacity_changed)
         self.focus_var = tk.BooleanVar(value=o["only_when_game_focused"])
         self.caption_var = tk.BooleanVar(value=o["show_caption"])
         self.transp_var = tk.BooleanVar(value=o.get("transparent", True))
         self.timer_show_var = tk.BooleanVar(value=o.get("show_timer", True))
         self.server_show_var = tk.BooleanVar(value=o.get("show_server", True))
         self.keep_bar_var = tk.BooleanVar(value=o.get("keep_in_bar", True))
-        ttk.Checkbutton(pos, text="Karte im schwarzen Rand halten (Ultrawide: nie ins Spielbild ragen)",
+        ttk.Checkbutton(pos, text=_("Karte im schwarzen Rand halten (Ultrawide: nie ins Spielbild ragen)"),
                         variable=self.keep_bar_var, command=self._overlay_flags_changed).pack(anchor="w", pady=(4, 0))
-        for text, var in (("Nur zeigen, wenn DBD das aktive Fenster ist", self.focus_var),
-                          ("Map-Namen über der Karte anzeigen", self.caption_var),
-                          ("Rundentimer unter der Karte anzeigen", self.timer_show_var),
-                          ("Verbundenen Server unter der Karte anzeigen (Tab Server)", self.server_show_var),
-                          ("Transparenter Rand um die Karte", self.transp_var)):
-            ttk.Checkbutton(look, text=text, variable=var, command=self._overlay_flags_changed).pack(anchor="w", pady=1)
+        for text, var in ((N_("Nur zeigen, wenn DBD das aktive Fenster ist"), self.focus_var),
+                          (N_("Map-Namen über der Karte anzeigen"), self.caption_var),
+                          (N_("Rundentimer unter der Karte anzeigen"), self.timer_show_var),
+                          (N_("Verbundenen Server unter der Karte anzeigen (Tab Server)"), self.server_show_var),
+                          (N_("Transparenter Rand um die Karte"), self.transp_var)):
+            ttk.Checkbutton(look, text=_(text), variable=var, command=self._overlay_flags_changed).pack(anchor="w", pady=1)
         return f
 
     # ------------------------------------------------------- tab: detection
     def _tab_detect(self):
         f = ttk.Frame(self.nb, padding=8)
-        auto = ttk.LabelFrame(f, text="Automatik", padding=8)
+        auto = ttk.LabelFrame(f, text=_("Automatik"), padding=8)
         auto.pack(fill="x")
         self.auto_var = tk.BooleanVar(value=self.settings["auto_detect"])
         self.hide_var = tk.BooleanVar(value=self.settings["hide_after_match"])
-        ttk.Checkbutton(auto, text="Map beim Match-Start automatisch erkennen", variable=self.auto_var,
+        ttk.Checkbutton(auto, text=_("Map beim Match-Start automatisch erkennen"), variable=self.auto_var,
                         command=self._detect_flags_changed).pack(anchor="w", pady=1)
-        ttk.Checkbutton(auto, text="Overlay ausblenden, sobald ich nicht mehr in der Runde bin",
+        ttk.Checkbutton(auto, text=_("Overlay ausblenden, sobald ich nicht mehr in der Runde bin"),
                         variable=self.hide_var, command=self._detect_flags_changed).pack(anchor="w", pady=1)
-        ttk.Label(auto, text="erkennt Ergebnisbildschirm, Lobby/Menüs, Ladebildschirm und geschlossenes DBD",
+        ttk.Label(auto, text=_("erkennt Ergebnisbildschirm, Lobby/Menüs, Ladebildschirm und geschlossenes DBD"),
                   style="Dim.TLabel", wraplength=400).pack(anchor="w", padx=(22, 0))
         self.menu_var = tk.BooleanVar(value=self.settings.get("pause_in_menus", True))
-        ttk.Checkbutton(auto, text="Overlay pausieren, solange ein DBD-Menü offen ist",
+        ttk.Checkbutton(auto, text=_("Overlay pausieren, solange ein DBD-Menü offen ist"),
                         variable=self.menu_var, command=self._detect_flags_changed).pack(anchor="w", pady=(4, 1))
-        ttk.Label(auto, text="erkannt am sichtbaren Mauszeiger (ESC-Menü, Ergebnisbildschirm, Lobby)",
+        ttk.Label(auto, text=_("erkannt am sichtbaren Mauszeiger (ESC-Menü, Ergebnisbildschirm, Lobby)"),
                   style="Dim.TLabel", wraplength=400).pack(anchor="w", padx=(22, 0))
-        lang = ttk.LabelFrame(f, text="Spielsprache (Map-Namen)", padding=8)
+        lang = ttk.LabelFrame(f, text=_("Spielsprache (Map-Namen)"), padding=8)
         lang.pack(fill="x", pady=(8, 0))
         grid = ttk.Frame(lang)
         grid.pack(anchor="w")
@@ -317,23 +324,23 @@ class App:
         self.adv_open = tk.BooleanVar(value=bool(self.settings.get("show_advanced", False)))
         self.adv_btn = ttk.Button(f, command=self._toggle_advanced)
         self.adv_btn.pack(anchor="w", pady=(10, 0))
-        adv = self.adv_frame = ttk.LabelFrame(f, text="Erweitert", padding=8)
+        adv = self.adv_frame = ttk.LabelFrame(f, text=_("Erweitert"), padding=8)
         self.wgc_var = tk.BooleanVar(value=self.settings.get("window_capture", True))
-        ttk.Checkbutton(adv, text="Auch erkennen, wenn andere Fenster über DBD liegen",
+        ttk.Checkbutton(adv, text=_("Auch erkennen, wenn andere Fenster über DBD liegen"),
                         variable=self.wgc_var, command=self._detect_flags_changed).pack(anchor="w", pady=1)
-        ttk.Label(adv, text="Fensteraufnahme wie bei OBS, nur solange DBD im Hintergrund ist",
+        ttk.Label(adv, text=_("Fensteraufnahme wie bei OBS, nur solange DBD im Hintergrund ist"),
                   style="Dim.TLabel", wraplength=400).pack(anchor="w", padx=(22, 0))
         self.rate_var = tk.DoubleVar(value=float(self.settings.get("scans_per_second", 5)))
-        self._slider(adv, "Scans/Sek.", self.rate_var, 2, 10, self._rate_changed, fmt="{:.0f}")
-        self.watch_var = tk.StringVar(value="Rundenende-Erkennung: keine Map angezeigt")
+        self._slider(adv, _("Scans/Sek."), self.rate_var, 2, 10, self._rate_changed, fmt="{:.0f}")
+        self.watch_var = tk.StringVar(value=_("Rundenende-Erkennung: {state}", state=_("keine Map angezeigt")))
         ttk.Label(adv, textvariable=self.watch_var, style="Dim.TLabel", wraplength=420).pack(anchor="w", pady=(4, 6))
         self.debug_var = tk.BooleanVar(value=self.settings["save_debug_images"])
-        ttk.Checkbutton(adv, text="Debug-Bilder speichern (Ordner debug/)", variable=self.debug_var,
+        ttk.Checkbutton(adv, text=_("Debug-Bilder speichern (Ordner debug/)"), variable=self.debug_var,
                         command=self._detect_flags_changed).pack(anchor="w")
         r = ttk.Frame(adv)
         r.pack(fill="x", pady=(6, 0))
-        ttk.Button(r, text="Bildschirm jetzt scannen", command=self.scan_now).pack(side="left")
-        ttk.Button(r, text="Diagnose kopieren", command=self.show_diagnose).pack(side="left", padx=6)
+        ttk.Button(r, text=_("Bildschirm jetzt scannen"), command=self.scan_now).pack(side="left")
+        ttk.Button(r, text=_("Diagnose kopieren"), command=self.show_diagnose).pack(side="left", padx=6)
         self._show_advanced()
         return f
 
@@ -345,35 +352,35 @@ class App:
 
     def _show_advanced(self):
         if self.adv_open.get():
-            self.adv_btn.configure(text="▾ Erweitert (Fehlersuche, Technik)")
+            self.adv_btn.configure(text="▾ " + _("Erweitert (Fehlersuche, Technik)"))
             self.adv_frame.pack(fill="x", pady=(4, 0))
         else:
-            self.adv_btn.configure(text="▸ Erweitert (Fehlersuche, Technik)")
+            self.adv_btn.configure(text="▸ " + _("Erweitert (Fehlersuche, Technik)"))
             self.adv_frame.pack_forget()
 
     # ----------------------------------------------------------- tab: server
     def _tab_server(self):
         f = ttk.Frame(self.nb, padding=8)
-        conn = ttk.LabelFrame(f, text="Verbundener Spielserver", padding=8)
+        conn = ttk.LabelFrame(f, text=_("Verbundener Spielserver"), padding=8)
         conn.pack(fill="x")
         self.conn_show_var = tk.BooleanVar(value=bool(self.settings.get("show_connection")))
-        ttk.Checkbutton(conn, text="Anzeigen, mit welchem Server DBD verbunden ist",
+        ttk.Checkbutton(conn, text=_("Anzeigen, mit welchem Server DBD verbunden ist"),
                         variable=self.conn_show_var, command=self._conn_toggled).pack(anchor="w")
         self.conn_tab_var = tk.StringVar(value="")
         ttk.Label(conn, textvariable=self.conn_tab_var, style="Big.TLabel").pack(anchor="w", pady=(2, 0))
 
-        reg = ttk.LabelFrame(f, text="Serverregionen", padding=8)
+        reg = ttk.LabelFrame(f, text=_("Serverregionen"), padding=8)
         reg.pack(fill="both", expand=True, pady=(8, 0))
-        ttk.Label(reg, text="DBD sucht Matches nur in den angehakten Regionen (über die Windows-hosts-Datei, "
-                            "das Spiel wird nicht verändert). Nach „Auswahl anwenden“ DBD neu starten.",
+        ttk.Label(reg, text=_("DBD sucht Matches nur in den angehakten Regionen (über die Windows-hosts-Datei, "
+                              "das Spiel wird nicht verändert). Nach „Auswahl anwenden“ DBD neu starten."),
                   style="Dim.TLabel", wraplength=430).pack(anchor="w")
         f_outer, f = f, reg
         tf = ttk.Frame(f)
         tf.pack(fill="both", expand=True, pady=(6, 0))
         t = ttk.Treeview(tf, columns=("ping", "state"), show="tree headings", height=11, selectmode="browse")
-        t.heading("#0", text="Region", anchor="w")
+        t.heading("#0", text=_("Region"), anchor="w")
         t.heading("ping", text="Ping", anchor="e")
-        t.heading("state", text="hosts-Datei", anchor="w")
+        t.heading("state", text=_("hosts-Datei"), anchor="w")
         t.column("#0", width=215, stretch=True)
         t.column("ping", width=78, anchor="e", stretch=False)
         t.column("state", width=120, anchor="w", stretch=False)
@@ -385,24 +392,24 @@ class App:
         saved = self.settings.get("regions_selected")
         self.srv_sel = set(saved) if saved else {c for c, _, _ in regions.REGIONS}
         for g in regions.GROUPS:
-            t.insert("", "end", iid=f"g:{g}", text=g, open=True, tags=("group",))
+            t.insert("", "end", iid=f"g:{g}", text=_(g), open=True, tags=("group",))
             for code, name, grp in regions.REGIONS:
                 if grp == g:
-                    t.insert(f"g:{g}", "end", iid=f"r:{code}", text=name, values=("", ""))
+                    t.insert(f"g:{g}", "end", iid=f"r:{code}", text=_(name), values=("", ""))
         t.bind("<Button-1>", self._srv_click)
         t.bind("<space>", lambda e: self._srv_toggle(t.focus()))
         row = ttk.Frame(f)
         row.pack(fill="x", pady=(6, 0))
-        self.srv_btns = [ttk.Button(row, text="Ping messen", command=self.srv_measure),
-                         ttk.Button(row, text="Auswahl anwenden", command=self.srv_apply),
-                         ttk.Button(row, text="Alles freigeben", command=self.srv_release)]
+        self.srv_btns = [ttk.Button(row, text=_("Ping messen"), command=self.srv_measure),
+                         ttk.Button(row, text=_("Auswahl anwenden"), command=self.srv_apply),
+                         ttk.Button(row, text=_("Alles freigeben"), command=self.srv_release)]
         self.srv_btns[0].pack(side="left")
         self.srv_btns[1].pack(side="left", padx=6)
         self.srv_btns[2].pack(side="left")
         self.srv_status = tk.StringVar(value="")
         ttk.Label(f, textvariable=self.srv_status, wraplength=430).pack(anchor="w", pady=(6, 0))
-        ttk.Label(f_outer, text="Mit VPN unzuverlässig. Region-Tools sind von BHVR weder erlaubt noch verboten – "
-                                "auf eigene Verantwortung.", style="Dim.TLabel", wraplength=440).pack(
+        ttk.Label(f_outer, text=_("Mit VPN unzuverlässig. Region-Tools sind von BHVR weder erlaubt noch verboten – "
+                                  "auf eigene Verantwortung."), style="Dim.TLabel", wraplength=440).pack(
             anchor="w", pady=(6, 0))
         self._srv_render()
         return f_outer
@@ -417,14 +424,14 @@ class App:
         else:
             self.conn.stop()
             self._conn_idle.reset()
-            self._log("Anzeige des Spielservers beendet.", "System")
+            self._log(_("Anzeige des Spielservers beendet."), "System")
             self._conn_tick(force=True)
 
     def _conn_start(self):
         if self.conn.running or self._conn_busy:
             return
         self._conn_busy = True
-        self.conn_tab_var.set("Warte auf Windows (Administratorrechte) …")
+        self.conn_tab_var.set(_("Warte auf Windows (Administratorrechte) …"))
         hwnd = self._root_hwnd()
 
         def work():
@@ -440,7 +447,7 @@ class App:
         if not err and not self.conn_show_var.get():      # unticked while Windows was asking
             self.conn.stop()
         elif err:
-            self._log(f"Spielserver-Anzeige: {err.get('error', 'Fehler')}", "Fehler")
+            self._log(_("Spielserver-Anzeige: {error}", error=err.get("error") or _("Fehler")), "Fehler")
             self.conn.error = err.get("error", "")
             if err.get("cancelled") or not IS_WIN:
                 self.conn_show_var.set(False)
@@ -448,7 +455,7 @@ class App:
                 self._save_soon()
                 self.conn.error = ""
         else:
-            self._log("Spielserver-Anzeige läuft (liest nur Paketköpfe, keine Inhalte).", "System")
+            self._log(_("Spielserver-Anzeige läuft (liest nur Paketköpfe, keine Inhalte)."), "System")
         self._conn_tick(force=True)
 
     def _conn_tick(self, force=False):
@@ -460,34 +467,34 @@ class App:
             act = self._conn_idle.update(now, self.game is not None, self.conn.running, self.conn.in_process)
             if act == "pause":
                 self.conn.stop()
-                self._log("Spielserver-Anzeige pausiert – DBD läuft nicht (startet automatisch mit DBD).", "System")
+                self._log(_("Spielserver-Anzeige pausiert – DBD läuft nicht (startet automatisch mit DBD)."), "System")
             elif act == "resume" and not self.conn.running:
                 self._conn_start()
         was_running = self.conn.running
         self.conn.poll(now)
         if was_running and not self.conn.running and self.conn.error:
-            self._log(f"Spielserver-Anzeige beendet: {self.conn.error}", "Fehler")
+            self._log(_("Spielserver-Anzeige beendet: {error}", error=self.conn.error), "Fehler")
         srv = self.conn.server
         key = (srv["ip"], srv["region"]) if srv else None
         if key != self._conn_last:
             self._conn_last = key
             if srv:
-                note = "" if srv["region"] in self.srv_sel else " – nicht in deiner Regionsauswahl"
+                note = "" if srv["region"] in self.srv_sel else _(" – nicht in deiner Regionsauswahl")
                 # region only: the log file is kept on disk, the server address is shown live in the window only
-                self._log(f"Verbunden mit Spielserver: {regions.NAMES.get(srv['region'], srv['region'])}{note}.",
-                          "System")
+                self._log(_("Verbunden mit Spielserver: {region}{note}.", region=_(regions.NAMES.get(srv["region"], srv["region"])),
+                            note=note), "System")
         text = self.conn.text()
         if self._conn_busy:
-            text = "Warte auf Windows (Administratorrechte) …"
+            text = _("Warte auf Windows (Administratorrechte) …")
         elif self._conn_idle.paused:
-            text = "pausiert, bis DBD läuft"
+            text = _("pausiert, bis DBD läuft")
         if not text and not self.conn_show_var.get():
-            text = "Aus. Zeigt Region und Ping des Spielservers, auch im Overlay (braucht Administratorrechte)."
-        self.conn_tab_var.set(f"Verbunden mit: {text}" if text and self.conn.running else text)
+            text = _("Aus. Zeigt Region und Ping des Spielservers, auch im Overlay (braucht Administratorrechte).")
+        self.conn_tab_var.set(_("Verbunden mit: {server}", server=text) if text and self.conn.running else text)
         show = self.settings["overlay"].get("show_server", True)
-        self.overlay.set_server(regions.NAMES.get(srv["region"], srv["region"]) if srv and show else "",
+        self.overlay.set_server(_(regions.NAMES.get(srv["region"], srv["region"])) if srv and show else "",
                                 self.conn.ping_ms)
-        main = f"Verbunden mit: {text}" if self.conn.running else ""
+        main = _("Verbunden mit: {server}", server=text) if self.conn.running else ""
         if main != self.conn_var.get():
             self.conn_var.set(main)
 
@@ -521,21 +528,21 @@ class App:
             codes = [c for c, _, grp in regions.REGIONS if grp == g]
             n = sum(c in self.srv_sel for c in codes)
             box = "☑" if n == len(codes) else "☐" if n == 0 else "◪"
-            t.item(f"g:{g}", text=f"{box}  {g}")
+            t.item(f"g:{g}", text=f"{box}  {_(g)}")
             for c in codes:
                 p = self.srv_ping.get(c)
                 ms = p.get("ms") if p else None
                 ping = "…" if self._srv_busy and p is None else ("–" if ms is None else f"{ms:.0f} ms")
                 tag = ("p_na" if ms is None else "p_good" if ms < 80 else "p_mid" if ms < 130 else "p_bad")
-                t.item(f"r:{c}", text=f"{'☑' if c in self.srv_sel else '☐'}  {regions.NAMES[c]}",
-                       values=(ping, states.get(c, "?")), tags=(tag,))
+                t.item(f"r:{c}", text=f"{'☑' if c in self.srv_sel else '☐'}  {_(regions.NAMES[c])}",
+                       values=(ping, _(states.get(c, "?"))), tags=(tag,))
 
     def _srv_refresh(self, log_summary=False):
         """Read the hosts file (no administrator rights needed)."""
         self.srv_state = regions.current_state()
         st = self.srv_state
         if st.get("error"):
-            self.srv_status.set(f"hosts-Datei nicht lesbar: {st['error']}")
+            self.srv_status.set(_("hosts-Datei nicht lesbar: {error}", error=st["error"]))
             self._srv_render()
             return
         rs = st["regions"]
@@ -544,18 +551,19 @@ class App:
         if st["own"] and not self.settings.get("regions_selected"):
             self.srv_sel = set(free)                          # show what is actually active
         if st["own"]:
-            text = f"Aktiv: nur {', '.join(regions.NAMES[c] for c in free) or '(keine)'} erlaubt."
+            text = _("Aktiv: nur {regions} erlaubt.", regions=", ".join(_(regions.NAMES[c]) for c in free) or _("(keine)"))
         elif any(v != "frei" for v in rs.values()):
-            text = "Keine eigene Auswahl aktiv, aber andere Einträge sperren Regionen."
+            text = _("Keine eigene Auswahl aktiv, aber andere Einträge sperren Regionen.")
         else:
-            text = "Keine Region gesperrt – DBD wählt selbst."
+            text = _("Keine Region gesperrt – DBD wählt selbst.")
         if st["foreign"]:
-            who = "Make Your Choice" if st["myc"] else "anderen Programmen"
-            text += f" Es gibt {st['foreign']} Einträge von {who} für DBD-Server (werden beim Anwenden ersetzt)."
+            who = "Make Your Choice" if st["myc"] else _("anderen Programmen")
+            text += _(" Es gibt {n} Einträge von {who} für DBD-Server (werden beim Anwenden ersetzt).",
+                      n=st["foreign"], who=who)
         self.srv_status.set(text)
         self._srv_render()
         if log_summary and (st["own"] or st["foreign"]):
-            self._log(f"Serverregionen: {text}", "System")
+            self._log(_("Serverregionen: {text}", text=text), "System")
 
     def srv_measure(self):
         if self._srv_busy:
@@ -563,7 +571,7 @@ class App:
         self._srv_busy = True
         self.srv_ping = {}
         self._srv_render()
-        self.srv_status.set("Messe Ping zu den Serverregionen …")
+        self.srv_status.set(_("Messe Ping zu den Serverregionen …"))
         for b in self.srv_btns:
             b.state(["disabled"])
 
@@ -582,60 +590,60 @@ class App:
             b.state(["!disabled"])
         if "_error" in res:
             self._srv_render()
-            self.srv_status.set(f"Ping fehlgeschlagen: {res['_error']}")
+            self.srv_status.set(_("Ping fehlgeschlagen: {error}", error=res["_error"]))
             return
         self.srv_ping = res
         ok = {c: r["ms"] for c, r in res.items() if r.get("ms") is not None}
         self._srv_refresh()
         if ok:
             best = sorted(ok, key=ok.get)[:3]
-            self.srv_status.set(self.srv_status.get() + "  Am schnellsten: " +
-                                ", ".join(f"{regions.NAMES[c]} {ok[c]:.0f} ms" for c in best) + ".")
+            self.srv_status.set(self.srv_status.get() + "  " + _("Am schnellsten: {list}.", list=", ".join(
+                f"{_(regions.NAMES[c])} {ok[c]:.0f} ms" for c in best)))
         else:
-            self.srv_status.set("Keine Region hat geantwortet (Internet/Firewall/VPN?).")
+            self.srv_status.set(_("Keine Region hat geantwortet (Internet/Firewall/VPN?)."))
 
     def srv_apply(self):
         if self._srv_busy:
             return
         sel = [c for c, _, _ in regions.REGIONS if c in self.srv_sel]
         if not sel:
-            messagebox.showinfo("Serverregionen", "Bitte mindestens eine Region anhaken.")
+            messagebox.showinfo(_("Serverregionen"), _("Bitte mindestens eine Region anhaken."))
             return
         if len(sel) == len(regions.REGIONS):
             self.srv_release()
             return
-        names = ", ".join(regions.NAMES[c] for c in sel)
+        names = ", ".join(_(regions.NAMES[c]) for c in sel)
         foreign = self.srv_state.get("foreign", 0)
-        msg = (f"Erlaubt bleiben: {names}.\n\nAlle anderen DBD-Serverregionen werden in der Windows-hosts-Datei "
-               f"gesperrt. Windows fragt gleich nach Administratorrechten.")
+        msg = _("Erlaubt bleiben: {names}.\n\nAlle anderen DBD-Serverregionen werden in der Windows-hosts-Datei "
+                "gesperrt. Windows fragt gleich nach Administratorrechten.", names=names)
         if foreign:
-            msg += f"\n\n{foreign} vorhandene Einträge anderer Programme (z. B. Make Your Choice) für DBD-Server " \
-                   f"werden dabei entfernt."
-        msg += "\n\nDanach DBD neu starten, damit es wirkt."
-        if not messagebox.askokcancel("Serverregionen anwenden", msg, parent=self.root):
+            msg += "\n\n" + _("{n} vorhandene Einträge anderer Programme (z. B. Make Your Choice) für DBD-Server "
+                                 "werden dabei entfernt.", n=foreign)
+        msg += "\n\n" + _("Danach DBD neu starten, damit es wirkt.")
+        if not messagebox.askokcancel(_("Serverregionen anwenden"), msg, parent=self.root):
             return
         self._srv_run({"block": regions.block_list(sel), "allowed": sel, "remove_foreign": True},
-                      f"Nur noch {names} erlaubt")
+                      _("Nur noch {names} erlaubt", names=names))
 
     def srv_release(self):
         if self._srv_busy:
             return
         st = self.srv_state
         if not st.get("own") and not st.get("foreign"):
-            self.srv_status.set("Es ist nichts gesperrt.")
+            self.srv_status.set(_("Es ist nichts gesperrt."))
             return
-        msg = "Alle Sperren für DBD-Serverregionen aus der hosts-Datei entfernen"
-        msg += " (auch die von Make Your Choice)?" if st.get("myc") else "?"
-        msg += "\n\nWindows fragt gleich nach Administratorrechten. Danach DBD neu starten."
-        if not messagebox.askokcancel("Serverregionen freigeben", msg, parent=self.root):
+        msg = (_("Alle Sperren für DBD-Serverregionen aus der hosts-Datei entfernen (auch die von Make Your Choice)?")
+               if st.get("myc") else _("Alle Sperren für DBD-Serverregionen aus der hosts-Datei entfernen?"))
+        msg += "\n\n" + _("Windows fragt gleich nach Administratorrechten. Danach DBD neu starten.")
+        if not messagebox.askokcancel(_("Serverregionen freigeben"), msg, parent=self.root):
             return
-        self._srv_run({"block": [], "remove_foreign": True}, "Alle Regionen freigegeben")
+        self._srv_run({"block": [], "remove_foreign": True}, _("Alle Regionen freigegeben"))
 
     def _srv_run(self, job, label):
         self._srv_busy = True
         for b in self.srv_btns:
             b.state(["disabled"])
-        self.srv_status.set("Warte auf Windows (Administratorrechte) …")
+        self.srv_status.set(_("Warte auf Windows (Administratorrechte) …"))
         hwnd = self._root_hwnd()
 
         def work():
@@ -653,13 +661,13 @@ class App:
         self._srv_refresh()
         if res.get("ok"):
             if res.get("changed", True):
-                self._log(f"Serverregionen: {label}. DBD neu starten, damit es wirkt.", "System")
-                self.srv_status.set(f"{label}. DBD jetzt neu starten.  " + self.srv_status.get())
+                self._log(_("Serverregionen: {text}. DBD neu starten, damit es wirkt.", text=label), "System")
+                self.srv_status.set(_("{text}. DBD jetzt neu starten.", text=label) + "  " + self.srv_status.get())
             else:
-                self.srv_status.set("Keine Änderung nötig.  " + self.srv_status.get())
+                self.srv_status.set(_("Keine Änderung nötig.") + "  " + self.srv_status.get())
         else:
-            err = res.get("error", "unbekannter Fehler")
-            self._log(f"Serverregionen: {err}", "System" if res.get("cancelled") else "Fehler")
+            err = res.get("error") or _("unbekannter Fehler")
+            self._log(_("Serverregionen: {text}", text=err), "System" if res.get("cancelled") else "Fehler")
             self.srv_status.set(err)
 
     # -------------------------------------------------------------- tab: log
@@ -667,13 +675,13 @@ class App:
         f = ttk.Frame(self.nb, padding=8)
         top = ttk.Frame(f)
         top.pack(fill="x", pady=(0, 6))
-        ttk.Label(top, text="Anzeigen:").pack(side="left")
+        ttk.Label(top, text=_("Anzeigen:")).pack(side="left")
         enabled = set(self.settings.get("log_categories", CATS))
         self.cat_vars = {}
         for c in CATS:
             v = tk.BooleanVar(value=c in enabled)
             self.cat_vars[c] = v
-            ttk.Checkbutton(top, text=c, variable=v, command=self._log_filter_changed).pack(side="left", padx=(6, 0))
+            ttk.Checkbutton(top, text=_(c), variable=v, command=self._log_filter_changed).pack(side="left", padx=(6, 0))
         tf = ttk.Frame(f)
         tf.pack(fill="both", expand=True)
         self.log_text = tk.Text(tf, height=14, width=58, wrap="word", state="disabled", relief="flat",
@@ -685,44 +693,57 @@ class App:
         sb.pack(side="right", fill="y")
         bottom = ttk.Frame(f)
         bottom.pack(fill="x", pady=(6, 0))
-        ttk.Button(bottom, text="Leeren", command=self._clear_log).pack(side="left")
-        ttk.Button(bottom, text="Log-Datei öffnen", command=self._open_logfile).pack(side="left", padx=6)
-        ttk.Button(bottom, text="Diagnose kopieren", command=self.show_diagnose).pack(side="left")
+        ttk.Button(bottom, text=_("Leeren"), command=self._clear_log).pack(side="left")
+        ttk.Button(bottom, text=_("Log-Datei öffnen"), command=self._open_logfile).pack(side="left", padx=6)
+        ttk.Button(bottom, text=_("Diagnose kopieren"), command=self.show_diagnose).pack(side="left")
         return f
 
     # --------------------------------------------------------- tab: settings
     def _tab_settings(self):
         f = ttk.Frame(self.nb, padding=8)
-        look = ttk.LabelFrame(f, text="Darstellung", padding=8)
+        look = ttk.LabelFrame(f, text=_("Sprache und Darstellung"), padding=8)
         look.pack(fill="x")
+        lr = ttk.Frame(look)
+        lr.pack(fill="x")
+        ttk.Label(lr, text="Sprache / Language").pack(side="left")
+        cur = self.settings.get("ui_language", "auto")
+        self._ui_langs = [(code, _(label) if code == "auto" else label) for code, label in i18n.LANGUAGES]
+        self.ui_lang_var = tk.StringVar(value=dict(self._ui_langs).get(cur, self._ui_langs[0][1]))
+        lcb = ttk.Combobox(lr, textvariable=self.ui_lang_var, values=[lbl for _c, lbl in self._ui_langs],
+                           state="readonly", width=30)
+        lcb.pack(side="left", padx=8)
+        lcb.bind("<<ComboboxSelected>>", lambda e: self._ui_lang_changed())
+        self.ui_lang_note = tk.StringVar(value="")
+        ttk.Label(look, textvariable=self.ui_lang_note, style="Dim.TLabel", wraplength=400).pack(anchor="w")
         self.dark_var = tk.BooleanVar(value=self.settings.get("dark_mode", True))
-        ttk.Checkbutton(look, text="Dark Mode", variable=self.dark_var, command=self._dark_changed).pack(anchor="w")
+        ttk.Checkbutton(look, text=_("Dark Mode"), variable=self.dark_var, command=self._dark_changed).pack(
+            anchor="w", pady=(4, 0))
 
-        hk = ttk.LabelFrame(f, text="Hotkeys", padding=8)
+        hk = ttk.LabelFrame(f, text=_("Hotkeys"), padding=8)
         hk.pack(fill="x", pady=(8, 0))
         self.hk_buttons = {}
         self._hk_rec, self._hk_mods = None, set()
         grid = ttk.Frame(hk)
         grid.pack(fill="x")
         for i, (key, label) in enumerate(HOTKEY_LABELS):
-            ttk.Label(grid, text=label).grid(row=i, column=0, sticky="w", pady=1)
+            ttk.Label(grid, text=_(label)).grid(row=i, column=0, sticky="w", pady=1)
             b = ttk.Button(grid, width=22, command=lambda k=key: self._hk_record(k))
             b.grid(row=i, column=1, sticky="w", padx=(10, 0), pady=1)
             self.hk_buttons[key] = b
         self._hk_show_all()
         r = ttk.Frame(hk)
         r.pack(fill="x", pady=(6, 0))
-        ttk.Button(r, text="Standard", command=self._hk_defaults).pack(side="left")
-        self.hk_status = tk.StringVar(value="Zum Ändern anklicken und die neue Tastenkombination drücken.")
+        ttk.Button(r, text=_("Standard"), command=self._hk_defaults).pack(side="left")
+        self.hk_status = tk.StringVar(value=_("Zum Ändern anklicken und die neue Tastenkombination drücken."))
         ttk.Label(r, textvariable=self.hk_status, style="Dim.TLabel", wraplength=300).pack(side="left", padx=8)
 
-        st = ttk.LabelFrame(f, text="Start und Infobereich", padding=8)
+        st = ttk.LabelFrame(f, text=_("Start und Infobereich"), padding=8)
         st.pack(fill="x", pady=(8, 0))
         self.tray_var = tk.BooleanVar(value=self.settings.get("tray", True))
-        ttk.Checkbutton(st, text="Beim Minimieren in den Infobereich (neben der Uhr)", variable=self.tray_var,
+        ttk.Checkbutton(st, text=_("Beim Minimieren in den Infobereich (neben der Uhr)"), variable=self.tray_var,
                         command=self._tray_flag_changed).pack(anchor="w")
         self.autostart_var = tk.BooleanVar(value=False)
-        self.autostart_cb = ttk.Checkbutton(st, text="Mit Windows starten (im Infobereich, ohne Windows-Abfrage)",
+        self.autostart_cb = ttk.Checkbutton(st, text=_("Mit Windows starten (im Infobereich, ohne Windows-Abfrage)"),
                                             variable=self.autostart_var, command=self._autostart_changed)
         self.autostart_cb.pack(anchor="w", pady=(2, 0))
         self.autostart_cb.state(["disabled"])
@@ -730,29 +751,38 @@ class App:
         ttk.Label(st, textvariable=self.autostart_info, style="Dim.TLabel", wraplength=400).pack(
             anchor="w", padx=(22, 0))
 
-        upd = ttk.LabelFrame(f, text="Updates", padding=8)
+        upd = ttk.LabelFrame(f, text=_("Updates"), padding=8)
         upd.pack(fill="x", pady=(8, 0))
         self.update_var = tk.BooleanVar(value=self.settings.get("auto_update", True))
-        ttk.Checkbutton(upd, text="Beim Start nach Updates suchen und installieren (GitHub)",
+        ttk.Checkbutton(upd, text=_("Beim Start nach Updates suchen und installieren (GitHub)"),
                         variable=self.update_var, command=self._update_flag_changed).pack(anchor="w")
-        ttk.Label(upd, text="nur über start.bat bzw. die Desktop-Verknüpfung; eigene Änderungen werden nie "
-                            "überschrieben", style="Dim.TLabel", wraplength=400).pack(anchor="w", padx=(22, 0))
+        ttk.Label(upd, text=_("nur über start.bat bzw. die Desktop-Verknüpfung; eigene Änderungen werden nie "
+                              "überschrieben"), style="Dim.TLabel", wraplength=400).pack(anchor="w", padx=(22, 0))
 
-        own = ttk.LabelFrame(f, text="Eigene Map-Zuordnungen", padding=8)
+        own = ttk.LabelFrame(f, text=_("Eigene Map-Zuordnungen"), padding=8)
         own.pack(fill="x", pady=(8, 0))
         self.alias_var = tk.StringVar(value="")
         ttk.Label(own, textvariable=self.alias_var, style="Dim.TLabel", wraplength=300).pack(side="left", fill="x")
-        ttk.Button(own, text="Alle löschen", command=self._clear_aliases).pack(side="right")
+        ttk.Button(own, text=_("Alle löschen"), command=self._clear_aliases).pack(side="right")
         self._show_aliases()
 
-        folders = ttk.LabelFrame(f, text="Ordner", padding=8)
+        folders = ttk.LabelFrame(f, text=_("Ordner"), padding=8)
         folders.pack(fill="x", pady=(8, 0))
-        ttk.Button(folders, text="Programmordner öffnen", command=lambda: self._open(self.root_dir)).pack(side="left")
-        ttk.Button(folders, text="Karten-Ordner öffnen",
+        ttk.Button(folders, text=_("Programmordner öffnen"), command=lambda: self._open(self.root_dir)).pack(side="left")
+        ttk.Button(folders, text=_("Karten-Ordner öffnen"),
                    command=lambda: self._open(os.path.join(self.root_dir, "maps"))).pack(side="left", padx=6)
-        ttk.Label(f, text=f"DbD Map Scout {__version__} · liest nur Bildschirmpixel, sendet keine Eingaben ans Spiel.",
+        ttk.Label(f, text=f"DbD Map Scout {__version__} · " + _("liest nur Bildschirmpixel, sendet keine Eingaben ans Spiel."),
                   style="Dim.TLabel", wraplength=430).pack(anchor="w", pady=(10, 0))
         return f
+
+    def _ui_lang_changed(self):
+        code = next((c for c, lbl in self._ui_langs if lbl == self.ui_lang_var.get()), "auto")
+        self.settings.set("ui_language", code)
+        self._save_soon()
+        changed = i18n.resolve(code) != i18n.current()
+        self.ui_lang_note.set(_("Wirkt nach dem nächsten Start des Programms.") if changed else "")
+        if changed:
+            self._log(_("Sprache geändert – wirkt nach dem nächsten Start des Programms."), "System")
 
     # ----------------------------------------------------------- map list
     def _fill_list(self):
@@ -760,7 +790,7 @@ class App:
         self._list_items = {}
         realms = {}
         for m in self.catalog.search(self.search_var.get()):
-            realm = self.catalog.realm_display(m) or "Eigene Bilder"
+            realm = self.catalog.realm_display(m) or _("Eigene Bilder")
             if realm not in realms:
                 realms[realm] = self.tree.insert("", "end", text=realm, open=bool(self.search_var.get()))
             for v in [v for v in sorted(m.variants) if m.variants[v]]:
@@ -786,12 +816,12 @@ class App:
             return
         path, shown = self.catalog.image_path(map_id, variant)
         if path is None:
-            self._log(f"Für „{m.label(variant)}“ gibt es kein Bild.", "Overlay")
+            self._log(_("Für „{map}“ gibt es kein Bild.", map=m.label(variant)), "Overlay")
             return
         try:
             frames = load_frames(path)
         except Exception as e:
-            self._log(f"Bild konnte nicht geladen werden: {path} ({e})", "Fehler")
+            self._log(_("Bild konnte nicht geladen werden: {path} ({error})", path=path, error=e), "Fehler")
             return
         was_on = self._map_on()
         self._test_map = False                   # a real/manual choice replaces the test picture
@@ -808,7 +838,7 @@ class App:
         self.map_var.set(m.label(shown))
         self.tray.set_title(f"DbD Map Scout – {m.label(shown)}")
         self.realm_var.set(self.catalog.realm_display(m))
-        self.detail_var.set(detail or {"manual": "manuell gewählt", "scan": "per Scan gefunden"}.get(source, ""))
+        self.detail_var.set(detail or {"manual": _("manuell gewählt"), "scan": _("per Scan gefunden")}.get(source, ""))
         thumb = frames[0][0].copy()
         thumb.thumbnail((88, 88))
         bg = Image.new("RGBA", thumb.size, (40, 40, 44, 255))
@@ -818,12 +848,12 @@ class App:
         self._update_toggle_text()
         self._update_layout_btn()
         if source == "manual":
-            self._log(f"Map gewählt: {m.label(shown)}", "Overlay")
+            self._log(_("Map gewählt: {map}", map=m.label(shown)), "Overlay")
         self._tick_overlay(reschedule=False)
 
     def toggle_overlay(self):
         if not self.overlay.has_map():
-            self._log("Noch keine Map gewählt.", "Overlay")
+            self._log(_("Noch keine Map gewählt."), "Overlay")
             return
         was_on = self._map_on()
         if self.hidden_after_match or self.menu_paused:
@@ -838,7 +868,7 @@ class App:
         elif was_on and not self._map_on():
             self._round_ended(time.time())
         self._update_toggle_text()
-        self._log("Overlay eingeblendet." if self.user_visible else "Overlay ausgeblendet.", "Overlay")
+        self._log(_("Overlay eingeblendet.") if self.user_visible else _("Overlay ausgeblendet."), "Overlay")
         self._tick_overlay(reschedule=False)
 
     def _watch(self, source):
@@ -853,7 +883,7 @@ class App:
 
     def _update_toggle_text(self):
         on = self.user_visible and not self.hidden_after_match and not self.menu_paused
-        self.toggle_btn.configure(text="Overlay ausblenden" if on else "Overlay einblenden")
+        self.toggle_btn.configure(text=_("Overlay ausblenden") if on else _("Overlay einblenden"))
 
     def _layouts(self):
         """Layouts with a picture of the map on display ([] without a map)."""
@@ -865,46 +895,46 @@ class App:
         if len(vs) < 2:
             self.layout_btn.pack_forget()
             return
-        text = f"Layout {roman(self.current[1])} von {roman(vs[-1])} ▸"
-        self.layout_btn.configure(text=text + (" (unsicher)" if self._layout_unsure else ""))
+        text = _("Layout {n} von {total}", n=roman(self.current[1]), total=roman(vs[-1])) + " ▸"
+        self.layout_btn.configure(text=text + (" " + _("(unsicher)") if self._layout_unsure else ""))
         if not self.layout_btn.winfo_manager():
             self.layout_btn.pack(side="left", padx=(4, 0), before=self.scan_btn)
 
     def _hk_hint(self, name):
         combo = (self.settings.get("hotkeys") or {}).get(name)
-        return f" Hotkey: {pretty(combo)}" if combo else ""
+        return " " + _("Hotkey: {keys}", keys=pretty(combo)) if combo else ""
 
     def _tip_lookup(self, w):
         """Tooltips for buttons whose label changes or repeats (the rest: tooltip.TIPS by label)."""
         hk = {b: k for k, b in self.hk_buttons.items()}
         if w is self.toggle_btn:
-            return lambda: ("Karte ausblenden (die automatische Erkennung läuft weiter)."
-                            if self.toggle_btn.cget("text") == "Overlay ausblenden" else
-                            "Karte wieder einblenden.") + self._hk_hint("toggle_overlay")
+            return lambda: (_("Karte ausblenden (die automatische Erkennung läuft weiter).")
+                            if self.toggle_btn.cget("text") == _("Overlay ausblenden") else
+                            _("Karte wieder einblenden.")) + self._hk_hint("toggle_overlay")
         if w is self.layout_btn:
-            return lambda: ("Die Erkennung war beim Layout nicht sicher – stimmt es nicht, hier weiterschalten. "
-                            if self._layout_unsure else "") + \
-                "Wechselt zum nächsten Layout dieser Map (z. B. Coal Tower ↔ Coal Tower II). Die Layouts ab II " \
-                "gibt es seit Patch 8.6.0 nur noch in Custom Games." + self._hk_hint("next_variant")
+            return lambda: (_("Die Erkennung war beim Layout nicht sicher – stimmt es nicht, hier weiterschalten.")
+                            + " " if self._layout_unsure else "") + \
+                _("Wechselt zum nächsten Layout dieser Map (z. B. Coal Tower ↔ Coal Tower II). Die Layouts ab II "
+                  "gibt es seit Patch 8.6.0 nur noch in Custom Games.") + self._hk_hint("next_variant")
         if w is self.test_btn:
-            return lambda: ("Test sofort beenden." if self.test_btn.cget("text") == "Test beenden" else
-                            "Zeigt die Karte 10 s an ihrer normalen Position – auch wenn sie gerade ausgeblendet "
-                            "wäre. Nochmal drücken beendet den Test.")
+            return lambda: (_("Test sofort beenden.") if self.test_btn.cget("text") == _("Test beenden") else
+                            _("Zeigt die Karte 10 s an ihrer normalen Position – auch wenn sie gerade ausgeblendet "
+                              "wäre. Nochmal drücken beendet den Test."))
         if w is self.adv_btn:
-            return "Technische Optionen für die Fehlersuche ein- oder ausklappen."
+            return _("Technische Optionen für die Fehlersuche ein- oder ausklappen.")
         if w is self.edit_btn:
-            return lambda: ("Verschieben beenden." if self.edit_btn.cget("text") == "Fertig" else
-                            "Karte direkt mit der Maus ziehen, Mausrad ändert die Grösse."
+            return lambda: (_("Verschieben beenden.") if self.edit_btn.cget("text") == _("Fertig") else
+                            _("Karte direkt mit der Maus ziehen, Mausrad ändert die Grösse.")
                             + self._hk_hint("edit_position"))
         if w in hk:
-            return ("Klicken und die neue Tastenkombination drücken (Strg/Alt + Taste oder F-Taste). "
-                    "Esc bricht ab, Entf schaltet den Hotkey aus.")
+            return _("Klicken und die neue Tastenkombination drücken (Strg/Alt + Taste oder F-Taste). "
+                     "Esc bricht ab, Entf schaltet den Hotkey aus.")
         text = str(w.cget("text"))
         if text in dict(LANGS).values():
-            return ("Map-Namen in dieser Spielsprache erkennen. Nur die Sprachen anhaken, in denen du spielst – "
-                    "weniger Sprachen, weniger Verwechslungen.")
-        if text in CATS:
-            return f"Meldungen der Art „{text}“ im Log anzeigen."
+            return _("Map-Namen in dieser Spielsprache erkennen. Nur die Sprachen anhaken, in denen du spielst – "
+                     "weniger Sprachen, weniger Verwechslungen.")
+        if i18n.source(text) in CATS:
+            return _("Meldungen der Art „{category}“ im Log anzeigen.", category=text)
         return None
 
     def next_variant(self):
@@ -913,10 +943,10 @@ class App:
         m = self.catalog.maps[self.current[0]]
         vs = [v for v in sorted(m.variants) if m.variants[v]]
         if len(vs) < 2:
-            self._log(f"„{m.name}“ hat nur ein Layout.", "Overlay")
+            self._log(_("„{map}“ hat nur ein Layout.", map=m.name), "Overlay")
             return
         i = vs.index(self.current[1]) if self.current[1] in vs else 0
-        self.show_map(m.id, vs[(i + 1) % len(vs)], "manual", "Layout manuell gewechselt")
+        self.show_map(m.id, vs[(i + 1) % len(vs)], "manual", _("Layout manuell gewechselt"))
 
     def step_map(self, step: int):
         items = list(self._list_items.values())
@@ -927,7 +957,7 @@ class App:
         self.show_map(mid, v, "manual")
 
     def scan_now(self):
-        self._log("Scanne den Bildschirm nach Map- oder Realm-Namen …", "Erkennung")
+        self._log(_("Scanne den Bildschirm nach Map- oder Realm-Namen …"), "Erkennung")
         self.worker.request_scan()
 
     def test_overlay(self):
@@ -940,12 +970,12 @@ class App:
         if not self.overlay.has_map():
             first = next(iter(self._list_items.values()), None)
             if first:
-                self.show_map(first[0], first[1], "manual", "Testanzeige")
+                self.show_map(first[0], first[1], "manual", _("Testanzeige"))
                 self._test_map = True            # loaded only for the test: hidden again when it ends
         self._force_until = time.time() + 10
-        self._log("Test: Overlay 10 s lang an seiner normalen Position – jetzt zu DBD wechseln "
-                  "(nochmal drücken beendet den Test).", "Overlay")
-        self.test_btn.configure(text="Test beenden")
+        self._log(_("Test: Overlay 10 s lang an seiner normalen Position – jetzt zu DBD wechseln "
+                    "(nochmal drücken beendet den Test)."), "Overlay")
+        self.test_btn.configure(text=_("Test beenden"))
         self._tick_overlay(reschedule=False)
 
     def show_diagnose(self):
@@ -961,18 +991,18 @@ class App:
             pass
         self.root.clipboard_clear()
         self.root.clipboard_append(text)
-        self._log("Diagnose in die Zwischenablage kopiert (auch als diagnose.txt gespeichert).", "System")
+        self._log(_("Diagnose in die Zwischenablage kopiert (auch als diagnose.txt gespeichert)."), "System")
         log.info(text)
 
     def toggle_edit(self):
         on = not self.overlay.editing
         if on and not self.overlay.has_map():
-            self._log("Erst eine Map wählen, dann lässt sich das Overlay verschieben.", "Overlay")
+            self._log(_("Erst eine Map wählen, dann lässt sich das Overlay verschieben."), "Overlay")
             return
         self.overlay.set_editing(on)
-        self.edit_btn.configure(text="Fertig" if on else "Mit der Maus verschieben")
+        self.edit_btn.configure(text=_("Fertig") if on else _("Mit der Maus verschieben"))
         if on:
-            self._log("Overlay mit der Maus ziehen, Mausrad = Grösse. Danach „Fertig“ oder Hotkey.", "Overlay")
+            self._log(_("Overlay mit der Maus ziehen, Mausrad = Grösse. Danach „Fertig“ oder Hotkey."), "Overlay")
         self._tick_overlay(reschedule=False)
 
     def _overlay_dragged(self, x, y):
@@ -982,7 +1012,7 @@ class App:
         o["anchor"] = "custom"
         o["pos_x"] = min(1.0, max(0.0, (x - gx) / max(1, gw - w)))
         o["pos_y"] = min(1.0, max(0.0, (y - gy) / max(1, gh - h)))
-        self.anchor_var.set(dict(ANCHORS)["custom"])
+        self.anchor_var.set(anchor_label("custom"))
         self._set_pos_sliders(o["pos_x"], o["pos_y"])
         self._save_soon()
 
@@ -1005,11 +1035,11 @@ class App:
                     self._srv_ping_done(ev[1])
                 elif isinstance(ev, tuple) and ev[0] == "srv_fw":
                     if ev[1]:
-                        self._log("Firewall-Regeln von Make Your Choice („Enforced“) gefunden – sie sperren Regionen "
-                                  "unabhängig von der hosts-Datei. In Make Your Choice „Revert to Default“ drücken.",
-                                  "Fehler")
-                        self.srv_status.set("Achtung: Firewall-Regeln von Make Your Choice aktiv (siehe Log).  "
-                                            + self.srv_status.get())
+                        self._log(_("Firewall-Regeln von Make Your Choice („Enforced“) gefunden – sie sperren "
+                                    "Regionen unabhängig von der hosts-Datei. In Make Your Choice „Revert to Default“ "
+                                    "drücken."), "Fehler")
+                        self.srv_status.set(_("Achtung: Firewall-Regeln von Make Your Choice aktiv (siehe Log).")
+                                            + "  " + self.srv_status.get())
                 elif isinstance(ev, tuple) and ev[0] == "tray":
                     {"open": self._show_window, "toggle": self.toggle_overlay,
                      "quit": self.quit}.get(ev[1], lambda: None)()
@@ -1042,7 +1072,7 @@ class App:
         if k == "status":
             self._set_status(d["text"])
         elif k == "banner":
-            self._log("Map-Banner gefunden, lese …", "Erkennung")
+            self._log(_("Map-Banner gefunden, lese …"), "Erkennung")
         elif k == "detected":
             m = self.catalog.maps.get(d["map_id"])
             if not m:
@@ -1050,27 +1080,27 @@ class App:
             same = (self.current == (d["map_id"], d["variant"]) and self.source == "auto"
                     and not self.hidden_after_match and not self.menu_paused and self.user_visible)
             vp = d["variant_probability"]
-            detail = f"automatisch erkannt ({d['probability']:.0%})"
+            detail = _("automatisch erkannt ({p})", p=f"{d['probability']:.0%}")
             if len(m.variants) > 1:
-                detail += f" · Layout {roman(d['variant'])} ({vp:.0%})"
+                detail += " · " + _("Layout {n} ({p})", n=roman(d["variant"]), p=f"{vp:.0%}")
             if self.round.detected(time.time()):
-                self._log("Rundentimer gestartet.", "Erkennung")
+                self._log(_("Rundentimer gestartet."), "Erkennung")
             if not same:
                 self.show_map(d["map_id"], d["variant"], "auto", detail, keep_timer=True)
-                self._log(f"Erkannt: {m.label(d['variant'])} – gelesen „{d['name_text']}“ / „{d['realm_text']}“",
-                          "Erkennung")
+                self._log(_("Erkannt: {map} – gelesen „{name}“ / „{realm}“", map=m.label(d["variant"]),
+                            name=d["name_text"], realm=d["realm_text"]), "Erkennung")
                 if len(m.variants) > 1 and vp < 0.8:
                     self._layout_unsure = True
                     self._update_layout_btn()
-                    self._log(f"Layout unsicher – falls falsch: {pretty(self.settings['hotkeys']['next_variant'])}.",
-                              "Erkennung")
+                    self._log(_("Layout unsicher – falls falsch: Layout-Knopf oder {keys}.",
+                                keys=pretty(self.settings["hotkeys"].get("next_variant") or "–")), "Erkennung")
         elif k == "unknown":
             txt = d.get("name_text") or "?"
-            self._log(f"Banner gesehen, aber keine bekannte Map: „{txt}“. Map manuell wählen "
-                      "oder mit „Zuordnen …“ dauerhaft zuordnen.", "Erkennung")
+            self._log(_("Banner gesehen, aber keine bekannte Map: „{text}“. Map manuell wählen "
+                        "oder mit „Zuordnen …“ dauerhaft zuordnen.", text=txt), "Erkennung")
             if len(fold(txt)) >= self.catalog.MIN_ALIAS:
                 self._unknown = (txt, d.get("realm_text") or "")
-                self.unknown_var.set(f"Unbekannte Map gelesen: „{txt}“")
+                self.unknown_var.set(_("Unbekannte Map gelesen: „{text}“", text=txt))
                 self.unknown_bar.pack(fill="x", padx=10, pady=(0, 6), before=self.nb)
         elif k == "match_end":
             self._round_ended(d.get("t") or time.time())
@@ -1079,40 +1109,41 @@ class App:
                 self.hidden_after_match = True
                 self.menu_paused = False
                 self._update_toggle_text()
-                self._log(f"Runde vorbei ({d.get('reason', 'Ergebnisbildschirm')})"
-                          + (" – Overlay ausgeblendet." if was_visible else "."), "Erkennung")
+                reason = _(d.get("reason") or "Ergebnisbildschirm")
+                self._log(_("Runde vorbei ({reason}) – Overlay ausgeblendet.", reason=reason) if was_visible
+                          else _("Runde vorbei ({reason}).", reason=reason), "Erkennung")
                 self._tick_overlay(reschedule=False)
         elif k == "menu":
             if d.get("on"):
                 if self.overlay.has_map() and not self.hidden_after_match and not self.menu_paused:
                     self.menu_paused = True
                     self._update_toggle_text()
-                    self._log("Menü offen (Mauszeiger sichtbar) – Overlay pausiert.", "Overlay")
+                    self._log(_("Menü offen (Mauszeiger sichtbar) – Overlay pausiert."), "Overlay")
                     self._tick_overlay(reschedule=False)
             elif self.menu_paused:
                 self.menu_paused = False
                 self._update_toggle_text()
-                self._log("Zurück im Spiel – Overlay wieder sichtbar.", "Overlay")
+                self._log(_("Zurück im Spiel – Overlay wieder sichtbar."), "Overlay")
                 self._tick_overlay(reschedule=False)
         elif k == "watch_info":
             self._log(d.get("text", ""), "Erkennung")
         elif k == "warn":
-            self._log(f"{d.get('text', '')} – Details in dbdmapscout.log", "Fehler")
+            self._log(_("{text} – Details in dbdmapscout.log", text=d.get("text", "")), "Fehler")
         elif k == "scan_result":
             self._scan_result(d)
         elif k == "error":
-            self._log("Die Erkennung ist abgestürzt – Details in dbdmapscout.log", "Fehler")
+            self._log(_("Die Erkennung ist abgestürzt – Details in dbdmapscout.log"), "Fehler")
             log.error(d["text"])
-            messagebox.showerror("DbD Map Scout", "Die Erkennung ist abgestürzt:\n\n" + d["text"][-1500:])
+            messagebox.showerror("DbD Map Scout", _("Die Erkennung ist abgestürzt:") + "\n\n" + d["text"][-1500:])
 
     # ---------------------------------------------------------- round timer
     def _round_started(self, t):
         self.round.start(t)
-        self._log("Rundentimer gestartet.", "Erkennung")
+        self._log(_("Rundentimer gestartet."), "Erkennung")
 
     def _round_ended(self, t):
         if self.round.stop(t):
-            self._log(f"Rundentimer gestoppt: {fmt_duration(self.round.elapsed(t))}.", "Erkennung")
+            self._log(_("Rundentimer gestoppt: {time}.", time=fmt_duration(self.round.elapsed(t))), "Erkennung")
 
     def _tick_timer(self):
         r = self.round
@@ -1120,9 +1151,9 @@ class App:
             text, overlay_text = "", ""
         elif r.running:
             overlay_text = fmt_duration(r.elapsed(time.time()))
-            text = f"Runde läuft: {overlay_text}"
+            text = _("Runde läuft: {time}", time=overlay_text)
         else:
-            text, overlay_text = f"Letzte Runde: {fmt_duration(r.elapsed(0))}", ""
+            text, overlay_text = _("Letzte Runde: {time}", time=fmt_duration(r.elapsed(0))), ""
         if text != self.timer_var.get():
             self.timer_var.set(text)
         self.overlay.set_timer(overlay_text if self.settings["overlay"].get("show_timer", True) else "")
@@ -1146,27 +1177,27 @@ class App:
     def _scan_result(self, d):
         hits = d.get("hits") or []
         if d.get("error"):
-            self._log(f"Scan fehlgeschlagen: {d['error']}", "Fehler")
+            self._log(_("Scan fehlgeschlagen: {error}", error=d["error"]), "Fehler")
             return
         maps = [h for h in hits if h.kind == "map"]
         if maps:
             h = maps[0]
             m = self.catalog.maps[h.map_id]
-            self.show_map(h.map_id, h.variant, "scan", f"per Scan gefunden: „{h.text}“")
-            self._log(f"Scan ({d['seconds']:.1f} s): {m.label(h.variant)}", "Erkennung")
+            self.show_map(h.map_id, h.variant, "scan", _("per Scan gefunden: „{text}“", text=h.text))
+            self._log(_("Scan ({s} s): {map}", s=f"{d['seconds']:.1f}", map=m.label(h.variant)), "Erkennung")
             return
         realms = [h for h in hits if h.kind == "realm" and h.realm]
         if realms:
             realm = realms[0].realm
             in_realm = [m for m in self.catalog.maps.values() if m.realm == realm]
             if len(in_realm) == 1:
-                self.show_map(in_realm[0].id, 1, "scan", f"Realm „{realms[0].text}“ hat nur diese Map")
+                self.show_map(in_realm[0].id, 1, "scan", _("Realm „{realm}“ hat nur diese Map", realm=realms[0].text))
             else:
                 self.search_var.set(self.catalog.realms.get(realm, {}).get("en", realm))
                 self.nb.select(self.tab_maps)
-                self._log(f"Scan: Realm „{realms[0].text}“ gefunden – bitte Map in der Liste wählen.", "Erkennung")
+                self._log(_("Scan: Realm „{realm}“ gefunden – bitte Map in der Liste wählen.", realm=realms[0].text), "Erkennung")
             return
-        self._log(f"Scan ({d['seconds']:.1f} s): kein Map- oder Realm-Name auf dem Bildschirm.", "Erkennung")
+        self._log(_("Scan ({s} s): kein Map- oder Realm-Name auf dem Bildschirm.", s=f"{d['seconds']:.1f}"), "Erkennung")
 
     # ============================================================ hotkeys
     def _start_hotkeys(self):
@@ -1181,27 +1212,28 @@ class App:
             return
         labels = dict(HOTKEY_LABELS)
         for name, combo, why in t.failed:
-            self._log(f"Hotkey {pretty(combo)} ({labels.get(name, name)}) nicht verfügbar: {why}.", "Fehler")
+            self._log(_("Hotkey {keys} ({action}) nicht verfügbar: {why}.", keys=pretty(combo),
+                        action=_(labels.get(name, name)), why=why), "Fehler")
         if t.failed and hasattr(self, "hk_status"):
-            self.hk_status.set(f"{len(t.failed)} Hotkey(s) nicht verfügbar – siehe Log.")
+            self.hk_status.set(_("{n} Hotkey(s) nicht verfügbar – siehe Log.", n=len(t.failed)))
 
     # ---------------------------------------------------------- hotkeys: record by pressing
     def _hk_show_all(self):
         for key, b in self.hk_buttons.items():
             combo = self.settings["hotkeys"].get(key, "")
-            b.configure(text=pretty(combo) if combo else "– aus –")
+            b.configure(text=pretty(combo) if combo else _("– aus –"))
 
     def _hk_record(self, key):
         if self._hk_rec:
             self._hk_stop(save=False)
         self._hk_rec, self._hk_mods = key, set()
         b = self.hk_buttons[key]
-        b.configure(text="Tasten drücken …")
+        b.configure(text=_("Tasten drücken …"))
         b.focus_set()
         # registered global hotkeys never reach this window: release them while recording
         self.hotkeys.stop()
         self.hotkeys.join(timeout=1.5)
-        self.hk_status.set("Neue Kombination drücken – Esc bricht ab, Entf schaltet den Hotkey aus.")
+        self.hk_status.set(_("Neue Kombination drücken – Esc bricht ab, Entf schaltet den Hotkey aus."))
         b.bind("<KeyPress>", self._hk_key)
         b.bind("<KeyRelease>", self._hk_key_up)
         b.bind("<FocusOut>", lambda e: self._hk_stop(save=False))
@@ -1230,7 +1262,8 @@ class App:
         labels = dict(HOTKEY_LABELS)
         taken = [k for k, c in self.settings["hotkeys"].items() if c == combo and k != key]
         if taken:
-            self.hk_status.set(f"{pretty(combo)} ist schon „{labels.get(taken[0], taken[0])}“ – andere wählen.")
+            self.hk_status.set(_("{keys} ist schon „{action}“ – andere wählen.", keys=pretty(combo),
+                                  action=_(labels.get(taken[0], taken[0]))))
             return "break"
         self._hk_stop(save=True, combo=combo)
         return "break"
@@ -1251,11 +1284,12 @@ class App:
         if save:
             self.settings["hotkeys"][key] = combo
             self._save_soon()
-            label = dict(HOTKEY_LABELS)[key]
-            self.hk_status.set(f"{label}: {pretty(combo)}" if combo else f"{label}: aus")
-            self._log(f"Hotkey {label}: {pretty(combo) if combo else 'aus'}.", "System")
+            label = _(dict(HOTKEY_LABELS)[key])
+            keys = pretty(combo) if combo else _("aus")
+            self.hk_status.set(f"{label}: {keys}")
+            self._log(_("Hotkey {action}: {keys}.", action=label, keys=keys), "System")
         else:
-            self.hk_status.set("Zum Ändern anklicken und die neue Tastenkombination drücken.")
+            self.hk_status.set(_("Zum Ändern anklicken und die neue Tastenkombination drücken."))
         self._hk_show_all()
         self.hotkeys = self._start_hotkeys()
 
@@ -1269,7 +1303,7 @@ class App:
         self.hotkeys.stop()
         self.hotkeys.join(timeout=1.5)
         self.hotkeys = self._start_hotkeys()
-        self.hk_status.set("Standard-Hotkeys wiederhergestellt.")
+        self.hk_status.set(_("Standard-Hotkeys wiederhergestellt."))
 
     # ============================================================ overlay
     def _game_rect(self):
@@ -1296,7 +1330,7 @@ class App:
         except Exception:
             self._report_once("status", traceback.format_exc())
         try:
-            status = f"Rundenende-Erkennung: {self.worker.watch_status}"
+            status = _("Rundenende-Erkennung: {state}", state=self.worker.watch_status)
             if status != self.watch_var.get():
                 self.watch_var.set(status)
         except Exception:
@@ -1310,7 +1344,7 @@ class App:
         if key not in self._errors_seen:
             self._errors_seen.add(key)
             last = text.strip().splitlines()[-1] if text.strip() else text
-            self._log(f"{key}: {last} – Details in dbdmapscout.log", "Fehler")
+            self._log(_("{text} – Details in dbdmapscout.log", text=f"{key}: {last}"), "Fehler")
 
     def _tk_error(self, exc, val, tb):
         self._report_once(getattr(exc, "__name__", "tk"), "".join(traceback.format_exception(exc, val, tb)))
@@ -1330,25 +1364,25 @@ class App:
                 self.user_visible = False
                 self._round_ended(time.time())
                 self._update_toggle_text()
-            self._log("Test beendet.", "Overlay")
+            self._log(_("Test beendet."), "Overlay")
         if (time.time() >= getattr(self, "_force_until", 0) and hasattr(self, "test_btn")
-                and self.test_btn.cget("text") != "Overlay testen"):
-            self.test_btn.configure(text="Overlay testen")
+                and self.test_btn.cget("text") != _("Overlay testen")):
+            self.test_btn.configure(text=_("Overlay testen"))
         reason = None
         if forced:
             pass
         elif not self.overlay.has_map():
-            reason = "keine Map"
+            reason = _("keine Map")
         elif not ((self.user_visible and not self.hidden_after_match) or self.overlay.editing):
-            reason = "ausgeblendet"
+            reason = _("ausgeblendet")
         elif self.menu_paused and not self.overlay.editing:
-            reason = "Menü offen"
+            reason = _("Menü offen")
         elif (o["only_when_game_focused"] and IS_WIN and not self.overlay.editing and not self.simulate
               and self.game is not None):
             fg = foreground_root()
             own = {self.overlay.hwnd(), self._root_hwnd()}
             if fg not in own and not is_game_window(fg):
-                reason = f"aktives Fenster ist {describe_window(fg)}"
+                reason = _("aktives Fenster ist {window}", window=describe_window(fg))
         if not forced:
             self._log_visibility(reason, (gx, gy, gw, gh))
         if reason:
@@ -1395,10 +1429,10 @@ class App:
 
     def _log_visibility(self, reason, game_rect):
         """One log line whenever the overlay goes from visible to hidden or back."""
-        if reason == "keine Map":
+        if reason == _("keine Map"):
             self._vis_state = reason
             return
-        if reason == "Menü offen":                     # already logged by the menu event
+        if reason == _("Menü offen"):                     # already logged by the menu event
             self._vis_state = reason
             return
         state = reason or "sichtbar"
@@ -1406,11 +1440,13 @@ class App:
             return
         self._vis_state = state
         if reason is None:
-            src = f"DBD-Fenster {game_rect[2]}×{game_rect[3]}" if self.game else "Bildschirm"
+            src = (_("DBD-Fenster {w}×{h}", w=game_rect[2], h=game_rect[3]) if self.game
+                   else _("Bildschirm"))
             self.root.after(300, lambda: self._log(
-                f"Overlay sichtbar bei {(self._last_place or ('?', '?'))[:2]} über {src}.", "Overlay"))
-        elif reason != "ausgeblendet":
-            self._log(f"Overlay pausiert: {reason}.", "Overlay")
+                _("Overlay sichtbar bei {pos} über {src}.", pos=(self._last_place or ("?", "?"))[:2], src=src),
+                "Overlay"))
+        elif reason != _("ausgeblendet"):
+            self._log(_("Overlay pausiert: {reason}.", reason=reason), "Overlay")
 
     def _root_hwnd(self):
         if not IS_WIN:
@@ -1428,15 +1464,15 @@ class App:
         self.overlay.set_transparent(o.get("transparent", True))
 
     def _anchor_changed(self):
-        rev = {v: k for k, v in ANCHORS}
+        rev = {_(v): k for k, v in ANCHORS}
         self.settings["overlay"]["anchor"] = rev.get(self.anchor_var.get(), "auto")
         self._save_soon()
         self._tick_overlay(reschedule=False)
 
     def _reset_position(self):
-        self.anchor_var.set(dict(ANCHORS)["auto"])
+        self.anchor_var.set(anchor_label("auto"))
         self._anchor_changed()
-        self._log("Position zurückgesetzt (automatisch).", "Overlay")
+        self._log(_("Position zurückgesetzt (automatisch)."), "Overlay")
 
     def _set_pos_sliders(self, fx, fy):
         fx, fy = min(1.0, max(0.0, fx)), min(1.0, max(0.0, fy))
@@ -1457,7 +1493,7 @@ class App:
         o = self.settings["overlay"]
         if o["anchor"] != "custom":
             o["anchor"] = "custom"
-            self.anchor_var.set(dict(ANCHORS)["custom"])
+            self.anchor_var.set(anchor_label("custom"))
         o["pos_x"] = round(self.posx_var.get() / 100, 4)
         o["pos_y"] = round(self.posy_var.get() / 100, 4)
         self._save_soon()
@@ -1489,7 +1525,7 @@ class App:
             self.overlay.set_transparent(o["transparent"])
         if self.current:
             m = self.catalog.maps[self.current[0]]
-            path, _ = self.catalog.image_path(*self.current)
+            path, _v = self.catalog.image_path(*self.current)
             self.overlay.show_caption = o["show_caption"]
             self.overlay.set_map(path, m.label(self.current[1]))
         self._save_soon()
@@ -1510,8 +1546,8 @@ class App:
     # ---------------------------------------------------------- tray and autostart
     def _tray_start(self):
         if not self.tray.active and not self.tray.start():
-            self._log(f"Symbol im Infobereich nicht verfügbar ({self.tray.error}) – Minimieren wie gewohnt.",
-                      "Fehler")
+            self._log(_("Symbol im Infobereich nicht verfügbar ({error}) – Minimieren wie gewohnt.",
+                        error=self.tray.error), "Fehler")
 
     def _tray_flag_changed(self):
         on = bool(self.tray_var.get())
@@ -1548,9 +1584,9 @@ class App:
             if res is not None:
                 self.events.put(("setup_done", res[0], res[1]))
         elif IS_WIN and not autostart.task_exists(autostart.TASK):
-            self.events.put(("setup_done", None, "Tipp: Einmal als Administrator starten (Rechtsklick auf start.bat → "
-                                                 "„Als Administrator ausführen“) – dann richtet das Programm die "
-                                                 "Desktop-Verknüpfung ein, die künftig ohne Windows-Abfrage startet."))
+            self.events.put(("setup_done", None, _(
+                "Tipp: Einmal als Administrator starten (Rechtsklick auf start.bat → „Als Administrator ausführen“) "
+                "– dann richtet das Programm die Desktop-Verknüpfung ein, die künftig ohne Windows-Abfrage startet.")))
         self._read_autostart()
 
     def _setup_done(self, ok, msg):
@@ -1558,22 +1594,22 @@ class App:
             self.settings.set("setup_version", autostart.SETUP_VERSION)
             self.settings.set("setup_root", os.path.abspath(self.root_dir))
             self._save_soon()
-            self._log("Desktop-Verknüpfung eingerichtet/aktualisiert: startet ab jetzt ohne Windows-Abfrage.",
+            self._log(_("Desktop-Verknüpfung eingerichtet/aktualisiert: startet ab jetzt ohne Windows-Abfrage."),
                       "System")
         elif ok is None:
             self._log(msg, "System")
         else:
-            self._log(f"Einrichtung der Verknüpfung fehlgeschlagen: {msg}", "Fehler")
+            self._log(_("Einrichtung der Verknüpfung fehlgeschlagen: {error}", error=msg), "Fehler")
 
     def _read_autostart(self):
         """Runs in a thread: does the logon task exist, may we change it (administrator)?"""
         if not IS_WIN:
-            self.events.put(("autostart", None, False, "Nur unter Windows."))
+            self.events.put(("autostart", None, False, _("Nur unter Windows.")))
             return
         exists = autostart.task_exists(autostart.TASK_AUTO)
         admin = is_admin()
-        info = ("" if admin else "Änderbar, wenn das Programm über die Desktop-Verknüpfung gestartet wurde "
-                                 "(verknuepfung_erstellen.bat einmal ausführen).")
+        info = ("" if admin else _("Änderbar, wenn das Programm über die Desktop-Verknüpfung gestartet wurde "
+                                   "(verknuepfung_erstellen.bat einmal ausführen)."))
         self.events.put(("autostart", exists, admin, info))
 
     def _autostart_state(self, exists, can_change, info):
@@ -1584,15 +1620,16 @@ class App:
     def _autostart_changed(self):
         on = bool(self.autostart_var.get())
         self.autostart_cb.state(["disabled"])
-        self.autostart_info.set("Wird eingerichtet …")
+        self.autostart_info.set(_("Wird eingerichtet …"))
         root_dir = self.root_dir
 
         def work():
             ok, out = autostart.set_autostart(root_dir, on)
             if ok:
-                msg = ("Startet ab jetzt mit Windows im Infobereich." if on else "Startet nicht mehr mit Windows.")
+                msg = (_("Startet ab jetzt mit Windows im Infobereich.") if on
+                       else _("Startet nicht mehr mit Windows."))
             else:
-                msg = f"Fehlgeschlagen: {out}"
+                msg = _("Fehlgeschlagen: {error}", error=out)
             self.events.put(("autostart", on if ok else not on, True, msg))
             self.events.put(("status_log", msg))
         threading.Thread(target=work, daemon=True, name="autostart").start()
@@ -1629,14 +1666,14 @@ class App:
         labels = [f"{m.name} ({self.catalog.realm_display(m)})" for m in entries]
         guess = self.catalog.suggest(name, realm)
         dlg = tk.Toplevel(self.root)
-        dlg.title("Map zuordnen")
+        dlg.title(_("Map zuordnen"))
         dlg.transient(self.root)
         dlg.resizable(False, False)
         body = ttk.Frame(dlg, padding=12)
         body.pack(fill="both", expand=True)
-        ttk.Label(body, text=f"Gelesen: „{name}“" + (f" / „{realm}“" if realm else ""),
+        ttk.Label(body, text=_("Gelesen: „{text}“", text=name) + (f" / „{realm}“" if realm else ""),
                   wraplength=380).pack(anchor="w")
-        ttk.Label(body, text="Welche Map war das? Der Name wird künftig automatisch erkannt.",
+        ttk.Label(body, text=_("Welche Map war das? Der Name wird künftig automatisch erkannt."),
                   style="Dim.TLabel", wraplength=380).pack(anchor="w", pady=(2, 8))
         var = tk.StringVar(value=labels[[m.id for m in entries].index(guess)] if guess in
                            [m.id for m in entries] else "")
@@ -1647,7 +1684,7 @@ class App:
 
         def ok():
             if var.get() not in labels:
-                msg.set("Bitte eine Map auswählen.")
+                msg.set(_("Bitte eine Map auswählen."))
                 return
             m = entries[labels.index(var.get())]
             problem = self.catalog.alias_problem(name, m.id)
@@ -1663,13 +1700,14 @@ class App:
             self._reload_catalog()
             dlg.destroy()
             self._hide_unknown()
-            self._log(f"„{name}“ wird jetzt als {m.name} erkannt (eigene Zuordnung).", "Erkennung")
-            self.show_map(m.id, 1, "manual", f"zugeordnet: „{name}“")
+            self._log(_("„{text}“ wird jetzt als {map} erkannt (eigene Zuordnung).", text=name, map=m.name),
+                      "Erkennung")
+            self.show_map(m.id, 1, "manual", _("zugeordnet: „{text}“", text=name))
 
         row = ttk.Frame(body)
         row.pack(fill="x", pady=(10, 0))
-        ttk.Button(row, text="Zuordnen", command=ok).pack(side="right")
-        ttk.Button(row, text="Abbrechen", command=dlg.destroy).pack(side="right", padx=6)
+        ttk.Button(row, text=_("Zuordnen"), command=ok).pack(side="right")
+        ttk.Button(row, text=_("Abbrechen"), command=dlg.destroy).pack(side="right", padx=6)
         dlg.bind("<Return>", lambda e: ok())
         dlg.bind("<Escape>", lambda e: dlg.destroy())
         tooltip.attach_all(dlg)
@@ -1694,16 +1732,16 @@ class App:
                 self._hide_unknown()
         rel = os.path.relpath(path, self.root_dir)
         if map_id is None:
-            self._log(f"Kartenbild gespeichert: {rel}", "Overlay")
+            self._log(_("Kartenbild gespeichert: {path}", path=rel), "Overlay")
             return
         m = self.catalog.maps[map_id]
-        self._log(f"Eigenes Kartenbild für {m.label(variant)} gespeichert: {rel}"
-                  + (" – wird ab jetzt automatisch erkannt." if m.custom else ""), "Overlay")
-        self.show_map(map_id, variant, "manual", "eigenes Bild")
+        self._log(_("Eigenes Kartenbild für {map} gespeichert: {path}", map=m.label(variant), path=rel)
+                  + (" – " + _("wird ab jetzt automatisch erkannt.") if m.custom else ""), "Overlay")
+        self.show_map(map_id, variant, "manual", _("eigenes Bild"))
 
     def picture_deleted(self, label: str):
         self._reload_catalog()
-        self._log(f"Eigenes Kartenbild für {label} gelöscht – das mitgelieferte gilt wieder.", "Overlay")
+        self._log(_("Eigenes Kartenbild für {map} gelöscht – das mitgelieferte gilt wieder.", map=label), "Overlay")
         if self.current and self.current[0] in self.catalog.maps:
             self.show_map(self.current[0], self.current[1], self.source or "manual", keep_timer=True)
 
@@ -1718,17 +1756,18 @@ class App:
         items = [f"„{t}“ → {self.catalog.maps[mid].name}" for mid, ts in aliases.items() if mid in self.catalog.maps
                  for t in ts]
         self.alias_var.set("; ".join(items) if items else
-                           "Keine. Unbekannte Map-Namen lassen sich nach dem Match im Hauptfenster zuordnen.")
+                           _("Keine. Unbekannte Map-Namen lassen sich nach dem Match im Hauptfenster zuordnen."))
 
     def _clear_aliases(self):
         if not self.settings.get("user_aliases"):
             return
-        if not messagebox.askokcancel("Eigene Zuordnungen", "Alle eigenen Map-Zuordnungen löschen?", parent=self.root):
+        if not messagebox.askokcancel(_("Eigene Zuordnungen"), _("Alle eigenen Map-Zuordnungen löschen?"),
+                                      parent=self.root):
             return
         self.settings.set("user_aliases", {})
         self._save_soon()
         self._reload_catalog()
-        self._log("Eigene Map-Zuordnungen gelöscht.", "System")
+        self._log(_("Eigene Map-Zuordnungen gelöscht."), "System")
 
     def _langs_changed(self):
         langs = [c for c, _ in LANGS if self.lang_vars[c].get()] or ["en"]
@@ -1737,7 +1776,7 @@ class App:
         self.worker.set_catalog(self.catalog)
         self._fill_list()
         self._save_soon()
-        self._log(f"Spielsprachen: {', '.join(langs)}", "System")
+        self._log(_("Spielsprachen: {langs}", langs=", ".join(langs)), "System")
 
     def _apply_theme(self):
         dark = bool(self.dark_var.get())
@@ -1770,7 +1809,7 @@ class App:
     def _log(self, text, cat="System"):
         entry = (time.strftime("%H:%M:%S"), cat if cat in CATS else "System", text)
         self._log_entries.append(entry)
-        log.info(f"[{entry[1]}] {text}")
+        log.info(f"[{_(entry[1])}] {text}")
         if self.cat_vars[entry[1]].get():
             self._append_log(entry)
         if entry[1] == "Fehler" and self.nb.select() != str(self.tab_log):
@@ -1781,7 +1820,7 @@ class App:
         t = self.log_text
         t.configure(state="normal")
         t.insert("end", ts + "  ", "ts")
-        t.insert("end", f"{cat:<9}", f"cat_{cat}")
+        t.insert("end", f"{_(cat):<9}", f"cat_{cat}")
         t.insert("end", "  " + text + "\n", "msg_Fehler" if cat == "Fehler" else "msg")
         lines = int(t.index("end-1c").split(".")[0])
         if lines > 1200:
@@ -1827,9 +1866,9 @@ class App:
             if IS_WIN:
                 os.startfile(path)                     # noqa: S606 – opens Explorer / editor
             else:
-                self._log(f"Öffnen nur unter Windows: {path}", "System")
+                self._log(_("Öffnen nur unter Windows: {path}", path=path), "System")
         except OSError as e:
-            self._log(f"Kann {path} nicht öffnen: {e}", "Fehler")
+            self._log(_("Kann {path} nicht öffnen: {error}", path=path, error=e), "Fehler")
 
     # ======================================================== window state
     def _restore_geometry(self):

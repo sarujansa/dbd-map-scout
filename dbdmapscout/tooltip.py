@@ -10,10 +10,12 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
+from .i18n import _, source
+
 DELAY_MS = 550
 WRAP = 320
 
-# label -> info text (buttons/checkboxes with a fixed label)
+# German label -> German info text (buttons/checkboxes with a fixed label); both translated via i18n
 TIPS = {
     # main window
     "Scannen": "Sucht sofort auf dem ganzen Bildschirm nach einem Map- oder Realm-Namen – falls die "
@@ -99,11 +101,13 @@ _PREFIX = [("Hintergrund entfernen", "Macht Dunkelblau (#282a42) und Graulila (#
 
 
 def tip_for_label(text: str):
-    if text in TIPS:
-        return TIPS[text]
+    """Info text for a (translated) label – the table is keyed by the German label."""
+    key = source(text)
+    if key in TIPS:
+        return _(TIPS[key])
     for prefix, tip in _PREFIX:
-        if text.startswith(prefix):
-            return tip
+        if key.startswith(prefix):
+            return _(tip)
     return None
 
 
