@@ -98,6 +98,9 @@ def collect(app) -> str:
                      f"Überwachung={w.watch_gen}, Overlay-Rechteck={w.overlay_rect})")
         lines.append(f"Aufnahme: {getattr(w, 'capture_info', '?')}  (Fensteraufnahme erlaubt="
                      f"{app.settings.get('window_capture', True)})")
+        q = getattr(w, "queue", None)
+        lines.append(f"Lobby: letzter Blick {getattr(w, 'lobby_info', '?')} · Zustand "
+                     f"{getattr(q, 'state', '?')}, Rolle {getattr(q, 'role', None)}")
         hist = list(getattr(w, "end_history", []))
         lines.append(f"Letzte Prüfungen ({len(hist)}):" if hist else "Letzte Prüfungen: keine")
         lines.extend("  " + h for h in hist[-40:])

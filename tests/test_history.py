@@ -67,3 +67,32 @@ def test_select_and_per_region():
     assert h.per_region(rs) == [("eu-central-1", 2, 200, 0.5), ("eu-west-2", 1, 200, 0.25),
                                 (h.NO_REGION, 1, 400, 0.25)]
     assert h.per_region([]) == []
+
+
+def test_wait_and_role_round_trip(tmp_path):
+    p = str(tmp_path / h.FILE)
+    h.append(p, h.Round(t=1.0, seconds=600, map_id="a", map="A", wait=125.0, role="killer"))
+    h.append(p, h.Round(t=2.0, seconds=600, map_id="b", map="B", custom=True))
+    with open(p, "a", encoding="utf-8") as fh:
+        fh.write('{"t": 3, "seconds": 70, "map_id": "c", "role": "hacker", "wait": -5}\n')   # nonsense is dropped
+    a, b, c = h.load(p)
+    assert (a.wait, a.role, a.custom) == (125.0, "killer", False)
+    assert (b.wait, b.role, b.custom) == (None, "", True)
+    assert (c.wait, c.role) == (None, "")
+
+
+def test_role_filter_and_waiting_times():
+    import datetime
+    ts = lambda *a: datetime.datetime(*a).timestamp()                   # noqa: E731
+    rs = [h.Round(ts(2026, 9, 28, 20, 5), 600, "a", "A", "eu-central-1", wait=60, role="killer"),      # Monday
+          h.Round(ts(2026, 9, 28, 21, 0), 600, "a", "A", "eu-west-2", wait=180, role="killer"),
+          h.Round(ts(2026, 9, 29, 9, 0), 600, "a", "A", "eu-central-1", wait=30, role="survivor"),        # Tuesday
+          h.Round(ts(2026, 9, 29, 10, 0), 600, "a", "A", custom=True, role="killer"),
+          h.Round(ts(2026, 9, 29, 11, 0), 600, "a", "A", role="survivor")]                              # search not seen
+    assert len(h.select(rs, role="killer")) == 2 and len(h.select(rs, role="custom")) == 1
+    assert len(h.select(rs, role="survivor")) == 2 and len(h.select(rs)) == 5
+    assert h.wait_summary(rs) == {"count": 3, "avg": 90.0, "median": 60, "min": 30, "max": 180}
+    assert h.wait_summary([])["count"] == 0
+    assert h.wait_by(rs, "weekday") == [(0, 2, 120.0, 60), (1, 1, 30.0, 30)]
+    assert h.wait_by(rs, "hour") == [(9, 1, 30.0, 30), (18, 1, 60.0, 60), (21, 1, 180.0, 180)]
+    assert h.wait_by(rs, "region") == [("eu-central-1", 2, 45.0, 30), ("eu-west-2", 1, 180.0, 180)]

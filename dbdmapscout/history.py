@@ -22,6 +22,9 @@ class Round:
     map: str                # label shown, incl. layout ("Coal Tower II")
     region: str = ""        # AWS region code of the game server, if "Verbunden mit" was on
     source: str = ""        # auto | manual | scan
+    wait: float | None = None   # seconds searched in the lobby until it was found (None: not seen / custom)
+    role: str = ""          # killer | survivor | "" (unknown)
+    custom: bool = False    # custom game (no queue)
 
 
 def should_record(seconds: float) -> bool:
@@ -59,9 +62,13 @@ def load(path: str) -> list:
             for line in fh:
                 try:
                     d = json.loads(line)
+                    wait = d.get("wait")
                     out.append(Round(t=float(d["t"]), seconds=float(d["seconds"]), map_id=str(d["map_id"]),
                                      map=str(d.get("map") or d["map_id"]), region=str(d.get("region") or ""),
-                                     source=str(d.get("source") or "")))
+                                     source=str(d.get("source") or ""),
+                                     wait=float(wait) if isinstance(wait, (int, float)) and wait >= 0 else None,
+                                     role=str(d.get("role") or "") if d.get("role") in ROLES else "",
+                                     custom=bool(d.get("custom"))))
                 except (ValueError, KeyError, TypeError):
                     continue
     except OSError:
@@ -110,9 +117,18 @@ def period_start(period: str, now: float):
     return d.timestamp()
 
 
-def select(rounds, since=None, region=None) -> list:
-    """Rounds from ``since`` on; ``region``: None = all, NO_REGION = rounds without a known server."""
+ROLES = ("killer", "survivor")
+ROLE_FILTERS = ("all", "killer", "survivor", "custom")
+
+
+def select(rounds, since=None, region=None, role="all") -> list:
+    """Rounds from ``since`` on; ``region``: None = all, NO_REGION = rounds without a known server;
+    ``role``: all | killer | survivor | custom (custom games only)."""
     out = [r for r in rounds if since is None or r.t >= since]
+    if role == "custom":
+        out = [r for r in out if r.custom]
+    elif role in ROLES:
+        out = [r for r in out if r.role == role and not r.custom]
     if region == NO_REGION:
         out = [r for r in out if not r.region]
     elif region:
@@ -137,3 +153,39 @@ def per_region(rounds) -> list:
     total = len(rounds) or 1
     rows = [(c, len(s), sum(s) / len(s), len(s) / total) for c, s in groups.items()]
     return sorted(rows, key=lambda row: (-row[1], row[0] == NO_REGION, row[0]))
+
+
+# ------------------------------------------------------------------ waiting time in the lobby
+WAIT_GROUPS = ("weekday", "hour", "region")
+HOUR_BLOCK = 3              # time of day in blocks of 3 hours (00–03, 03–06, …)
+
+
+def wait_summary(rounds) -> dict:
+    """Waiting times of rounds that have one (public matches whose search was seen)."""
+    w = sorted(r.wait for r in rounds if r.wait is not None and not r.custom)
+    if not w:
+        return {"count": 0, "avg": 0.0, "median": 0.0, "min": 0.0, "max": 0.0}
+    return {"count": len(w), "avg": sum(w) / len(w), "median": w[len(w) // 2], "min": w[0], "max": w[-1]}
+
+
+def _wait_key(r, by):
+    import datetime
+    d = datetime.datetime.fromtimestamp(r.t)
+    if by == "weekday":
+        return d.weekday()                                   # 0 = Monday
+    if by == "hour":
+        return d.hour // HOUR_BLOCK * HOUR_BLOCK             # start hour of the block
+    return r.region or NO_REGION
+
+
+def wait_by(rounds, by: str) -> list:
+    """[(key, rounds, average wait s, shortest s)] – weekday 0..6 and hour blocks in calendar order,
+    regions by shortest average wait (the answer to "where/when do I find a match fastest?")."""
+    groups = {}
+    for r in rounds:
+        if r.wait is not None and not r.custom:
+            groups.setdefault(_wait_key(r, by), []).append(r.wait)
+    rows = [(k, len(w), sum(w) / len(w), min(w)) for k, w in groups.items()]
+    if by == "region":
+        return sorted(rows, key=lambda row: (row[0] == NO_REGION, row[2]))
+    return sorted(rows)

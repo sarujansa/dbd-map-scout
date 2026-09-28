@@ -15,7 +15,7 @@ Das Programm muss „regelkonform“ zu Dead by Daylight bleiben. Konkret:
 
 ## Setup des Nutzers (wichtig für Tests und Schwellenwerte)
 
-- Monitor Samsung G5, **3440×1440**; DBD (Epic Games Store) im Modus **Fenster-Vollbild**.
+- Monitor Samsung G5, **3440×1440**; DBD (Steam, laut Screenshot-Pfad; früher Epic Games Store) im Modus **Fenster-Vollbild**.
 - DBD rendert **16:9 = 2560×1440 zentriert**, schwarze Balken links/rechts je 440 px. Alle UI-Positionen daher relativ zum 16:9-Viewport rechnen (`detector.viewport()`), nie relativ zur vollen Fensterbreite.
 - Spielsprache Englisch (EN/DE sind standardmäßig aktiv). Spielt oft Killer, auch Custom Games mit Bots.
 - Overlay-Standardposition „automatisch“ = im linken schwarzen Balken.
@@ -49,7 +49,8 @@ start_debug.bat           :: mit Konsole
 | `detector.py` | Banner: Trennlinie finden → Text ausschneiden → OCR-Scoring gegen Katalog → `Accumulator`. Rundenende: `OutOfMatchWatcher.observe()` (CONTINUE, Währung, Ladebalken) |
 | `matchend.py` | `MatchEndTracker` – reine Logik (testbar): Menü-Pause per Mauszeiger, Rundenende-Latch, Scharfschalten bei manueller Map |
 | `status.py` | `user_state()` – reine Logik: Statuszeile oben für Spieler (Wartet auf DBD / nächstes Match / Im Match / Menü / Runde vorbei; Worker-Probleme wie „schwarz“ gewinnen immer). Technische Worker-Texte nur noch ins Log |
-| `history.py` | Rundenverlauf für Tab „Statistik“ (reine Logik + `rounds.jsonl`; Filter `period_start()` = Kalender-Tag/-Woche ab Montag/-Monat/-Jahr, `select()`, `per_region()`; eine JSON-Zeile je Runde, ab 60 s, gekürzt auf die neuesten 5000). In `app.py`: Runde = automatisch erkannte Map (`_hist_open`, auch Scan) bis `match_end` (`_hist_close`); kommt ein neues Banner ohne erkanntes Ende, wird die offene Runde **verworfen** (falsche Dauer wäre schlimmer). Region nur als Code, nie die IP |
+| `history.py` | Rundenverlauf für Tab „Statistik“ (reine Logik + `rounds.jsonl`; seit 1.25 je Runde auch `wait`/`role`/`custom`, Filter `select(role=…)`, `wait_summary()`, `wait_by()` nach Wochentag/3-h-Block/Region; Filter `period_start()` = Kalender-Tag/-Woche ab Montag/-Monat/-Jahr, `select()`, `per_region()`; eine JSON-Zeile je Runde, ab 60 s, gekürzt auf die neuesten 5000). In `app.py`: Runde = automatisch erkannte Map (`_hist_open`, auch Scan) bis `match_end` (`_hist_close`); kommt ein neues Banner ohne erkanntes Ende, wird die offene Runde **verworfen** (falsche Dauer wäre schlimmer). Region nur als Code, nie die IP |
+| `lobby.py` | Lobby-Knopf unten rechts (am echten rechten Fensterrand, Masse in 16:9-Breiten vom rechten Rand): `LobbyReader` liest das Knopfwort per Lexikon (PLAY/CANCEL/READY, Fit ≥ −2; andere Bildschirme ≤ −7) und nur bei CANCEL/READY die Zeile darunter (links Killername, rechts „0:06 EST. 4:39“ bzw. Countdown). `kind`: CANCEL+EST = Suche, READY oder CANCEL ohne EST mit Uhrzeit = Lobby, READY ohne alles = Custom Game. Rolle: Name darunter → Killer, sonst Survivor (Custom: unbekannt). `result_role()`: Kategorien des Ergebnisbildschirms (BRUTALITY… / OBJECTIVES…, 2 von 4 reichen – das eigene Overlay verdeckt die erste). `QueueTracker` (reine Logik): Zustandswechsel erst nach 2 gleichen Blicken, Blicke ohne Knopf (Loadout, Shop) ändern nichts, Wartezeit ab DBDs eigener Anzeige (Median), PLAY bricht ab. Worker schaut 1×/s, nur außerhalb des Matchs (`not (map_on_screen and tracker.in_trial)`); `match_end` bringt `role` vom Ergebnisbildschirm mit. App: `_queue`, Zeile unter „Verbunden mit“, `_hist_open` hängt die gefundene Lobby (≤ 15 min alt) an die Runde. Testbilder: `tests/data/lobby/` (Ausschnitte der Nutzer-Screenshots, auf 3440×1440 hochskaliert). Rolle im Match-HUD bewusst **nicht** ausgewertet (unsicher, Fehlalarm mitten im Match) |
 | `roundtimer.py` | `RoundTimer` – reine Logik: läuft, solange eine Karte eingeblendet ist; neue Map-Erkennung startet neu (außer dasselbe Banner < 90 s) |
 | `ocr.py` | PP-OCRv4-Erkennungsnetz (ONNX) + `LexiconScorer` (CTC-Forward über alle Kandidaten) |
 | `catalog.py`, `maps.json`, `textnorm.py` | Map-/Realm-Namen (9 Sprachen), Varianten, Bildpfade. Aliasse aus `maps.json` plus eigene Zuordnungen des Nutzers (`settings.json` → `user_aliases`, Dialog „Zuordnen …“ nach einem `unknown`-Event; `alias_problem()` verhindert Konflikte, Realm-Prüfung bleibt) |
@@ -101,7 +102,7 @@ start_debug.bat           :: mit Konsole
 
 Halten-zum-Anzeigen-Taste, Etagen-Hotkey (Midwich), Autostart mit DBD + Tray-Icon, .exe-Build (vorerst verworfen: Updates per git pull, Virenscanner-Fehlalarme, Admin-Helfer bräuchten Umbau – Desktop-Verknüpfung reicht), Ausblenden im Zuschauermodus, „Match Details“ als zweite Erkennungsquelle.
 
-Gewählt, wartet auf Screenshots des Nutzers (3440×1440): **Wartezeit in der Statistik** (Suche/Lobby → Map-Banner, Ø pro Tag/Uhrzeit/Region; braucht Erkennung „sucht gerade“, sonst zählen Blutnetz/Shop mit) und **Rolle erkennen** (Killer/Survivor am HUD; Statistik und Overlay-Einstellungen pro Rolle; erst nur Anzeige, automatisches Umschalten erst nach Bestätigung).
+Wartezeit und Rolle sind seit 1.25.0 drin (`lobby.py`). Noch offen, erst nach Bestätigung des Nutzers, dass die Rollenanzeige stimmt: **Overlay-Einstellungen pro Rolle** (z. B. als Survivor „nur Infos“).
 
 ## Arbeitsweise
 
