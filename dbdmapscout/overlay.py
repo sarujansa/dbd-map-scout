@@ -87,9 +87,12 @@ class Overlay:
         self.pic = tk.Label(self.win, bd=0, bg=KEY, highlightthickness=0)
         self.caption.pack(side="top", anchor="w")
         self.pic.pack(side="top", anchor="w")
-        self.timer = tk.Label(self.win, text="", fg="#f2f2f2", bg="#141416", anchor="w",
-                              font=("Segoe UI", 12, "bold"), padx=6, pady=1)
+        self.timer = tk.Label(self.win, text="", fg="#ffffff", bg="#141416", anchor="center",
+                              font=("Segoe UI Black", 24), padx=6, pady=0)
+        self.server = tk.Label(self.win, text="", fg="#b2b8f8", bg="#141416", anchor="center",
+                               font=("Segoe UI", 11, "bold"), padx=6, pady=2)
         self._timer_text = ""
+        self._server_text = ""
         self._frames = []           # raw frames
         self._photos = []           # prepared PhotoImages for the current size
         self._frame_i = 0
@@ -138,10 +141,24 @@ class Overlay:
             return
         self._timer_text = text
         self.timer.configure(text=text)
-        if text:
-            self.timer.pack(side="top", anchor="w", after=self.pic)
-        else:
-            self.timer.pack_forget()
+        self._pack_info()
+
+    def set_server(self, text: str):
+        text = text or ""
+        if text == self._server_text:
+            return
+        self._server_text = text
+        self.server.configure(text=f"●  {text.upper()}" if text else "")
+        self._pack_info()
+
+    def _pack_info(self):
+        """Timer (big, centred) and server region below the map, in this order."""
+        self.timer.pack_forget()
+        self.server.pack_forget()
+        if self._timer_text:
+            self.timer.pack(side="top", fill="x", after=self.pic)
+        if self._server_text:
+            self.server.pack(side="top", fill="x", after=self.timer if self._timer_text else self.pic)
 
     def set_transparent(self, on: bool):
         """Colour-key transparency around the map (off = dark rectangle behind it)."""

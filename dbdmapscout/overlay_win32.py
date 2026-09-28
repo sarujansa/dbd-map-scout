@@ -12,7 +12,7 @@ import ctypes
 import sys
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from .capture import is_above
 from .overlay import BACKDROP, load_frames
@@ -110,8 +110,9 @@ if IS_WIN:
     HWND_NOTOPMOST = wintypes.HWND(-2)
 
 
-def _font(size: int):
-    for name in ("segoeuib.ttf", "arialbd.ttf", "DejaVuSans-Bold.ttf"):
+def _font(size: int, heavy: bool = False):
+    names = ("seguibl.ttf",) if heavy else ()             # Segoe UI Black: as heavy as the map titles
+    for name in names + ("segoeuib.ttf", "arialbd.ttf", "DejaVuSans-Bold.ttf"):
         try:
             return ImageFont.truetype(name, size)
         except OSError:
@@ -149,19 +150,78 @@ def add_border(pic: Image.Image) -> Image.Image:
     return pic
 
 
-def add_timer(pic: Image.Image, text: str, height: int) -> Image.Image:
-    """Small dark strip with the round timer below the (composed) map."""
-    size = max(14, height // 26)
-    font = _font(size)
-    x0, y0, x1, y1 = ImageDraw.Draw(pic).textbbox((0, 0), text, font=font)
-    bar_h = (y1 - y0) + size // 2 + 4
-    bar_w = min(pic.width, (x1 - x0) + size + 4)
-    canvas = Image.new("RGBA", (pic.width, pic.height + bar_h), (0, 0, 0, 0))
+INFO_TIMER = (255, 255, 255, 255)
+INFO_SERVER = (178, 184, 248, 255)     # light tone of the map colour
+INFO_DOT = (74, 222, 128, 255)         # "connected"
+
+
+def _content_bottom(pic: Image.Image) -> int:
+    """Last row with visible map pixels (map pictures often have an empty transparent margin below)."""
+    a = np.asarray(pic.getchannel("A"))
+    rows = np.flatnonzero((a > 24).any(axis=1))
+    return int(rows[-1]) + 1 if rows.size else pic.height
+
+
+def _tracked_width(d, text, font, track):
+    return sum(d.textlength(c, font=font) for c in text) + track * max(0, len(text) - 1)
+
+
+def add_info(pic: Image.Image, timer: str, server: str, height: int, backdrop: bool = False) -> Image.Image:
+    """Round timer and connected server below the map, styled like the map title: white heavy digits
+    with a soft shadow (no box), below them a green "connected" dot and the region in small caps.
+    ``backdrop``: the map sits on a dark rectangle (transparent edge off) – extend it behind the info."""
+    if not timer and not server:
+        return pic
+    d0 = ImageDraw.Draw(pic)
+    tfont, sfont = _font(max(22, height // 11), heavy=True), _font(max(14, height // 24))
+    stext = server.upper()
+    track = max(1, height // 220)
+    dot = max(7, height // 44)
+    gap = max(4, height // 64)
+    tb = d0.textbbox((0, 0), timer or "0", font=tfont)
+    sb = d0.textbbox((0, 0), stext or "0", font=sfont)
+    th = tb[3] - tb[1] if timer else 0
+    sh = sb[3] - sb[1] if server else 0
+    block_h = th + sh + (gap if timer and server else 0)
+    sw = int(_tracked_width(d0, stext, sfont, track)) + 2 * dot if server else 0
+    width = max(pic.width, (tb[2] - tb[0]) + 2 * gap, sw + 2 * gap)
+    # text layer for the info block only (shadow = blurred dark copy, like the title of the map pictures)
+    blur = max(2, height // 150)
+    pad = 3 * blur
+    off = max(1, height // 220)
+    layer_w, layer_h = width, block_h + 2 * pad
+    top = max(pad, _content_bottom(pic) + 3 * gap)      # right under the visible map, not its empty margin
+    halo = max(1, height // 200)                         # dark outline in the shadow: readable over bright game
+    canvas = Image.new("RGBA", (width, max(pic.height, top + block_h + pad + 2 * off)),
+                       BACKDROP + (255,) if backdrop else (0, 0, 0, 0))
     canvas.alpha_composite(pic, (0, 0))
-    d = ImageDraw.Draw(canvas)
-    d.rectangle([0, pic.height, bar_w - 1, pic.height + bar_h - 1], fill=(20, 20, 22, 235))
-    d.text((size // 2 + 2 - x0, pic.height + (bar_h - (y1 - y0)) // 2 - y0), text, font=font,
-           fill=(242, 242, 242, 255))
+
+    def draw(d, dark):
+        y = pad
+        if timer:
+            d.text(((layer_w - (tb[2] - tb[0])) // 2 - tb[0], y - tb[1]), timer, font=tfont,
+                   fill=(0, 0, 0, 230) if dark else INFO_TIMER,
+                   stroke_width=2 * halo if dark else 0, stroke_fill=(0, 0, 0, 230))
+            y += th + gap
+        if server:
+            x = (layer_w - sw) // 2
+            cy = y + sh // 2
+            grow = halo if dark else 0
+            d.ellipse([x - grow, cy - dot // 2 - grow, x + dot + grow, cy - dot // 2 + dot + grow],
+                      fill=(0, 0, 0, 230) if dark else INFO_DOT)
+            x += 2 * dot
+            for ch in stext:
+                d.text((x, y - sb[1]), ch, font=sfont, fill=(0, 0, 0, 230) if dark else INFO_SERVER,
+                       stroke_width=halo if dark else 0, stroke_fill=(0, 0, 0, 230))
+                x += d.textlength(ch, font=sfont) + track
+
+    shadow = Image.new("RGBA", (layer_w, layer_h), (0, 0, 0, 0))
+    draw(ImageDraw.Draw(shadow), True)
+    shadow = shadow.filter(ImageFilter.GaussianBlur(blur))
+    text = Image.new("RGBA", (layer_w, layer_h), (0, 0, 0, 0))
+    draw(ImageDraw.Draw(text), False)
+    canvas.alpha_composite(shadow, (off, top - pad + 2 * off))
+    canvas.alpha_composite(text, (0, top - pad))
     return canvas
 
 
@@ -193,6 +253,7 @@ class Win32Overlay:
         self._frames = []               # [(PIL RGBA, duration)]
         self._caption = ""
         self._timer = ""                # round timer text below the map ("" = none)
+        self._server = ""               # connected server region below the timer ("" = none)
         self._base = []                 # [(PIL RGBA, duration)] scaled map (+ caption), cached per size
         self._base_key = None
         self._prepared = []             # [(bytes, w, h, duration)]
@@ -244,6 +305,10 @@ class Win32Overlay:
         """Round timer shown below the map; only re-renders when the text changes."""
         self._timer = text or ""
 
+    def set_server(self, text: str):
+        """Connected server region shown below the timer."""
+        self._server = text or ""
+
     def has_map(self) -> bool:
         return bool(self._frames)
 
@@ -262,12 +327,12 @@ class Win32Overlay:
             self._base = [(compose(img, height, base_key[1], self.transparent, False), dur)
                           for img, dur in self._frames]
             self._base_key = base_key
-        key = (base_key, self._editing, self._timer)
+        key = (base_key, self._editing, self._timer, self._server)
         if key != self._key:
             self._prepared = []
             for pic, dur in self._base:
-                if self._timer:
-                    pic = add_timer(pic, self._timer, height)
+                if self._timer or self._server:
+                    pic = add_info(pic, self._timer, self._server, height, backdrop=not self.transparent)
                 if self._editing:
                     pic = add_border(pic.copy())
                 self._prepared.append((premultiplied_bgra(pic), pic.width, pic.height, dur))

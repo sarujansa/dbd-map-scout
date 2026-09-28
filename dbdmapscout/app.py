@@ -232,9 +232,11 @@ class App:
         self.caption_var = tk.BooleanVar(value=o["show_caption"])
         self.transp_var = tk.BooleanVar(value=o.get("transparent", True))
         self.timer_show_var = tk.BooleanVar(value=o.get("show_timer", True))
+        self.server_show_var = tk.BooleanVar(value=o.get("show_server", True))
         for text, var in (("Nur zeigen, wenn DBD das aktive Fenster ist", self.focus_var),
                           ("Map-Namen über der Karte anzeigen", self.caption_var),
                           ("Rundentimer unter der Karte anzeigen", self.timer_show_var),
+                          ("Verbundenen Server unter der Karte anzeigen (Tab Server)", self.server_show_var),
                           ("Transparenter Rand um die Karte", self.transp_var)):
             ttk.Checkbutton(look, text=text, variable=var, command=self._overlay_flags_changed).pack(anchor="w", pady=1)
         return f
@@ -402,6 +404,8 @@ class App:
         if self._conn_busy:
             text = "Warte auf Windows (Administratorrechte) …"
         self.conn_tab_var.set(f"Verbunden mit: {text}" if text and self.conn.running else text)
+        show = self.settings["overlay"].get("show_server", True)
+        self.overlay.set_server(regions.NAMES.get(srv["region"], srv["region"]) if srv and show else "")
         main = f"Verbunden mit: {text}" if self.conn.running else ""
         if main != self.conn_var.get():
             self.conn_var.set(main)
@@ -1195,6 +1199,7 @@ class App:
         o["only_when_game_focused"] = bool(self.focus_var.get())
         o["show_caption"] = bool(self.caption_var.get())
         o["show_timer"] = bool(self.timer_show_var.get())
+        o["show_server"] = bool(self.server_show_var.get())
         if bool(self.transp_var.get()) != o.get("transparent", True):
             o["transparent"] = bool(self.transp_var.get())
             self.overlay.set_transparent(o["transparent"])
