@@ -493,23 +493,41 @@ def _right_region(frame, x0, y0, y1, full_width=False):
 BAR_FILLED = 0.6        # share of non-black pixels for a side bar to count as "picture"
 
 
-def fills_bars(frame) -> bool:
+def has_bars(frame) -> bool:
+    """Is the window wider than 16:9, i.e. does a trial show black bars left and right?"""
+    H, W = frame.shape[:2]
+    return int(viewport(W, H)[0] * 0.9) >= 40
+
+
+def fills_bars(frame, ignore=None) -> bool:
     """Does the picture extend into the side bars of an ultrawide window?
 
     In a trial DBD draws 16:9 with black bars; result screen, lobby and menus use the
-    full width. The top and bottom 15 % are ignored (FPS counters, notifications), and
-    our own overlay is blacked out before the check, so one side only needs to be
-    partly filled."""
+    full width. The top and bottom 15 % are ignored (FPS counters, notifications).
+    ``ignore``: (x0, y0, x1, y1) of our own overlay, blacked out before the check – those
+    pixels do not count (a big map in the left bar would otherwise make it look empty)."""
     H, W = frame.shape[:2]
     vx, _ = viewport(W, H)
     bar = int(vx * 0.9)
     if bar < 40:
         return False                                      # no bars (16:9 or narrower)
     y0, y1 = int(0.15 * H), int(0.85 * H)
-    g = cv2.cvtColor(frame[y0:y1], cv2.COLOR_BGR2GRAY)
-    left = float((g[:, :bar] > 8).mean())
-    right = float((g[:, W - bar:] > 8).mean())
-    return max(left, right) >= BAR_FILLED and min(left, right) >= BAR_FILLED / 2
+    lit = cv2.cvtColor(frame[y0:y1], cv2.COLOR_BGR2GRAY) > 8
+    use = np.ones(lit.shape, bool)
+    if ignore is not None:
+        ix0, iy0, ix1, iy1 = (int(v) for v in ignore)
+        use[max(0, iy0 - y0):max(0, iy1 - y0), max(0, ix0):max(0, ix1)] = False
+
+    def share(cols):
+        n = int(use[:, cols].sum())
+        return float(lit[:, cols][use[:, cols]].mean()) if n >= 0.2 * use[:, cols].size else None
+
+    parts = [s for s in (share(slice(0, bar)), share(slice(W - bar, W))) if s is not None]
+    if not parts:
+        return False
+    if len(parts) == 1:                                   # one bar hidden by our overlay: judge by the other
+        return parts[0] >= BAR_FILLED
+    return max(parts) >= BAR_FILLED and min(parts) >= BAR_FILLED / 2
 
 
 def has_loading_bar(frame) -> bool:
@@ -591,18 +609,22 @@ class OutOfMatchWatcher:
             return False
         return float(np.percentile(np.abs(thumb - prev), 99)) <= 4.0
 
-    def observe(self, frame: np.ndarray) -> EndObservation:
+    def observe(self, frame: np.ndarray, ignore=None) -> EndObservation:
+        """``ignore``: rectangle of our own (blacked out) overlay in ``frame``."""
         t0 = time.perf_counter()
         ob = EndObservation()
         if frame is None or frame.size == 0:
             return ob
         H = frame.shape[0]
-        ob.full_width = full = fills_bars(frame)
+        ob.full_width = full = fills_bars(frame, ignore)
         ob.continue_fit, ob.continue_text = self._continue_fit(_right_region(frame, 0.78, 0.86, 0.99, full), H)
         if ob.continue_fit is not None and ob.continue_fit >= self.CONTINUE_OK:
             ob.reason, ob.sure = N_("Ergebnisbildschirm"), ob.continue_fit >= self.CONTINUE_SURE
-        ob.currency_groups, ob.currency_digits, ob.currency_text = self._currency(
-            _right_region(frame, 0.62, 0.0, 0.12, full), H)
+        if full or not has_bars(frame):
+            # lobby/menus with the counters fill the bars on ultrawide; black bars = trial, whose
+            # score events top right would only cost OCR time (14–28 ms per look)
+            ob.currency_groups, ob.currency_digits, ob.currency_text = self._currency(
+                _right_region(frame, 0.62, 0.0, 0.12, full), H)
         if ob.reason is None and ob.currency_groups >= 2 and ob.currency_digits >= 6:
             ob.reason = N_("Lobby/Menü")
         ob.static = self._still(frame)
