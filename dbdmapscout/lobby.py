@@ -12,7 +12,8 @@ the top (y) of the window in units of the 16:9 picture width.
 
 Killers see their killer's name left below the button (searching and lobby), survivors never do. The
 name is matched against KILLERS (lexicon fit, like the button word); a name not on the list (a new
-killer) is kept as read instead of being forced onto a wrong one.
+killer, or a skin: some skins show their own name there, e.g. "MURDEROUS GRIZZLY") is kept as read
+instead of being forced onto a wrong one – the user assigns it once (settings "killer_aliases").
 After the match the result screen names the four categories – BRUTALITY … for killers,
 OBJECTIVES … for survivors – which confirms the role (also in custom games).
 
@@ -35,7 +36,12 @@ KILLERS = ("The Trapper", "The Wraith", "The Hillbilly", "The Nurse", "The Shape
            "The Blight", "The Twins", "The Trickster", "The Nemesis", "The Cenobite", "The Artist", "The Onryō",
            "The Dredge", "The Mastermind", "The Knight", "The Skull Merchant", "The Singularity", "The Xenomorph",
            "The Good Guy", "The Unknown", "The Lich", "The Dark Lord", "The Houndmaster", "The Ghoul",
-           "The Animatronic", "The Krasue", "The First", "Murderous Grizzly")
+           "The Animatronic", "The Krasue", "The First")
+# Legendary outfits show their own name below the button instead of the killer's. Only outfits whose
+# killer is confirmed (official news / wiki); anything else the user assigns once in the statistics.
+SKINS = {"Murderous Grizzly": "The Oni", "The Minotaur": "The Oni", "Ferryman of the Underworld": "The Blight",
+         "Naughty Bear": "The Trapper", "Frank Stone": "The Trapper", "Were-Elk": "The Huntress",
+         "Hunk": "The Legion", "William Afton": "The Animatronic"}
 KILLER_OK = -3.0          # listed killers fit about +1, a killer missing from the list -22 and worse
 KILLER_CATEGORIES = ("BRUTALITY", "DEVIOUSNESS", "HUNTER", "SACRIFICE")
 SURVIVOR_CATEGORIES = ("OBJECTIVES", "SURVIVAL", "ALTRUISM", "BOLDNESS")
@@ -68,6 +74,12 @@ def plain_name(text: str) -> str:
 def killer_label(name: str) -> str:
     """Short form for tables: "The Nurse" -> "Nurse"."""
     return name[4:] if name.startswith("The ") else name
+
+
+def resolve_killer(name: str, aliases: dict) -> str:
+    """The killer behind a name as read (skin / unknown name) – user assignments keyed by fold(name),
+    so "MURDEROUSGRIZZLY" and "Murderous Grizzly" are the same."""
+    return (aliases or {}).get(fold(name), name) if name else name
 
 
 def corner_box(W: int, H: int):
@@ -149,7 +161,8 @@ class LobbyReader:
     def __init__(self, recognizer):
         self.rec = recognizer
         self.scorer = LexiconScorer([fold(w) for w in BUTTON_WORDS])
-        self.killers = LexiconScorer([fold(k) for k in KILLERS])
+        self._names = list(KILLERS) + list(SKINS)
+        self.killers = LexiconScorer([fold(k) for k in self._names])
 
     def read(self, corner, W: int, H: int) -> LobbyView:
         """``corner``: the picture of corner_box(W, H)."""
@@ -184,7 +197,9 @@ class LobbyReader:
     def killer_name(self, groups, text: str) -> str:
         s = self.killers.score(groups)
         if len(s) and float(s.max() - best_path_logp(groups)) >= KILLER_OK:
-            return KILLERS[int(s.argmax())]
+            name = self.killers.strings[int(s.argmax())]
+            hit = next(n for n in self._names if fold(n) == name)
+            return SKINS.get(hit, hit)                   # an outfit counts for its killer
         return plain_name(text)
 
     def result_role(self, img) -> str | None:
