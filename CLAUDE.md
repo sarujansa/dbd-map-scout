@@ -37,7 +37,7 @@ start_debug.bat           :: mit Konsole
 - Update beim Start: `update.py` (nur Standardbibliothek, als Skript aufgerufen) zieht auf `main` per Fast-Forward nach – nie bei eigenen Änderungen, anderem Zweig, eigenen Commits, offline. Exit-Code 3 = aktualisiert → `start.bat` startet sich **in derselben Zeile** neu (cmd liest .bat-Dateien während der Ausführung weiter; eine geänderte `start.bat` darf nicht an alter Byte-Position weitergelesen werden). Diese Zeile nicht aufteilen. Ergebnis in `.venv\update_status.txt`, die App zeigt es im Log.
 - GitHub Actions (`.github/workflows/tests.yml`) führt pyflakes + pytest bei jedem PR unter Linux aus – PRs erst mergen, wenn der Haken grün ist.
 - Tests dürfen **niemals die echte hosts-Datei** anfassen. `hostsedit.hosts_path()` ignoriert die Test-Variable `DBDMS_HOSTS_FILE` unter Windows absichtlich (Sicherheit des Admin-Helfers) – Schreibtests laufen daher nur über `hostsedit.build()` / `apply_job` mit reinen Text-/Temp-Dateien bzw. unter Linux/CI. Nicht „reparieren“.
-- `settings.json`, `dbdmapscout.log`, `diagnose.txt`, `debug/` sind Laufzeitdateien, nicht committen.
+- `settings.json`, `dbdmapscout.log`, `diagnose.txt`, `debug/`, `rounds.jsonl`, `user_maps/` sind Laufzeitdateien, nicht committen.
 
 ## Architektur (dbdmapscout/)
 
@@ -49,6 +49,7 @@ start_debug.bat           :: mit Konsole
 | `detector.py` | Banner: Trennlinie finden → Text ausschneiden → OCR-Scoring gegen Katalog → `Accumulator`. Rundenende: `OutOfMatchWatcher.observe()` (CONTINUE, Währung, Ladebalken) |
 | `matchend.py` | `MatchEndTracker` – reine Logik (testbar): Menü-Pause per Mauszeiger, Rundenende-Latch, Scharfschalten bei manueller Map |
 | `status.py` | `user_state()` – reine Logik: Statuszeile oben für Spieler (Wartet auf DBD / nächstes Match / Im Match / Menü / Runde vorbei; Worker-Probleme wie „schwarz“ gewinnen immer). Technische Worker-Texte nur noch ins Log |
+| `history.py` | Rundenverlauf für Tab „Statistik“ (reine Logik + `rounds.jsonl`, eine JSON-Zeile je Runde, ab 60 s, gekürzt auf die neuesten 5000). In `app.py`: Runde = automatisch erkannte Map (`_hist_open`, auch Scan) bis `match_end` (`_hist_close`); kommt ein neues Banner ohne erkanntes Ende, wird die offene Runde **verworfen** (falsche Dauer wäre schlimmer). Region nur als Code, nie die IP |
 | `roundtimer.py` | `RoundTimer` – reine Logik: läuft, solange eine Karte eingeblendet ist; neue Map-Erkennung startet neu (außer dasselbe Banner < 90 s) |
 | `ocr.py` | PP-OCRv4-Erkennungsnetz (ONNX) + `LexiconScorer` (CTC-Forward über alle Kandidaten) |
 | `catalog.py`, `maps.json`, `textnorm.py` | Map-/Realm-Namen (9 Sprachen), Varianten, Bildpfade. Aliasse aus `maps.json` plus eigene Zuordnungen des Nutzers (`settings.json` → `user_aliases`, Dialog „Zuordnen …“ nach einem `unknown`-Event; `alias_problem()` verhindert Konflikte, Realm-Prüfung bleibt) |

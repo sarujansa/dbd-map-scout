@@ -224,6 +224,27 @@ EN = {
     "Mitschnitt beendet (Code {code}).": "Capture ended (code {code}).",
     "Fehler: {error}": "Error: {error}",
 
+    # ------------------------------------------------------------------ tab statistics
+    "Statistik": "Statistics",
+    "Gezählt werden Runden mit automatisch erkannter Map, vom Map-Banner bis zum erkannten Rundenende (mindestens "
+    "1 Minute). Gespeichert nur lokal in rounds.jsonl.":
+        "Counted are rounds with an automatically detected map, from the map banner to the detected end of the "
+        "round (at least 1 minute). Stored only locally in rounds.jsonl.",
+    "Maps": "Maps",
+    "Map": "Map",
+    "Runden": "Rounds",
+    "Ø Dauer": "Avg. length",
+    "Längste": "Longest",
+    "Letzte Runden": "Last rounds",
+    "Wann": "When",
+    "Dauer": "Length",
+    "Verlauf löschen": "Delete history",
+    "Noch keine Runden gespeichert.": "No rounds saved yet.",
+    "{n} Runden · Ø {avg} · gesamt {total}": "{n} rounds · avg. {avg} · total {total}",
+    "Alle gespeicherten Runden löschen?": "Delete all saved rounds?",
+    "Rundenverlauf gelöscht.": "Round history deleted.",
+    "Löscht alle gespeicherten Runden (Datei rounds.jsonl).": "Deletes all saved rounds (file rounds.jsonl).",
+
     # ------------------------------------------------------------------ tab log
     "Anzeigen:": "Show:",
     "Leeren": "Clear",
