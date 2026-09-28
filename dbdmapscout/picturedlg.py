@@ -60,6 +60,7 @@ class PictureDialog:
         self.realms = sorted(cat.realms)
         self.src = None
         self._photos = []
+        self._base = None                    # picked picture after trim/background removal (preview)
 
         d = self.dlg = tk.Toplevel(app.root)
         d.title(_("Kartenbild hinzufügen"))
@@ -86,13 +87,15 @@ class PictureDialog:
         self.map_cb = ttk.Combobox(mf, textvariable=self.map_var, values=self.labels, state="readonly",
                                    width=48, height=18)
         self.map_cb.pack(fill="x", padx=(22, 0), pady=(2, 6))
-        self.map_cb.bind("<<ComboboxSelected>>", lambda e: self._update_buttons())
+        self.map_cb.bind("<<ComboboxSelected>>", lambda e: (self._update_buttons(),
+                                                              self._render_preview(again=False)))
         ttk.Radiobutton(mf, text=_("Neue Map (fehlt im Programm)"), variable=self.mode, value="new",
                         command=self._mode_changed).pack(anchor="w")
         nf = ttk.Frame(mf)
         nf.pack(fill="x", padx=(22, 0), pady=(2, 0))
         ttk.Label(nf, text=_("Name"), width=7).grid(row=0, column=0, sticky="w")
         self.name_var = tk.StringVar(value=name.title() if name.isupper() else name)
+        self.name_var.trace_add("write", lambda *a: self._render_preview(again=False))
         self.name_entry = ttk.Entry(nf, textvariable=self.name_var, width=40)
         self.name_entry.grid(row=0, column=1, sticky="we", pady=1)
         ttk.Label(nf, text="Realm", width=7).grid(row=1, column=0, sticky="w")
@@ -106,6 +109,9 @@ class PictureDialog:
         ttk.Checkbutton(body, text=_("Hintergrund entfernen (Dunkelblau und Graulila der Community-Karten) "
                                      "und Rand abschneiden"), variable=self.bg_var,
                         command=self._render_preview).pack(anchor="w", pady=(10, 0))
+        self.title_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(body, text=_("Map-Namen oben einfügen (wie bei den mitgelieferten Karten)"),
+                        variable=self.title_var, command=lambda: self._render_preview(again=False)).pack(anchor="w")
 
         pv = ttk.Frame(body)
         pv.pack(fill="x", pady=(8, 0))
@@ -145,6 +151,7 @@ class PictureDialog:
         self.name_entry.configure(state="normal" if new else "disabled")
         self.realm_cb.configure(state="normal" if new else "disabled")
         self._update_buttons()
+        self._render_preview(again=False)
 
     def _update_buttons(self):
         sel = self._selected()
@@ -168,17 +175,32 @@ class PictureDialog:
         self._render_preview()
         self._update_buttons()
 
-    def _render_preview(self):
+    def _title(self) -> str:
+        """Name to put on top of the picture ("" = none)."""
+        if not self.title_var.get():
+            return ""
+        if self.mode.get() == "new":
+            return self.name_var.get().strip()
+        sel = self._selected()
+        return self.app.catalog.maps[sel[0]].label(sel[1]) if sel else ""
+
+    def _render_preview(self, again: bool = True):
+        """``again``: the picture or the background option changed (else only the name on top)."""
         if not self.src:
             return
         try:
             with Image.open(self.src) as im:
                 im.load()
+                note = ""
                 if mi.is_animated(self.src):
+                    self._base = None
                     result, note = im.convert("RGBA"), _("Animiertes GIF: wird unverändert übernommen.")
                 else:
-                    result = mi.convert(im, self.bg_var.get(), PREVIEW_H)
-                    note = ""
+                    if again or self._base is None:
+                        self._base = mi.prepare(im, self.bg_var.get())
+                    if self._title() and mi.title_split(self._base) is not None:
+                        note = _("Das Bild hat oben schon einen Namen – es wird keiner hinzugefügt.")
+                    result = mi.convert(self._base, height=PREVIEW_H, title=self._title(), prepared=True)
                 before = preview(im)
         except (OSError, ValueError) as e:
             self.msg.set(_("Bild konnte nicht verarbeitet werden: {error}", error=e))
@@ -222,7 +244,7 @@ class PictureDialog:
         try:
             self.dlg.configure(cursor="watch")
             self.dlg.update_idletasks()
-            mi.save(self.src, dest, self.bg_var.get())
+            mi.save(self.src, dest, self.bg_var.get(), self._title())
         except (OSError, ValueError) as e:
             self.msg.set(_("Speichern fehlgeschlagen: {error}", error=e))
             return
