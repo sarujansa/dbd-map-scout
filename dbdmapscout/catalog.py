@@ -15,6 +15,7 @@ import json
 import os
 from dataclasses import dataclass, field
 
+from .i18n import _
 from .mapimage import USER_DIR
 from .textnorm import fold, name_forms, roman
 
@@ -215,12 +216,12 @@ class Catalog:
         """Why ``text`` cannot become an alias of ``map_id`` (None = fine)."""
         k = fold(text)
         if len(k) < self.MIN_ALIAS:
-            return "Der gelesene Text ist zu kurz."
+            return _("Der gelesene Text ist zu kurz.")
         if map_id not in self.maps:
-            return "Unbekannte Map."
+            return _("Unbekannte Map.")
         other = {h.map_id for h in self.hypotheses if h.name_key == k} - {map_id}
         if other:
-            return f"„{text}“ ist schon der Name von {self.maps[sorted(other)[0]].name}."
+            return _("„{text}“ ist schon der Name von {map}.", text=text, map=self.maps[sorted(other)[0]].name)
         return None
 
     def suggest(self, name_text: str, realm_text: str = "") -> str | None:

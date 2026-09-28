@@ -13,6 +13,7 @@ from dataclasses import dataclass
 import cv2
 
 from .capture import IS_WIN, ImageSource, ScreenGrabber, cursor_state, find_game_window, foreground_root
+from .i18n import _
 from .detector import ROI, Accumulator, BannerReader, OutOfMatchWatcher
 from .matchend import MatchEndTracker, Signals
 from .ocr import Recognizer
@@ -41,7 +42,7 @@ class DetectionWorker(threading.Thread):
         self.map_on_screen = False       # set by the UI: a map is displayed (not hidden after a match)
         self.watch_gen = None            # set by the UI: (number, source) of the map on display
         self.overlay_rect = None         # set by the UI: overlay position on screen (x, y, w, h) or None
-        self.watch_status = "keine Map angezeigt"
+        self.watch_status = _("keine Map angezeigt")
         self.capture_info = "Bildschirm"                     # where the pictures come from (diagnosis)
         self.end_history = collections.deque(maxlen=80)     # for the diagnosis
         self._scanner = None
@@ -136,18 +137,18 @@ class DetectionWorker(threading.Thread):
                 origin = (0, 0)
             else:
                 if window is not None and window.minimized:
-                    self._status("DBD ist minimiert", last_status)
-                    last_status = "DBD ist minimiert"
+                    self._status(_("DBD ist minimiert"), last_status)
+                    last_status = _("DBD ist minimiert")
                     time.sleep(0.5)
                     continue
                 if window is not None and window.width > 100 and window.height > 100:
                     origin = (window.left, window.top)
                     fw, fh = window.width, window.height
-                    status = f"DBD gefunden ({fw}×{fh}) – warte auf Map-Banner"
+                    status = _("DBD gefunden ({w}×{h}) – warte auf Map-Banner", w=fw, h=fh)
                 else:
                     ml, mt, mw, mh = grabber.primary_monitor()
                     origin, fw, fh = (ml, mt), mw, mh
-                    status = "DBD-Fenster nicht gefunden – beobachte Hauptbildschirm"
+                    status = _("DBD-Fenster nicht gefunden – beobachte Hauptbildschirm")
                 # ---- DBD in the background: take its picture from Windows instead of the screen
                 win_ok = source is None and window is not None and not window.minimized and window.width > 100
                 fg_now = win_ok and foreground_root() == window.hwnd
@@ -162,11 +163,12 @@ class DetectionWorker(threading.Thread):
                         if wcap.start():
                             if not wcap_told:
                                 wcap_told = True
-                                self.post("watch_info", text="DBD im Hintergrund – Fensteraufnahme aktiv: die Map "
-                                                             "wird auch erkannt, wenn andere Fenster darüber liegen.")
+                                self.post("watch_info", text=_("DBD im Hintergrund – Fensteraufnahme aktiv: die Map "
+                                                               "wird auch erkannt, wenn andere Fenster darüber "
+                                                               "liegen."))
                         else:
-                            self.post("warn", text=f"Fensteraufnahme nicht möglich, nutze Bildschirmaufnahme "
-                                                   f"({wcap.error})")
+                            self.post("warn", text=_("Fensteraufnahme nicht möglich, nutze Bildschirmaufnahme "
+                                                     "({error})", error=wcap.error))
                             wcap_failed, wcap = window.hwnd, None
                 elif wcap is not None:
                     wcap.stop()
@@ -183,7 +185,7 @@ class DetectionWorker(threading.Thread):
                     return grabber.grab(_o[0] + box[0], _o[1] + box[1], box[2], box[3])
 
             if not self.settings.get("auto_detect", True):
-                status = "Automatische Erkennung ist aus"
+                status = _("Automatische Erkennung ist aus")
             if status != last_status:
                 self._status(status, last_status)
                 last_status = status
@@ -194,7 +196,7 @@ class DetectionWorker(threading.Thread):
                 try:
                     img = grab(box)
                 except Exception as e:           # e.g. window moved off-screen
-                    warn = f"Bildschirmaufnahme fehlgeschlagen: {e}"
+                    warn = _("Bildschirmaufnahme fehlgeschlagen: {error}", error=e)
                     self._status(warn, last_status)
                     last_status = warn
                     time.sleep(1.0)
@@ -202,7 +204,7 @@ class DetectionWorker(threading.Thread):
                 if img.size and float(img.mean()) < 1.0 and window is not None:
                     black_since = black_since or tick
                     if tick - black_since > 8:
-                        warn = "Aufnahme ist schwarz – DBD im Modus „Fenster-Vollbild“ betreiben"
+                        warn = _("Aufnahme ist schwarz – DBD im Modus „Fenster-Vollbild“ betreiben")
                         self._status(warn, last_status)
                         last_status = warn
                 else:
@@ -293,17 +295,17 @@ class DetectionWorker(threading.Thread):
                     elif ev[0] == "match_end":
                         self.post("match_end", reason=ev[1], gen=tracker.generation, t=tracker.end_t)
                     elif ev[0] == "armed" and tracker.source != "auto":
-                        self.post("watch_info", text="Rundenende-Erkennung für die gewählte Map ist jetzt aktiv.")
+                        self.post("watch_info", text=_("Rundenende-Erkennung für die gewählte Map ist jetzt aktiv."))
                     elif ev[0] == "cursor_unreliable":
-                        self.post("watch_info", text="Mauszeiger war beim Map-Banner sichtbar – Menü-Erkennung "
-                                                     "per Mauszeiger ist für diese Runde aus.")
+                        self.post("watch_info", text=_("Mauszeiger war beim Map-Banner sichtbar – Menü-Erkennung "
+                                                       "per Mauszeiger ist für diese Runde aus."))
             elif not (use_end or use_menu):
-                self.watch_status = "aus (Einstellung)"
+                self.watch_status = _("aus (Einstellung)")
             elif tracker.ended and self.map_on_screen:
                 self.watch_status = tracker.describe()
             elif not self.map_on_screen:
-                self.watch_status = ("Runde vorbei – wartet auf die nächste Map" if tracker.ended
-                                     else "keine Map angezeigt")
+                self.watch_status = (_("Runde vorbei – wartet auf die nächste Map") if tracker.ended
+                                     else _("keine Map angezeigt"))
 
             rate = max(1.0, float(self.settings.get("scans_per_second", 5)))
             if self.map_on_screen and tracker.in_trial and not session:

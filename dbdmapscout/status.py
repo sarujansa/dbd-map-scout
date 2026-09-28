@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .i18n import _
+
 
 @dataclass
 class State:
@@ -19,7 +21,8 @@ DOT_STYLE = {"err": "err", "idle": "idle", "wait": "warn", "ok": "ok", "menu": "
 
 def is_problem(worker_status: str) -> bool:
     low = (worker_status or "").lower()
-    return any(w in low for w in ("fehl", "schwarz", "minimiert", "abgestürzt"))
+    return any(w in low for w in ("fehl", "schwarz", "minimiert", "abgestürzt",       # German texts
+                                   "fail", "black", "minimi", "crash"))                # English texts
 
 
 def user_state(worker_status: str = "", *, auto_detect: bool = True, game_found: bool = False,
@@ -29,15 +32,15 @@ def user_state(worker_status: str = "", *, auto_detect: bool = True, game_found:
         return State("err", worker_status)
     shown = has_map and visible_wanted and not hidden_after_match
     if shown and menu_paused:
-        return State("menu", f"Im Menü – Karte pausiert ({map_label})")
+        return State("menu", _("Im Menü – Karte pausiert ({map})", map=map_label))
     if shown:
-        return State("ok", f"Im Match: {map_label}" if map_label else "Karte eingeblendet")
+        return State("ok", _("Im Match: {map}", map=map_label) if map_label else _("Karte eingeblendet"))
     if has_map and hidden_after_match:
-        return State("done", "Runde vorbei – wartet auf das nächste Match")
+        return State("done", _("Runde vorbei – wartet auf das nächste Match"))
     if has_map and not visible_wanted:
-        return State("idle", f"Karte ausgeblendet ({map_label})")
+        return State("idle", _("Karte ausgeblendet ({map})", map=map_label))
     if not game_found and not simulate:
-        return State("idle", "Wartet auf DBD")
+        return State("idle", _("Wartet auf DBD"))
     if not auto_detect:
-        return State("wait", "DBD läuft – automatische Erkennung ist aus (Map von Hand wählen)")
-    return State("wait", "Wartet auf das nächste Match" if not simulate else "Simulation – wartet auf das Map-Banner")
+        return State("wait", _("DBD läuft – automatische Erkennung ist aus (Map von Hand wählen)"))
+    return State("wait", _("Wartet auf das nächste Match") if not simulate else _("Simulation – wartet auf das Map-Banner"))
