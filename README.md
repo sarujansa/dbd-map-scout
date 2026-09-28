@@ -36,14 +36,16 @@ Auf Ultrawide-Monitoren zeigt DBD Ergebnisbildschirm und Menüs in voller Breite
 
 Im Tab **Erkennung** zeigt die Zeile „Rundenende-Erkennung: …“ jederzeit, was das Programm gerade sieht, z. B. „im Match · Mauszeiger verborgen“. `Strg+Alt+M` holt eine ausgeblendete Karte sofort zurück.
 
+Oben im Steuerfenster steht immer, woran das Programm gerade ist: **Wartet auf DBD**, **Wartet auf das nächste Match**, **Im Match: …**, **Im Menü – Karte pausiert** oder **Runde vorbei** (Probleme wie ein schwarzes Bild stehen dort in Rot). Technische Einzelheiten stehen im Tab Log.
+
 Das Steuerfenster ist in Tabs aufgeteilt:
 
 | Tab | Inhalt |
 |---|---|
 | **Maps** | alle Karten nach Realm, Suche, Doppelklick zeigt eine Karte |
 | **Overlay** | Position (Vorgabe oder Schieberegler horizontal/vertikal, 0 % = links/oben, 100 % = rechts/unten), Grösse, Deckkraft, Anzeigeoptionen |
-| **Erkennung** | Automatik, Ausblenden nach der Runde, Pause in Menüs, Live-Status, Scans pro Sekunde, Spielsprache, Debug-Bilder, Diagnose |
-| **Server** | Serverregionen mit Ping, Regionen per hosts-Datei sperren oder freigeben, verbundener Spielserver (siehe unten) |
+| **Erkennung** | Automatik, Ausblenden nach der Runde, Pause in Menüs, Spielsprache; eingeklappt unter „Erweitert“: Fensteraufnahme, Scans pro Sekunde, Live-Status, Debug-Bilder, Diagnose |
+| **Server** | oben der verbundene Spielserver, darunter Serverregionen mit Ping, per hosts-Datei sperren oder freigeben (siehe unten) |
 | **Log** | Meldungen mit Kategorien *Erkennung*, *Overlay*, *System*, *Fehler*, einzeln ein-/ausblendbar |
 | **Einstellungen** | Dark Mode, Hotkeys ändern, Ordner öffnen |
 
@@ -62,7 +64,7 @@ Das Overlay ist ein eigenes, natives Windows-Fenster: immer im Vordergrund, durc
 | `Strg+Alt+↑` / `↓` | Overlay grösser / kleiner |
 | `Strg+Alt+P` | Position ändern (Overlay mit der Maus ziehen, Mausrad = Grösse, nochmals drücken = fertig) |
 
-Hotkeys lassen sich unter **Einstellungen → Hotkeys** ändern (Format z. B. `ctrl+shift+f8`). Alle Einstellungen landen in `settings.json`.
+Hotkeys lassen sich unter **Einstellungen → Hotkeys** ändern: Feld anklicken und die neue Kombination drücken (Esc bricht ab, Entf schaltet den Hotkey aus, „Standard“ stellt alle zurück). Buchstaben und Ziffern brauchen Strg oder Alt, damit der Hotkey nicht das normale Tippen blockiert; doppelt belegte Kombinationen werden abgelehnt. Alle Einstellungen landen in `settings.json`.
 
 **Spielsprache:** Standardmässig werden englische und deutsche Map-Namen erkannt. Wenn DBD auf Französisch, Spanisch, Italienisch, Polnisch, Portugiesisch oder Türkisch läuft, die Sprache im Steuerfenster anhaken.
 

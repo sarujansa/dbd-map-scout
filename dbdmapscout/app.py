@@ -21,10 +21,11 @@ from .catalog import Catalog
 from .config import Settings
 from . import autostart
 from .connwatch import ConnectionWatch, IdlePause, is_admin
-from .hotkeys import HotkeyThread, parse, pretty
+from .hotkeys import HotkeyThread, combo_from_keys, modifier_name, pretty
 from .overlay import load_frames
 from .overlay_win32 import make_overlay
 from .roundtimer import RoundTimer
+from .status import DOT_STYLE, user_state
 from .textnorm import fmt_duration, fold, roman
 from .worker import DetectionWorker
 
@@ -132,6 +133,7 @@ class App:
         self.dot = ttk.Label(head, text="●", style="DotWarn.TLabel")
         self.dot.pack(side="left")
         self.status_var = tk.StringVar(value="Starte …")
+        self._worker_status = ""
         ttk.Label(head, textvariable=self.status_var, wraplength=430).pack(side="left", padx=(4, 0))
 
         card = ttk.Frame(self.root)
@@ -183,10 +185,6 @@ class App:
         self.nb.add(self.tab_settings, text="Einstellungen")
         self.nb.bind("<<NotebookTabChanged>>", lambda e: self._tab_changed())
 
-        # ---------------------------------------------------------- footer
-        self.last_var = tk.StringVar(value="")
-        ttk.Label(self.root, textvariable=self.last_var, style="Dim.TLabel", wraplength=450).pack(
-            fill="x", padx=10, pady=(0, 8))
         self._apply_theme()
 
     # ------------------------------------------------------------ tab: maps
@@ -289,16 +287,6 @@ class App:
                         variable=self.menu_var, command=self._detect_flags_changed).pack(anchor="w", pady=(4, 1))
         ttk.Label(auto, text="erkannt am sichtbaren Mauszeiger (ESC-Menü, Ergebnisbildschirm, Lobby)",
                   style="Dim.TLabel", wraplength=400).pack(anchor="w", padx=(22, 0))
-        self.wgc_var = tk.BooleanVar(value=self.settings.get("window_capture", True))
-        ttk.Checkbutton(auto, text="Auch erkennen, wenn andere Fenster über DBD liegen",
-                        variable=self.wgc_var, command=self._detect_flags_changed).pack(anchor="w", pady=(4, 1))
-        ttk.Label(auto, text="Fensteraufnahme wie bei OBS (Windows Graphics Capture), nur solange DBD im "
-                             "Hintergrund ist", style="Dim.TLabel", wraplength=400).pack(anchor="w", padx=(22, 0))
-        self.watch_var = tk.StringVar(value="Rundenende-Erkennung: keine Map angezeigt")
-        ttk.Label(auto, textvariable=self.watch_var, style="Dim.TLabel", wraplength=420).pack(anchor="w", pady=(6, 2))
-        self.rate_var = tk.DoubleVar(value=float(self.settings.get("scans_per_second", 5)))
-        self._slider(auto, "Scans/Sek.", self.rate_var, 2, 10, self._rate_changed, fmt="{:.0f}")
-
         lang = ttk.LabelFrame(f, text="Spielsprache (Map-Namen)", padding=8)
         lang.pack(fill="x", pady=(8, 0))
         grid = ttk.Frame(lang)
@@ -310,23 +298,61 @@ class App:
             ttk.Checkbutton(grid, text=label, variable=v, command=self._langs_changed).grid(
                 row=i // 5, column=i % 5, sticky="w", padx=(0, 12), pady=1)
 
-        dbg = ttk.LabelFrame(f, text="Fehlersuche", padding=8)
-        dbg.pack(fill="x", pady=(8, 0))
+        # technical options: folded away, only needed when something does not work
+        self.adv_open = tk.BooleanVar(value=bool(self.settings.get("show_advanced", False)))
+        self.adv_btn = ttk.Button(f, command=self._toggle_advanced)
+        self.adv_btn.pack(anchor="w", pady=(10, 0))
+        adv = self.adv_frame = ttk.LabelFrame(f, text="Erweitert", padding=8)
+        self.wgc_var = tk.BooleanVar(value=self.settings.get("window_capture", True))
+        ttk.Checkbutton(adv, text="Auch erkennen, wenn andere Fenster über DBD liegen",
+                        variable=self.wgc_var, command=self._detect_flags_changed).pack(anchor="w", pady=1)
+        ttk.Label(adv, text="Fensteraufnahme wie bei OBS, nur solange DBD im Hintergrund ist",
+                  style="Dim.TLabel", wraplength=400).pack(anchor="w", padx=(22, 0))
+        self.rate_var = tk.DoubleVar(value=float(self.settings.get("scans_per_second", 5)))
+        self._slider(adv, "Scans/Sek.", self.rate_var, 2, 10, self._rate_changed, fmt="{:.0f}")
+        self.watch_var = tk.StringVar(value="Rundenende-Erkennung: keine Map angezeigt")
+        ttk.Label(adv, textvariable=self.watch_var, style="Dim.TLabel", wraplength=420).pack(anchor="w", pady=(4, 6))
         self.debug_var = tk.BooleanVar(value=self.settings["save_debug_images"])
-        ttk.Checkbutton(dbg, text="Debug-Bilder speichern (Ordner debug/)", variable=self.debug_var,
+        ttk.Checkbutton(adv, text="Debug-Bilder speichern (Ordner debug/)", variable=self.debug_var,
                         command=self._detect_flags_changed).pack(anchor="w")
-        r = ttk.Frame(dbg)
+        r = ttk.Frame(adv)
         r.pack(fill="x", pady=(6, 0))
         ttk.Button(r, text="Bildschirm jetzt scannen", command=self.scan_now).pack(side="left")
         ttk.Button(r, text="Diagnose kopieren", command=self.show_diagnose).pack(side="left", padx=6)
+        self._show_advanced()
         return f
+
+    def _toggle_advanced(self):
+        self.adv_open.set(not self.adv_open.get())
+        self.settings.set("show_advanced", bool(self.adv_open.get()))
+        self._save_soon()
+        self._show_advanced()
+
+    def _show_advanced(self):
+        if self.adv_open.get():
+            self.adv_btn.configure(text="▾ Erweitert (Fehlersuche, Technik)")
+            self.adv_frame.pack(fill="x", pady=(4, 0))
+        else:
+            self.adv_btn.configure(text="▸ Erweitert (Fehlersuche, Technik)")
+            self.adv_frame.pack_forget()
 
     # ----------------------------------------------------------- tab: server
     def _tab_server(self):
         f = ttk.Frame(self.nb, padding=8)
-        ttk.Label(f, text="DBD sucht Matches nur auf den angehakten Serverregionen. Die übrigen werden in der "
-                          "Windows-hosts-Datei gesperrt (wie bei „Make Your Choice“). Das Spiel selbst wird "
-                          "dabei nicht verändert.", style="Dim.TLabel", wraplength=440).pack(anchor="w")
+        conn = ttk.LabelFrame(f, text="Verbundener Spielserver", padding=8)
+        conn.pack(fill="x")
+        self.conn_show_var = tk.BooleanVar(value=bool(self.settings.get("show_connection")))
+        ttk.Checkbutton(conn, text="Anzeigen, mit welchem Server DBD verbunden ist",
+                        variable=self.conn_show_var, command=self._conn_toggled).pack(anchor="w")
+        self.conn_tab_var = tk.StringVar(value="")
+        ttk.Label(conn, textvariable=self.conn_tab_var, style="Big.TLabel").pack(anchor="w", pady=(2, 0))
+
+        reg = ttk.LabelFrame(f, text="Serverregionen", padding=8)
+        reg.pack(fill="both", expand=True, pady=(8, 0))
+        ttk.Label(reg, text="DBD sucht Matches nur in den angehakten Regionen (über die Windows-hosts-Datei, "
+                            "das Spiel wird nicht verändert). Nach „Auswahl anwenden“ DBD neu starten.",
+                  style="Dim.TLabel", wraplength=430).pack(anchor="w")
+        f_outer, f = f, reg
         tf = ttk.Frame(f)
         tf.pack(fill="both", expand=True, pady=(6, 0))
         t = ttk.Treeview(tf, columns=("ping", "state"), show="tree headings", height=11, selectmode="browse")
@@ -359,20 +385,12 @@ class App:
         self.srv_btns[1].pack(side="left", padx=6)
         self.srv_btns[2].pack(side="left")
         self.srv_status = tk.StringVar(value="")
-        ttk.Label(f, textvariable=self.srv_status, wraplength=440).pack(anchor="w", pady=(6, 0))
-        conn = ttk.Frame(f)
-        conn.pack(fill="x", pady=(8, 0))
-        self.conn_show_var = tk.BooleanVar(value=bool(self.settings.get("show_connection")))
-        ttk.Checkbutton(conn, text="Verbundenen Spielserver anzeigen (Administratorrechte)",
-                        variable=self.conn_show_var, command=self._conn_toggled).pack(anchor="w")
-        self.conn_tab_var = tk.StringVar(value="")
-        ttk.Label(conn, textvariable=self.conn_tab_var, style="Big.TLabel").pack(anchor="w")
-        ttk.Label(f, text="Windows fragt beim Anwenden nach Administratorrechten. Danach DBD neu starten. "
-                          "Mit VPN unzuverlässig. BHVR hat solche Region-Tools weder erlaubt noch verboten – "
-                          "Nutzung auf eigene Verantwortung.", style="Dim.TLabel", wraplength=440).pack(
-            anchor="w", pady=(4, 0))
+        ttk.Label(f, textvariable=self.srv_status, wraplength=430).pack(anchor="w", pady=(6, 0))
+        ttk.Label(f_outer, text="Mit VPN unzuverlässig. Region-Tools sind von BHVR weder erlaubt noch verboten – "
+                                "auf eigene Verantwortung.", style="Dim.TLabel", wraplength=440).pack(
+            anchor="w", pady=(6, 0))
         self._srv_render()
-        return f
+        return f_outer
 
     # ---------------------------------------------------------- connected server
     def _conn_toggled(self):
@@ -448,6 +466,8 @@ class App:
             text = "Warte auf Windows (Administratorrechte) …"
         elif self._conn_idle.paused:
             text = "pausiert, bis DBD läuft"
+        if not text and not self.conn_show_var.get():
+            text = "Aus. Zeigt Region und Ping des Spielservers, auch im Overlay (braucht Administratorrechte)."
         self.conn_tab_var.set(f"Verbunden mit: {text}" if text and self.conn.running else text)
         show = self.settings["overlay"].get("show_server", True)
         self.overlay.set_server(regions.NAMES.get(srv["region"], srv["region"]) if srv and show else "",
@@ -665,19 +685,20 @@ class App:
 
         hk = ttk.LabelFrame(f, text="Hotkeys", padding=8)
         hk.pack(fill="x", pady=(8, 0))
-        self.hk_entries = {}
+        self.hk_buttons = {}
+        self._hk_rec, self._hk_mods = None, set()
         grid = ttk.Frame(hk)
         grid.pack(fill="x")
         for i, (key, label) in enumerate(HOTKEY_LABELS):
             ttk.Label(grid, text=label).grid(row=i, column=0, sticky="w", pady=1)
-            e = ttk.Entry(grid, width=22)
-            e.insert(0, self.settings["hotkeys"].get(key, ""))
-            e.grid(row=i, column=1, sticky="w", padx=(10, 0), pady=1)
-            self.hk_entries[key] = e
+            b = ttk.Button(grid, width=22, command=lambda k=key: self._hk_record(k))
+            b.grid(row=i, column=1, sticky="w", padx=(10, 0), pady=1)
+            self.hk_buttons[key] = b
+        self._hk_show_all()
         r = ttk.Frame(hk)
         r.pack(fill="x", pady=(6, 0))
-        ttk.Button(r, text="Übernehmen", command=self._apply_hotkeys).pack(side="left")
-        self.hk_status = tk.StringVar(value="Format: ctrl+alt+m, shift+f8, ctrl+alt+up …")
+        ttk.Button(r, text="Standard", command=self._hk_defaults).pack(side="left")
+        self.hk_status = tk.StringVar(value="Zum Ändern anklicken und die neue Tastenkombination drücken.")
         ttk.Label(r, textvariable=self.hk_status, style="Dim.TLabel", wraplength=300).pack(side="left", padx=8)
 
         st = ttk.LabelFrame(f, text="Start und Infobereich", padding=8)
@@ -1027,13 +1048,20 @@ class App:
         self.overlay.set_timer(overlay_text if self.settings["overlay"].get("show_timer", True) else "")
 
     def _set_status(self, text):
-        self.status_var.set(text)
-        low = text.lower()
-        kind = ("err" if ("fehl" in low or "schwarz" in low) else
-                "info" if low.startswith("simulation") else
-                "ok" if "gefunden (" in low else "warn")
-        self.dot.configure(style=f"Dot{kind.title()}.TLabel")
+        """Technical status from the worker: goes to the log; the status line shows a plain summary."""
+        self._worker_status = text
         self._log(text, "System")
+        self._update_state()
+
+    def _update_state(self):
+        st = user_state(self._worker_status, auto_detect=bool(self.settings.get("auto_detect", True)),
+                        game_found=self.game is not None, simulate=bool(self.simulate),
+                        has_map=self.overlay.has_map(), map_label=self.map_var.get() if self.current else "",
+                        visible_wanted=self.user_visible, hidden_after_match=self.hidden_after_match,
+                        menu_paused=self.menu_paused)
+        if st.text != self.status_var.get():
+            self.status_var.set(st.text)
+            self.dot.configure(style=f"Dot{DOT_STYLE[st.kind].title()}.TLabel")
 
     def _scan_result(self, d):
         hits = d.get("hits") or []
@@ -1077,27 +1105,91 @@ class App:
         if t.failed and hasattr(self, "hk_status"):
             self.hk_status.set(f"{len(t.failed)} Hotkey(s) nicht verfügbar – siehe Log.")
 
-    def _apply_hotkeys(self):
-        new, errors = {}, []
-        labels = dict(HOTKEY_LABELS)
-        for key, entry in self.hk_entries.items():
-            combo = re.sub(r"\s+", "", entry.get().strip().lower())
-            if combo:
-                try:
-                    parse(combo)
-                except ValueError as e:
-                    errors.append(f"{labels[key]}: {e}")
-            new[key] = combo
-        if errors:
-            self.hk_status.set("; ".join(errors))
-            return
-        self.settings["hotkeys"].update(new)
-        self._save_soon()
+    # ---------------------------------------------------------- hotkeys: record by pressing
+    def _hk_show_all(self):
+        for key, b in self.hk_buttons.items():
+            combo = self.settings["hotkeys"].get(key, "")
+            b.configure(text=pretty(combo) if combo else "– aus –")
+
+    def _hk_record(self, key):
+        if self._hk_rec:
+            self._hk_stop(save=False)
+        self._hk_rec, self._hk_mods = key, set()
+        b = self.hk_buttons[key]
+        b.configure(text="Tasten drücken …")
+        b.focus_set()
+        # registered global hotkeys never reach this window: release them while recording
         self.hotkeys.stop()
-        self.hotkeys.join(timeout=1.5)            # old registrations must be gone first
+        self.hotkeys.join(timeout=1.5)
+        self.hk_status.set("Neue Kombination drücken – Esc bricht ab, Entf schaltet den Hotkey aus.")
+        b.bind("<KeyPress>", self._hk_key)
+        b.bind("<KeyRelease>", self._hk_key_up)
+        b.bind("<FocusOut>", lambda e: self._hk_stop(save=False))
+
+    def _hk_key(self, e):
+        key = self._hk_rec
+        if key is None:
+            return None
+        if e.keysym == "Escape":
+            self._hk_stop(save=False)
+            return "break"
+        if e.keysym in ("Delete", "BackSpace") and not self._hk_mods:
+            self._hk_stop(save=True, combo="")
+            return "break"
+        m = modifier_name(e.keysym)
+        if m:
+            self._hk_mods.add(m)
+            held = [m for m in ("ctrl", "alt", "shift") if m in self._hk_mods]
+            self.hk_buttons[key].configure(text=pretty("+".join(held)) + "+ …")
+            return "break"
+        combo, why = combo_from_keys(self._hk_mods, e.keysym, e.keycode if IS_WIN else None)
+        if combo is None:
+            if why:
+                self.hk_status.set(why)
+            return "break"
+        labels = dict(HOTKEY_LABELS)
+        taken = [k for k, c in self.settings["hotkeys"].items() if c == combo and k != key]
+        if taken:
+            self.hk_status.set(f"{pretty(combo)} ist schon „{labels.get(taken[0], taken[0])}“ – andere wählen.")
+            return "break"
+        self._hk_stop(save=True, combo=combo)
+        return "break"
+
+    def _hk_key_up(self, e):
+        m = modifier_name(e.keysym)
+        if m:
+            self._hk_mods.discard(m)
+        return "break"
+
+    def _hk_stop(self, save: bool, combo: str = ""):
+        key, self._hk_rec = self._hk_rec, None
+        if key is None:
+            return
+        b = self.hk_buttons[key]
+        for seq in ("<KeyPress>", "<KeyRelease>", "<FocusOut>"):
+            b.unbind(seq)
+        if save:
+            self.settings["hotkeys"][key] = combo
+            self._save_soon()
+            label = dict(HOTKEY_LABELS)[key]
+            self.hk_status.set(f"{label}: {pretty(combo)}" if combo else f"{label}: aus")
+            self._log(f"Hotkey {label}: {pretty(combo) if combo else 'aus'}.", "System")
+        else:
+            self.hk_status.set("Zum Ändern anklicken und die neue Tastenkombination drücken.")
+        self._hk_show_all()
         self.hotkeys = self._start_hotkeys()
-        self.hk_status.set("Übernommen.")
-        self._log("Hotkeys neu registriert.", "System")
+
+    def _hk_defaults(self):
+        from .config import DEFAULTS
+        if self._hk_rec:
+            self._hk_stop(save=False)
+        self.settings["hotkeys"].update(DEFAULTS["hotkeys"])
+        self._save_soon()
+        self._hk_show_all()
+        self.hotkeys.stop()
+        self.hotkeys.join(timeout=1.5)
+        self.hotkeys = self._start_hotkeys()
+        self.hk_status.set("Standard-Hotkeys wiederhergestellt.")
 
     # ============================================================ overlay
     def _game_rect(self):
@@ -1119,6 +1211,10 @@ class App:
             self._conn_tick()
         except Exception:
             self._report_once("verbindung", traceback.format_exc())
+        try:
+            self._update_state()
+        except Exception:
+            self._report_once("status", traceback.format_exc())
         try:
             status = f"Rundenende-Erkennung: {self.worker.watch_status}"
             if status != self.watch_var.get():
@@ -1543,7 +1639,6 @@ class App:
         entry = (time.strftime("%H:%M:%S"), cat if cat in CATS else "System", text)
         self._log_entries.append(entry)
         log.info(f"[{entry[1]}] {text}")
-        self.last_var.set(f"{entry[0]}  {text}")
         if self.cat_vars[entry[1]].get():
             self._append_log(entry)
         if entry[1] == "Fehler" and self.nb.select() != str(self.tab_log):
