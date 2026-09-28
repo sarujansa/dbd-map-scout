@@ -17,7 +17,7 @@ Map-Overlay für Dead by Daylight. Beim Match-Start wird der Map-Name automatisc
 
 *Zur Sicherheit:* Eine Aufgabe „mit höchsten Rechten“ umgeht die Windows-Abfrage absichtlich – was im Programmordner liegt (auch per Update geholter Code), läuft dann ohne Nachfrage als Administrator. Wer das strenger will, legt den Ordner an einen Ort, in den nur Administratoren schreiben dürfen (z. B. unter `C:\Program Files`).
 
-**Updates** kommen automatisch: Beim Start über `start.bat` bzw. die Desktop-Verknüpfung holt das Programm den neuen Stand von GitHub (nur wenn der Ordner ein Git-Klon auf `main` ist und du keine Programmdateien selbst geändert hast) und installiert geänderte Pakete nach. Offline oder bei eigenen Änderungen startet einfach die vorhandene Version. Was neu ist, steht danach im Log. Abschaltbar unter **Einstellungen → Updates**.
+**Updates** kommen automatisch: Beim Start über `start.bat` bzw. die Desktop-Verknüpfung holt das Programm den neuen Stand von GitHub (nur wenn der Ordner ein Git-Klon auf `main` ist und du keine Programmdateien selbst geändert hast) und installiert geänderte Pakete nach. Offline oder bei eigenen Änderungen startet einfach die vorhandene Version. Was neu ist, steht danach im Log. Abschaltbar unter **Einstellungen → Updates**. Dort gibt es auch **„Jetzt nach Updates suchen“**: fragt GitHub (nur bei diesem Klick), zeigt „Kein Update“ oder die neue Version mit ihren Änderungen, und **„Aktualisieren und neu starten“** beendet das Programm, installiert das Update über `start.bat` und startet neu – auch wenn die Prüfung beim Start ausgeschaltet ist.
 
 In DBD unter **Einstellungen → Grafik** den Anzeigemodus **„Fenster-Vollbild“** verwenden. Im exklusiven Vollbild kann Windows kein Fenster über dem Spiel anzeigen.
 
@@ -154,7 +154,7 @@ Das Programm wurde bewusst so gebaut, dass es **nicht mit dem Spiel interagiert*
 - keine Spieldateien werden gelesen oder verändert,
 - gelesen werden nur Bildschirmpixel (wie bei OBS/Discord) und ob der Windows-Mauszeiger gerade sichtbar ist (dieselbe Systeminfo, mit der OBS den Zeiger in Aufnahmen zeichnet). Genutzt wird nur der Map-Name, den das Spiel allen anzeigt,
 - angezeigt wird eine statische Community-Karte, keine versteckten Informationen (keine Generatoren, keine Positionen),
-- Map-Erkennung und Overlay bauen keine Internetverbindung auf, die Texterkennung läuft komplett lokal. Nur der Tab **Server** misst auf Wunsch den Ping zu den GameLift-Servern von AWS.
+- Map-Erkennung und Overlay bauen keine Internetverbindung auf (Updates: nur im Starter und auf Knopfdruck „Jetzt nach Updates suchen“, nur GitHub), die Texterkennung läuft komplett lokal. Nur der Tab **Server** misst auf Wunsch den Ping zu den GameLift-Servern von AWS.
 - Der Tab **Server** verändert nicht das Spiel, sondern die Windows-hosts-Datei. Das ist eine Systemeinstellung, die für den ganzen PC gilt und jederzeit mit „Alles freigeben“ rückgängig gemacht werden kann. BHVR hat Region-Tools wie „Make Your Choice“ weder offiziell erlaubt noch verboten. Auch hier gilt: Nutzung auf eigene Verantwortung.
 
 BHVRs [Game Rules](https://forums.bhvr.com/dead-by-daylight/kb/articles/139-game-rules) verbieten Drittsoftware, die einen „unfair advantage that wasn't intended by the game“ verschafft, sofern sie nicht freigegeben ist. Eine offizielle Freigabe für Map-Overlays gibt es nicht. Die Entscheidung liegt bei BHVR, Nutzung auf eigene Verantwortung. In Turnieren oder Ligen gelten deren eigene Regeln.

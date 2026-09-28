@@ -50,6 +50,10 @@ EN = {
         "Packages from {name} could not be installed (internet?) – the next start tries again.",
     "Suche nach Updates ...": "Looking for updates ...",
     "Update-Prüfung fehlgeschlagen: {error}": "Update check failed: {error}",
+    "Kein Update – Version {version} ist aktuell.": "No update – version {version} is up to date.",
+    "Update verfügbar: {old} → {new}": "Update available: {old} → {new}",
+    "Wird nicht installiert: eigene Änderungen an Programmdateien.":
+        "Will not be installed: own changes to program files.",
 }
 _lang = None
 
@@ -96,6 +100,8 @@ def _git(root, *args, timeout=15):
 
 
 def _enabled(root) -> bool:
+    if os.environ.get("DBDMS_FORCE_UPDATE") == "1":       # "Aktualisieren und neu starten" in the program
+        return True
     try:
         with open(os.path.join(root, "settings.json"), encoding="utf-8") as fh:
             return bool(json.load(fh).get("auto_update", True))
@@ -109,28 +115,72 @@ def _version(root, rev) -> str:
     return m.group(1) if m else "?"
 
 
+def _repo_problem(root, branch):
+    """Why this folder cannot be updated (message), or None."""
+    if shutil.which("git") is None:
+        return _t(root, "Update übersprungen: git ist nicht installiert.")
+    if not os.path.isdir(os.path.join(root, ".git")):
+        return _t(root, "Update übersprungen: kein Git-Ordner (entpackte Kopie).")
+    code, current = _git(root, "rev-parse", "--abbrev-ref", "HEAD")
+    if code != 0:
+        return _t(root, "Update übersprungen: {reason}", reason=current)
+    if current != branch:
+        return _t(root, "Update übersprungen: Zweig „{current}“ statt „{branch}“.", current=current, branch=branch)
+    return None
+
+
+def _fetch(root, branch):
+    """git fetch; returns (old, new, None) or (None, None, message)."""
+    _, old = _git(root, "rev-parse", "HEAD")
+    code, out = _git(root, "fetch", "--quiet", "origin", branch, timeout=FETCH_TIMEOUT)
+    if code != 0:
+        return None, None, _t(root, "Update übersprungen: GitHub nicht erreichbar") + (
+            f" ({out.splitlines()[-1]})" if out else ".")
+    _, new = _git(root, "rev-parse", "FETCH_HEAD")
+    return old, new, None
+
+
+def _changes(root, old, new):
+    _, log = _git(root, "log", "--format=%s", f"{old}..{new}")
+    changes = [line for line in log.splitlines() if line and not line.startswith("Merge pull request")]
+    return "".join(f"\n  • {c}" for c in changes[:12])
+
+
+def check(root: str, branch: str = "main"):
+    """"Nach Updates suchen" in the program: fetch and compare, never change a file.
+    Returns (state, message, can_apply) with state "current" | "available" | "error"."""
+    problem = _repo_problem(root, branch)
+    if problem:
+        return "error", problem, False
+    old, new, problem = _fetch(root, branch)
+    if problem:
+        return "error", problem, False
+    if new == old:
+        return "current", _t(root, "Kein Update – Version {version} ist aktuell.", version=_version(root, old)), False
+    if _git(root, "merge-base", "--is-ancestor", "HEAD", "FETCH_HEAD")[0] != 0:
+        return "error", _t(root, "Update übersprungen: eigene Commits auf main (kein reines Nachziehen möglich)."), False
+    msg = _t(root, "Update verfügbar: {old} → {new}", old=_version(root, old), new=_version(root, new))
+    try:
+        msg += _changes(root, old, new)
+    except Exception:
+        pass
+    if _git(root, "diff", "--quiet", "HEAD")[0] != 0:
+        return "available", msg + "\n" + _t(root, "Wird nicht installiert: eigene Änderungen an Programmdateien."), False
+    return "available", msg, True
+
+
 def update(root: str, branch: str = "main"):
     """Returns (exit code, message for the log)."""
     if not _enabled(root):
         return SKIPPED, _t(root, "Update-Prüfung ist ausgeschaltet.")
-    if shutil.which("git") is None:
-        return SKIPPED, _t(root, "Update übersprungen: git ist nicht installiert.")
-    if not os.path.isdir(os.path.join(root, ".git")):
-        return SKIPPED, _t(root, "Update übersprungen: kein Git-Ordner (entpackte Kopie).")
-    code, current = _git(root, "rev-parse", "--abbrev-ref", "HEAD")
-    if code != 0:
-        return SKIPPED, _t(root, "Update übersprungen: {reason}", reason=current)
-    if current != branch:
-        return SKIPPED, _t(root, "Update übersprungen: Zweig „{current}“ statt „{branch}“.", current=current,
-                          branch=branch)
+    problem = _repo_problem(root, branch)
+    if problem:
+        return SKIPPED, problem
     if _git(root, "diff", "--quiet", "HEAD")[0] != 0:
         return SKIPPED, _t(root, "Update übersprungen: eigene Änderungen an Programmdateien.")
-    _, old = _git(root, "rev-parse", "HEAD")
-    code, out = _git(root, "fetch", "--quiet", "origin", branch, timeout=FETCH_TIMEOUT)
-    if code != 0:
-        return SKIPPED, _t(root, "Update übersprungen: GitHub nicht erreichbar") + (
-            f" ({out.splitlines()[-1]})" if out else ".")
-    _, new = _git(root, "rev-parse", "FETCH_HEAD")
+    old, new, problem = _fetch(root, branch)
+    if problem:
+        return SKIPPED, problem
     if new == old:
         return NOTHING, ""
     if _git(root, "merge-base", "--is-ancestor", "HEAD", "FETCH_HEAD")[0] != 0:
@@ -141,11 +191,8 @@ def update(root: str, branch: str = "main"):
     # files (maybe start.bat itself) have changed now: whatever happens below, report UPDATED so
     # start.bat restarts itself instead of reading on in its changed file
     try:
-        _, log = _git(root, "log", "--format=%s", f"{old}..{new}")
-        changes = [line for line in log.splitlines() if line and not line.startswith("Merge pull request")]
         msg = _t(root, "Update installiert: {old} → {new}", old=_version(root, old), new=_version(root, new))
-        if changes:
-            msg += "\n" + "\n".join(f"  • {c}" for c in changes[:12])
+        msg += _changes(root, old, new)
     except Exception:
         msg = _t(root, "Update installiert.")
     return UPDATED, msg
