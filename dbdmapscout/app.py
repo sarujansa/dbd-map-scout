@@ -15,7 +15,7 @@ from tkinter import messagebox, ttk
 
 from PIL import Image, ImageTk
 
-from . import __version__, regions, theme
+from . import __version__, layout, regions, theme
 from .capture import IS_WIN, describe_window, find_game_window, foreground_root, is_game_window
 from .catalog import Catalog
 from .config import Settings
@@ -262,6 +262,9 @@ class App:
         self.transp_var = tk.BooleanVar(value=o.get("transparent", True))
         self.timer_show_var = tk.BooleanVar(value=o.get("show_timer", True))
         self.server_show_var = tk.BooleanVar(value=o.get("show_server", True))
+        self.keep_bar_var = tk.BooleanVar(value=o.get("keep_in_bar", True))
+        ttk.Checkbutton(pos, text="Karte im schwarzen Rand halten (Ultrawide: nie ins Spielbild ragen)",
+                        variable=self.keep_bar_var, command=self._overlay_flags_changed).pack(anchor="w", pady=(4, 0))
         for text, var in (("Nur zeigen, wenn DBD das aktive Fenster ist", self.focus_var),
                           ("Map-Namen über der Karte anzeigen", self.caption_var),
                           ("Rundentimer unter der Karte anzeigen", self.timer_show_var),
@@ -863,7 +866,7 @@ class App:
         self.worker.request_scan()
 
     def test_overlay(self):
-        """Show the overlay in the middle of the game/screen for 10 s, ignoring all filters.
+        """Show the overlay at its normal place for 10 s, ignoring all reasons to hide it.
         Pressing the button again during the test ends it at once."""
         if time.time() < getattr(self, "_force_until", 0):
             self._force_until = 0
@@ -875,7 +878,7 @@ class App:
                 self.show_map(first[0], first[1], "manual", "Testanzeige")
                 self._test_map = True            # loaded only for the test: hidden again when it ends
         self._force_until = time.time() + 10
-        self._log("Test: Overlay 10 s lang in der Bildschirmmitte – jetzt zu DBD wechseln "
+        self._log("Test: Overlay 10 s lang an seiner normalen Position – jetzt zu DBD wechseln "
                   "(nochmal drücken beendet den Test).", "Overlay")
         self.test_btn.configure(text="Test beenden")
         self._tick_overlay(reschedule=False)
@@ -1249,15 +1252,11 @@ class App:
         o = self.settings["overlay"]
         self.worker.map_on_screen = self.overlay.has_map() and not self.hidden_after_match
         gx, gy, gw, gh = self._game_rect()               # keeps the game window info fresh
-        if time.time() < getattr(self, "_force_until", 0) and self.overlay.has_map():
-            self.overlay.opacity = 1.0
-            w, h = self.overlay.render(int(gh * o["height"]))
-            self.overlay.show_at(gx + (gw - w) // 2, gy + (gh - h) // 2)
-            self._last_place = (gx + (gw - w) // 2, gy + (gh - h) // 2, w, h)
-            self.worker.overlay_rect = self._last_place
+        # test: shown at its normal place, ignoring every reason to hide it
+        forced = time.time() < getattr(self, "_force_until", 0) and self.overlay.has_map()
+        if forced:
             self._pos_forced = True
-            return
-        if getattr(self, "_pos_forced", False):
+        elif getattr(self, "_pos_forced", False):
             self._pos_forced = False
             if getattr(self, "_test_map", False):
                 self._test_map = False
@@ -1269,7 +1268,9 @@ class App:
                 and self.test_btn.cget("text") != "Overlay testen"):
             self.test_btn.configure(text="Overlay testen")
         reason = None
-        if not self.overlay.has_map():
+        if forced:
+            pass
+        elif not self.overlay.has_map():
             reason = "keine Map"
         elif not ((self.user_visible and not self.hidden_after_match) or self.overlay.editing):
             reason = "ausgeblendet"
@@ -1281,7 +1282,8 @@ class App:
             own = {self.overlay.hwnd(), self._root_hwnd()}
             if fg not in own and not is_game_window(fg):
                 reason = f"aktives Fenster ist {describe_window(fg)}"
-        self._log_visibility(reason, (gx, gy, gw, gh))
+        if not forced:
+            self._log_visibility(reason, (gx, gy, gw, gh))
         if reason:
             self.overlay.hide()
             self.worker.overlay_rect = None
@@ -1293,21 +1295,30 @@ class App:
         height = int(gh * o["height"])
         w, h = self.overlay.render(height)
         a = o["anchor"]
-        bar = (gw - gh * 16 / 9) / 2          # black bar left/right of a 16:9 picture (ultrawide)
-        if a == "auto" and bar >= 200:
-            avail = bar - 2 * margin
-            if w > avail:                       # shrink until it fits into the bar
+        bar = layout.bar_width(gw, gh)          # black bar left/right of a 16:9 picture (ultrawide)
+        if a == "auto" and bar < layout.MIN_BAR:
+            a = "top-left"
+
+        def place(w, h):
+            if a == "auto":
+                return gx + max(margin, (bar - w) / 2), gy + margin
+            if a == "custom":
+                return gx + o.get("pos_x", 0.0) * max(0, gw - w), gy + o.get("pos_y", 0.0) * max(0, gh - h)
+            return (gx + margin if a.endswith("left") else gx + gw - w - margin,
+                    gy + margin if a.startswith("top") else gy + gh - h - margin)
+
+        x, y = place(w, h)
+        side = (layout.bar_side(a, x, w, gx, gw, bar)
+                if a == "auto" or o.get("keep_in_bar", True) else None)
+        if side:
+            avail = layout.max_width(bar, margin)
+            for _ in range(2):                  # shrink until it fits into the bar (info block: not linear)
+                if w <= avail:
+                    break
                 height = max(80, int(height * avail / w))
                 w, h = self.overlay.render(height)
-            x = gx + max(margin, (bar - w) / 2)
-            y = gy + margin
-        elif a == "custom":
-            x = gx + o.get("pos_x", 0.0) * max(0, gw - w)
-            y = gy + o.get("pos_y", 0.0) * max(0, gh - h)
-        else:
-            a = "top-left" if a == "auto" else a
-            x = gx + margin if a.endswith("left") else gx + gw - w - margin
-            y = gy + margin if a.startswith("top") else gy + gh - h - margin
+            x, y = place(w, h)
+            x = layout.clamp_x(side, x, w, gx, gw, bar, margin)
         self.overlay.show_at(int(x), int(y))
         self._last_place = (int(x), int(y), w, h)
         self.worker.overlay_rect = self._last_place if self.overlay.shown else None
@@ -1404,6 +1415,7 @@ class App:
         o["show_caption"] = bool(self.caption_var.get())
         o["show_timer"] = bool(self.timer_show_var.get())
         o["show_server"] = bool(self.server_show_var.get())
+        o["keep_in_bar"] = bool(self.keep_bar_var.get())
         if bool(self.transp_var.get()) != o.get("transparent", True):
             o["transparent"] = bool(self.transp_var.get())
             self.overlay.set_transparent(o["transparent"])
