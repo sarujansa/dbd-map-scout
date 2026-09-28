@@ -42,12 +42,12 @@ start_debug.bat           :: mit Konsole
 |---|---|
 | `__main__.py` | Start, Single-Instance-Mutex, Logging, `--simulate`/`--test` |
 | `app.py` | Tk-Steuerfenster (Tabs Maps/Overlay/Erkennung/Server/Log/Einstellungen), verbindet alles; Events kommen über `self.events` (Queue) im `_poll` an |
-| `worker.py` | Hintergrund-Thread: Aufnahme → Banner-Erkennung → Rundenende; postet Events (`detected`, `menu`, `match_end`, `watch_info`, `warn`, …) |
+| `worker.py` | Hintergrund-Thread: Aufnahme → Banner-Erkennung → Rundenende; postet Events (`detected`, `unknown`, `menu`, `match_end`, `watch_info`, `warn`, …). Im Match (`tracker.in_trial`, kein Banner) gedrosselt auf `IN_MATCH_RATE` = 1 Scan/s |
 | `detector.py` | Banner: Trennlinie finden → Text ausschneiden → OCR-Scoring gegen Katalog → `Accumulator`. Rundenende: `OutOfMatchWatcher.observe()` (CONTINUE, Währung, Ladebalken) |
 | `matchend.py` | `MatchEndTracker` – reine Logik (testbar): Menü-Pause per Mauszeiger, Rundenende-Latch, Scharfschalten bei manueller Map |
 | `roundtimer.py` | `RoundTimer` – reine Logik: läuft, solange eine Karte eingeblendet ist; neue Map-Erkennung startet neu (außer dasselbe Banner < 90 s) |
 | `ocr.py` | PP-OCRv4-Erkennungsnetz (ONNX) + `LexiconScorer` (CTC-Forward über alle Kandidaten) |
-| `catalog.py`, `maps.json`, `textnorm.py` | Map-/Realm-Namen (9 Sprachen), Varianten, Bildpfade |
+| `catalog.py`, `maps.json`, `textnorm.py` | Map-/Realm-Namen (9 Sprachen), Varianten, Bildpfade. Aliasse aus `maps.json` plus eigene Zuordnungen des Nutzers (`settings.json` → `user_aliases`, Dialog „Zuordnen …“ nach einem `unknown`-Event; `alias_problem()` verhindert Konflikte, Realm-Prüfung bleibt) |
 | `capture.py` | DBD-Fenster finden, mss-Aufnahme, `cursor_state()`; öffnet nie den Spielprozess |
 | `overlay_win32.py` / `overlay.py` | natives Layered-Window-Overlay (WS_EX_TRANSPARENT/NOACTIVATE) / Tk-Fallback |
 | `regions.py` | Server-Tab: Regionstabelle (Namen), Ping (UDP-Beacon, DNS ohne hosts), `run_job()` startet Helfer per UAC |
@@ -78,7 +78,7 @@ start_debug.bat           :: mit Konsole
 
 ## Offene Ideen (vom Nutzer noch nicht entschieden)
 
-Halten-zum-Anzeigen-Taste, Scans im Match drosseln, Etagen-Hotkey (Midwich), „Bild für unbekannte Map hinzufügen“, Autostart mit DBD + Tray-Icon, .exe-Build, Ausblenden im Zuschauermodus, „Match Details“ als zweite Erkennungsquelle.
+Halten-zum-Anzeigen-Taste, Etagen-Hotkey (Midwich), „Bild für unbekannte Map hinzufügen“ (Namen zuordnen gibt es seit 1.8.0, neue Karten-Bilder noch nicht), Autostart mit DBD + Tray-Icon, .exe-Build, Ausblenden im Zuschauermodus, „Match Details“ als zweite Erkennungsquelle.
 
 ## Arbeitsweise
 

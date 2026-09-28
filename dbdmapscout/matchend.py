@@ -75,6 +75,11 @@ class MatchEndTracker:
         self.game_seen = False
         self.cursor_now = None
 
+    @property
+    def in_trial(self) -> bool:
+        """Watching a map that is certainly being played (scans can slow down until the match ends)."""
+        return self.active and self.armed and not self.ended
+
     def _end(self, reason, events, t):
         if not self.use_end:
             return events

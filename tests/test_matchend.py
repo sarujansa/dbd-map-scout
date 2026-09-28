@@ -222,3 +222,13 @@ def test_end_time_game_closed():
     ev, t = run(tr, 5)
     run(tr, 4, t0=t, game=False, fg=False, cursor=None)
     assert tr.ended and abs(tr.end_t - (t + 0.2)) < 1e-6
+
+
+def test_in_trial_for_scan_throttling():
+    tr = fresh()                                  # detected map: watched right away
+    assert tr.in_trial
+    run(tr, 3, obs=CONTINUE)
+    assert tr.ended and not tr.in_trial           # match over: full scan rate for the next banner
+    manual = fresh(source="manual")               # picked in the lobby: not yet in a trial
+    assert not manual.in_trial
+    assert not MatchEndTracker().in_trial         # nothing on display

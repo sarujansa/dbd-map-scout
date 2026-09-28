@@ -81,11 +81,13 @@ Mit dem Häkchen **Verbundenen Spielserver anzeigen** im Tab Server zeigt das Pr
 
 ## So funktioniert die Erkennung
 
-1. Etwa 5× pro Sekunde wird nur der Bereich unten links des DBD-Fensters aufgenommen, wie bei einer Bildschirmaufnahme.
+1. Etwa 5× pro Sekunde wird nur der Bereich unten links des DBD-Fensters aufgenommen, wie bei einer Bildschirmaufnahme. Ist die Map erkannt und das Match läuft, sinkt das auf 1× pro Sekunde (spart Leistung für das Spiel); nach dem Rundenende geht es wieder auf den vollen Takt.
 2. Gesucht wird die **dünne Trennlinie** zwischen Map-Name und Realm. Sie ist ein sehr eindeutiges Merkmal und kostet nur wenige Millisekunden. Solange sie nicht zu sehen ist, läuft keine OCR.
 3. Ist sie da, werden die Textzeile darüber (Map-Name, auch zweizeilig) und darunter (Realm) genau ausgeschnitten. Das funktioniert unabhängig von Auflösung, UI-Skalierung und Monitorformat.
 4. Ein Texterkennungsmodell (PaddleOCR PP-OCRv4, läuft lokal) liefert pro Buchstabe Wahrscheinlichkeiten. Statt daraus Text zu raten, wird für **jeden bekannten Map-Namen berechnet, wie wahrscheinlich genau dieser Name ist**, zusammen mit dem Realm. Deshalb stören Hintergrund, Nebel und Apostrophe kaum, und „COAL TOWER“ lässt sich von „COAL TOWER II“ unterscheiden.
 5. Die Ergebnisse mehrerer Bilder werden kombiniert. Unbekannter Text (z. B. eine neue Map ohne Bild) wird nicht auf eine falsche Map abgebildet, sondern im Log gemeldet.
+
+**Unbekannte Map zuordnen.** Liest das Programm einen Map-Namen, den es nicht kennt (z. B. nach einem DBD-Update oder bei anderer Schreibweise), erscheint im Hauptfenster „Unbekannte Map gelesen: „…““ mit dem Knopf **Zuordnen …**. Dort die richtige Map wählen (ein Vorschlag ist vorausgewählt) – der gelesene Name wird ab sofort erkannt. Die Zuordnungen stehen in `settings.json` und bleiben bei Updates erhalten; der Realm wird weiterhin geprüft. Löschen unter **Einstellungen → Eigene Map-Zuordnungen**.
 
 Hinweis zu Varianten: Seit Patch 8.6.0 sind die II/III-Layouts (MacMillan II, Ormond II/III, Badham II–V) nur noch in Custom Games spielbar. Bei unsicherer Lesung wird deshalb leicht das Standard-Layout bevorzugt. `Strg+Alt+V` wechselt manuell.
 

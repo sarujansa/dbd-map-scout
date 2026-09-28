@@ -113,3 +113,28 @@ def test_fmt_duration():
     assert fmt_duration(452.9) == "07:32"
     assert fmt_duration(3723) == "1:02:03"
     assert fmt_duration(-5) == "00:00"
+
+
+def test_user_aliases_become_hypotheses():
+    cat = Catalog(ROOT, ["en"], {"coal-tower": ["Macmillan Tower"], "no-such-map": ["Whatever Place"]})
+    alias = [h for h in cat.hypotheses if h.name_key == "MACMILLANTOWER"]
+    assert [(h.map_id, h.lang) for h in alias] == [("coal-tower", "alias")]
+    assert fold("The MacMillan Estate") in alias[0].realm_keys            # realm check stays on
+    assert not [h for h in cat.hypotheses if h.name_key == "WHATEVERPLACE"]
+    assert not [h for h in Catalog(ROOT, ["en"]).hypotheses if h.name_key == "MACMILLANTOWER"]
+
+
+def test_alias_problems():
+    cat = Catalog(ROOT, ["en"])
+    assert cat.alias_problem("Macmillan Tower", "coal-tower") is None
+    assert "zu kurz" in cat.alias_problem("A.B", "coal-tower")
+    assert "Shelter Woods" in cat.alias_problem("SHELTER WOODS", "coal-tower")   # name of another map
+    assert cat.alias_problem("COAL TOWER", "coal-tower") is None                  # own name: harmless
+    assert cat.alias_problem("Macmillan Tower", "no-such-map") == "Unbekannte Map."
+
+
+def test_suggestion_for_unknown_banner():
+    cat = Catalog(ROOT, ["en", "de"])
+    assert cat.suggest("GRIM PANTRI", "BACKWATER SWAMP") == "grim-pantry"
+    assert cat.suggest("COAL TOWR", "THE MACMILLAN ESTATE") == "coal-tower"
+    assert cat.suggest("TREATMENT THEATER", "LERY'S MEMORIAL INSTITUTE") == "treatment-theatre"
