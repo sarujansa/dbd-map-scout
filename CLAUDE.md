@@ -57,6 +57,7 @@ start_debug.bat           :: mit Konsole
 | `hostsedit.py` | Admin-Helfer (UAC): schreibt nur den eigenen markierten Abschnitt der hosts-Datei. Nur Standardbibliothek, gestartet mit `pythonw -I -S`. Erlaubt nur Namen aus `MANAGED` (fest codiert) |
 | `netwatch.py` | Admin-Teil „Verbunden mit“: Raw-Socket (`RCVALL_IPLEVEL`, kein Rückfall), zählt UDP-Pakete je öffentlicher Gegenstelle, schreibt jede Sekunde die aktivsten in eine Ergebnisdatei. Nur Standardbibliothek. Läuft als Thread, wenn das Programm schon Admin ist, sonst als Helfer per UAC (`pythonw -I -S`). Beendet sich, wenn die Steuerdatei fehlt, „stop“ sagt oder 20 s nicht aufgefrischt wurde |
 | `connwatch.py` | startet `netwatch`, liest die Ergebnisdatei, wählt den Spielserver (≥ 10 Pakete/s, Reverse-DNS = AWS EC2), bestimmt die Region aus dem DNS-Namen und misst den Ping zum Beacon dieser Region (Median der letzten 3, alle 5 s). `IdlePause`: läuft DBD 30 s nicht, pausiert der Mitschnitt (nur als Admin, da Neustart dann ohne UAC) und startet mit DBD neu |
+| `icon.py` | Programmsymbol, gezeichnet (kein Binärfile im Repo): `python -m dbdmapscout.icon PFAD.ico`; `verknuepfung_erstellen.bat/.ps1` erzeugt damit `dbdmapscout.ico` (gitignored) und die Desktop-Verknüpfung auf `start.bat` (minimiert, „Als Administrator“ über LinkFlags-Bit) |
 | `fullscan.py`, `hotkeys.py`, `diagnose.py`, `theme.py`, `config.py` | Vollbild-Scan, globale Hotkeys, Diagnose-Text, Dark Mode, Einstellungen (+ Migrationen, `SETTINGS_VERSION`) |
 
 ## Wichtige Designentscheidungen (nicht ohne Grund ändern)
@@ -81,7 +82,7 @@ start_debug.bat           :: mit Konsole
 
 ## Offene Ideen (vom Nutzer noch nicht entschieden)
 
-Halten-zum-Anzeigen-Taste, Etagen-Hotkey (Midwich), „Bild für unbekannte Map hinzufügen“ (Namen zuordnen gibt es seit 1.8.0, neue Karten-Bilder noch nicht), Autostart mit DBD + Tray-Icon, .exe-Build, Ausblenden im Zuschauermodus, „Match Details“ als zweite Erkennungsquelle.
+Halten-zum-Anzeigen-Taste, Etagen-Hotkey (Midwich), „Bild für unbekannte Map hinzufügen“ (Namen zuordnen gibt es seit 1.8.0, neue Karten-Bilder noch nicht), Autostart mit DBD + Tray-Icon, .exe-Build (vorerst verworfen: Updates per git pull, Virenscanner-Fehlalarme, Admin-Helfer bräuchten Umbau – Desktop-Verknüpfung reicht), Ausblenden im Zuschauermodus, „Match Details“ als zweite Erkennungsquelle.
 
 ## Arbeitsweise
 
