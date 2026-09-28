@@ -42,7 +42,7 @@ Das Steuerfenster ist in Tabs aufgeteilt:
 
 | Tab | Inhalt |
 |---|---|
-| **Maps** | alle Karten nach Realm, Suche, Doppelklick zeigt eine Karte |
+| **Maps** | alle Karten nach Realm, Suche, Doppelklick zeigt eine Karte; „Kartenbild hinzufügen …“ für eigene Bilder |
 | **Overlay** | Position (Vorgabe oder Schieberegler horizontal/vertikal, 0 % = links/oben, 100 % = rechts/unten), Grösse, Deckkraft, Anzeigeoptionen |
 | **Erkennung** | Automatik, Ausblenden nach der Runde, Pause in Menüs, Spielsprache; eingeklappt unter „Erweitert“: Fensteraufnahme, Scans pro Sekunde, Live-Status, Debug-Bilder, Diagnose |
 | **Server** | oben der verbundene Spielserver, darunter Serverregionen mit Ping, per hosts-Datei sperren oder freigeben (siehe unten) |
@@ -122,7 +122,8 @@ Die synthetischen Tests ersetzen keinen Praxistest. Wenn eine Map in echten Rund
 
 ## Eigene / neue Karten
 
-- **Neues Bild ergänzen:** Datei in einen Unterordner von `maps/` legen, benannt nach dem Map-Namen, wie er im Spiel steht, z. B. `maps/Neuer Realm/Neue Map.png`. Das Programm erkennt sie dann automatisch (englischer Name bzw. der Name aus der Datei).
+- **Eigenes Kartenbild (empfohlen):** Tab Maps → „Kartenbild hinzufügen …“ (oder nach einem nicht erkannten Banner „Bild hinzufügen …“). Bild wählen, dann entweder das Bild einer vorhandenen Map ersetzen oder eine neue Map anlegen (Name so, wie er im Banner steht, und Realm). Das Programm schneidet den Rand ab, macht den Hintergrund der Community-Karten (Dunkelblau `#282a42`, Graulila `#535781`, 10 % Toleranz) transparent, bringt das Bild auf 1280 px Höhe und speichert es als WebP in `user_maps/`. Eine Vorschau zeigt vorher/nachher. Animierte GIFs werden unverändert übernommen. `user_maps/` wird von Git ignoriert, das Update beim Start funktioniert also weiter. Eigene Bilder haben Vorrang vor den mitgelieferten; „Eigenes Bild löschen“ stellt das Original wieder her.
+- **Neues Bild von Hand ergänzen:** Datei in einen Unterordner von `user_maps/` (oder `maps/`) legen, benannt nach dem Map-Namen, wie er im Spiel steht, z. B. `user_maps/Neuer Realm/Neue Map.png`. Das Programm erkennt sie dann automatisch (englischer Name bzw. der Name aus der Datei). Bilder in `maps/` gelten als eigene Änderung und halten das automatische Update an.
 - **Bild austauschen:** Datei in `maps/` ersetzen oder in `maps.json` den Pfad unter `variants` ändern.
 - **Zusätzliche Schreibweise:** in `maps.json` bei der Map `"aliases": ["ANDERER NAME"]` ergänzen.
 

@@ -166,6 +166,8 @@ class App:
         self.unknown_bar = ttk.Frame(self.root)
         self.unknown_var = tk.StringVar(value="")
         ttk.Button(self.unknown_bar, text="✕", width=3, command=self._hide_unknown).pack(side="right")
+        ttk.Button(self.unknown_bar, text="Bild hinzufügen …",
+                   command=lambda: self.add_picture(from_unknown=True)).pack(side="right")
         ttk.Button(self.unknown_bar, text="Zuordnen …", command=self.assign_unknown).pack(side="right", padx=4)
         ttk.Label(self.unknown_bar, textvariable=self.unknown_var, wraplength=300).pack(side="left", fill="x")
 
@@ -210,6 +212,11 @@ class App:
         self.tree.bind("<Return>", lambda e: self._pick_selected())
         ttk.Label(f, text="Doppelklick zeigt die Map. Die Erkennung übernimmt beim nächsten Match wieder.",
                   style="Dim.TLabel", wraplength=420).pack(anchor="w", pady=(6, 0))
+        prow = ttk.Frame(f)
+        prow.pack(fill="x", pady=(6, 0))
+        ttk.Button(prow, text="Kartenbild hinzufügen …", command=self.add_picture).pack(side="left")
+        ttk.Label(prow, text="eigenes Bild für eine Map (Hintergrund wird entfernt)", style="Dim.TLabel").pack(
+            side="left", padx=8)
         self._fill_list()
         return f
 
@@ -1607,6 +1614,37 @@ class App:
         dlg.bind("<Escape>", lambda e: dlg.destroy())
         cb.focus_set()
         dlg.grab_set()
+
+    def add_picture(self, from_unknown: bool = False):
+        """Dialog: own picture for a known map, or a new map (prefilled from an unknown banner)."""
+        from .picturedlg import PictureDialog
+        name, realm = self._unknown if from_unknown and self._unknown else ("", "")
+        self._picture_from_unknown = bool(name)
+        PictureDialog(self, name, realm)
+
+    def picture_saved(self, path: str, map_id, variant: int):
+        self._reload_catalog()
+        if map_id is None:                       # new map: the catalog made it from the file
+            map_id = next((m.id for m in self.catalog.maps.values()
+                           if m.custom and self.catalog.image_path(m.id)[0]
+                           and os.path.normcase(os.path.abspath(self.catalog.image_path(m.id)[0]))
+                           == os.path.normcase(os.path.abspath(path))), None)
+            if getattr(self, "_picture_from_unknown", False):
+                self._hide_unknown()
+        rel = os.path.relpath(path, self.root_dir)
+        if map_id is None:
+            self._log(f"Kartenbild gespeichert: {rel}", "Overlay")
+            return
+        m = self.catalog.maps[map_id]
+        self._log(f"Eigenes Kartenbild für {m.label(variant)} gespeichert: {rel}"
+                  + (" – wird ab jetzt automatisch erkannt." if m.custom else ""), "Overlay")
+        self.show_map(map_id, variant, "manual", "eigenes Bild")
+
+    def picture_deleted(self, label: str):
+        self._reload_catalog()
+        self._log(f"Eigenes Kartenbild für {label} gelöscht – das mitgelieferte gilt wieder.", "Overlay")
+        if self.current and self.current[0] in self.catalog.maps:
+            self.show_map(self.current[0], self.current[1], self.source or "manual", keep_timer=True)
 
     def _reload_catalog(self):
         self.catalog = Catalog(self.root_dir, self.settings["languages"], self.settings.get("user_aliases"))

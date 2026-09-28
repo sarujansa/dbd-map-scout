@@ -55,6 +55,8 @@ start_debug.bat           :: mit Konsole
 | `capture.py` | DBD-Fenster finden, mss-Aufnahme, `cursor_state()`; öffnet nie den Spielprozess |
 | `wincapture.py` | Fensteraufnahme (WGC) für DBD im Hintergrund: `CapturePolicy` (reine Logik: an, sobald DBD nicht aktiv; aus nach 5 s aktiv), `WindowCapture` (kopiert nur die angefragte Region im Rückruf; falsche Bildgröße/keine Bilder → `None` → Worker nimmt mss). Bilder daraus enthalten das eigene Overlay nicht → kein Ausschwärzen |
 | `layout.py` | reine Logik: Overlay im schwarzen Balken halten (`bar_side`, `clamp_x`); gilt für alle Positionen, solange `keep_in_bar` an ist; „automatisch“ immer. Mitten über dem Spiel platziert → keine Begrenzung |
+| `mapimage.py` | reine Bildlogik für eigene Kartenbilder: Rand abschneiden, Hintergrundfarben `#282a42`/`#535781` (10 % euklidisch) transparent, 1280 px hoch, WebP; GIF unverändert. Ziel `user_maps/` (gitignored, sonst blockiert das Update) |
+| `picturedlg.py` | Dialog „Kartenbild hinzufügen …“ (Tab Maps, Leiste „unbekannte Map“): vorhandene Map/Layout ersetzen oder neue Map (Name + Realm-Ordner), Vorschau, „Eigenes Bild löschen“. `catalog.py`: Bild in `user_maps/` mit gleichem relativem Pfad (beliebige Endung) ersetzt das mitgelieferte, sonst neue `custom:`-Map |
 | `overlay_win32.py` / `overlay.py` | natives Layered-Window-Overlay (WS_EX_TRANSPARENT/NOACTIVATE) / Tk-Fallback |
 | `regions.py` | Server-Tab: Regionstabelle (Namen), Ping (UDP-Beacon, DNS ohne hosts), `run_job()` startet Helfer per UAC |
 | `hostsedit.py` | Admin-Helfer (UAC): schreibt nur den eigenen markierten Abschnitt der hosts-Datei. Nur Standardbibliothek, gestartet mit `pythonw -I -S`. Erlaubt nur Namen aus `MANAGED` (fest codiert) |
@@ -89,7 +91,7 @@ start_debug.bat           :: mit Konsole
 
 ## Offene Ideen (vom Nutzer noch nicht entschieden)
 
-Halten-zum-Anzeigen-Taste, Etagen-Hotkey (Midwich), „Bild für unbekannte Map hinzufügen“ (Namen zuordnen gibt es seit 1.8.0, neue Karten-Bilder noch nicht), Autostart mit DBD + Tray-Icon, .exe-Build (vorerst verworfen: Updates per git pull, Virenscanner-Fehlalarme, Admin-Helfer bräuchten Umbau – Desktop-Verknüpfung reicht), Ausblenden im Zuschauermodus, „Match Details“ als zweite Erkennungsquelle.
+Halten-zum-Anzeigen-Taste, Etagen-Hotkey (Midwich), Autostart mit DBD + Tray-Icon, .exe-Build (vorerst verworfen: Updates per git pull, Virenscanner-Fehlalarme, Admin-Helfer bräuchten Umbau – Desktop-Verknüpfung reicht), Ausblenden im Zuschauermodus, „Match Details“ als zweite Erkennungsquelle.
 
 ## Arbeitsweise
 
