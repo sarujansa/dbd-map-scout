@@ -122,10 +122,13 @@ EN = {
     "Erinnern, wenn der Lobby-Countdown abläuft und READY noch nicht gedrückt ist":
         "Remind me when the lobby countdown runs out and READY is not pressed yet",
     "Nur wenn DBD nicht das aktive Fenster ist": "Only when DBD is not the active window",
-    "Die Meldung erscheint am Symbol im Infobereich (dafür „Beim Minimieren in den Infobereich“ anlassen); der Ton "
-    "kommt immer.":
-        "The notification appears at the icon in the notification area (keep \"Minimise into the notification "
-        "area\" on for it); the sound always plays.",
+    "Die Meldung erscheint unten rechts über allen Fenstern – auch bei „Nicht stören“ – und nimmt dem aktiven "
+    "Fenster nicht den Fokus. Klick darauf schliesst sie.":
+        "The notification appears bottom right above all windows – also with \"Do not disturb\" – and does not "
+        "take the focus from the active window. Click it to close it.",
+    "Meldung testen": "Test notification",
+    "Zeigt die Meldung und spielt den Ton – so siehst du, wo sie erscheint.":
+        "Shows the notification and plays the sound – so you see where it appears.",
     "Lobby gefunden": "Lobby found",
     "nach {time}": "after {time}",
     "READY drücken.": "Press READY.",

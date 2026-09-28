@@ -20,6 +20,7 @@ from .capture import IS_WIN, describe_window, find_game_window, foreground_root,
 from .catalog import Catalog
 from .config import Settings
 from . import autostart
+from .toast import Toast
 from .connwatch import ConnectionWatch, IdlePause, is_admin
 from .i18n import N_, _
 from .hotkeys import HotkeyThread, combo_from_keys, modifier_name, pretty
@@ -84,6 +85,7 @@ class App:
         self._watch_gen = 0
         self.round = RoundTimer()        # runs while a map is on display
         self._hist = None                # round for the statistics: detected map -> detected end of the match
+        self.toast = Toast(self.root)
         self._queue = {"state": "idle"}  # lobby (worker "queue" events): search since / role / found lobby
         self.game = None
         self._game_checked = 0.0
@@ -1057,9 +1059,12 @@ class App:
                            ("notify_background_only", N_("Nur wenn DBD nicht das aktive Fenster ist"))):
             v = self.notify_vars[key] = tk.BooleanVar(value=bool(self.settings.get(key, True)))
             ttk.Checkbutton(nt, text=_(label), variable=v, command=self._notify_flags_changed).pack(anchor="w")
-        ttk.Label(nt, text=_("Die Meldung erscheint am Symbol im Infobereich (dafür „Beim Minimieren in den "
-                             "Infobereich“ anlassen); der Ton kommt immer."), style="Dim.TLabel",
-                  wraplength=400).pack(anchor="w", padx=(22, 0))
+        ttk.Label(nt, text=_("Die Meldung erscheint unten rechts über allen Fenstern – auch bei „Nicht stören“ – und "
+                             "nimmt dem aktiven Fenster nicht den Fokus. Klick darauf schliesst sie."),
+                  style="Dim.TLabel", wraplength=400).pack(anchor="w", padx=(22, 0))
+        ttk.Button(nt, text=_("Meldung testen"),
+                   command=lambda: self._notify(_("Lobby gefunden"), _("nach {time}", time="04:12") + " – "
+                                                + _("READY drücken."), force=True)).pack(anchor="w", pady=(6, 0))
 
         upd = ttk.LabelFrame(f, text=_("Updates"), padding=8)
         upd.pack(fill="x", pady=(8, 0))
@@ -1097,9 +1102,10 @@ class App:
             self.settings.set(key, bool(v.get()))
         self._save_soon()
 
-    def _notify(self, title, text):
-        """Sound + tray notification (lobby found, countdown) – only local, nothing goes to the game."""
-        if self.settings.get("notify_background_only", True) and not self.simulate and self.game is not None:
+    def _notify(self, title, text, force=False):
+        """Sound + own notification window (lobby found, countdown) – only local, nothing goes to the game."""
+        if (not force and self.settings.get("notify_background_only", True) and not self.simulate
+                and self.game is not None):
             fg = foreground_root()
             if is_game_window(fg):
                 return                                   # DBD is in front: the player sees it anyway
@@ -1111,7 +1117,9 @@ class App:
                 self.root.bell()
         except Exception:
             log.debug("notify sound", exc_info=True)
-        self.tray.notify(title, text)
+        # own window instead of a Windows notification: those are swallowed by "Do not disturb",
+        # which Windows turns on by itself while a game runs
+        self.toast.show(title, text)
 
     def _ui_lang_changed(self):
         code = next((c for c, lbl in self._ui_langs if lbl == self.ui_lang_var.get()), "auto")
