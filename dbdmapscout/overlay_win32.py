@@ -149,19 +149,27 @@ def add_border(pic: Image.Image) -> Image.Image:
     return pic
 
 
-def add_timer(pic: Image.Image, text: str, height: int) -> Image.Image:
-    """Small dark strip with the round timer below the (composed) map."""
-    size = max(14, height // 26)
-    font = _font(size)
-    x0, y0, x1, y1 = ImageDraw.Draw(pic).textbbox((0, 0), text, font=font)
-    bar_h = (y1 - y0) + size // 2 + 4
-    bar_w = min(pic.width, (x1 - x0) + size + 4)
-    canvas = Image.new("RGBA", (pic.width, pic.height + bar_h), (0, 0, 0, 0))
+def add_info(pic: Image.Image, timer: str, server: str, height: int) -> Image.Image:
+    """Dark strip below the (composed) map: big centred round timer, connected server region below it."""
+    lines = [(t, _font(max(size, 1)), fill) for t, size, fill in
+             ((timer, max(22, height // 11), (242, 242, 242, 255)),
+              (server, max(14, height // 24), (170, 200, 235, 255))) if t]
+    if not lines:
+        return pic
+    d = ImageDraw.Draw(pic)
+    boxes = [d.textbbox((0, 0), t, font=f) for t, f, _ in lines]
+    pad = max(6, height // 60)
+    gap = pad
+    bar_h = sum(b[3] - b[1] for b in boxes) + gap * (len(lines) - 1) + 2 * pad
+    width = max(pic.width, max(b[2] - b[0] for b in boxes) + 2 * pad)
+    canvas = Image.new("RGBA", (width, pic.height + bar_h), (0, 0, 0, 0))
     canvas.alpha_composite(pic, (0, 0))
     d = ImageDraw.Draw(canvas)
-    d.rectangle([0, pic.height, bar_w - 1, pic.height + bar_h - 1], fill=(20, 20, 22, 235))
-    d.text((size // 2 + 2 - x0, pic.height + (bar_h - (y1 - y0)) // 2 - y0), text, font=font,
-           fill=(242, 242, 242, 255))
+    d.rectangle([0, pic.height, width - 1, pic.height + bar_h - 1], fill=(20, 20, 22, 235))
+    y = pic.height + pad
+    for (text, font, fill), (x0, y0, x1, y1) in zip(lines, boxes):
+        d.text(((width - (x1 - x0)) // 2 - x0, y - y0), text, font=font, fill=fill)
+        y += (y1 - y0) + gap
     return canvas
 
 
@@ -193,6 +201,7 @@ class Win32Overlay:
         self._frames = []               # [(PIL RGBA, duration)]
         self._caption = ""
         self._timer = ""                # round timer text below the map ("" = none)
+        self._server = ""               # connected server region below the timer ("" = none)
         self._base = []                 # [(PIL RGBA, duration)] scaled map (+ caption), cached per size
         self._base_key = None
         self._prepared = []             # [(bytes, w, h, duration)]
@@ -244,6 +253,10 @@ class Win32Overlay:
         """Round timer shown below the map; only re-renders when the text changes."""
         self._timer = text or ""
 
+    def set_server(self, text: str):
+        """Connected server region shown below the timer."""
+        self._server = text or ""
+
     def has_map(self) -> bool:
         return bool(self._frames)
 
@@ -262,12 +275,12 @@ class Win32Overlay:
             self._base = [(compose(img, height, base_key[1], self.transparent, False), dur)
                           for img, dur in self._frames]
             self._base_key = base_key
-        key = (base_key, self._editing, self._timer)
+        key = (base_key, self._editing, self._timer, self._server)
         if key != self._key:
             self._prepared = []
             for pic, dur in self._base:
-                if self._timer:
-                    pic = add_timer(pic, self._timer, height)
+                if self._timer or self._server:
+                    pic = add_info(pic, self._timer, self._server, height)
                 if self._editing:
                     pic = add_border(pic.copy())
                 self._prepared.append((premultiplied_bgra(pic), pic.width, pic.height, dur))
