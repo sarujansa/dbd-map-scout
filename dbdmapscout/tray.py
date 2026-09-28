@@ -51,6 +51,17 @@ class Tray:
             except Exception:
                 log.debug("tray title", exc_info=True)
 
+    def notify(self, title: str, text: str) -> bool:
+        """Windows notification ("balloon") from the tray icon."""
+        if self._icon is None:
+            return False
+        try:
+            self._icon.notify(text[:250], title[:60])
+            return True
+        except Exception:
+            log.debug("tray notify", exc_info=True)
+            return False
+
     def stop(self) -> None:
         icon, self._icon = self._icon, None
         if icon is not None:

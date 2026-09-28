@@ -95,6 +95,14 @@ class LobbyView:
         return int(m.group(1)) * 60 + int(m.group(2))
 
     @property
+    def countdown(self) -> float | None:
+        """Seconds left on the lobby countdown ("00:53"), lobby screens only."""
+        if self.kind != "lobby":
+            return None
+        m = _CLOCK.search(self.time_text)
+        return int(m.group(1)) * 60 + int(m.group(2)) if m and int(m.group(2)) < 60 else None
+
+    @property
     def kind(self) -> str | None:
         """play | search | lobby | custom | None"""
         if self.button == "play":
@@ -177,16 +185,18 @@ class QueueTracker:
     a lobby button (other menus, loadout, store …) change nothing: the search keeps running there.
     """
     CONFIRM: int = 2
+    REMIND: float = 15                # lobby countdown at/below this and READY not pressed -> remind once
     MAX_SEARCH: float = 3 * 3600      # a "search" older than this is stale (DBD closed meanwhile …)
     state: str = "idle"               # idle | search | lobby | custom
     role: str | None = None
     search_start: float | None = None
     found: Found | None = None
     _pending: tuple | None = None     # (kind, count, first t)
+    _reminded: bool = False
     _starts: list = field(default_factory=list)
 
     def update(self, view: LobbyView | None, t: float) -> list:
-        """Returns events: ("search",) ("cancel",) ("found", Found) ("role", role)."""
+        """Returns events: ("search",) ("cancel",) ("found", Found) ("role", role) ("remind", seconds left)."""
         events = []
         kind = view.kind if view is not None else None
         if kind is None:
@@ -201,6 +211,10 @@ class QueueTracker:
             el = view.elapsed
             if el is not None and 0 <= el < self.MAX_SEARCH:
                 self._starts.append(t - el)          # DBD's own counter: exact even if the start was missed
+        if (kind == "lobby" and self.state == "lobby" and view.button == "ready" and not self._reminded
+                and view.countdown is not None and 0 < view.countdown <= self.REMIND):
+            self._reminded = True                    # READY still not pressed, the lobby is about to start
+            events.append(("remind", view.countdown))
         if self._pending and self._pending[0] == kind:
             self._pending = (kind, self._pending[1] + 1, self._pending[2])
         else:
@@ -221,6 +235,7 @@ class QueueTracker:
                 wait = max(0.0, first - start)
             self.found = Found(first, wait, self.role)
             self.state = "lobby"
+            self._reminded = False
             self._starts = []
             events.append(("found", self.found))
         elif kind == "custom":
