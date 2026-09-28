@@ -73,9 +73,41 @@ def _merge(base: dict, override: dict) -> dict:
     return out
 
 
+def export_settings(data: dict, path: str) -> None:
+    """Backup of all settings (hotkeys, sizes/rotations per map, own map assignments …)."""
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2, ensure_ascii=False)
+    os.replace(tmp, path)
+
+
+# per-PC values that must not come along from a backup (other folder / other machine)
+LOCAL_KEYS = ("setup_version", "setup_root", "window_geometry")
+
+
+def read_backup(path: str, current: dict) -> dict:
+    """Settings from a backup file, merged over the defaults (keys missing in older backups get their
+    default); ValueError if it is no settings file of this program."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            raw = json.load(fh)
+    except (OSError, ValueError) as e:
+        raise ValueError(str(e)) from e
+    if not isinstance(raw, dict) or not isinstance(raw.get("overlay"), dict) or "hotkeys" not in raw:
+        raise ValueError("no DbD Map Scout settings")
+    for k in LOCAL_KEYS:
+        raw.pop(k, None)
+        if k in current:
+            raw[k] = current[k]
+    merged = _merge(DEFAULTS, raw)
+    merged["settings_version"] = SETTINGS_VERSION
+    return merged
+
+
 class Settings:
     def __init__(self, path: str):
         self.path = path
+        self.frozen = False             # after importing a backup: nothing is written until the restart
         self.data = copy.deepcopy(DEFAULTS)
         if os.path.exists(path):
             try:
@@ -104,6 +136,8 @@ class Settings:
         self.data[key] = value
 
     def save(self):
+        if self.frozen:
+            return
         tmp = self.path + ".tmp"
         try:
             with open(tmp, "w", encoding="utf-8") as fh:
