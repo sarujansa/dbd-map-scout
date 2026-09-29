@@ -156,9 +156,11 @@ class DetectionWorker(threading.Thread):
                     fw, fh = window.width, window.height
                     status = _("DBD gefunden ({w}×{h}) – warte auf Map-Banner", w=fw, h=fh)
                 else:
+                    # no DBD: no automatic detection – a DBD video or screenshot on the desktop must not open
+                    # the overlay over other work ("Scannen" still looks at the main screen)
                     ml, mt, mw, mh = grabber.primary_monitor()
                     origin, fw, fh = (ml, mt), mw, mh
-                    status = _("DBD-Fenster nicht gefunden – beobachte Hauptbildschirm")
+                    status = _("DBD nicht gefunden – Erkennung startet, sobald DBD läuft")
                 # ---- DBD in the background: take its picture from Windows instead of the screen
                 win_ok = source is None and window is not None and not window.minimized and window.width > 100
                 fg_now = win_ok and foreground_root() == window.hwnd
@@ -200,7 +202,7 @@ class DetectionWorker(threading.Thread):
                 self._status(status, last_status)
                 last_status = status
             sep = None
-            if self.settings.get("auto_detect", True):
+            if self.settings.get("auto_detect", True) and (source is not None or window is not None):
                 # ------------------------------------------------ banner search
                 box = (int(ROI[0] * fw), int(ROI[1] * fh), int((ROI[2] - ROI[0]) * fw), int((ROI[3] - ROI[1]) * fh))
                 try:
@@ -351,6 +353,8 @@ class DetectionWorker(threading.Thread):
                     self.watch_status += f" · {IN_MATCH_RATE:.0f} Scan/s"
             elif not session and tick - lobby_button_t < LOBBY_HOLD:
                 rate = min(rate, LOBBY_RATE)             # in the lobby / queue: no banner possible yet
+            elif source is None and window is None:
+                rate = 1.0                               # no DBD: only looking for its window
             try:
                 cmd = self.commands.get(timeout=max(0.02, 1.0 / rate - (time.time() - tick)))
                 self.commands.put(cmd)          # handled at the top of the next loop

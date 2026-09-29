@@ -595,7 +595,7 @@ EN = {
     "Automatische Erkennung ist aus": "Automatic detection is off",
     "DBD ist minimiert": "DBD is minimised",
     "DBD gefunden ({w}×{h}) – warte auf Map-Banner": "DBD found ({w}×{h}) – waiting for the map banner",
-    "DBD-Fenster nicht gefunden – beobachte Hauptbildschirm": "DBD window not found – watching the main screen",
+    "DBD nicht gefunden – Erkennung startet, sobald DBD läuft": "DBD not found – detection starts once DBD runs",
     "Bildschirmaufnahme fehlgeschlagen: {error}": "Screen capture failed: {error}",
     "Aufnahme ist schwarz – DBD im Modus „Fenster-Vollbild“ betreiben":
         "Capture is black – run DBD in “Windowed Fullscreen” mode",
