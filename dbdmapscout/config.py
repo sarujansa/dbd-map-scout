@@ -60,6 +60,7 @@ DEFAULTS = {
     "notify_background_only": True,     # only while DBD is not the active window
     "auto_update": True,                # start.bat: pull the newest state from GitHub before starting
     "user_aliases": {},                 # own assignments of unknown banner texts: {map_id: [text, ...]}
+    "welcome_seen": False,              # the "So geht's" line on the very first start was dismissed
     "killer_aliases": {},               # killer names as read (skins, new killers): {fold(name): "The Nurse"}
 }
 
