@@ -46,6 +46,18 @@ def test_shortcut_runs_the_task():
     assert "GetFolderPath('Desktop')" in s
 
 
+def test_shortcut_gets_the_program_app_id(monkeypatch, tmp_path):
+    """Pinned shortcut and running window must share one AppUserModelID (one taskbar button, own icon)."""
+    import dbdmapscout.icon as icon
+    monkeypatch.setattr(icon, "save_ico", lambda path: None)
+    lnk = r"C:\Users\saruj\Desktop\DbD Map Scout.lnk"
+    monkeypatch.setattr(au, "powershell", lambda script: (True, lnk if "CreateShortcut" in script else ""))
+    seen = []
+    monkeypatch.setattr(au, "set_link_app_id", lambda path: seen.append(path) or True)
+    ok, _msg = au.install(str(tmp_path))
+    assert ok and seen == [lnk]
+
+
 def test_powershell_is_encoded(monkeypatch):
     seen = {}
 
