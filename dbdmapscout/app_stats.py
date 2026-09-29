@@ -22,7 +22,7 @@ STATS_ROLES = [("all", N_("Alle Rollen")), ("killer", N_("Killer")), ("survivor"
 STATS_WAIT_GROUPS = [("weekday", N_("nach Wochentag")), ("hour", N_("nach Uhrzeit")), ("region", N_("nach Region"))]
 WEEKDAYS = [N_("Montag"), N_("Dienstag"), N_("Mittwoch"), N_("Donnerstag"), N_("Freitag"), N_("Samstag"),
             N_("Sonntag")]
-STATS_PERIODS = [("all", N_("Alle")), ("day", N_("Heute")), ("week", N_("Diese Woche")), ("month", N_("Dieser Monat")),
+STATS_PERIODS = [("all", N_("Gesamter Zeitraum")), ("day", N_("Heute")), ("week", N_("Diese Woche")), ("month", N_("Dieser Monat")),
                  ("year", N_("Dieses Jahr"))]
 
 
@@ -32,35 +32,29 @@ class StatsTab:
         outer, f = self._scroll_tab()
         fr = ttk.Frame(f)
         fr.pack(fill="x", pady=(0, 6))
-        ttk.Label(fr, text=_("Zeitraum")).pack(side="left")
         self._stats_periods = [(k, _(label)) for k, label in STATS_PERIODS]
         self.stats_period_var = tk.StringVar(value=self._stats_periods[0][1])
         cb = ttk.Combobox(fr, textvariable=self.stats_period_var, values=[lbl for _k, lbl in self._stats_periods],
-                          state="readonly", width=14)
-        cb.pack(side="left", padx=(6, 14))
+                          state="readonly", width=16)
+        cb.pack(side="left")
         cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
-        ttk.Label(fr, text=_("Region")).pack(side="left")
         self._stats_regions = [(None, _("Alle Regionen"))]
         self.stats_region_var = tk.StringVar(value=self._stats_regions[0][1])
-        self.stats_region_cb = ttk.Combobox(fr, textvariable=self.stats_region_var, state="readonly", width=18,
+        self.stats_region_cb = ttk.Combobox(fr, textvariable=self.stats_region_var, state="readonly", width=20,
                                             values=[lbl for _c, lbl in self._stats_regions])
-        self.stats_region_cb.pack(side="left", padx=(6, 14))
+        self.stats_region_cb.pack(side="left", padx=(8, 0))
         self.stats_region_cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
-        ttk.Label(fr, text=_("Rolle")).pack(side="left")
         self._stats_roles = [(k, _(label)) for k, label in STATS_ROLES]
         self.stats_role_var = tk.StringVar(value=self._stats_roles[0][1])
         cb = ttk.Combobox(fr, textvariable=self.stats_role_var, values=[lbl for _k, lbl in self._stats_roles],
                           state="readonly", width=13)
-        cb.pack(side="left", padx=6)
+        cb.pack(side="left", padx=(8, 0))
         cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
-        fr = ttk.Frame(f)                                    # second row: the filter row is already the widest
-        fr.pack(fill="x", pady=(0, 6))
-        ttk.Label(fr, text=_("Killer")).pack(side="left")
         self._stats_killers = [(None, _("Alle Killer"))]
         self.stats_killer_var = tk.StringVar(value=self._stats_killers[0][1])
         self.stats_killer_cb = ttk.Combobox(fr, textvariable=self.stats_killer_var, state="readonly", width=14,
                                             values=[lbl for _k, lbl in self._stats_killers])
-        self.stats_killer_cb.pack(side="left", padx=6)
+        self.stats_killer_cb.pack(side="left", padx=(8, 0))
         self.stats_killer_cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
         self.stats_var = tk.StringVar(value="")
         ttk.Label(f, textvariable=self.stats_var, style="Big.TLabel", wraplength=540).pack(anchor="w")
