@@ -37,6 +37,8 @@ TIPS = {
     "Killer": "Diese Runde als Killer-Runde zählen (falls die Erkennung falsch lag).",
     "Zuordnen": "Der markierte Name (Skin oder neuer Killer) zählt ab jetzt als der gewählte Killer – auch in allen "
                 "bisherigen Runden.",
+    "Killer setzen": "Setzt den Killer nur für die markierte Runde und zählt sie als Killer-Runde – z. B. wenn sie "
+                     "fälschlich als Survivor gezählt wurde oder der Name falsch gelesen wurde.",
     "Zuordnungen löschen": "Entfernt alle eigenen Killer-Zuordnungen; die Namen erscheinen wieder so, wie sie gelesen "
                            "wurden.",
     "Survivor": "Diese Runde als Survivor-Runde zählen (falls die Erkennung falsch lag).",
