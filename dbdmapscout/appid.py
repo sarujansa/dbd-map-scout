@@ -8,6 +8,7 @@ the running program are one taskbar button.
 from __future__ import annotations
 
 import ctypes
+import os
 import sys
 import uuid
 
@@ -36,6 +37,11 @@ class _PROPERTYKEY(ctypes.Structure):
 class _PROPVARIANT(ctypes.Structure):             # only the VT_LPWSTR case; size as in the SDK (16 / 24 bytes)
     _fields_ = [("vt", ctypes.c_ushort), ("r1", ctypes.c_ushort), ("r2", ctypes.c_ushort),
                 ("r3", ctypes.c_ushort), ("pwszVal", ctypes.c_void_p), ("pad", ctypes.c_void_p)]
+
+
+def start_menu_link(name: str = "DbD Map Scout.lnk") -> str:
+    """Where the setup puts the Start menu shortcut (the one Windows pins for the running window)."""
+    return os.path.join(os.environ.get("APPDATA", ""), "Microsoft", "Windows", "Start Menu", "Programs", name)
 
 
 def set_process_app_id() -> bool:

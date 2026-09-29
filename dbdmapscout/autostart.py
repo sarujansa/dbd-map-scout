@@ -5,13 +5,17 @@ without asking; running an existing task needs no elevation. Creating or changin
 tasks does – the setup (verknuepfung_erstellen.bat) is elevated, and the program itself
 runs elevated when started through the task.
 
-    python -m dbdmapscout.autostart install      (elevated) icon + task + desktop shortcut
+    python -m dbdmapscout.autostart install      (elevated) icon + task + desktop and Start menu shortcut
 
 Tasks:
-  "DbD Map Scout"               on demand; the desktop shortcut runs it (schtasks /run)
+  "DbD Map Scout"               on demand; the shortcuts run it (schtasks /run)
   "DbD Map Scout (Autostart)"   at logon (20 s delay), starts in the notification area ("tray")
 Both run: cmd /c start "" /min cmd /c ""<folder>\\start.bat" [tray]"  – so updates and packages keep
 working, and the minimised console closes again (start alone would use cmd /K and leave it open).
+
+Both shortcuts carry the program's AppUserModelID (appid.py). The Start menu one is needed for pinning
+the running window: Windows looks for a shortcut with that ID there (not on the desktop) and pins it –
+without one it pins .venv\\Scripts\\pythonw.exe (Python icon, starts nothing).
 """
 from __future__ import annotations
 
@@ -23,7 +27,7 @@ import sys
 from .appid import set_link_app_id
 from .i18n import _
 
-SETUP_VERSION = 3           # raise when task, shortcut or icon change: the program then renews them itself
+SETUP_VERSION = 4           # raise when task, shortcut or icon change: the program then renews them itself
 TASK = "DbD Map Scout"
 TASK_AUTO = "DbD Map Scout (Autostart)"
 LINK_NAME = "DbD Map Scout.lnk"
@@ -67,12 +71,12 @@ def remove_script(name: str) -> str:
             f"if ($t) {{ Unregister-ScheduledTask -TaskName {_q(name)} -Confirm:$false }}")
 
 
-def shortcut_script(root: str, icon: str) -> str:
-    """Desktop shortcut that runs the on-demand task (no UAC prompt)."""
+def shortcut_script(root: str, icon: str, folder: str = "Desktop") -> str:
+    """Shortcut that runs the on-demand task (no UAC prompt); folder: "Desktop" or "Programs" (Start menu)."""
     run_args = '/run /tn "' + TASK + '"'
     lines = [
         "$ErrorActionPreference = 'Stop'",
-        f"$lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) {_q(LINK_NAME)}",
+        f"$lnk = Join-Path ([Environment]::GetFolderPath({_q(folder)})) {_q(LINK_NAME)}",
         "$s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)",
         "$s.TargetPath = \"$env:SystemRoot\\System32\\schtasks.exe\"",
         f"$s.Arguments = {_q(run_args)}",
@@ -116,6 +120,14 @@ def set_autostart(root: str, on: bool):
     return ok, out
 
 
+def ensure_autostart(root: str, wanted: bool):
+    """Autostart is on unless the user switched it off in the settings: create the logon task if it
+    is missing (needs administrator rights). Returns None (nothing to do) or (ok, output)."""
+    if not IS_WIN or not wanted or task_exists(TASK_AUTO):
+        return None
+    return set_autostart(root, True)
+
+
 def needs_setup(saved_version, saved_root, root: str, task_present: bool) -> bool:
     """Should the program (running as administrator) create or renew task, icon and shortcut?
     First run, other folder (moved), a newer setup after an update, or the task was removed.
@@ -139,7 +151,7 @@ def ensure(root: str, saved_version, saved_root):
 
 
 def install(root: str):
-    """Icon, on-demand task and desktop shortcut. Returns (ok, message)."""
+    """Icon, on-demand task, desktop and Start menu shortcut. Returns (ok, message)."""
     from .icon import save_ico
     icon = os.path.join(root, "dbdmapscout.ico")
     try:
@@ -149,11 +161,14 @@ def install(root: str):
     ok, out = powershell(task_script(root, TASK, False))
     if not ok:
         return False, _("Aufgabe konnte nicht angelegt werden: {error}", error=out)
-    ok, out = powershell(shortcut_script(root, icon))
-    if not ok:
-        return False, _("Verknüpfung konnte nicht angelegt werden: {error}", error=out)
-    set_link_app_id(out)          # same ID as the program: pinned shortcut and window share one button
-    return True, _("Verknüpfung erstellt: {path}", path=out)
+    links = []
+    for folder in ("Programs", "Desktop"):        # Start menu first: pinning the running window uses it
+        ok, out = powershell(shortcut_script(root, icon, folder))
+        if not ok:
+            return False, _("Verknüpfung konnte nicht angelegt werden: {error}", error=out)
+        set_link_app_id(out)      # same ID as the program: pinned shortcut and window share one button
+        links.append(out)
+    return True, _("Verknüpfung erstellt: {path}", path=links[-1])
 
 
 def main(argv) -> int:

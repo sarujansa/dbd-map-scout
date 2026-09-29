@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ctypes
+import os
 import platform
 import sys
 import time
@@ -85,6 +86,11 @@ def collect(app) -> str:
     if game and oh:
         lines.append(f"Z-Reihenfolge: Overlay über Spiel = {is_above(oh, game.hwnd)}")
     lines.append(f"Vordergrund: {describe_window(foreground_root())}")
+    if IS_WIN:
+        from . import appid
+        link = appid.start_menu_link()
+        lines.append(f"Taskleiste: App-ID={appid.process_app_id() or '—'}  Startmenü-Verknüpfung="
+                     f"{(appid.link_app_id(link) or 'ohne App-ID') if os.path.exists(link) else 'fehlt'}")
     lines.append(f"Status: map={app.current} quelle={app.source} sichtbar_gewünscht={app.user_visible} "
                  f"nach_match_aus={app.hidden_after_match} edit={ov.editing} zustand={getattr(app, '_vis_state', None)} "
                  f"letzte_position={getattr(app, '_last_place', None)}")

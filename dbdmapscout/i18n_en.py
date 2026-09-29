@@ -482,6 +482,10 @@ EN = {
     "Wird eingerichtet …": "Setting up …",
     "Startet ab jetzt mit Windows im Infobereich.": "From now on starts with Windows in the notification area.",
     "Startet nicht mehr mit Windows.": "No longer starts with Windows.",
+    "Startet ab jetzt mit Windows im Infobereich (abschaltbar unter Einstellungen → Start und Infobereich).":
+        "From now on starts with Windows in the notification area (can be switched off under Settings → "
+        "Start and notification area).",
+    "Autostart mit Windows fehlgeschlagen: {error}": "Starting with Windows could not be set up: {error}",
     "Fehlgeschlagen: {error}": "Failed: {error}",
     "Nur unter Windows.": "Windows only.",
     "Tipp: Einmal als Administrator starten (Rechtsklick auf start.bat → „Als Administrator ausführen“) – dann "
