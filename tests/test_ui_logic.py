@@ -10,7 +10,7 @@ from dbdmapscout.status import DOT_STYLE, user_state  # noqa: E402
 
 # ------------------------------------------------------------------ status line
 def test_waiting_for_dbd_then_match():
-    assert user_state("DBD-Fenster nicht gefunden – beobachte Hauptbildschirm").text == "Wartet auf DBD"
+    assert user_state("DBD nicht gefunden – Erkennung startet, sobald DBD läuft").text == "Wartet auf DBD"
     s = user_state("DBD gefunden (3440×1440) – warte auf Map-Banner", game_found=True)
     assert (s.kind, s.text) == ("wait", "Wartet auf das nächste Match")
 
