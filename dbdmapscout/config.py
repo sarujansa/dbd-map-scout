@@ -55,6 +55,7 @@ DEFAULTS = {
     "save_debug_images": False,
     "show_advanced": False,             # detection tab: technical options unfolded
     "tray": True,                       # minimise into the notification area
+    "autostart": True,                  # start with Windows (logon task, set up as admin) unless switched off
     "lobby_notify": True,               # sound + notification when a lobby was found
     "lobby_remind": True,               # … and when its countdown runs out while READY is not pressed
     "notify_background_only": True,     # only while DBD is not the active window
