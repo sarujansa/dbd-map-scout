@@ -108,6 +108,9 @@ class Overlay:
         self.ping = tk.Label(self.win, text="", fg="#b2b8f8", bg="#141416", anchor="center",
                              font=("Segoe UI", 11, "bold"), padx=6, pady=1)
         self._ping_text = ""
+        self.status = tk.Label(self.win, text="", fg="#ffffff", bg="#141416", anchor="center", justify="center",
+                               font=("Segoe UI", 11, "bold"), padx=8, pady=4)
+        self._waiting = ()          # lines of the waiting card: shown instead of everything else
         self._frames = []           # raw frames
         self._photos = []           # prepared PhotoImages for the current size
         self._frame_i = 0
@@ -146,6 +149,8 @@ class Overlay:
         self._frames = load_frames(path, rotation) if path else []
         self._height = 0
         self.caption.configure(text=caption)
+        if self._waiting:
+            return                                        # packed again when the waiting card goes
         if self.show_caption and caption and self.show_map:
             self.caption.pack(side="top", anchor="w", before=self.pic)
         else:
@@ -173,6 +178,8 @@ class Overlay:
 
     def _pack_info(self):
         """Timer (big, centred), server region and ping below the map, in this order."""
+        if self._waiting:
+            return
         last = self.pic if self.pic.winfo_manager() else None      # info only: no picture above
         for label, shown in ((self.timer, self._timer_text), (self.server, self._server_text),
                              (self.ping, self._ping_text)):
@@ -194,18 +201,38 @@ class Overlay:
             self._apply_styles()
         self._height = 0                  # re-render with/without key colour
 
+    def set_waiting(self, lines):
+        """No map on screen: show only these lines; () = off (map, timer and server come back)."""
+        lines = tuple(lines or ())
+        if lines == self._waiting:
+            return
+        was, self._waiting = self._waiting, lines
+        if lines:
+            for w in (self.caption, self.pic, self.timer, self.server, self.ping):
+                w.pack_forget()
+            self.status.configure(text="\n".join(x.upper() for x in lines))
+            self.status.pack(side="top", fill="x")
+        elif was:
+            self.status.pack_forget()
+            self.set_show_map(self.show_map)
+            if self.show_caption and self.caption.cget("text") and self.show_map:
+                self.caption.pack(side="top", anchor="w", before=self.pic)
+
     def has_map(self) -> bool:
         return bool(self._frames)
 
     def map_size(self):
         """Size of the map picture as loaded (w, h) – to fit it without rendering it first."""
-        return self._frames[0][0].size if self._frames and self.show_map else (0, 0)
+        return self._frames[0][0].size if self._frames and self.show_map and not self._waiting else (0, 0)
 
     def has_info(self) -> bool:
         return bool(self._timer_text or self._server_text)
 
     def set_show_map(self, on: bool):
         self.show_map = bool(on)
+        self._height = 0
+        if self._waiting:
+            return
         if self.show_map:
             self.pic.pack(side="top", anchor="w")
         else:
@@ -244,6 +271,9 @@ class Overlay:
     # ------------------------------------------------------------ placement
     def render(self, height: int):
         """Prepare the picture for this height; returns the window size (w, h)."""
+        if self._waiting:
+            self.win.update_idletasks()
+            return self.win.winfo_reqwidth(), self.win.winfo_reqheight()
         if not self._frames:
             return 0, 0
         self._render(max(40, int(height)))
@@ -251,7 +281,7 @@ class Overlay:
         return self.win.winfo_reqwidth(), self.win.winfo_reqheight()
 
     def show_at(self, x: int, y: int):
-        if not self._frames:
+        if not self._frames and not self._waiting:
             self.hide()
             return
         if self._alpha != self.opacity:

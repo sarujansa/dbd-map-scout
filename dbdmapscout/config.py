@@ -29,6 +29,7 @@ DEFAULTS = {
         "only_when_game_focused": True,
         "show_caption": False,          # the map pictures already carry their name
         "show_timer": True,             # round timer below the map (map shown -> map gone)
+        "show_waiting": True,           # no map on screen: small card "Warte auf Map" + lobby state
         "show_server": True,            # connected server region below the timer (needs the Server tab option)
         "transparent": True,            # transparent area around the map (off = dark rectangle)
         "keep_in_bar": True,            # ultrawide: shrink/move the map so it stays inside the black bar
