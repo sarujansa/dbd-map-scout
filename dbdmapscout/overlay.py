@@ -210,7 +210,6 @@ class Overlay:
         if lines:
             for w in (self.caption, self.pic, self.timer, self.server, self.ping):
                 w.pack_forget()
-            self.status.configure(text="\n".join(x.upper() for x in lines))
             self.status.pack(side="top", fill="x")
         elif was:
             self.status.pack_forget()
@@ -271,7 +270,12 @@ class Overlay:
     # ------------------------------------------------------------ placement
     def render(self, height: int):
         """Prepare the picture for this height; returns the window size (w, h)."""
-        if self._waiting:
+        if self._waiting:                     # status lines, then the server once DBD talks to one (lobby)
+            extra = [f"●  {self._server_text.upper()}"] if self._server_text else []
+            extra += [self._ping_text] if self._ping_text else []
+            text = "\n".join([x.upper() for x in self._waiting] + extra)
+            if self.status.cget("text") != text:
+                self.status.configure(text=text)
             self.win.update_idletasks()
             return self.win.winfo_reqwidth(), self.win.winfo_reqheight()
         if not self._frames:

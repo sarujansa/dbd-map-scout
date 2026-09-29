@@ -192,12 +192,12 @@ def add_info(pic: Image.Image, timer: str, server: str, height: int, backdrop: b
     rows = []
     if timer:
         rows.append(("timer", [(timer, INFO_TIMER)], tfont))
+    for i, line in enumerate(status):          # waiting card: above the server, like the timer on the map
+        rows.append(("status", [(line.upper(), INFO_TIMER if i == 0 else INFO_SERVER)], sfont))
     if server:
         rows.append(("server", [(server.upper(), INFO_SERVER)], sfont))
     if ping is not None:
         rows.append(("ping", [("PING ", INFO_SERVER), (f"{ping:.0f} MS", ping_colour(ping))], sfont))
-    for i, line in enumerate(status):
-        rows.append(("status", [(line.upper(), INFO_TIMER if i == 0 else INFO_SERVER)], sfont))
     boxes, widths = [], []
     for kind, segs, font in rows:
         text = "".join(t for t, _ in segs)
@@ -403,11 +403,11 @@ class Win32Overlay:
         return self._size
 
     def _render_waiting(self, height: int):
-        key = ("waiting", height, self.transparent, self._editing, self._waiting)
+        key = ("waiting", height, self.transparent, self._editing, self._waiting, self._server, self._ping)
         if key != self._key:
             self._stop_anim()
-            pic = add_info(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), "", "", height,
-                           backdrop=not self.transparent, status=self._waiting)
+            pic = add_info(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), "", self._server, height,
+                           backdrop=not self.transparent, ping=self._ping, status=self._waiting)
             if self._editing:
                 pic = add_border(pic.copy())
             self._prepared = [(premultiplied_bgra(pic), pic.width, pic.height, 0)]
