@@ -37,6 +37,10 @@ TIPS = {
     "Killer": "Diese Runde als Killer-Runde zählen (falls die Erkennung falsch lag).",
     "Zuordnen": "Der markierte Name (Skin oder neuer Killer) zählt ab jetzt als der gewählte Killer – auch in allen "
                 "bisherigen Runden.",
+    "Ohne Karte: „Warte auf Map“ und Lobby-Status anzeigen":
+        "Solange DBD läuft und keine Karte eingeblendet ist, zeigt das Overlay eine kleine Karte: „Warte auf "
+        "Map“, darunter Suche/Lobby (z. B. „Suche läuft: 02:13 · Nurse“) oder die letzte Runde. Gilt nicht, "
+        "wenn du die Karte selbst ausgeblendet hast.",
     "Verstanden": "Hinweis schliessen – er erscheint nicht wieder.",
     "Killer setzen": "Setzt den Killer nur für die markierte Runde und zählt sie als Killer-Runde – z. B. wenn sie "
                      "fälschlich als Survivor gezählt wurde oder der Name falsch gelesen wurde.",

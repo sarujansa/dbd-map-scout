@@ -173,14 +173,15 @@ def _tracked_width(d, text, font, track):
 
 
 def add_info(pic: Image.Image, timer: str, server: str, height: int, backdrop: bool = False,
-             ping: float | None = None) -> Image.Image:
+             ping: float | None = None, status=()) -> Image.Image:
     """Round timer, connected server and its ping below the map, styled like the map title: white heavy
     digits with a soft shadow (no box); below them a green "connected" dot with the region in small
     caps, and the ping coloured by quality. The ping is only shown together with a server.
+    ``status``: lines of the waiting card (no map on screen) – first one white, the others dimmer.
     ``backdrop``: the map sits on a dark rectangle (transparent edge off) – extend it behind the info."""
     if not server:
         ping = None
-    if not timer and not server:
+    if not timer and not server and not status:
         return pic
     d0 = ImageDraw.Draw(pic)
     tfont, sfont = _font(max(22, height // 11), heavy=True), _font(max(14, height // 24))
@@ -195,6 +196,8 @@ def add_info(pic: Image.Image, timer: str, server: str, height: int, backdrop: b
         rows.append(("server", [(server.upper(), INFO_SERVER)], sfont))
     if ping is not None:
         rows.append(("ping", [("PING ", INFO_SERVER), (f"{ping:.0f} MS", ping_colour(ping))], sfont))
+    for i, line in enumerate(status):
+        rows.append(("status", [(line.upper(), INFO_TIMER if i == 0 else INFO_SERVER)], sfont))
     boxes, widths = [], []
     for kind, segs, font in rows:
         text = "".join(t for t, _ in segs)
@@ -281,6 +284,7 @@ class Win32Overlay:
         self._timer = ""                # round timer text below the map ("" = none)
         self._server = ""               # connected server region below the timer ("" = none)
         self._ping = None               # ping to that region in ms, below the region
+        self._waiting = ()              # lines of the waiting card: shown instead of everything else
         self._base = []                 # [(PIL RGBA, duration)] scaled map (+ caption), cached per size
         self._base_key = None
         self._prepared = []             # [(bytes, w, h, duration)]
@@ -337,12 +341,16 @@ class Win32Overlay:
         self._server = text or ""
         self._ping = round(ping) if ping is not None and self._server else None
 
+    def set_waiting(self, lines):
+        """No map on screen: show only these lines ("Warte auf Map", lobby state); () = off."""
+        self._waiting = tuple(lines or ())
+
     def has_map(self) -> bool:
         return bool(self._frames)
 
     def map_size(self):
         """Size of the map picture as loaded (w, h) – to fit it without rendering it first."""
-        return self._frames[0][0].size if self._frames and self.show_map else (0, 0)
+        return self._frames[0][0].size if self._frames and self.show_map and not self._waiting else (0, 0)
 
     def has_info(self) -> bool:
         return bool(self._timer or self._server)
@@ -357,6 +365,8 @@ class Win32Overlay:
 
     def render(self, height: int):
         """Prepare pictures for this height; returns (w, h) of the overlay."""
+        if self._waiting:
+            return self._render_waiting(max(40, int(height)))
         if not self._frames:
             return 0, 0
         height = max(40, int(height))
@@ -390,6 +400,21 @@ class Win32Overlay:
                 self._restart_anim()
             elif self._shown:
                 self._push()              # timer text changed: same frame, keep the animation running
+        return self._size
+
+    def _render_waiting(self, height: int):
+        key = ("waiting", height, self.transparent, self._editing, self._waiting)
+        if key != self._key:
+            self._stop_anim()
+            pic = add_info(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), "", "", height,
+                           backdrop=not self.transparent, status=self._waiting)
+            if self._editing:
+                pic = add_border(pic.copy())
+            self._prepared = [(premultiplied_bgra(pic), pic.width, pic.height, 0)]
+            self._key, self._base_key, self._frame_i = key, None, 0     # the map is rebuilt afterwards
+            self._size = (pic.width, pic.height)
+            if self._shown:
+                self._push()
         return self._size
 
     def _push(self, pos=None):
