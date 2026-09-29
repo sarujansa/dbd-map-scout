@@ -397,6 +397,12 @@ EN = {
     "Entfernt alle eigenen Killer-Zuordnungen; die Namen erscheinen wieder so, wie sie gelesen wurden.":
         "Removes all own killer assignments; the names show up again as they were read.",
     "Zuordnen": "Assign",
+    "Verstanden": "Got it",
+    "Hinweis schliessen – er erscheint nicht wieder.": "Close the hint – it will not come back.",
+    "So geht's: DBD starten und spielen – die Karte erscheint beim Match-Start von selbst und verschwindet nach der "
+    "Runde. Hotkeys: {toggle} ein/aus, {rotate} drehen, {edit} verschieben (ändern unter Einstellungen).":
+        "How it works: start DBD and play – the map appears by itself when the match starts and disappears after "
+        "the round. Hotkeys: {toggle} on/off, {rotate} rotate, {edit} move (change them under Settings).",
     "Killer der markierten Runde:": "Killer of the selected round:",
     "Killer setzen": "Set killer",
     "Killer konnte nicht gespeichert werden: {error}": "Could not save the killer: {error}",

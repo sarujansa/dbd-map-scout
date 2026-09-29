@@ -57,18 +57,20 @@ class StatsTab:
         self.stats_killer_cb.pack(side="left", padx=(8, 0))
         self.stats_killer_cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
         self.stats_var = tk.StringVar(value="")
-        ttk.Label(f, textvariable=self.stats_var, style="Big.TLabel", wraplength=540).pack(anchor="w")
+        self.stats_sum_label = ttk.Label(f, textvariable=self.stats_var, style="Big.TLabel", wraplength=540)
+        self.stats_sum_label.pack(anchor="w")
         self.stats_lost_var = tk.StringVar(value="")
-        ttk.Label(f, textvariable=self.stats_lost_var, wraplength=540).pack(anchor="w")
+        self.stats_lost_label = ttk.Label(f, textvariable=self.stats_lost_var, wraplength=540)   # only when needed
         ttk.Label(f, text=_("Gezählt werden Runden mit automatisch erkannter Map, vom Map-Banner bis zum erkannten "
                             "Rundenende (mindestens 1 Minute). Gespeichert nur lokal in rounds.jsonl."),
                   style="Dim.TLabel", wraplength=540).pack(anchor="w", pady=(2, 6))
-        box = ttk.LabelFrame(f, text=_("Maps"), padding=6)
-        box.pack(fill="both", expand=True)
+        # one table at a time: sub-tabs instead of five tables below each other
+        self.stats_nb = ttk.Notebook(f)
+        self.stats_nb.pack(fill="both", expand=True)
+        box = self._stats_page(_("Maps"))
         self.stats_maps = self._stats_tree(box, (("map", _("Map"), 230, "w"), ("n", _("Runden"), 70, "e"),
                                                  ("avg", _("Ø Dauer"), 80, "e"), ("max", _("Längste"), 80, "e")), 9)
-        box_k = ttk.LabelFrame(f, text=_("Killer"), padding=6)
-        box_k.pack(fill="both", expand=True, pady=(8, 0))
+        box_k = self._stats_page(_("Killer"))
         self.stats_kill = self._stats_tree(box_k, (("killer", _("Killer"), 150, "w"), ("n", _("Runden"), 70, "e"),
                                                    ("avg", _("Ø Dauer"), 80, "e"), ("map", _("Häufigste Map"), 160, "w")),
                                            5, select=True)
@@ -88,15 +90,13 @@ class StatsTab:
                                 "eigenen Namen – dann Zeile markieren und dem Killer zuordnen (gilt auch rückwirkend). "
                                 "Killer auswählen (oben) zeigt Maps und Dauer nur für ihn."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
-        box_r = ttk.LabelFrame(f, text=_("Serverregionen"), padding=6)
-        box_r.pack(fill="both", expand=True, pady=(8, 0))
+        box_r = self._stats_page(_("Serverregionen"))
         self.stats_regs = self._stats_tree(box_r, (("reg", _("Region"), 190, "w"), ("n", _("Runden"), 65, "e"),
                                                    ("avg", _("Ø Dauer"), 75, "e"), ("share", _("Anteil"), 65, "e"),
                                                    ("ping", _("Ø Ping"), 70, "e")), 5)
         ttk.Label(box_r, text=_("Region nur bekannt, wenn im Tab Server „Verbundener Spielserver“ an war."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
-        box_w = ttk.LabelFrame(f, text=_("Wartezeit in der Lobby"), padding=6)
-        box_w.pack(fill="both", expand=True, pady=(8, 0))
+        box_w = self._stats_page(_("Wartezeit in der Lobby"))
         wr = ttk.Frame(box_w)
         wr.pack(fill="x", pady=(0, 4))
         self.stats_wait_var = tk.StringVar(value="")
@@ -113,11 +113,10 @@ class StatsTab:
         ttk.Label(box_w, text=_("Gemessen von „CANCEL“ (Suche läuft) bis zur gefundenen Lobby – nur wenn das Programm "
                                 "die Suche gesehen hat. Custom Games haben keine Wartezeit."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
-        box2 = ttk.LabelFrame(f, text=_("Letzte Runden"), padding=6)
-        box2.pack(fill="both", expand=True, pady=(8, 0))
-        self.stats_last = self._stats_tree(box2, (("when", _("Wann"), 110, "w"), ("map", _("Map"), 120, "w"),
-                                                  ("dur", _("Dauer"), 55, "e"), ("wait", _("Warten"), 55, "e"),
-                                                  ("role", _("Rolle"), 90, "w"), ("srv", _("Server"), 105, "w")), 9,
+        box2 = self._stats_page(_("Letzte Runden"))
+        self.stats_last = self._stats_tree(box2, (("when", _("Wann"), 120, "w"), ("map", _("Map"), 140, "w"),
+                                                  ("dur", _("Dauer"), 60, "e"), ("wait", _("Warten"), 65, "e"),
+                                                  ("role", _("Rolle"), 115, "w"), ("srv", _("Server"), 115, "w")), 7,
                                            select=True)
         self.stats_last.bind("<<TreeviewSelect>>", lambda e: self._stats_role_buttons())
         rr = ttk.Frame(box2)
@@ -143,6 +142,11 @@ class StatsTab:
         ttk.Button(row, text=_("Verlauf löschen"), command=self._stats_clear).pack(side="left")
         self._stats_sort = ("n", True)
         return outer
+
+    def _stats_page(self, title):
+        page = ttk.Frame(self.stats_nb, padding=6)
+        self.stats_nb.add(page, text=title)
+        return page
 
     def _stats_tree(self, parent, cols, height, select=False):
         tf = ttk.Frame(parent)
@@ -200,6 +204,10 @@ class StatsTab:
                                   "erkannt wurde). Zuletzt: {map}, {when}.", n=len(lost), map=lost[-1][1],
                                   when=time.strftime("%d.%m.%y %H:%M", time.localtime(lost[-1][0])))
                                 if lost else "")
+        if lost:
+            self.stats_lost_label.pack(anchor="w", after=self.stats_sum_label)
+        else:
+            self.stats_lost_label.pack_forget()
         if not all_rounds:
             self.stats_var.set(_("Noch keine Runden gespeichert."))
         elif not s["count"]:
