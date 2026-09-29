@@ -24,6 +24,8 @@ class ServerTab:
                         variable=self.conn_show_var, command=self._conn_toggled).pack(anchor="w")
         self.conn_tab_var = tk.StringVar(value="")
         ttk.Label(conn, textvariable=self.conn_tab_var, style="Big.TLabel", wraplength=540).pack(anchor="w", pady=(2, 0))
+        ttk.Label(conn, text=_("Zeigt Region und Ping des Spielservers, auch im Overlay (braucht "
+                               "Administratorrechte)."), style="Dim.TLabel", wraplength=540).pack(anchor="w")
 
         reg = ttk.LabelFrame(f, text=_("Serverregionen"), padding=8)
         reg.pack(fill="both", expand=True, pady=(8, 0))
@@ -149,7 +151,7 @@ class ServerTab:
         elif self._conn_idle.paused:
             text = _("pausiert, bis DBD läuft")
         if not text and not self.conn_show_var.get():
-            text = _("Aus. Zeigt Region und Ping des Spielservers, auch im Overlay (braucht Administratorrechte).")
+            text = _("Aus")                              # the explanation is its own (small) line below
         self.conn_tab_var.set(_("Verbunden mit: {server}", server=text) if text and self.conn.running else text)
         show = self.settings["overlay"].get("show_server", True)
         self.overlay.set_server(_(regions.NAMES.get(srv["region"], srv["region"])) if srv and show else "",

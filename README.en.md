@@ -51,12 +51,12 @@ The control window has these tabs. If a tab does not fit into the window, a scro
 | Tab | Content |
 |---|---|
 | **Maps** | all maps by realm, search, double-click shows a map; "Add map picture …" for your own pictures |
-| **Overlay** | position (preset or horizontal/vertical sliders, 0 % = left/top, 100 % = right/bottom), size, opacity, display options |
-| **Detection** | automatic mode, hiding after the round, pause in menus, game language; folded under "Advanced": window capture, scans per second, live status, debug pictures, diagnostics |
-| **Server** | the connected game server at the top, below it server regions with ping, blocked or allowed through the hosts file (see below) |
-| **Log** | messages in the categories *Detection*, *Overlay*, *System*, *Error*, each can be shown or hidden |
+| **Overlay** | position (preset or horizontal/vertical sliders, 0 % = left/top, 100 % = right/bottom; moving a slider switches to "own position"), "Test overlay", size, opacity, display options |
 | **Statistics** | your rounds, filtered by period (today, this week, this month, this year) and server region: count, average length, total time; per map rounds, average and longest length (click a column to sort); per server region rounds, average length, share and average ping (median per round, only with "Connected game server"); the last 100 rounds with date, length and server region. Counted from the detected map banner to the detected end of the round (from 1 minute; without a detected end the round is not counted). Also filtered by **role** (killer, survivor, custom games), with the **waiting time in the lobby**: average, median, shortest and longest search, split by weekday, time of day (3-hour blocks) or region. As killer each round also remembers the **killer** (name below the lobby button): its own table with rounds, avg. duration and most frequent map per killer, and a **Killer** filter – e.g. which maps you get how often with the Nurse and how long those rounds last. If the role detection was wrong: select the round under "Last rounds" and correct it with **Killer / Survivor / Custom game**. If the end of a round was not detected, it is not counted – the statistics then say "⚠ Not counted: 2 × …" so you know rounds are missing. Stored only locally in `rounds.jsonl`, "Delete history" removes everything |
-| **Settings** | language, dark mode, hotkeys, start/notification area, updates, own assignments, folders |
+| **Server** | the connected game server at the top, below it server regions with ping, blocked or allowed through the hosts file (see below) |
+| **Settings** | hotkeys, notifications, start/notification area, language, dark mode, updates; folded under "More": own map assignments, backup, folders |
+| **Detection** | automatic mode, hiding after the round, pause in menus, game language; folded under "Advanced": window capture, scans per second, live status, debug pictures, diagnostics |
+| **Log** | messages in the categories *Detection*, *Overlay*, *System*, *Error*, each can be shown or hidden |
 
 **Position "automatic":** if DBD runs with a 16:9 picture on a wider monitor (e.g. 3440×1440 with black bars), the map goes into the left black bar and is scaled to fit. Otherwise it appears at the top left. As soon as you move a position slider or drag the map with the mouse, "custom position" applies. "Reset" sets "automatic" again.
 
@@ -149,7 +149,7 @@ The synthetic tests do not replace a real test. If a map is not detected in real
 
 ## When something does not work
 
-- **The map is not visible:** press "Test overlay" in the control window. The map then appears for 10 seconds at its normal position, even if it would be hidden right now (press again – "End test" – to hide it at once). If no map was shown before, none is shown after the test either. If it stays invisible, press "Copy diagnostics" and pass the text on. It contains window position, window style and Z-order relative to DBD.
+- **The map is not visible:** press "Test overlay" in the Overlay tab. The map then appears for 10 seconds at its normal position, even if it would be hidden right now (press again – "End test" – to hide it at once). If no map was shown before, none is shown after the test either. If it stays invisible, press "Copy diagnostics" and pass the text on. It contains window position, window style and Z-order relative to DBD.
 - **The map is not detected:** tick "Save debug pictures" in the control window and start a match. The folder `debug/` then receives the pictures the program saw, with the text it read.
 - **The map does not disappear after the round:** look at the line "End-of-round detection" in the Detection tab. Right afterwards press "Copy diagnostics": the text contains the latest checks (what was read for "CONTINUE", currencies and loading bar, and whether the mouse pointer was visible). With "Save debug pictures", small screenshots from the round are also saved in `debug/frames/`.
 - **Testing your own screenshots:** drag screenshots with a visible map banner (Win+Print) onto `screenshot_testen.bat`. The window then shows what is detected.

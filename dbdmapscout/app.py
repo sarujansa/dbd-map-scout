@@ -42,6 +42,9 @@ ANCHORS = [("auto", N_("automatisch")), ("top-left", N_("oben links")), ("top-ri
 CATS = [N_("Erkennung"), N_("Overlay"), N_("System"), N_("Fehler")]   # log categories (keys; shown translated)
 
 
+DEFAULT_HEIGHT = 700                  # first start (later: the saved window size)
+
+
 def anchor_label(key: str) -> str:
     return _(dict(ANCHORS).get(key, "automatisch"))
 
@@ -157,14 +160,18 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         self.realm_var = tk.StringVar(value="")
         self.detail_var = tk.StringVar(value=_("Wird beim Match-Start automatisch erkannt."))
         ttk.Label(info, textvariable=self.map_var, style="Big.TLabel").pack(anchor="w")
-        ttk.Label(info, textvariable=self.realm_var).pack(anchor="w")
-        ttk.Label(info, textvariable=self.detail_var, style="Dim.TLabel", wraplength=320).pack(anchor="w")
         self.timer_var = tk.StringVar(value="")
-        ttk.Label(info, textvariable=self.timer_var).pack(anchor="w")
         self.conn_var = tk.StringVar(value="")
-        ttk.Label(info, textvariable=self.conn_var).pack(anchor="w")
         self.queue_var = tk.StringVar(value="")
-        ttk.Label(info, textvariable=self.queue_var, style="Dim.TLabel").pack(anchor="w")
+        # the other lines are only packed while they have text: empty labels would still take a row each
+        # (4 rows ≈ 80 px less for the tabs)
+        self._info_lines = []
+        for var, style, wrap in ((self.realm_var, "TLabel", 0), (self.detail_var, "Dim.TLabel", 320),
+                                 (self.timer_var, "TLabel", 0), (self.conn_var, "TLabel", 0),
+                                 (self.queue_var, "Dim.TLabel", 0)):
+            self._info_lines.append((var, ttk.Label(info, textvariable=var, style=style, wraplength=wrap)))
+            var.trace_add("write", lambda *_a: self._info_relayout())
+        self._info_relayout()
 
         btns = ttk.Frame(self.root)
         btns.pack(fill="x", padx=10, pady=(2, 6))
@@ -177,8 +184,6 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         self.rotate_btn.pack(side="left", padx=(4, 0))
         self.scan_btn = ttk.Button(btns, text=_("Scannen"), command=self.scan_now)
         self.scan_btn.pack(side="left", padx=(4, 0))
-        self.test_btn = ttk.Button(btns, text=_("Overlay testen"), command=self.test_overlay)
-        self.test_btn.pack(side="left", padx=4)
 
         # shown when a banner matched no map: assign the read name to a map with one click
         self.unknown_bar = ttk.Frame(self.root)
@@ -199,13 +204,14 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         self.tab_log = self._tab_log()
         self.tab_stats = self._tab_stats()
         self.tab_settings = self._tab_settings()
+        # most used first, technical last
         self.nb.add(self.tab_maps, text="Maps")
         self.nb.add(self.tab_overlay, text=_("Overlay"))
-        self.nb.add(self.tab_detect, text=_("Erkennung"))
-        self.nb.add(self.tab_server, text=_("Server"))
-        self.nb.add(self.tab_log, text="Log")
         self.nb.add(self.tab_stats, text=_("Statistik"))
+        self.nb.add(self.tab_server, text=_("Server"))
         self.nb.add(self.tab_settings, text=_("Einstellungen"))
+        self.nb.add(self.tab_detect, text=_("Erkennung"))
+        self.nb.add(self.tab_log, text="Log")
         self.nb.bind("<<NotebookTabChanged>>", lambda e: self._tab_changed())
 
         self._apply_theme()
@@ -216,6 +222,13 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         self.root.update_idletasks()
         widest = max([p["inner"].winfo_reqwidth() for p in self._pages] + [self.nb.winfo_reqwidth() - 20])
         self.root.minsize(max(470, widest + 40), 420)
+
+    def _info_relayout(self):
+        for _var, lbl in self._info_lines:
+            lbl.pack_forget()
+        for var, lbl in self._info_lines:
+            if var.get():
+                lbl.pack(anchor="w")
 
     # ------------------------------------------------------------ scrollable tabs
     def _scroll_tab(self):
@@ -341,7 +354,12 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         r2.pack(fill="x", pady=(4, 0))
         self.edit_btn = ttk.Button(r2, text=_("Mit der Maus verschieben"), command=self.toggle_edit)
         self.edit_btn.pack(side="left")
-        ttk.Label(r2, text=_("0 % = links/oben, 100 % = rechts/unten"), style="Dim.TLabel").pack(side="right")
+        self.test_btn = ttk.Button(r2, text=_("Overlay testen"), command=self.test_overlay)
+        self.test_btn.pack(side="left", padx=(6, 0))
+        self.pos_hint_var = tk.StringVar(value="")
+        ttk.Label(pos, textvariable=self.pos_hint_var, style="Dim.TLabel", wraplength=520).pack(anchor="w",
+                                                                                              pady=(4, 0))
+        self._pos_hint()
 
         look = ttk.LabelFrame(f, text=_("Darstellung"), padding=8)
         look.pack(fill="x", pady=(8, 0))
@@ -614,6 +632,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
                               "wäre. Nochmal drücken beendet den Test."))
         if w is self.adv_btn:
             return _("Technische Optionen für die Fehlersuche ein- oder ausklappen.")
+        if w is self.more_btn:
+            return _("Selten gebrauchte Einstellungen ein- oder ausklappen.")
         if w is self.edit_btn:
             return lambda: (_("Verschieben beenden.") if self.edit_btn.cget("text") == _("Fertig") else
                             _("Karte direkt mit der Maus ziehen, Mausrad ändert die Grösse.")
@@ -1052,6 +1072,10 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
                 self._round_ended(time.time())
                 self._update_toggle_text()
             self._log(_("Test beendet."), "Overlay")
+        for b, ok in ((self.toggle_btn, self.overlay.has_map()), (self.rotate_btn, self.current is not None)):
+            want = "normal" if ok else "disabled"
+            if str(b.cget("state")) != want:
+                b.configure(state=want)
         if (time.time() >= getattr(self, "_force_until", 0) and hasattr(self, "test_btn")
                 and self.test_btn.cget("text") != _("Overlay testen")):
             self.test_btn.configure(text=_("Overlay testen"))
@@ -1153,9 +1177,20 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         self.overlay.set_transparent(o.get("transparent", True))
         self.overlay.set_show_map(o.get("show_map", True))
 
+    def _pos_hint(self):
+        """The sliders always work: moving one switches to "eigene Position" – say so while a preset is set."""
+        if self.settings["overlay"].get("anchor", "auto") == "custom":
+            text = _("0 % = links/oben, 100 % = rechts/unten")
+        elif self.settings["overlay"].get("anchor", "auto") == "auto":
+            text = _("Automatisch: im schwarzen Rand neben dem Spielbild. Regler bewegen = eigene Position.")
+        else:
+            text = _("Regler bewegen = eigene Position.")
+        self.pos_hint_var.set(text)
+
     def _anchor_changed(self):
         rev = {_(v): k for k, v in ANCHORS}
         self.settings["overlay"]["anchor"] = rev.get(self.anchor_var.get(), "auto")
+        self._pos_hint()
         self._save_soon()
         self._tick_overlay(reschedule=False)
 
@@ -1184,6 +1219,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         if o["anchor"] != "custom":
             o["anchor"] = "custom"
             self.anchor_var.set(anchor_label("custom"))
+            self._pos_hint()
         o["pos_x"] = round(self.posx_var.get() / 100, 4)
         o["pos_y"] = round(self.posy_var.get() / 100, 4)
         self._save_soon()
@@ -1464,7 +1500,13 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
     def _restore_geometry(self):
         geo = self.settings.get("window_geometry") or ""
         m = re.fullmatch(r"(\d+)x(\d+)([+-])(-?\d+)([+-])(-?\d+)", geo)
-        if not m:
+        if not m:                              # first start: tall enough that most tabs need no scrolling
+            try:
+                self.root.update_idletasks()
+                h = min(DEFAULT_HEIGHT, self.root.winfo_screenheight() - 80)
+                self.root.geometry(f"{self.root.winfo_reqwidth()}x{max(h, self.root.winfo_reqheight())}")
+            except tk.TclError:
+                pass
             return
         try:
             w, h = int(m.group(1)), int(m.group(2))
