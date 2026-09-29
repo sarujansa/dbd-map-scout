@@ -398,6 +398,13 @@ EN = {
         "Removes all own killer assignments; the names show up again as they were read.",
     "Zuordnen": "Assign",
     "Verstanden": "Got it",
+    "Warte auf Map": "Waiting for map",
+    "Solange DBD läuft und keine Karte eingeblendet ist, zeigt das Overlay eine kleine Karte: „Warte auf Map“, "
+    "darunter Suche/Lobby (z. B. „Suche läuft: 02:13 · Nurse“) oder die letzte Runde. Gilt nicht, wenn du die "
+    "Karte selbst ausgeblendet hast.":
+        "While DBD runs and no map is shown, the overlay shows a small card: \"Waiting for map\", below it the "
+        "search/lobby (e.g. \"Searching: 02:13 · Nurse\") or the last round. Not when you hid the map yourself.",
+    "Ohne Karte: „Warte auf Map“ und Lobby-Status anzeigen": "Without a map: show \"Waiting for map\" and the lobby state",
     "Hinweis schliessen – er erscheint nicht wieder.": "Close the hint – it will not come back.",
     "So geht's: DBD starten und spielen – die Karte erscheint beim Match-Start von selbst und verschwindet nach der "
     "Runde. Hotkeys: {toggle} ein/aus, {rotate} drehen, {edit} verschieben (ändern unter Einstellungen).":

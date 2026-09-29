@@ -76,3 +76,15 @@ def test_program_icon(tmp_path):
     assert sorted(ico.info["sizes"]) == [(n, n) for n in SIZES]
     small = draw(16)
     assert small.size == (16, 16) and small.getpixel((8, 8))[3] == 255     # visible even at 16 px
+
+
+def test_waiting_card_lines():
+    """No map on screen: only the status lines, on an empty picture, wide enough to read."""
+    empty = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
+    one = ow.add_info(empty, "", "", 500, status=["Warte auf Map"])
+    two = ow.add_info(empty, "", "", 500, status=["Warte auf Map", "Suche läuft: 02:13 · Nurse"])
+    assert one.width > 100 and two.height > one.height and two.width >= one.width
+    assert two.getchannel("A").getextrema()[1] > 200                    # white text is drawn
+    assert ow.add_info(empty, "", "", 500, status=()) is empty
+    boxed = ow.add_info(empty, "", "", 500, status=["Warte auf Map"], backdrop=True)
+    assert boxed.getpixel((1, 1))[3] == 255                             # dark box when the edge is not transparent
