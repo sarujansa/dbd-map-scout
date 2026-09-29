@@ -20,9 +20,10 @@ import os
 import subprocess
 import sys
 
+from .appid import set_link_app_id
 from .i18n import _
 
-SETUP_VERSION = 2           # raise when task, shortcut or icon change: the program then renews them itself
+SETUP_VERSION = 3           # raise when task, shortcut or icon change: the program then renews them itself
 TASK = "DbD Map Scout"
 TASK_AUTO = "DbD Map Scout (Autostart)"
 LINK_NAME = "DbD Map Scout.lnk"
@@ -151,6 +152,7 @@ def install(root: str):
     ok, out = powershell(shortcut_script(root, icon))
     if not ok:
         return False, _("Verknüpfung konnte nicht angelegt werden: {error}", error=out)
+    set_link_app_id(out)          # same ID as the program: pinned shortcut and window share one button
     return True, _("Verknüpfung erstellt: {path}", path=out)
 
 

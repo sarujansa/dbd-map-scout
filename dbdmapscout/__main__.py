@@ -101,6 +101,8 @@ def main():
         run_test(args.test, [l.strip() for l in args.lang.split(",") if l.strip()])
         return
 
+    from .appid import set_process_app_id
+    set_process_app_id()                          # before the first window: own taskbar button and icon
     i18n.init_from_settings(os.path.join(ROOT, "settings.json"))
     if not _single_instance():
         return
