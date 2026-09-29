@@ -404,6 +404,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         self.server_show_var = tk.BooleanVar(value=o.get("show_server", True))
         self.keep_bar_var = tk.BooleanVar(value=o.get("keep_in_bar", True))
         self.show_map_var = tk.BooleanVar(value=o.get("show_map", True))
+        self.waiting_var = tk.BooleanVar(value=o.get("show_waiting", True))
         ttk.Checkbutton(pos, text=_("Karte im schwarzen Rand halten (Ultrawide: nie ins Spielbild ragen)"),
                         variable=self.keep_bar_var, command=self._overlay_flags_changed).pack(anchor="w", pady=(4, 0))
         for text, var in ((N_("Karte anzeigen (aus: nur Timer, Ort und Ping)"), self.show_map_var),
@@ -411,6 +412,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
                           (N_("Map-Namen über der Karte anzeigen"), self.caption_var),
                           (N_("Rundentimer unter der Karte anzeigen"), self.timer_show_var),
                           (N_("Verbundenen Server unter der Karte anzeigen (Tab Server)"), self.server_show_var),
+                          (N_("Ohne Karte: „Warte auf Map“ und Lobby-Status anzeigen"), self.waiting_var),
                           (N_("Transparenter Rand um die Karte"), self.transp_var)):
             ttk.Checkbutton(look, text=_(text), variable=var, command=self._overlay_flags_changed).pack(anchor="w", pady=1)
         return outer
@@ -1102,9 +1104,13 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         if (time.time() >= getattr(self, "_force_until", 0) and hasattr(self, "test_btn")
                 and self.test_btn.cget("text") != _("Overlay testen")):
             self.test_btn.configure(text=_("Overlay testen"))
+        wait = [] if forced else self._waiting_lines()
+        self.overlay.set_waiting(wait)
         reason = None
         if forced:
             pass
+        elif wait:
+            reason = self._focus_reason(o)                  # only the "DBD in front" rule applies
         elif not self.overlay.has_map():
             reason = _("keine Map")
         elif not ((self.user_visible and not self.hidden_after_match) or self.overlay.editing):
@@ -1113,13 +1119,11 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
             reason = _("Menü offen")
         elif not o.get("show_map", True) and not self.overlay.has_info() and not self.overlay.editing:
             reason = _("nichts anzuzeigen")          # info only, but no timer/server yet
-        elif (o["only_when_game_focused"] and IS_WIN and not self.overlay.editing and not self.simulate
-              and self.game is not None):
-            fg = foreground_root()
-            own = {self.overlay.hwnd(), self._root_hwnd()}
-            if fg not in own and not is_game_window(fg):
-                reason = _("aktives Fenster ist {window}", window=describe_window(fg))
-        if not forced:
+        else:
+            reason = self._focus_reason(o)
+        if wait:
+            self._vis_state = "wartet"                      # the waiting card is not logged
+        elif not forced:
             self._log_visibility(reason, (gx, gy, gw, gh))
         if reason:
             self.overlay.hide()
@@ -1162,6 +1166,33 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         self.worker.overlay_rect = self._last_place if self.overlay.shown else None
         if a != "custom":                      # sliders follow the preset position
             self._set_pos_sliders((x - gx) / max(1, gw - w), (y - gy) / max(1, gh - h))
+
+    def _focus_reason(self, o):
+        """Reason to hide while another window is in front ("Nur zeigen, wenn DBD das aktive Fenster ist")."""
+        if (o["only_when_game_focused"] and IS_WIN and not self.overlay.editing and not self.simulate
+                and self.game is not None):
+            fg = foreground_root()
+            own = {self.overlay.hwnd(), self._root_hwnd()}
+            if fg not in own and not is_game_window(fg):
+                return _("aktives Fenster ist {window}", window=describe_window(fg))
+        return None
+
+    def _waiting_lines(self):
+        """The waiting card while DBD runs and no map is on screen: what the program is waiting for, and
+        the lobby state below it. Never over a map the user hid on purpose, never while editing."""
+        o = self.settings["overlay"]
+        if (not o.get("show_waiting", True) or not self.settings.get("auto_detect", True)
+                or (self.game is None and not self.simulate) or self.overlay.editing):
+            return []
+        if self.overlay.has_map() and not self.hidden_after_match:
+            return []                                        # map shown, paused in a menu or hidden by hand
+        lines = [_("Warte auf Map")]
+        q = self._queue
+        if q.get("state") == "search" or q.get("found") is not None:      # searching / lobby found (not yet used)
+            lines += [t for t in [self._queue_text(time.time())] if t]
+        elif self.hidden_after_match and self.round.start_t is not None and not self.round.running:
+            lines.append(_("Letzte Runde: {time}", time=fmt_duration(self.round.elapsed(0))))
+        return lines
 
     def _log_visibility(self, reason, game_rect):
         """One log line whenever the overlay goes from visible to hidden or back."""
@@ -1269,6 +1300,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         o["show_timer"] = bool(self.timer_show_var.get())
         o["show_server"] = bool(self.server_show_var.get())
         o["keep_in_bar"] = bool(self.keep_bar_var.get())
+        o["show_waiting"] = bool(self.waiting_var.get())
         if bool(self.show_map_var.get()) != o.get("show_map", True):
             o["show_map"] = bool(self.show_map_var.get())
             self.overlay.set_show_map(o["show_map"])
