@@ -160,3 +160,20 @@ def test_killer_per_round(tmp_path):
     rs = h.load(p)
     assert [r.map for r in h.select(rs, killer="The Nurse")] == ["B"] and rs[0].killer == "The Nurse"   # undo-able
     assert h.select(rs, role="survivor", killer="The Nurse") == []
+
+
+def test_killer_of_one_round_can_be_set(tmp_path):
+    """A round counted as survivor has no killer name – setting one makes it a killer round with that killer."""
+    p = str(tmp_path / h.FILE)
+    h.append(p, h.Round(t=1.0, seconds=600, map_id="a", map="A", wait=90.0, role="survivor"))
+    h.append(p, h.Round(t=2.0, seconds=300, map_id="b", map="B", custom=True))
+    assert h.set_killer(p, 1.0, "The Nurse").map == "A"
+    a = h.load(p)[0]
+    assert (a.role, a.killer, a.custom, a.wait) == ("killer", "The Nurse", False, 90.0)
+    assert h.per_killer(h.load(p)) == [("The Nurse", 1, 600.0, "A")]
+    h.set_killer(p, 2.0, "The Oni")                                            # custom game -> killer round
+    assert [r.map for r in h.select(h.load(p), killer="The Oni")] == ["B"]
+    assert h.set_killer(p, 9.0, "The Oni") is None
+    import pytest
+    with pytest.raises(ValueError):
+        h.set_killer(p, 1.0, "")
