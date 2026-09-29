@@ -38,6 +38,8 @@ On ultrawide monitors DBD shows the results screen and menus in full width, but 
 
 **Round timer.** The timer runs while a map is shown. When a map appears (detected automatically, chosen by hand or shown by hotkey), it starts at 00:00. When it disappears (end of round detected or hidden by hand), it stops. It is shown in the control window below the map name ("Round running: 07:32", then "Last round: 12:04") and large and centred right below the map in the overlay, styled like the map title: white digits with a shadow, no box (can be switched off in the Overlay tab). At the end of the round, the first sign of it counts as the end time, e.g. the mouse pointer appearing on the results screen, not the moment detection is sure. Briefly hiding in the ESC menu or while another window is active does not stop the timer, because the match goes on. Switching the layout or map while the map is shown does not reset it. A new map banner always starts a new round, even if the end of the previous one was not detected.
 
+**Only while DBD runs.** As long as the DBD window is not found, nothing is detected automatically, even if a DBD video or screenshot is on screen. So no map pops up while you work. "Scan" still checks the main screen when clicked.
+
 In the **Detection** tab, the line "End-of-round detection: …" always shows what the program currently sees, e.g. "in match · mouse pointer hidden". `Ctrl+Alt+M` brings back a hidden map right away.
 
 The top of the control window always says where things stand: **Waiting for DBD**, **Waiting for the next match**, **In match: …**, **In a menu – map paused** or **Round over** (problems such as a black picture are shown in red). Technical details are in the Log tab.
