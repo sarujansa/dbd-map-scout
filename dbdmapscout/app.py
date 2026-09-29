@@ -194,9 +194,23 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         ttk.Button(self.unknown_bar, text=_("Zuordnen …"), command=self.assign_unknown).pack(side="right", padx=4)
         ttk.Label(self.unknown_bar, textvariable=self.unknown_var, wraplength=300).pack(side="left", fill="x")
 
+        # first start only: nothing to do but play – and the hotkeys that matter
+        self.welcome_bar = ttk.Frame(self.root)
+        ttk.Button(self.welcome_bar, text=_("Verstanden"), command=self._hide_welcome).pack(side="right")
+        hk = self.settings.get("hotkeys") or {}
+        ttk.Label(self.welcome_bar, wraplength=520, justify="left",
+                  text=_("So geht's: DBD starten und spielen – die Karte erscheint beim Match-Start von selbst und "
+                         "verschwindet nach der Runde. Hotkeys: {toggle} ein/aus, {rotate} drehen, {edit} "
+                         "verschieben (ändern unter Einstellungen).", toggle=pretty(hk.get("toggle_overlay") or "–"),
+                         rotate=pretty(hk.get("rotate_map") or "–"), edit=pretty(hk.get("edit_position") or "–"))
+                  ).pack(side="left", fill="x")
+        show_welcome = not self.settings.get("welcome_seen") and not self.settings.get("window_geometry")
+
         # ------------------------------------------------------- tab menu
         self.nb = ttk.Notebook(self.root)
         self.nb.pack(fill="both", expand=True, padx=8, pady=(0, 4))
+        if show_welcome:
+            self.welcome_bar.pack(fill="x", padx=10, pady=(0, 6), before=self.nb)
         self.tab_maps = self._tab_maps()
         self.tab_overlay = self._tab_overlay()
         self.tab_detect = self._tab_detect()
@@ -220,7 +234,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
             self.root.bind_all(seq, self._on_wheel, add="+")
         # pages scroll vertically only: never narrower than the widest page (and the tab row)
         self.root.update_idletasks()
-        widest = max([p["inner"].winfo_reqwidth() for p in self._pages] + [self.nb.winfo_reqwidth() - 20])
+        widest = max([p["inner"].winfo_reqwidth() for p in self._pages] + [self.nb.winfo_reqwidth() - 20]
+                     + [p.winfo_reqwidth() for p in getattr(self, "_fixed_pages", [])])
         self.root.minsize(max(470, widest + 40), 420)
 
     def _info_relayout(self):
@@ -246,6 +261,14 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         self._pages.append(page)
         canvas.bind("<Configure>", lambda e: self._layout_page(page))
         return outer, inner
+
+    def _fixed_tab(self):
+        """(outer, inner) for a tab that is one big list (maps, log): no page scrolling – the list fills
+        the tab and scrolls itself (two scroll bars next to each other looked broken)."""
+        outer = ttk.Frame(self.nb, padding=8)
+        self._fixed_pages = getattr(self, "_fixed_pages", [])
+        self._fixed_pages.append(outer)
+        return outer, outer
 
     def _layout_page(self, page):
         c, inner = page["canvas"], page["inner"]
@@ -290,7 +313,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
 
     # ------------------------------------------------------------ tab: maps
     def _tab_maps(self):
-        outer, f = self._scroll_tab()
+        outer, f = self._fixed_tab()
         srow = ttk.Frame(f)
         srow.pack(fill="x", pady=(0, 6))
         ttk.Label(srow, text=_("Suche")).pack(side="left")
@@ -461,7 +484,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
 
     # -------------------------------------------------------------- tab: log
     def _tab_log(self):
-        outer, f = self._scroll_tab()
+        outer, f = self._fixed_tab()
         top = ttk.Frame(f)
         top.pack(fill="x", pady=(0, 6))
         ttk.Label(top, text=_("Anzeigen:")).pack(side="left")
@@ -1273,6 +1296,11 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         self._save_soon()
 
     # ---------------------------------------------------------- own map assignments
+    def _hide_welcome(self):
+        self.welcome_bar.pack_forget()
+        self.settings.set("welcome_seen", True)
+        self._save_soon()
+
     def _hide_unknown(self):
         self.unknown_bar.pack_forget()
         self._unknown = None
