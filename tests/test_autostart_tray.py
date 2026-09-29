@@ -44,6 +44,26 @@ def test_shortcut_runs_the_task():
     assert "schtasks.exe" in s and "'/run /tn \"DbD Map Scout\"'" in s
     assert "$s.WindowStyle = 7" in s and "dbdmapscout.ico,0'" in s
     assert "GetFolderPath('Desktop')" in s
+    assert "GetFolderPath('Programs')" in au.shortcut_script(ROOT, "", "Programs")
+
+
+def test_shortcut_gets_the_program_app_id(monkeypatch, tmp_path):
+    """Pinned shortcut and running window must share one AppUserModelID (one taskbar button, own icon)."""
+    import dbdmapscout.icon as icon
+    monkeypatch.setattr(icon, "save_ico", lambda path: None)
+    start = r"C:\Users\saruj\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\DbD Map Scout.lnk"
+    desk = r"C:\Users\saruj\Desktop\DbD Map Scout.lnk"
+
+    def fake(script):
+        if "CreateShortcut" not in script:
+            return True, ""
+        return True, start if "GetFolderPath('Programs')" in script else desk
+    monkeypatch.setattr(au, "powershell", fake)
+    seen = []
+    monkeypatch.setattr(au, "set_link_app_id", lambda path: seen.append(path) or True)
+    ok, msg = au.install(str(tmp_path))
+    # Start menu: Windows pins that shortcut for the running window (none there -> pythonw.exe is pinned)
+    assert ok and seen == [start, desk] and desk in msg
 
 
 def test_powershell_is_encoded(monkeypatch):
@@ -143,6 +163,20 @@ def test_ensure_renews_autostart_only_if_it_was_on(monkeypatch):
     present[au.TASK_AUTO] = True
     assert au.ensure(ROOT, au.SETUP_VERSION - 1, ROOT)[0]
     assert calls == ["install", ("autostart", True)]                          # autostart kept, renewed
+
+
+def test_autostart_is_on_unless_switched_off(monkeypatch):
+    from dbdmapscout.config import DEFAULTS
+    assert DEFAULTS["autostart"] is True                                      # user's wish: always on
+    monkeypatch.setattr(au, "IS_WIN", True)
+    calls = []
+    monkeypatch.setattr(au, "set_autostart", lambda root, on: calls.append(on) or (True, ""))
+    present = {au.TASK_AUTO: False}
+    monkeypatch.setattr(au, "task_exists", lambda name: present[name])
+    assert au.ensure_autostart(ROOT, False) is None and calls == []           # switched off: stays off
+    assert au.ensure_autostart(ROOT, True) == (True, "") and calls == [True]  # missing: set up again
+    present[au.TASK_AUTO] = True
+    assert au.ensure_autostart(ROOT, True) is None and calls == [True]        # already there
 
 
 def test_task_command_line_quoting():

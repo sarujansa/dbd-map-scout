@@ -63,7 +63,13 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
 
         self.root = tk.Tk()
         self.root.title(f"DbD Map Scout {__version__}")
-        ico = os.path.join(root_dir, "dbdmapscout.ico")        # made by verknuepfung_erstellen.bat
+        ico = os.path.join(root_dir, "dbdmapscout.ico")        # also made by the shortcut setup
+        if IS_WIN and not os.path.exists(ico):
+            try:
+                from .icon import save_ico
+                save_ico(ico)                                  # the taskbar button shows this icon
+            except OSError:
+                pass
         if IS_WIN and os.path.exists(ico):
             try:
                 self.root.iconbitmap(default=ico)

@@ -239,8 +239,8 @@ class SettingsTab:
             pass
 
     def _setup_then_read_autostart(self):
-        """Thread: create/renew task, icon and desktop shortcut if needed (only as administrator,
-        no prompt), then read the autostart state for the settings tab."""
+        """Thread: create/renew task, icon and shortcuts if needed, and the logon task unless autostart was
+        switched off (only as administrator, no prompt), then read the autostart state for the settings tab."""
         if IS_WIN and is_admin():
             try:
                 res = autostart.ensure(self.root_dir, self.settings.get("setup_version"),
@@ -249,6 +249,14 @@ class SettingsTab:
                 res = (False, f"{type(e).__name__}: {e}")
             if res is not None:
                 self.events.put(("setup_done", res[0], res[1]))
+            try:
+                auto = autostart.ensure_autostart(self.root_dir, self.settings.get("autostart", True))
+            except Exception as e:
+                auto = (False, f"{type(e).__name__}: {e}")
+            if auto is not None:
+                self.events.put(("status_log", _(
+                    "Startet ab jetzt mit Windows im Infobereich (abschaltbar unter Einstellungen → Start und "
+                    "Infobereich).") if auto[0] else _("Autostart mit Windows fehlgeschlagen: {error}", error=auto[1])))
         elif IS_WIN and not autostart.task_exists(autostart.TASK):
             self.events.put(("setup_done", None, _(
                 "Tipp: Einmal als Administrator starten (Rechtsklick auf start.bat → „Als Administrator ausführen“) "
@@ -285,6 +293,8 @@ class SettingsTab:
 
     def _autostart_changed(self):
         on = bool(self.autostart_var.get())
+        self.settings.set("autostart", on)         # switched off stays off (else it is set up again at start)
+        self._save_soon()
         self.autostart_cb.state(["disabled"])
         self.autostart_info.set(_("Wird eingerichtet …"))
         root_dir = self.root_dir

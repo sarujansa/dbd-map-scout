@@ -90,6 +90,65 @@ def test_hotkeys_register_and_stop():
     assert not t.is_alive()
 
 
+def test_own_taskbar_identity():
+    from dbdmapscout import appid
+    assert appid.set_process_app_id()
+    assert appid.process_app_id() == appid.APP_ID
+
+
+def test_shortcut_app_id_is_written_and_read_back(tmp_path):
+    from dbdmapscout import appid
+    from dbdmapscout.autostart import powershell
+    lnk = str(tmp_path / "DbD Map Scout.lnk")
+    ok, out = powershell(f"$s = (New-Object -ComObject WScript.Shell).CreateShortcut('{lnk}')\n"
+                         "$s.TargetPath = \"$env:SystemRoot\\System32\\schtasks.exe\"\n$s.Save()")
+    assert ok and os.path.exists(lnk), out
+    assert appid.link_app_id(lnk) is None
+    assert appid.set_link_app_id(lnk)
+    assert appid.link_app_id(lnk) == appid.APP_ID
+
+
+def _locked_mutex(name):
+    """A named mutex nobody may open – what a copy running as administrator owns, seen from a normal one."""
+    import ctypes
+    from ctypes import wintypes
+    adv = ctypes.WinDLL("advapi32", use_last_error=True)
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    conv = adv.ConvertStringSecurityDescriptorToSecurityDescriptorW
+    conv.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, ctypes.POINTER(ctypes.c_void_p), ctypes.c_void_p]
+    conv.restype = wintypes.BOOL
+    sd = ctypes.c_void_p()
+    assert conv("D:(D;;GA;;;WD)", 1, ctypes.byref(sd), None), ctypes.get_last_error()     # deny everyone
+
+    class SA(ctypes.Structure):
+        _fields_ = [("nLength", wintypes.DWORD), ("lpSecurityDescriptor", ctypes.c_void_p),
+                    ("bInheritHandle", wintypes.BOOL)]
+    sa = SA(ctypes.sizeof(SA), sd, False)
+    k32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
+    k32.CreateMutexW.restype = wintypes.HANDLE
+    h = k32.CreateMutexW(ctypes.byref(sa), False, name)
+    assert h, ctypes.get_last_error()
+    return h
+
+
+def test_single_instance_also_against_a_copy_with_more_rights():
+    import ctypes
+    from dbdmapscout.__main__ import _claim_mutex
+    from dbdmapscout.restart import _program_running
+    free = f"Local\\DbDMapScout.Test.{os.getpid()}.free"
+    assert not _program_running(free)
+    assert _claim_mutex(free)                                  # first copy
+    assert _program_running(free)
+    assert not _claim_mutex(free)                              # second copy: ERROR_ALREADY_EXISTS
+    locked = f"Local\\DbDMapScout.Test.{os.getpid()}.locked"
+    h = _locked_mutex(locked)
+    try:
+        assert not _claim_mutex(locked)                        # ERROR_ACCESS_DENIED is another copy, too
+        assert _program_running(locked)                        # restart helper: wait, no second copy
+    finally:
+        ctypes.windll.kernel32.CloseHandle(ctypes.c_void_p(h))
+
+
 def test_window_capture_package_is_the_checked_version():
     from importlib.metadata import version
     assert version("windows-capture") == "2.0.1"             # CLAUDE.md: re-audit before changing it
