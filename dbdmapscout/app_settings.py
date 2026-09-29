@@ -23,26 +23,8 @@ class SettingsTab:
     # --------------------------------------------------------- tab: settings
     def _tab_settings(self):
         outer, f = self._scroll_tab()
-        look = ttk.LabelFrame(f, text=_("Sprache und Darstellung"), padding=8)
-        look.pack(fill="x")
-        lr = ttk.Frame(look)
-        lr.pack(fill="x")
-        ttk.Label(lr, text="Sprache / Language").pack(side="left")
-        cur = self.settings.get("ui_language", "auto")
-        self._ui_langs = [(code, _(label) if code == "auto" else label) for code, label in i18n.LANGUAGES]
-        self.ui_lang_var = tk.StringVar(value=dict(self._ui_langs).get(cur, self._ui_langs[0][1]))
-        lcb = ttk.Combobox(lr, textvariable=self.ui_lang_var, values=[lbl for _c, lbl in self._ui_langs],
-                           state="readonly", width=30)
-        lcb.pack(side="left", padx=8)
-        lcb.bind("<<ComboboxSelected>>", lambda e: self._ui_lang_changed())
-        self.ui_lang_note = tk.StringVar(value="")
-        ttk.Label(look, textvariable=self.ui_lang_note, style="Dim.TLabel", wraplength=400).pack(anchor="w")
-        self.dark_var = tk.BooleanVar(value=self.settings.get("dark_mode", True))
-        ttk.Checkbutton(look, text=_("Dark Mode"), variable=self.dark_var, command=self._dark_changed).pack(
-            anchor="w", pady=(4, 0))
-
         hk = ttk.LabelFrame(f, text=_("Hotkeys"), padding=8)
-        hk.pack(fill="x", pady=(8, 0))
+        hk.pack(fill="x")
         self.hk_buttons = {}
         self._hk_rec, self._hk_mods = None, set()
         grid = ttk.Frame(hk)
@@ -58,20 +40,6 @@ class SettingsTab:
         ttk.Button(r, text=_("Standard"), command=self._hk_defaults).pack(side="left")
         self.hk_status = tk.StringVar(value=_("Zum Ändern anklicken und die neue Tastenkombination drücken."))
         ttk.Label(r, textvariable=self.hk_status, style="Dim.TLabel", wraplength=300).pack(side="left", padx=8)
-
-        st = ttk.LabelFrame(f, text=_("Start und Infobereich"), padding=8)
-        st.pack(fill="x", pady=(8, 0))
-        self.tray_var = tk.BooleanVar(value=self.settings.get("tray", True))
-        ttk.Checkbutton(st, text=_("Beim Minimieren in den Infobereich (neben der Uhr)"), variable=self.tray_var,
-                        command=self._tray_flag_changed).pack(anchor="w")
-        self.autostart_var = tk.BooleanVar(value=False)
-        self.autostart_cb = ttk.Checkbutton(st, text=_("Mit Windows starten (im Infobereich, ohne Windows-Abfrage)"),
-                                            variable=self.autostart_var, command=self._autostart_changed)
-        self.autostart_cb.pack(anchor="w", pady=(2, 0))
-        self.autostart_cb.state(["disabled"])
-        self.autostart_info = tk.StringVar(value="")
-        ttk.Label(st, textvariable=self.autostart_info, style="Dim.TLabel", wraplength=400).pack(
-            anchor="w", padx=(22, 0))
 
         nt = ttk.LabelFrame(f, text=_("Benachrichtigungen"), padding=8)
         nt.pack(fill="x", pady=(8, 0))
@@ -89,6 +57,38 @@ class SettingsTab:
                    command=lambda: self._notify(_("Lobby gefunden"), _("nach {time}", time="04:12") + " – "
                                                 + _("READY drücken."), force=True)).pack(anchor="w", pady=(6, 0))
 
+        st = ttk.LabelFrame(f, text=_("Start und Infobereich"), padding=8)
+        st.pack(fill="x", pady=(8, 0))
+        self.tray_var = tk.BooleanVar(value=self.settings.get("tray", True))
+        ttk.Checkbutton(st, text=_("Beim Minimieren in den Infobereich (neben der Uhr)"), variable=self.tray_var,
+                        command=self._tray_flag_changed).pack(anchor="w")
+        self.autostart_var = tk.BooleanVar(value=False)
+        self.autostart_cb = ttk.Checkbutton(st, text=_("Mit Windows starten (im Infobereich, ohne Windows-Abfrage)"),
+                                            variable=self.autostart_var, command=self._autostart_changed)
+        self.autostart_cb.pack(anchor="w", pady=(2, 0))
+        self.autostart_cb.state(["disabled"])
+        self.autostart_info = tk.StringVar(value="")
+        ttk.Label(st, textvariable=self.autostart_info, style="Dim.TLabel", wraplength=400).pack(
+            anchor="w", padx=(22, 0))
+
+        look = ttk.LabelFrame(f, text=_("Sprache und Darstellung"), padding=8)
+        look.pack(fill="x", pady=(8, 0))
+        lr = ttk.Frame(look)
+        lr.pack(fill="x")
+        ttk.Label(lr, text="Sprache / Language").pack(side="left")
+        cur = self.settings.get("ui_language", "auto")
+        self._ui_langs = [(code, _(label) if code == "auto" else label) for code, label in i18n.LANGUAGES]
+        self.ui_lang_var = tk.StringVar(value=dict(self._ui_langs).get(cur, self._ui_langs[0][1]))
+        lcb = ttk.Combobox(lr, textvariable=self.ui_lang_var, values=[lbl for _c, lbl in self._ui_langs],
+                           state="readonly", width=30)
+        lcb.pack(side="left", padx=8)
+        lcb.bind("<<ComboboxSelected>>", lambda e: self._ui_lang_changed())
+        self.ui_lang_note = tk.StringVar(value="")
+        ttk.Label(look, textvariable=self.ui_lang_note, style="Dim.TLabel", wraplength=400).pack(anchor="w")
+        self.dark_var = tk.BooleanVar(value=self.settings.get("dark_mode", True))
+        ttk.Checkbutton(look, text=_("Dark Mode"), variable=self.dark_var, command=self._dark_changed).pack(
+            anchor="w", pady=(4, 0))
+
         upd = ttk.LabelFrame(f, text=_("Updates"), padding=8)
         upd.pack(fill="x", pady=(8, 0))
         self.update_var = tk.BooleanVar(value=self.settings.get("auto_update", True))
@@ -104,27 +104,46 @@ class SettingsTab:
         self.upd_status = tk.StringVar(value="")
         ttk.Label(upd, textvariable=self.upd_status, wraplength=420, justify="left").pack(anchor="w", pady=(4, 0))
 
-        own = ttk.LabelFrame(f, text=_("Eigene Map-Zuordnungen"), padding=8)
-        own.pack(fill="x", pady=(8, 0))
+        # rarely needed: folded away (like "Erweitert" in the detection tab)
+        self.more_btn = ttk.Button(f, command=self._toggle_more)
+        self.more_btn.pack(anchor="w", pady=(10, 0))
+        more = self.more_frame = ttk.Frame(f)
+        own = ttk.LabelFrame(more, text=_("Eigene Map-Zuordnungen"), padding=8)
+        own.pack(fill="x")
         self.alias_var = tk.StringVar(value="")
         ttk.Label(own, textvariable=self.alias_var, style="Dim.TLabel", wraplength=300).pack(side="left", fill="x")
         ttk.Button(own, text=_("Alle löschen"), command=self._clear_aliases).pack(side="right")
         self._show_aliases()
 
-        bk = ttk.LabelFrame(f, text=_("Sicherung"), padding=8)
+        bk = ttk.LabelFrame(more, text=_("Sicherung"), padding=8)
         bk.pack(fill="x", pady=(8, 0))
         ttk.Button(bk, text=_("Einstellungen exportieren …"), command=self._export_settings).pack(side="left")
         ttk.Button(bk, text=_("Einstellungen importieren …"), command=self._import_settings).pack(side="left",
                                                                                                  padx=6)
 
-        folders = ttk.LabelFrame(f, text=_("Ordner"), padding=8)
+        folders = ttk.LabelFrame(more, text=_("Ordner"), padding=8)
         folders.pack(fill="x", pady=(8, 0))
         ttk.Button(folders, text=_("Programmordner öffnen"), command=lambda: self._open(self.root_dir)).pack(side="left")
         ttk.Button(folders, text=_("Karten-Ordner öffnen"),
                    command=lambda: self._open(os.path.join(self.root_dir, "maps"))).pack(side="left", padx=6)
-        ttk.Label(f, text=f"DbD Map Scout {__version__} · " + _("liest nur Bildschirmpixel, sendet keine Eingaben ans Spiel."),
-                  style="Dim.TLabel", wraplength=430).pack(anchor="w", pady=(10, 0))
+        self.version_label = ttk.Label(f, text=f"DbD Map Scout {__version__} · " + _("liest nur Bildschirmpixel, sendet keine Eingaben ans Spiel."),
+                  style="Dim.TLabel", wraplength=430)
+        self.version_label.pack(anchor="w", pady=(10, 0))
+        self._more_open = False
+        self._show_more()
         return outer
+
+    def _toggle_more(self):
+        self._more_open = not self._more_open
+        self._show_more()
+
+    def _show_more(self):
+        arrow = "▾ " if self._more_open else "▸ "
+        self.more_btn.configure(text=arrow + _("Mehr (Map-Zuordnungen, Sicherung, Ordner)"))
+        if self._more_open:
+            self.more_frame.pack(fill="x", pady=(4, 0), before=self.version_label)
+        else:
+            self.more_frame.pack_forget()
 
     def _export_settings(self):
         path = filedialog.asksaveasfilename(parent=self.root, title=_("Einstellungen exportieren"),

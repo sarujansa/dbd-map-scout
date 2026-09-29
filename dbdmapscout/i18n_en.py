@@ -266,8 +266,14 @@ EN = {
     "Mit VPN unzuverlässig. Region-Tools sind von BHVR weder erlaubt noch verboten – auf eigene Verantwortung.":
         "Unreliable with a VPN. Region tools are neither allowed nor forbidden by BHVR – at your own risk.",
     "Warte auf Windows (Administratorrechte) …": "Waiting for Windows (administrator rights) …",
-    "Aus. Zeigt Region und Ping des Spielservers, auch im Overlay (braucht Administratorrechte).":
-        "Off. Shows region and ping of the game server, also in the overlay (needs administrator rights).",
+    "Aus": "Off",
+    "Zeigt Region und Ping des Spielservers, auch im Overlay (braucht Administratorrechte).":
+        "Shows region and ping of the game server, also in the overlay (needs administrator rights).",
+    "Automatisch: im schwarzen Rand neben dem Spielbild. Regler bewegen = eigene Position.":
+        "Automatic: in the black border next to the game picture. Moving a slider = own position.",
+    "Regler bewegen = eigene Position.": "Moving a slider = own position.",
+    "Mehr (Map-Zuordnungen, Sicherung, Ordner)": "More (map assignments, backup, folders)",
+    "Selten gebrauchte Einstellungen ein- oder ausklappen.": "Show or hide rarely used settings.",
     "Verbunden mit: {server}": "Connected to: {server}",
     "pausiert, bis DBD läuft": "paused until DBD runs",
     "Anzeige des Spielservers beendet.": "Game server display stopped.",
