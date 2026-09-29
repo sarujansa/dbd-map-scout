@@ -88,3 +88,14 @@ def test_waiting_card_lines():
     assert ow.add_info(empty, "", "", 500, status=()) is empty
     boxed = ow.add_info(empty, "", "", 500, status=["Warte auf Map"], backdrop=True)
     assert boxed.getpixel((1, 1))[3] == 255                             # dark box when the edge is not transparent
+
+
+def test_waiting_card_shows_the_server_below_the_status():
+    """In the lobby DBD already talks to the match server: region and ping go below "Warte auf Map"."""
+    empty = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
+    status = ["Warte auf Map", "Rolle: Nurse · Wartezeit 03:10"]
+    plain = ow.add_info(empty, "", "", 500, status=status)
+    with_server = ow.add_info(empty, "", "Frankfurt", 500, ping=24, status=status)
+    assert with_server.height > plain.height
+    top = with_server.crop((0, 0, with_server.width, plain.height - 10))
+    assert top.getchannel("A").getextrema()[1] > 200                   # status rows still at the top
