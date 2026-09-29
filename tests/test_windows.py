@@ -90,6 +90,24 @@ def test_hotkeys_register_and_stop():
     assert not t.is_alive()
 
 
+def test_own_taskbar_identity():
+    from dbdmapscout import appid
+    assert appid.set_process_app_id()
+    assert appid.process_app_id() == appid.APP_ID
+
+
+def test_shortcut_app_id_is_written_and_read_back(tmp_path):
+    from dbdmapscout import appid
+    from dbdmapscout.autostart import powershell
+    lnk = str(tmp_path / "DbD Map Scout.lnk")
+    ok, out = powershell(f"$s = (New-Object -ComObject WScript.Shell).CreateShortcut('{lnk}')\n"
+                         "$s.TargetPath = \"$env:SystemRoot\\System32\\schtasks.exe\"\n$s.Save()")
+    assert ok and os.path.exists(lnk), out
+    assert appid.link_app_id(lnk) is None
+    assert appid.set_link_app_id(lnk)
+    assert appid.link_app_id(lnk) == appid.APP_ID
+
+
 def test_window_capture_package_is_the_checked_version():
     from importlib.metadata import version
     assert version("windows-capture") == "2.0.1"             # CLAUDE.md: re-audit before changing it
