@@ -391,6 +391,14 @@ EN = {
     "Entfernt alle eigenen Killer-Zuordnungen; die Namen erscheinen wieder so, wie sie gelesen wurden.":
         "Removes all own killer assignments; the names show up again as they were read.",
     "Zuordnen": "Assign",
+    "Killer der markierten Runde:": "Killer of the selected round:",
+    "Killer setzen": "Set killer",
+    "Killer konnte nicht gespeichert werden: {error}": "Could not save the killer: {error}",
+    "Killer für {map} ({when}) auf {killer} gesetzt.": "Killer for {map} ({when}) set to {killer}.",
+    "Setzt den Killer nur für die markierte Runde und zählt sie als Killer-Runde – z. B. wenn sie fälschlich als "
+    "Survivor gezählt wurde oder der Name falsch gelesen wurde.":
+        "Sets the killer for the selected round only and counts it as a killer round – e.g. if it was wrongly counted "
+        "as survivor or the name was misread.",
     "Zuordnungen löschen": "Delete assignments",
     "„{name}“ zählt jetzt als {killer}.": "\"{name}\" now counts as {killer}.",
     "Alle eigenen Killer-Zuordnungen löschen?": "Delete all own killer assignments?",
