@@ -20,21 +20,30 @@ def _setup_logging():
 
 
 _mutex = None
+ERROR_ACCESS_DENIED = 5
+ERROR_ALREADY_EXISTS = 183
 
 
-def _single_instance() -> bool:
-    """Only one running copy (a second one could not register the hotkeys)."""
+def _claim_mutex(name: str) -> bool:
+    """True if no other copy holds the single-instance mutex. A copy running as administrator (autostart
+    task, desktop shortcut) owns a mutex that a normal copy (start.bat double-clicked) may not open:
+    CreateMutexW then fails with ERROR_ACCESS_DENIED instead of ERROR_ALREADY_EXISTS – another copy, too."""
     global _mutex
-    if sys.platform != "win32":
-        return True
     import ctypes
     from ctypes import wintypes
     k32 = ctypes.WinDLL("kernel32", use_last_error=True)
     k32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
     k32.CreateMutexW.restype = wintypes.HANDLE
+    _mutex = k32.CreateMutexW(None, False, name)
+    return ctypes.get_last_error() not in (ERROR_ALREADY_EXISTS, ERROR_ACCESS_DENIED)
+
+
+def _single_instance() -> bool:
+    """Only one running copy (a second one could not register the hotkeys)."""
+    if sys.platform != "win32":
+        return True
     from .restart import MUTEX_NAME
-    _mutex = k32.CreateMutexW(None, False, MUTEX_NAME)
-    if ctypes.get_last_error() == 183:          # ERROR_ALREADY_EXISTS
+    if not _claim_mutex(MUTEX_NAME):
         try:
             import tkinter as tk
             from tkinter import messagebox
