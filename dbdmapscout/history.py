@@ -270,6 +270,20 @@ def set_role(path: str, t: float, role: str):
     return hit
 
 
+def set_killer(path: str, t: float, killer: str):
+    """Set the killer of the round that started at ``t`` (also makes it a killer round – e.g. a round
+    wrongly counted as survivor has no name from the lobby). Returns the changed round or None."""
+    if not killer:
+        raise ValueError(killer)
+    rounds = load(path)
+    hit = next((r for r in rounds if abs(r.t - t) < 1e-6), None)
+    if hit is None:
+        return None
+    hit.killer, hit.role, hit.custom = killer, "killer", False
+    _rewrite(path, rounds, load_lost(path))
+    return hit
+
+
 # ------------------------------------------------------------------ ping
 def median(values):
     v = sorted(x for x in values if x is not None)

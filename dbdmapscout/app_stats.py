@@ -128,6 +128,16 @@ class StatsTab:
             b = ttk.Button(rr, text=_(label), command=lambda r=role: self._stats_set_role(r), state="disabled")
             b.pack(side="left", padx=(6, 0))
             self.stats_role_btns.append(b)
+        kr = ttk.Frame(box2)
+        kr.pack(fill="x", pady=(6, 0))
+        ttk.Label(kr, text=_("Killer der markierten Runde:")).pack(side="left")
+        self.stats_round_killer_var = tk.StringVar(value="")
+        self.stats_round_killer_cb = ttk.Combobox(kr, textvariable=self.stats_round_killer_var, state="disabled",
+                                                  width=16, values=[killer_label(k) for k in self._stats_alias_choices])
+        self.stats_round_killer_cb.pack(side="left", padx=(6, 0))
+        self.stats_round_killer_btn = ttk.Button(kr, text=_("Killer setzen"), command=self._stats_set_killer,
+                                                 state="disabled")
+        self.stats_round_killer_btn.pack(side="left", padx=(6, 0))
         row = ttk.Frame(f)
         row.pack(fill="x", pady=(8, 0))
         ttk.Button(row, text=_("Verlauf löschen"), command=self._stats_clear).pack(side="left")
@@ -256,6 +266,8 @@ class StatsTab:
         state = "normal" if self.stats_last.selection() else "disabled"
         for b in self.stats_role_btns:
             b.configure(state=state)
+        self.stats_round_killer_cb.configure(state="readonly" if state == "normal" else "disabled")
+        self.stats_round_killer_btn.configure(state=state)
 
     def _stats_alias_buttons(self):
         sel = self.stats_kill.selection()
@@ -302,6 +314,25 @@ class StatsTab:
             self._log(_("Rolle für {map} ({when}) auf {role} geändert.", map=r.map,
                         when=time.strftime("%d.%m.%y %H:%M", time.localtime(r.t)),
                         role=_("Custom Game") if role == "custom" else self._role_name(role)), "System")
+        self._stats_render()
+
+    def _stats_set_killer(self):
+        """Killer of the round marked in "Letzte Runden" (wrongly read, or the round was counted as survivor)."""
+        sel = self.stats_last.selection()
+        target = next((k for k in self._stats_alias_choices if killer_label(k) == self.stats_round_killer_var.get()),
+                      None)
+        if not sel or target is None:
+            return
+        try:
+            r = history.set_killer(self._hist_path(), float(sel[0]), target)
+        except OSError as e:
+            self._log(_("Killer konnte nicht gespeichert werden: {error}", error=e), "Fehler")
+            return
+        if r is not None:
+            self._log(_("Killer für {map} ({when}) auf {killer} gesetzt.", map=r.map,
+                        when=time.strftime("%d.%m.%y %H:%M", time.localtime(r.t)), killer=killer_label(target)),
+                      "System")
+        self.stats_round_killer_var.set("")
         self._stats_render()
 
     def _stats_clear(self):
