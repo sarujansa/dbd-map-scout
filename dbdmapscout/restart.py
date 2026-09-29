@@ -36,13 +36,14 @@ def spawn_helper(root: str) -> bool:
     return True
 
 
-def _program_running() -> bool:
+def _program_running(name: str = MUTEX_NAME) -> bool:
     import ctypes
-    k32 = ctypes.WinDLL("kernel32")
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.OpenMutexW.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_wchar_p]
     k32.OpenMutexW.restype = ctypes.c_void_p
-    h = k32.OpenMutexW(0x00100000, False, MUTEX_NAME)          # SYNCHRONIZE
+    h = k32.OpenMutexW(0x00100000, False, name)                # SYNCHRONIZE
     if not h:
-        return False
+        return ctypes.get_last_error() == 5    # access denied: it exists, owned by a copy with more rights
     k32.CloseHandle(ctypes.c_void_p(h))
     return True
 
