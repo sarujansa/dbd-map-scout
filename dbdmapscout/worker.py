@@ -372,6 +372,8 @@ class DetectionWorker(threading.Thread):
                       killer=self.queue.killer)
         elif ev[0] == "cancel":
             self.post("queue", what="cancel")
+        elif ev[0] == "left":
+            self.post("queue", what="left")
         elif ev[0] == "role":
             self.post("queue", what="role", role=ev[1], killer=self.queue.killer)
         elif ev[0] == "found":

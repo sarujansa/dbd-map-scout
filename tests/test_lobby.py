@@ -229,3 +229,16 @@ def test_found_lobby_carries_the_killer():
     q2 = QueueTracker()                                                      # survivor: never a killer
     ev2 = run(q2, [(0, V("search", "survivor", 0)), (1, V("search", "survivor", 1)), (9, V("lobby")), (10, V("lobby"))])
     assert [e[1] for e in ev2 if e[0] == "found"][0].killer == ""
+
+
+def test_leaving_a_lobby_drops_it():
+    """Lobby found, then back on PLAY (left / dodged): the old lobby must not stick to the next round."""
+    q = QueueTracker()
+    ev = run(q, [(0, V("search", "killer", 0)), (1, V("search", "killer", 1)), (60, V("lobby", "killer")),
+                 (61, V("lobby", "killer")), (90, V("play")), (91, V("play"))])
+    assert ("left",) in ev and ("cancel",) not in ev
+    assert q.state == "idle" and q.found is None and q.take(100) is None
+    q2 = QueueTracker()                                                      # custom game left: same
+    assert ("left",) in run(q2, [(0, V("custom")), (1, V("custom")), (5, V("play")), (6, V("play"))])
+    q3 = QueueTracker()                                                      # plain PLAY screen: nothing to leave
+    assert run(q3, [(0, V("play")), (1, V("play"))]) == []

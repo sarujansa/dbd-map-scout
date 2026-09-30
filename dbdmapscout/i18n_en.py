@@ -110,6 +110,7 @@ EN = {
     "Custom Game – keine Wartezeit.": "Custom game – no waiting time.",
     "Suche läuft: {time}": "Searching: {time}",
     "Suche nach einem Match gestartet.": "Started searching for a match.",
+    "Lobby verlassen – sie zählt für keine Runde.": "Lobby left – it does not count for any round.",
     "Suche abgebrochen.": "Search cancelled.",
     "Lobby gefunden nach {time}{role}.": "Lobby found after {time}{role}.",
     "Lobby gefunden{role}.": "Lobby found{role}.",
