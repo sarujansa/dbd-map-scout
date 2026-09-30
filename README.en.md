@@ -29,7 +29,7 @@ Start the program and play DBD. When the map name appears at the bottom left at 
 
 - the results screen (button "CONTINUE"),
 - lobby, main menu, bloodweb and store (currencies at the top right),
-- the loading screen of the next round,
+- the loading screen of the next round (almost black, still picture with a loading bar – lying on the ground with the recovery bar does not count),
 - DBD being closed.
 
 On ultrawide monitors DBD shows the results screen and menus in full width, but the match in 16:9 with black bars. The program recognises this and then looks for CONTINUE and the currencies up to the real screen edge; during the match the bars are left out.

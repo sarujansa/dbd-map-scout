@@ -29,7 +29,7 @@ Programm starten und DBD spielen. Wenn beim Match-Start unten links der Map-Name
 
 - dem Ergebnisbildschirm (Knopf „CONTINUE“/„FORTFAHREN“),
 - Lobby, Hauptmenü, Blutnetz und Shop (Währungsanzeige oben rechts),
-- dem Ladebildschirm der nächsten Runde,
+- dem Ladebildschirm der nächsten Runde (fast schwarzes, stilles Bild mit Ladebalken – am Boden liegend mit Aufsteh-Balken zählt nicht),
 - einem geschlossenen DBD.
 
 Auf Ultrawide-Monitoren zeigt DBD Ergebnisbildschirm und Menüs in voller Breite, das Match aber in 16:9 mit schwarzen Balken. Das Programm erkennt das und sucht CONTINUE und Währungsanzeige dann bis zum echten Bildschirmrand; im Match bleiben die Balken außen vor.

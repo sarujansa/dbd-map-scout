@@ -85,7 +85,7 @@ start_debug.bat           :: mit Konsole
 
 - **Erkennung**: nicht Text raten, sondern für jeden bekannten Namen die Wahrscheinlichkeit berechnen (Lexikon-Scoring) und über mehrere Frames kombinieren. Unbekannter Text darf nie auf eine falsche Map abgebildet werden.
 - **Rundenende – Fehlalarme sind schlimmer als verpasste Erkennungen.** Ein Overlay, das mitten im Match verschwindet, ist der schlimmste Fehler. Darum:
-  - Screen-Hinweise brauchen 2 Blicke in Folge (CONTINUE mit sehr gutem Fit: 1), Ladebildschirm 3 Blicke **und** stilles Bild (sonst lösen Reparatur-/Heilbalken aus).
+  - Screen-Hinweise brauchen 2 Blicke in Folge (CONTINUE mit sehr gutem Fit: 1), Ladebildschirm 3 Blicke **und** stilles Bild **und** fast schwarzes Bild (`detector.is_dark`, ≥ 85 % der oberen 70 % unter Grau 12; gemessen: Ladebildschirm 0,95, dunkelstes Spielbild 0,75) – ohne „dunkel“ beendete am Boden liegen (geslugged: Aufsteh-Balken + fast stilles Bild) die Runde (1.31.3, Ironworks of Misery). Testbilder `tests/data/end/`.
   - Mauszeiger-Hinweis erst nutzen, wenn beim Map-Banner der Zeiger nachweislich versteckt war (`cursor_proven`).
   - Menü-Latch zählt nur Zeit, in der DBD aktiv und der Zeiger sichtbar ist (60 s).
   - Regionen nie in die schwarzen Balken ausdehnen (FPS-Anzeigen, Benachrichtigungen). Ausnahme: `detector.fills_bars()` – Ergebnisbildschirm, Lobby und Menüs nutzen auf Ultrawide die **volle Fensterbreite** (CONTINUE und Währung sitzen am echten rechten Rand, x ≈ 2800–3300). Nur wenn beide Balken selbst Bild enthalten (im Match sind sie schwarz), reichen CONTINUE-/Währungsregion bis zum Fensterrand.
