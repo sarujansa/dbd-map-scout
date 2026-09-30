@@ -86,3 +86,43 @@ def test_no_currency_ocr_in_a_trial_on_ultrawide():
     assert len(calls) == 1                                  # lobby/menus: counters are read
     w.observe(np.full((1440, 2560, 3), 60, np.uint8))
     assert len(calls) == 2                                  # 16:9 monitor: no bars to tell, always read
+
+
+# ------------------------------------------------------------------ loading screen vs. lying on the ground
+DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "end")
+
+
+def _full(name):
+    import cv2
+    return cv2.resize(cv2.imread(os.path.join(DATA, name)), (W, H))
+
+
+def _watcher():
+    from dbdmapscout.detector import OutOfMatchWatcher
+    from dbdmapscout.ocr import Recognizer
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return OutOfMatchWatcher(Recognizer(os.path.join(root, "models", "ch_PP-OCRv4_rec_infer.onnx")))
+
+
+def test_real_loading_screen_counts():
+    from dbdmapscout.detector import has_loading_bar, is_dark
+    f = _full("loading.jpg")                    # user screenshot: black, white logo, tip, filled bar
+    assert has_loading_bar(f) and is_dark(f)
+    w = _watcher()
+    w.observe(f)
+    ob = w.observe(f)                           # second look: still
+    assert (ob.loading, ob.static, ob.dark, ob.reason) == (True, True, True, "Ladebildschirm")
+
+
+def test_lying_on_the_ground_is_no_loading_screen():
+    """Slugged (Ironworks of Misery, 1.31.2): a progress bar, the camera barely moves – but the game
+    world is lit. Upper picture from a real match, bottom quarter with the loading bar."""
+    from dbdmapscout.detector import is_dark
+    f = _full("loading.jpg")
+    f[:int(0.72 * H)] = _full("spectate.jpg")[:int(0.72 * H)]
+    assert not is_dark(f)
+    w = _watcher()
+    w.observe(f)
+    ob = w.observe(f)
+    assert ob.loading and ob.static and ob.reason is None
+    assert not is_dark(_full("spectate.jpg"))
