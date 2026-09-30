@@ -556,6 +556,17 @@ def has_loading_bar(frame) -> bool:
     return (hi - lo + 1) >= max(2, round(H * 0.005))
 
 
+DARK_SHARE = 0.85       # loading screen: share of near-black pixels in the upper picture (measured: 0.95;
+                        # darkest gameplay seen: 0.75 – a dark map at match start)
+
+
+def is_dark(frame) -> bool:
+    """Almost black upper picture (loading screen: black with the white logo). A player lying on the
+    ground has a progress bar and a nearly still picture too – but the lit game world around them."""
+    g = cv2.cvtColor(_region(frame, 0.0, 0.0, 1.0, 0.70), cv2.COLOR_BGR2GRAY)
+    return g.size > 0 and float((g < 12).mean()) >= DARK_SHARE
+
+
 @dataclass
 class EndObservation:
     """What one look at the whole screen found (also used for the diagnosis)."""
@@ -566,6 +577,7 @@ class EndObservation:
     currency_text: str = ""
     loading: bool = False
     static: bool = False                   # upper picture unchanged since the previous look
+    dark: bool = False                     # upper picture almost black (loading screen)
     full_width: bool = False               # picture fills the ultrawide bars (menus, result screen)
     reason: str | None = None
     sure: bool = False
@@ -576,7 +588,8 @@ class EndObservation:
         cur = f"{self.currency_groups} Gruppen/{self.currency_digits} Ziffern"
         if self.currency_text:
             cur += f" „{self.currency_text}“"
-        bar = ("ja, Bild still" if self.static else "ja, Bild bewegt") if self.loading else "nein"
+        bar = (("ja, Bild still" if self.static else "ja, Bild bewegt") + (", dunkel" if self.dark else ", hell")
+               if self.loading else "nein")
         out = f"CONTINUE {cont} · Währung {cur} · Ladebalken {bar}" + (" · volle Breite" if self.full_width else "")
         return out + (f" → {self.reason}{' (sicher)' if self.sure else ''}" if self.reason else " → –")
 
@@ -586,7 +599,7 @@ class OutOfMatchWatcher:
 
     * result screens: the CONTINUE / FORTFAHREN button bottom right
     * lobby, menus, store, bloodweb: the currency counters top right (never shown in a trial)
-    * next loading screen: the filled progress bar
+    * next loading screen: the filled progress bar on an almost black, still picture
     Confirming (two looks in a row etc.) is the caller's job, see matchend.py.
     """
 
@@ -629,7 +642,8 @@ class OutOfMatchWatcher:
             ob.reason = N_("Lobby/Menü")
         ob.static = self._still(frame)
         ob.loading = has_loading_bar(frame)
-        if ob.reason is None and ob.loading and ob.static:
+        ob.dark = ob.loading and is_dark(frame)
+        if ob.reason is None and ob.loading and ob.static and ob.dark:   # lying on the ground: bright world
             ob.reason = N_("Ladebildschirm")
         ob.ms = (time.perf_counter() - t0) * 1000
         return ob
