@@ -250,7 +250,9 @@ class QueueTracker:
         return max(self._killers, key=self._killers.get) if self.role == "killer" and self._killers else ""
 
     def update(self, view: LobbyView | None, t: float) -> list:
-        """Returns events: ("search",) ("cancel",) ("found", Found) ("role", role) ("remind", seconds left)."""
+        """Returns events: ("search",) ("cancel",) ("left",) ("found", Found) ("role", role)
+        ("remind", seconds left). ("left",): back on PLAY from a lobby / custom game – the lobby found
+        before is gone (left, dodged, or the match is over) and must not stick to anything."""
         events = []
         kind = view.kind if view is not None else None
         if kind is None:
@@ -303,6 +305,9 @@ class QueueTracker:
         elif kind == "play":
             if self.state == "search":
                 events.append(("cancel",))
+            elif self.state in ("lobby", "custom"):
+                events.append(("left",))
+                self.found = None
             self._reset()
         return events
 
