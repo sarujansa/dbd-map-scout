@@ -73,6 +73,10 @@ class LobbyInfo:
         elif what == "cancel":
             self._queue = {"state": "idle"}
             self._log(_("Suche abgebrochen."), "Erkennung")
+        elif what == "left":                             # back on PLAY: an unused lobby must not stick
+            if prev.get("found") is not None:
+                self._log(_("Lobby verlassen – sie zählt für keine Runde."), "Erkennung")
+            self._queue = {"state": "idle"}
         elif what == "found" and d.get("found") is not None:
             f = d["found"]
             self._queue = {"state": "custom" if f.custom else "lobby", "role": f.role, "killer": f.killer, "found": f}
