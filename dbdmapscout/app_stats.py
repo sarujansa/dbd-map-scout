@@ -68,8 +68,9 @@ class StatsTab:
         self.stats_nb = ttk.Notebook(f)
         self.stats_nb.pack(fill="both", expand=True)
         box = self._stats_page(_("Maps"))
-        self.stats_maps = self._stats_tree(box, (("map", _("Map"), 230, "w"), ("n", _("Runden"), 70, "e"),
-                                                 ("avg", _("Ø Dauer"), 80, "e"), ("max", _("Längste"), 80, "e")), 9)
+        self.stats_maps = self._stats_tree(box, (("map", _("Map"), 160, "w"), ("n", _("Runden"), 75, "e"),
+                                                 ("k", _("Killer"), 60, "e"), ("s", _("Survivor"), 85, "e"),
+                                                 ("avg", _("Ø Dauer"), 85, "e"), ("max", _("Längste"), 75, "e")), 9)
         box_k = self._stats_page(_("Killer"))
         self.stats_kill = self._stats_tree(box_k, (("killer", _("Killer"), 150, "w"), ("n", _("Runden"), 70, "e"),
                                                    ("avg", _("Ø Dauer"), 80, "e"), ("map", _("Häufigste Map"), 160, "w")),
@@ -215,14 +216,15 @@ class StatsTab:
         else:
             self.stats_var.set(_("{n} Runden · Ø {avg} · gesamt {total}", n=s["count"], avg=fmt_duration(s["avg"]),
                                  total=fmt_duration(s["total"])))
-        rows = history.per_map(rounds)
+        roles = history.roles_per_map(rounds)               # rounds = killer + survivor + custom/unknown
+        rows = [(name, n, *roles.get(name, (0, 0)), avg, longest) for name, n, avg, longest in history.per_map(rounds)]
         col, desc = self._stats_sort
-        idx = {"map": 0, "n": 1, "avg": 2, "max": 3}[col]
+        idx = {"map": 0, "n": 1, "k": 2, "s": 3, "avg": 4, "max": 5}[col]
         rows.sort(key=lambda r: r[idx].lower() if idx == 0 else r[idx], reverse=desc)
         t = self.stats_maps
         t.delete(*t.get_children())
-        for name, n, avg, longest in rows:
-            t.insert("", "end", values=(name, n, fmt_duration(avg), fmt_duration(longest)))
+        for name, n, k, s, avg, longest in rows:
+            t.insert("", "end", values=(name, n, k, s, fmt_duration(avg), fmt_duration(longest)))
         t = self.stats_kill
         t.delete(*t.get_children())
         keep = t.selection()

@@ -127,6 +127,19 @@ def summary(rounds) -> dict:
     return {"count": len(rounds), "total": total, "avg": total / len(rounds) if rounds else 0.0}
 
 
+def roles_per_map(rounds) -> dict:
+    """{map label: (killer rounds, survivor rounds)} – custom games and unknown roles count for neither."""
+    out = {}
+    for r in rounds:
+        k, s = out.get(r.map, (0, 0))
+        if not r.custom and r.role == "killer":
+            k += 1
+        elif not r.custom and r.role == "survivor":
+            s += 1
+        out[r.map] = (k, s)
+    return out
+
+
 def per_map(rounds) -> list:
     """[(map label, rounds, average s, longest s)], most played first."""
     groups = {}
