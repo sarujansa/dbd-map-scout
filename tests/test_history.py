@@ -177,3 +177,10 @@ def test_killer_of_one_round_can_be_set(tmp_path):
     import pytest
     with pytest.raises(ValueError):
         h.set_killer(p, 1.0, "")
+
+
+def test_roles_per_map():
+    rs = [h.Round(1, 600, "a", "Coal Tower", role="killer"), h.Round(2, 600, "a", "Coal Tower", role="survivor"),
+          h.Round(3, 600, "a", "Coal Tower", role="killer"), h.Round(4, 600, "a", "Coal Tower", custom=True),
+          h.Round(5, 600, "b", "Ormond")]                                      # role unknown
+    assert h.roles_per_map(rs) == {"Coal Tower": (2, 1), "Ormond": (0, 0)}
