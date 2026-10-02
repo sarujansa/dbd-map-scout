@@ -184,3 +184,19 @@ def test_roles_per_map():
           h.Round(3, 600, "a", "Coal Tower", role="killer"), h.Round(4, 600, "a", "Coal Tower", custom=True),
           h.Round(5, 600, "b", "Ormond")]                                      # role unknown
     assert h.roles_per_map(rs) == {"Coal Tower": (2, 1), "Ormond": (0, 0)}
+
+
+def test_today_at_a_glance():
+    import datetime
+    now = datetime.datetime(2026, 10, 2, 20, 0).timestamp()
+    yesterday = now - 86400
+    rounds = [h.Round(t=now - 3600, seconds=600, map_id="a", map="A", role="killer", killer="The Nurse", wait=120,
+                      ping=30),
+              h.Round(t=now - 1800, seconds=900, map_id="b", map="B", role="survivor", wait=60, ping=40),
+              h.Round(t=now - 900, seconds=300, map_id="b", map="B", custom=True),
+              h.Round(t=yesterday, seconds=999, map_id="c", map="C", role="killer", killer="The Hag", wait=999)]
+    d = h.today(rounds, now)
+    assert d["count"] == 3 and d["total"] == 1800 and (d["killer"], d["survivor"]) == (1, 1)
+    assert d["wait"] == 90 and d["top_killer"] == "The Nurse" and d["ping"] == 35
+    empty = h.today(rounds[3:], now)
+    assert empty["count"] == 0 and empty["wait"] is None and empty["ping"] is None and not empty["top_killer"]

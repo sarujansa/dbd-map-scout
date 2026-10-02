@@ -367,6 +367,8 @@ class Decision:
     frames: int
     name_text: str
     realm_text: str
+    name_fit: float = 0.0        # best name fit of the frames that read this map (≈0 = a clean banner)
+    unsure: bool = False         # no frame fitted well (name_fit < Accumulator.unsure_fit): maybe a false read
 
 
 def _softmax(d: dict) -> dict:
@@ -397,18 +399,23 @@ class Accumulator:
     fit_fast: float = -3.0
     base_variant_prior: float = 1.0  # nats in favour of layout I
     variant_decay: float = 0.6
+    unsure_fit: float = -3.0         # real banners fit ≈ 0; below this on every frame the read is doubtful
     maps: dict = field(default_factory=dict)       # map_id -> tempered score sum
     variants: dict = field(default_factory=dict)   # (map_id, v) -> score sum relative to that map's best
     frames: int = 0
     good_frames: int = 0
     last_texts: tuple = ("", "")
     decided: tuple | None = None
+    decided_unsure: bool = False
+    fits: dict = field(default_factory=dict)       # map_id -> best name fit of the frames that read it
 
     def reset(self):
         self.maps, self.variants = {}, {}
         self.frames = self.good_frames = 0
         self.last_texts = ("", "")
         self.decided = None
+        self.decided_unsure = False
+        self.fits = {}
 
     def map_posterior(self):
         return _softmax(self.maps)
@@ -427,6 +434,8 @@ class Accumulator:
         if fr.name_fit < self.fit_ok:
             return None                   # unreadable / unknown text: no evidence
         self.good_frames += 1
+        if fr.best is not None:
+            self.fits[fr.best[0]] = max(self.fits.get(fr.best[0], -1e9), fr.name_fit)
         per_map = {}
         for (m, v), sc in fr.scores.items():
             sc = sc if np.isfinite(sc) else -1e6
@@ -447,12 +456,15 @@ class Accumulator:
         vpost = self.variant_posterior(best_map)
         best_v = max(vpost, key=vpost.get)
         choice = (best_map, best_v)
-        if choice == self.decided:
-            return None
+        fit = self.fits.get(best_map, fr.name_fit)
+        unsure = fit < self.unsure_fit
+        if choice == self.decided and not (self.decided_unsure and not unsure):
+            return None                   # nothing new (a doubtful read that became sure is news)
         if self.decided is not None and self.decided[0] != best_map and self.good_frames < 4:
             return None                   # switching to another map needs more evidence
-        self.decided = choice
-        return Decision(best_map, best_v, p, float(vpost[best_v]), self.good_frames, fr.name_text, fr.realm_text)
+        self.decided, self.decided_unsure = choice, unsure
+        return Decision(best_map, best_v, p, float(vpost[best_v]), self.good_frames, fr.name_text, fr.realm_text,
+                        name_fit=fit, unsure=unsure)
 
 
 # --------------------------------------------------------------------------
