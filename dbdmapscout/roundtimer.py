@@ -30,6 +30,10 @@ class RoundTimer:
         self.end_t = max(self.start_t, t)
         return True
 
+    def clear(self):
+        """Forget the round (a false detection was thrown away): no timer, no "last round"."""
+        self.start_t = self.end_t = None
+
     def elapsed(self, now: float) -> float:
         if self.start_t is None:
             return 0.0

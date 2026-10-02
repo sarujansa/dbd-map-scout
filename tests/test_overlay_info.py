@@ -99,3 +99,11 @@ def test_waiting_card_shows_the_server_below_the_status():
     assert with_server.height > plain.height
     top = with_server.crop((0, 0, with_server.width, plain.height - 10))
     assert top.getchannel("A").getextrema()[1] > 200                   # status rows still at the top
+
+
+def test_warning_note_below_the_timer():
+    pic = map_pic()
+    plain = ow.add_info(pic, "07:32", "", 400)
+    noted = ow.add_info(pic, "07:32", "", 400, note="? unsicher")
+    assert noted.height > plain.height
+    assert ow.add_info(pic, "", "", 400, note="? unsicher").height > pic.height     # a note alone is shown too

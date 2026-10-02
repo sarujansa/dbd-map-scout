@@ -798,4 +798,27 @@ EN = {
     "gleichfarbigen Rand ab und bringt das Bild auf 1280 px Höhe.":
         "Makes the dark blue (#282a42) and grey violet (#535781) of the community maps transparent, cuts off the "
         "border of the same colour and scales the picture to 1280 px height.",
+    # doubtful detection, today line (1.33)
+    "? unsicher – {keys} = falsch": "? unsure – {keys} = wrong",
+    "Falsch erkannt": "Wrong map",
+    "Stimmt": "Correct",
+    "Unsicher erkannt: {map} (gelesen „{name}“)": "Unsure detection: {map} (read “{name}”)",
+    "Unsicher erkannt: {map} – gelesen „{name}“, Passung {fit}. Falls falsch: {keys} oder „Falsch erkannt“.":
+        "Unsure detection: {map} – read “{name}”, fit {fit}. If wrong: {keys} or “Wrong map”.",
+    "{map} bestätigt.": "{map} confirmed.",
+    "Nichts zu verwerfen: keine automatisch erkannte Map eingeblendet.":
+        "Nothing to throw away: no automatically detected map on display.",
+    "Verworfen: {map} – die Runde wird nicht gezählt.": "Thrown away: {map} – the round is not counted.",
+    "Die erkannte Map stimmt nicht: Karte ausblenden, Timer zurücksetzen, die Runde wird nicht "
+    "gezählt. Geht auch im Spiel mit dem Hotkey (Standard Strg+Alt+X).":
+        "The detected map is wrong: hide the map, reset the timer, the round is not counted. Also works in "
+        "game with the hotkey (default Ctrl+Alt+X).",
+    "Die Map stimmt – Hinweis „unsicher“ ausblenden.": "The map is right – hide the “unsure” note.",
+    "als falsch verworfen": "thrown away as wrong",
+    "Heute: noch keine Runde.": "Today: no round yet.",
+    "Heute: {n} Runden ({time})": "Today: {n} rounds ({time})",
+    "{k} Killer / {s} Survivor": "{k} killer / {s} survivor",
+    "Ø Wartezeit {time}": "avg. wait {time}",
+    "meist {killer}": "mostly {killer}",
+    "Ping {ms} ms": "ping {ms} ms",
 }

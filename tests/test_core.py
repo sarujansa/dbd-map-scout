@@ -167,3 +167,19 @@ def test_settings_backup_round_trip(tmp_path):
     s.frozen = True                                                  # after an import: no writes until restart
     s.save()
     assert not (tmp_path / "settings.json").exists()
+
+
+def test_doubtful_read_is_marked_and_cleared_by_a_clean_frame():
+    acc = Accumulator()
+    meh = FrameResult(scores={("a", 1): -5.0, ("b", 1): -60.0}, best=("a", 1), name_fit=-5.0)
+    assert acc.add(meh) is None                                   # one mediocre frame: not decided yet
+    d = acc.add(meh)
+    assert d is not None and d.map_id == "a" and d.unsure and d.name_fit == -5.0
+    assert acc.add(meh) is None                                   # still doubtful: nothing new
+    clean = FrameResult(scores={("a", 1): -0.5, ("b", 1): -60.0}, best=("a", 1), name_fit=-0.2)
+    d = acc.add(clean)
+    assert d is not None and not d.unsure and d.name_fit == -0.2  # the banner read cleanly later on
+    assert acc.add(clean) is None
+    acc.reset()
+    d = acc.add(clean)
+    assert d is not None and not d.unsure                         # a clean banner is never doubtful
