@@ -78,6 +78,22 @@ def test_window_and_cursor_queries():
     capture.foreground_root()                                  # must not raise
 
 
+def test_window_geometry_of_a_real_window(root):
+    import tkinter as tk
+    from dbdmapscout import capture
+    w = tk.Toplevel(root)
+    w.geometry("640x400+50+60")
+    w.update()
+    hwnd = int(w.wm_frame(), 16)
+    client, outer, window, monitor = capture.window_geometry(hwnd)
+    w.destroy()
+    assert client and outer and window and monitor
+    assert client[2] >= 600 and client[3] >= 380
+    # title bar: client starts below the outer top, outer lies inside GetWindowRect
+    assert outer[1] < client[1] and window[0] <= outer[0] and outer[2] <= window[2]
+    assert monitor[2] > 0 and monitor[3] > 0
+
+
 def test_hotkeys_register_and_stop():
     import time
     from dbdmapscout.config import DEFAULTS

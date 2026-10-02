@@ -56,3 +56,24 @@ def clamp_x(side: str, x: float, w: float, gx: float, gw: float, bar: float, mar
     else:
         lo, hi = gx + gw - bar + margin, gx + gw - margin - w
     return min(max(x, lo), max(lo, hi))
+
+
+def outside_slot(ox: float, ow: float, mx: float, mw: float, min_w: float = MIN_BAR):
+    """Free desktop space beside a DBD window that does not fill the monitor (windowed mode):
+    ("left" | "right", x0, width) or None. ``ox``/``ow``: the window's outer edges, ``mx``/``mw``:
+    the monitor's work area. Left is preferred, like the left bar on ultrawide."""
+    left, right = ox - mx, mx + mw - (ox + ow)
+    if left >= min_w:
+        return "left", mx, left
+    if right >= min_w:
+        return "right", ox + ow, right
+    return None
+
+
+def slot_x(slot, w: float, margin: float) -> float:
+    """x of an overlay ``w`` wide in ``slot``: right next to the window (short way for the eyes),
+    never past the monitor edge."""
+    side, x0, width = slot
+    if side == "left":
+        return max(x0 + margin, x0 + width - margin - w)
+    return x0 + margin

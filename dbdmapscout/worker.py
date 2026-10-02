@@ -28,6 +28,17 @@ LOBBY_RATE = 1.0                  # banner scans per second while the lobby butt
 LOBBY_HOLD = 3.0                  # only comes after the loading screen; full rate again 3 s after the button went
 
 
+def _wgc_grab(cap, window, box):
+    """``box`` (game-picture coordinates) from the window capture, or None. In window mode its pictures
+    include title bar and frame: the game picture sits at an offset that depends on the picture size."""
+    size = cap.size
+    off = window.capture_offset(size) if size is not None else (0, 0)
+    if off is None:
+        return None
+    return cap.grab(box[0] + off[0], box[1] + off[1], box[2], box[3],
+                    expect_size=size or (window.width, window.height))
+
+
 @dataclass
 class Event:
     kind: str          # status | detected | unknown | banner | menu | match_end | watch_info | warn | scan_result | error
@@ -187,9 +198,9 @@ class DetectionWorker(threading.Thread):
                     wcap = None
                 self.capture_info = describe(wcap, policy.active)
 
-                def grab(box, _o=origin, _size=(fw, fh), _cap=wcap):
-                    if _cap is not None:
-                        img = _cap.grab(box[0], box[1], box[2], box[3], expect_size=_size)
+                def grab(box, _o=origin, _cap=wcap, _win=window):
+                    if _cap is not None and _win is not None:
+                        img = _wgc_grab(_cap, _win, box)
                         if img is not None:
                             via["screen"] = False
                             return img
@@ -399,7 +410,7 @@ class DetectionWorker(threading.Thread):
             elif window is not None and not window.minimized:
                 frame = None
                 if wcap is not None:
-                    frame = wcap.grab(0, 0, window.width, window.height, expect_size=(window.width, window.height))
+                    frame = _wgc_grab(wcap, window, (0, 0, window.width, window.height))
                 if frame is None:
                     frame = grabber.grab(window.left, window.top, window.width, window.height)
             else:

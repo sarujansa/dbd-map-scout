@@ -45,3 +45,15 @@ def test_fit_height_from_the_picture_size():
     assert L.fit_height(300, 406, 1455, 1600) == 300                        # fits: unchanged
     assert L.fit_height(518, 10, 1455, 1600) == 80                          # never below the minimum
     assert L.fit_height(518, 406, 0, 0) == 518                              # no picture
+
+
+def test_window_mode_slot_beside_the_window():
+    # the user's setup: DBD as a 1718 px window at the right of a 3440 px monitor starting at -3440
+    assert L.outside_slot(-1727, 1734, -3440, 3440) == ("left", -3440, 1713)
+    assert L.outside_slot(0, 1734, 0, 3440) == ("right", 1734, 1706)          # window at the left edge
+    assert L.outside_slot(100, 3240, 0, 3440) is None                          # only 100 px free
+    assert L.outside_slot(0, 3440, 0, 3440) is None                            # fullscreen
+    slot = ("left", -3440, 1713)
+    assert L.slot_x(slot, 400, 17) == -1727 - 17 - 400                         # right next to the window
+    assert L.slot_x(slot, 1800, 17) == -3440 + 17                              # never past the monitor edge
+    assert L.slot_x(("right", 1734, 1706), 400, 17) == 1734 + 17
