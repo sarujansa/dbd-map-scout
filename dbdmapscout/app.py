@@ -37,6 +37,7 @@ from .app_settings import SettingsTab
 
 LANGS = [("en", "EN"), ("de", "DE"), ("fr", "FR"), ("es", "ES"), ("es-MX", "ES-MX"), ("it", "IT"),
          ("pl", "PL"), ("pt-BR", "PT"), ("tr", "TR")]
+SMALL_PICTURE = 1080      # 16:9 picture lines below which detection gets less reliable (log hint)
 ANCHORS = [("auto", N_("automatisch")), ("top-left", N_("oben links")), ("top-right", N_("oben rechts")),
            ("bottom-left", N_("unten links")), ("bottom-right", N_("unten rechts")), ("custom", N_("eigene Position"))]
 CATS = [N_("Erkennung"), N_("Overlay"), N_("System"), N_("Fehler")]   # log categories (keys; shown translated)
@@ -1047,6 +1048,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         if now - self._game_checked > 1.0:
             self.game = find_game_window()
             self._game_checked = now
+            self._note_window()
         if self.game and not self.game.minimized and self.game.width > 100:
             return self.game.rect
         return (0, 0, self.root.winfo_screenwidth(), self.root.winfo_screenheight())
@@ -1142,10 +1144,15 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         height = int(gh * self._map_height())
         a = o["anchor"]
         bar = layout.bar_width(gw, gh)          # black bar left/right of a 16:9 picture (ultrawide)
+        slot = None
         if a == "auto" and bar < layout.MIN_BAR:
-            a = "top-left"
+            slot = self._outside_slot()          # window mode: free desktop beside the DBD window
+            if slot is None:
+                a = "top-left"
 
         def place(w, h):
+            if slot is not None:
+                return layout.slot_x(slot, w, margin), gy + margin
             if a == "auto":
                 return gx + max(margin, (bar - w) / 2), gy + margin
             if a == "custom":
@@ -1157,21 +1164,50 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         iw, ih = self.overlay.map_size()
         w_est = round(iw * height / ih) if ih else 0
         side = (layout.bar_side(a, place(w_est, 0)[0], w_est, gx, gw, bar)
-                if a == "auto" or o.get("keep_in_bar", True) else None)
+                if slot is None and (a == "auto" or o.get("keep_in_bar", True)) else None)
         avail = layout.max_width(bar, margin)
+        if slot is not None:                     # the free space works like a bar: fit, never cover DBD
+            side, avail = "slot", layout.max_width(slot[2], margin)
         if side:
             height = layout.fit_height(height, avail, iw, ih)
         w, h = self.overlay.render(height)
         if side and w > avail:                  # info block below is wider than the map (rare)
             w, h = self.overlay.render(max(80, int(height * avail / w)))
         x, y = place(w, h)
-        if side:
+        if side and side != "slot":
             x = layout.clamp_x(side, x, w, gx, gw, bar, margin)
         self.overlay.show_at(int(x), int(y))
         self._last_place = (int(x), int(y), w, h)
         self.worker.overlay_rect = self._last_place if self.overlay.shown else None
         if a != "custom":                      # sliders follow the preset position
             self._set_pos_sliders((x - gx) / max(1, gw - w), (y - gy) / max(1, gh - h))
+
+    def _outside_slot(self):
+        """Free desktop space beside a DBD window that does not fill its monitor, or None."""
+        g = self.game
+        if g is None or g.minimized or not g.monitor:
+            return None
+        frame = g.outer or g.window or g.client
+        if not frame:
+            return None
+        return layout.outside_slot(frame[0], frame[2], g.monitor[0], g.monitor[2])
+
+    def _note_window(self):
+        """Log once when DBD runs in a way that makes detection weaker (small window, narrower than 16:9)."""
+        g = self.game
+        if g is None or g.minimized or not g.client:
+            return
+        flags = (min(g.height, g.width * 9 / 16) < SMALL_PICTURE, g.width * 9 < g.height * 16 - 32)
+        told = getattr(self, "_window_told", (False, False))
+        if flags[0] and not told[0]:
+            self._log(_("DBD läuft mit {w}×{h}, kleiner als 1920×1080: die Erkennung ist unsicherer (vor allem "
+                        "Lobby-Knopf und Killername). Fenster größer ziehen oder „Fenster-Vollbild“ nutzen.",
+                        w=g.width, h=g.height), "Erkennung")
+        if flags[1] and not told[1]:
+            self._log(_("DBD-Fenster ist schmaler als 16:9 ({w}×{h}): diese Form ist ungetestet, Map- und "
+                        "Rundenende-Erkennung können danebenliegen. Am sichersten: 16:9 oder breiter.",
+                        w=g.width, h=g.height), "Erkennung")
+        self._window_told = flags
 
     def _focus_reason(self, o):
         """Reason to hide while another window is in front ("Nur zeigen, wenn DBD das aktive Fenster ist")."""
@@ -1242,7 +1278,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         if self.settings["overlay"].get("anchor", "auto") == "custom":
             text = _("0 % = links/oben, 100 % = rechts/unten")
         elif self.settings["overlay"].get("anchor", "auto") == "auto":
-            text = _("Automatisch: im schwarzen Rand neben dem Spielbild. Regler bewegen = eigene Position.")
+            text = _("Automatisch: im schwarzen Rand neben dem Spielbild, im Fenstermodus neben dem DBD-Fenster "
+                     "(falls dort Platz ist). Regler bewegen = eigene Position.")
         else:
             text = _("Regler bewegen = eigene Position.")
         self.pos_hint_var.set(text)
