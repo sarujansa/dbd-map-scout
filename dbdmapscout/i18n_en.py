@@ -270,8 +270,18 @@ EN = {
     "Aus": "Off",
     "Zeigt Region und Ping des Spielservers, auch im Overlay (braucht Administratorrechte).":
         "Shows region and ping of the game server, also in the overlay (needs administrator rights).",
-    "Automatisch: im schwarzen Rand neben dem Spielbild. Regler bewegen = eigene Position.":
-        "Automatic: in the black border next to the game picture. Moving a slider = own position.",
+    "Automatisch: im schwarzen Rand neben dem Spielbild, im Fenstermodus neben dem DBD-Fenster "
+    "(falls dort Platz ist). Regler bewegen = eigene Position.":
+        "Automatic: in the black border next to the game picture, in window mode next to the DBD window "
+        "(if there is room). Moving a slider = own position.",
+    "DBD läuft mit {w}×{h}, kleiner als 1920×1080: die Erkennung ist unsicherer (vor allem "
+    "Lobby-Knopf und Killername). Fenster größer ziehen oder „Fenster-Vollbild“ nutzen.":
+        "DBD runs at {w}×{h}, smaller than 1920×1080: detection is less reliable (above all the lobby "
+        "button and killer name). Make the window bigger or use “Windowed Fullscreen”.",
+    "DBD-Fenster ist schmaler als 16:9 ({w}×{h}): diese Form ist ungetestet, Map- und "
+    "Rundenende-Erkennung können danebenliegen. Am sichersten: 16:9 oder breiter.":
+        "DBD window is narrower than 16:9 ({w}×{h}): this shape is untested, map and round-end "
+        "detection may be off. Safest: 16:9 or wider.",
     "Regler bewegen = eigene Position.": "Moving a slider = own position.",
     "Mehr (Map-Zuordnungen, Sicherung, Ordner)": "More (map assignments, backup, folders)",
     "Selten gebrauchte Einstellungen ein- oder ausklappen.": "Show or hide rarely used settings.",
