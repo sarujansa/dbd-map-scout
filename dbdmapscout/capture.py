@@ -44,6 +44,8 @@ if IS_WIN:
     user32.GetClientRect.restype = wintypes.BOOL
     user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
     user32.ClientToScreen.restype = wintypes.BOOL
+    user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+    user32.GetWindowRect.restype = wintypes.BOOL
     user32.GetForegroundWindow.argtypes = []
     user32.GetForegroundWindow.restype = wintypes.HWND
     user32.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
@@ -54,6 +56,22 @@ if IS_WIN:
     user32.GetWindow.restype = wintypes.HWND
     GA_ROOT = 2
     GW_HWNDNEXT = 2
+
+    # window manager only (no process access): outer edges as drawn by DWM, monitor work area
+    dwmapi = ctypes.WinDLL("dwmapi")
+    dwmapi.DwmGetWindowAttribute.argtypes = [wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD]
+    dwmapi.DwmGetWindowAttribute.restype = ctypes.c_long
+    DWMWA_EXTENDED_FRAME_BOUNDS = 9
+
+    class MONITORINFO(ctypes.Structure):
+        _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT), ("rcWork", wintypes.RECT),
+                    ("dwFlags", wintypes.DWORD)]
+
+    user32.MonitorFromWindow.argtypes = [wintypes.HWND, wintypes.DWORD]
+    user32.MonitorFromWindow.restype = wintypes.HMONITOR
+    user32.GetMonitorInfoW.argtypes = [wintypes.HMONITOR, ctypes.POINTER(MONITORINFO)]
+    user32.GetMonitorInfoW.restype = wintypes.BOOL
+    MONITOR_DEFAULTTONEAREST = 2
 
     class CURSORINFO(ctypes.Structure):
         _fields_ = [("cbSize", wintypes.DWORD), ("flags", wintypes.DWORD), ("hCursor", wintypes.HANDLE),
@@ -108,10 +126,29 @@ class GameWindow:
     width: int
     height: int
     minimized: bool = False
+    # left/top/width/height: the client area (the game picture)
+    client: tuple | None = None          # client area (x, y, w, h) on screen
+    outer: tuple | None = None           # window incl. title bar and frame, as DWM draws it
+    window: tuple | None = None          # GetWindowRect (outer + invisible resize borders)
+    monitor: tuple | None = None         # work area of the window's monitor (without taskbar)
 
     @property
     def rect(self):
         return self.left, self.top, self.width, self.height
+
+    def capture_offset(self, size):
+        """Position of the game picture inside a window-capture picture of ``size`` (WGC captures the
+        whole window in window mode, title bar included), or None if the size fits no known frame."""
+        if size is None:
+            return None
+        size = tuple(size)
+        if self.client and size == tuple(self.client[2:]):
+            frame = self.client                    # borderless: picture = client area
+        else:
+            frame = next((r for r in (self.outer, self.window) if r and size == tuple(r[2:])), None)
+        if frame is None:
+            return None
+        return self.left - frame[0], self.top - frame[1]
 
 
 def is_game_window(hwnd) -> bool:
@@ -132,6 +169,43 @@ def _client_rect(hwnd):
     pt = wintypes.POINT(0, 0)
     user32.ClientToScreen(hwnd, ctypes.byref(pt))
     return pt.x, pt.y, rc.right - rc.left, rc.bottom - rc.top
+
+
+def _outer_rect(hwnd):
+    rc = wintypes.RECT()
+    if dwmapi.DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, ctypes.byref(rc), ctypes.sizeof(rc)) != 0:
+        return None
+    return rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top
+
+
+def _monitor_work_area(hwnd):
+    mon = user32.MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)
+    mi = MONITORINFO()
+    mi.cbSize = ctypes.sizeof(MONITORINFO)
+    if not mon or not user32.GetMonitorInfoW(mon, ctypes.byref(mi)):
+        return None
+    r = mi.rcWork
+    return r.left, r.top, r.right - r.left, r.bottom - r.top
+
+
+def _window_rect(hwnd):
+    rc = wintypes.RECT()
+    if not user32.GetWindowRect(hwnd, ctypes.byref(rc)):
+        return None
+    return rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top
+
+
+def window_geometry(hwnd):
+    """(client, outer, window rect, monitor work area) of a window, each (x, y, w, h) or None."""
+    if not IS_WIN:
+        return None, None, None, None
+    out = []
+    for f in (_client_rect, _outer_rect, _window_rect, _monitor_work_area):
+        try:
+            out.append(f(hwnd))
+        except Exception:
+            out.append(None)
+    return tuple(out)
 
 
 def find_game_window() -> GameWindow | None:
@@ -165,8 +239,11 @@ def find_game_window() -> GameWindow | None:
             best, best_key = (hwnd, rect, minimized), key
     if best is None:
         return None
-    hwnd, (x, y, w, h), minimized = best
-    return GameWindow(hwnd=hwnd, title=_window_text(hwnd), left=x, top=y, width=w, height=h, minimized=minimized)
+    hwnd, client, minimized = best
+    _client, outer, window, monitor = window_geometry(hwnd)
+    x, y, w, h = client
+    return GameWindow(hwnd=hwnd, title=_window_text(hwnd), left=x, top=y, width=w, height=h,
+                      minimized=minimized, client=client, outer=outer, window=window, monitor=monitor)
 
 
 def foreground_root() -> int:
