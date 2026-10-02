@@ -30,6 +30,8 @@ class StatsTab:
     # -------------------------------------------------------------- tab: statistics
     def _tab_stats(self):
         outer, f = self._scroll_tab()
+        self.stats_today_var = tk.StringVar(value="")       # today at a glance, independent of the filters
+        ttk.Label(f, textvariable=self.stats_today_var, wraplength=540).pack(anchor="w", pady=(0, 6))
         fr = ttk.Frame(f)
         fr.pack(fill="x", pady=(0, 6))
         self._stats_periods = [(k, _(label)) for k, label in STATS_PERIODS]
@@ -175,6 +177,20 @@ class StatsTab:
             return _("ohne Region")
         return _(regions.NAMES.get(code, code))
 
+    def _today_text(self, d):
+        if not d["count"]:
+            return _("Heute: noch keine Runde.")
+        parts = [_("Heute: {n} Runden ({time})", n=d["count"], time=fmt_duration(d["total"]))]
+        if d["killer"] or d["survivor"]:
+            parts.append(_("{k} Killer / {s} Survivor", k=d["killer"], s=d["survivor"]))
+        if d["wait"] is not None:
+            parts.append(_("Ø Wartezeit {time}", time=fmt_duration(d["wait"])))
+        if d["top_killer"]:
+            parts.append(_("meist {killer}", killer=killer_label(d["top_killer"])))
+        if d["ping"] is not None:
+            parts.append(_("Ping {ms} ms", ms=f"{d['ping']:.0f}"))
+        return " · ".join(parts)
+
     def _stats_render(self):
         all_rounds = history.load(self._hist_path())
         for r in all_rounds:                         # skins / new killers: the user's assignment
@@ -197,6 +213,7 @@ class StatsTab:
             killer = None
         self.stats_killer_cb.configure(values=[lbl for _k, lbl in self._stats_killers])
         self.stats_killer_var.set(dict(self._stats_killers)[killer])
+        self.stats_today_var.set(self._today_text(history.today(all_rounds, time.time())))
         since = history.period_start(period, time.time())
         rounds = history.select(all_rounds, since=since, region=wanted, role=role, killer=killer)
         s = history.summary(rounds)

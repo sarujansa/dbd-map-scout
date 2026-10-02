@@ -37,6 +37,8 @@ from .app_settings import SettingsTab
 
 LANGS = [("en", "EN"), ("de", "DE"), ("fr", "FR"), ("es", "ES"), ("es-MX", "ES-MX"), ("it", "IT"),
          ("pl", "PL"), ("pt-BR", "PT"), ("tr", "TR")]
+REJECT_HOLD = 60.0        # s: a rejected map is not shown again by the same banner
+UNSURE_DELAY = 2.5        # s: a doubtful read is shown only if the banner did not read cleanly meanwhile
 SMALL_PICTURE = 1080      # 16:9 picture lines below which detection gets less reliable (log hint)
 ANCHORS = [("auto", N_("automatisch")), ("top-left", N_("oben links")), ("top-right", N_("oben rechts")),
            ("bottom-left", N_("unten links")), ("bottom-right", N_("unten rechts")), ("custom", N_("eigene Position"))]
@@ -200,6 +202,15 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
                    command=lambda: self.add_picture(from_unknown=True)).pack(side="right")
         ttk.Button(self.unknown_bar, text=_("Zuordnen …"), command=self.assign_unknown).pack(side="right", padx=4)
         ttk.Label(self.unknown_bar, textvariable=self.unknown_var, wraplength=300).pack(side="left", fill="x")
+
+        # shown when a map was read with a poor fit: one click to throw it away (or to keep it)
+        self.unsure_bar = ttk.Frame(self.root)
+        self.unsure_var = tk.StringVar(value="")
+        ttk.Button(self.unsure_bar, text=_("Stimmt"), command=self._confirm_unsure).pack(side="right")
+        ttk.Button(self.unsure_bar, text=_("Falsch erkannt"), command=self.reject_detection).pack(side="right", padx=4)
+        ttk.Label(self.unsure_bar, textvariable=self.unsure_var, wraplength=300).pack(side="left", fill="x")
+        self._unsure = None             # doubtful detection: {"label", "t", "shown", "fit", "name"}
+        self._rejected = None           # (map_id, time) thrown away with "Falsch erkannt"
 
         # first start only: nothing to do but play – and the hotkeys that matter
         self.welcome_bar = ttk.Frame(self.root)
@@ -561,6 +572,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
             return
         was_on = self._map_on()
         self._test_map = False                   # a real/manual choice replaces the test picture
+        self._clear_unsure()                     # another map on display: the doubt was about the old one
         self._layout_unsure = False
         self.current = (map_id, shown)
         self.source = source
@@ -892,7 +904,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         {"toggle_overlay": self.toggle_overlay, "next_variant": self.next_variant, "scan_now": self.scan_now,
          "next_map": lambda: self.step_map(1), "prev_map": lambda: self.step_map(-1),
          "bigger": lambda: self._resize(0.03), "smaller": lambda: self._resize(-0.03),
-         "edit_position": self.toggle_edit, "rotate_map": self.rotate_map}.get(name, lambda: None)()
+         "edit_position": self.toggle_edit, "rotate_map": self.rotate_map,
+         "reject_map": self.reject_detection}.get(name, lambda: None)()
 
     def _event(self, ev):
         k, d = ev.kind, ev.data
@@ -906,6 +919,9 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
             m = self.catalog.maps.get(d["map_id"])
             if not m:
                 return
+            rej = self._rejected
+            if rej and rej[0] == d["map_id"] and time.time() - rej[1] < REJECT_HOLD:
+                return                              # the same banner again: the user said it is wrong
             same = (self.current == (d["map_id"], d["variant"]) and self.source == "auto"
                     and not self.hidden_after_match and not self.menu_paused and self.user_visible)
             vp = d["variant_probability"]
@@ -917,8 +933,13 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
                 self._log(_("Rundentimer gestartet."), "Erkennung")
             if restarted or self._hist is None:
                 self._hist_open(d["map_id"], d["variant"], "auto")
+            if self._unsure and not d.get("unsure") and same:
+                self._clear_unsure(confirmed=True)  # later frames of the banner read it cleanly
             if not same:
                 self.show_map(d["map_id"], d["variant"], "auto", detail, keep_timer=True)
+                if d.get("unsure"):
+                    self._unsure = {"label": m.label(d["variant"]), "t": time.time(), "shown": False,
+                                    "fit": d.get("name_fit", 0.0), "name": d["name_text"]}
                 self._log(_("Erkannt: {map} – gelesen „{name}“ / „{realm}“", map=m.label(d["variant"]),
                             name=d["name_text"], realm=d["realm_text"]), "Erkennung")
                 if len(m.variants) > 1 and vp < 0.8:
@@ -937,6 +958,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         elif k == "queue":
             self._queue_event(d)
         elif k == "match_end":
+            self._clear_unsure()                  # a whole round on that map: it was real
             self._round_ended(d.get("t") or time.time())
             if d.get("role"):
                 self._log(_("Ergebnisbildschirm: gespielt als {role}.", role=self._role_name(d["role"])), "Erkennung")
@@ -1055,6 +1077,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
 
     def _tick_overlay(self, reschedule=True):
         try:
+            self._tick_unsure()
             self._tick_timer()
             self._place_overlay()
         except Exception:
@@ -1375,6 +1398,54 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         self.welcome_bar.pack_forget()
         self.settings.set("welcome_seen", True)
         self._save_soon()
+
+    # ---------------------------------------------------------- doubtful detection
+    def _tick_unsure(self):
+        """Show the doubt only if the banner did not read cleanly a moment later (fade-in frames fit worse)."""
+        u = self._unsure
+        if not u or u["shown"] or time.time() - u["t"] < UNSURE_DELAY:
+            return
+        u["shown"] = True
+        keys = pretty(self.settings["hotkeys"].get("reject_map") or "–")
+        self.overlay.set_note(_("? unsicher – {keys} = falsch", keys=keys))
+        self.unsure_var.set(_("Unsicher erkannt: {map} (gelesen „{name}“)", map=u["label"], name=u["name"]))
+        self.unsure_bar.pack(fill="x", padx=10, pady=(0, 6), before=self.nb)
+        self._log(_("Unsicher erkannt: {map} – gelesen „{name}“, Passung {fit}. Falls falsch: {keys} oder "
+                    "„Falsch erkannt“.", map=u["label"], name=u["name"], fit=f"{u['fit']:.1f}", keys=keys),
+                  "Erkennung")
+
+    def _clear_unsure(self, confirmed=False):
+        u, self._unsure = self._unsure, None
+        if u is None:
+            return
+        self.overlay.set_note("")
+        self.unsure_bar.pack_forget()
+        if confirmed and u["shown"]:
+            self._log(_("{map} bestätigt.", map=u["label"]), "Erkennung")
+
+    def _confirm_unsure(self):
+        self._clear_unsure(confirmed=True)
+
+    def reject_detection(self):
+        """The detected map is wrong: hide it, stop the timer and do not count the round."""
+        if self.current is None or self.source != "auto" or self.hidden_after_match:
+            self._log(_("Nichts zu verwerfen: keine automatisch erkannte Map eingeblendet."), "Erkennung")
+            return
+        label = self.map_var.get()
+        self._rejected = (self.current[0], time.time())
+        self._clear_unsure()
+        if self._hist is not None:
+            self._hist = None
+            used = self._queue.get("used")           # the lobby goes to the next (real) round
+            if used is not None and self._queue.get("found") is None:
+                self._queue = dict(self._queue, found=used, used=None)
+        self.round.clear()
+        self.hidden_after_match = True              # waiting card again; the next banner shows its map
+        self.menu_paused = False
+        self._update_toggle_text()
+        self.detail_var.set(_("als falsch verworfen"))
+        self._log(_("Verworfen: {map} – die Runde wird nicht gezählt.", map=label), "Erkennung")
+        self._tick_overlay(reschedule=False)
 
     def _hide_unknown(self):
         self.unknown_bar.pack_forget()

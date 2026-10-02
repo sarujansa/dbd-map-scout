@@ -127,6 +127,20 @@ def summary(rounds) -> dict:
     return {"count": len(rounds), "total": total, "avg": total / len(rounds) if rounds else 0.0}
 
 
+def today(rounds, now: float) -> dict:
+    """Today at a glance (calendar day, all filters off): rounds, killer/survivor, play time, average wait,
+    most played killer, median ping."""
+    rs = select(rounds, since=period_start("day", now))
+    waits = [r.wait for r in rs if r.wait is not None and not r.custom]
+    killers = killers_used(rs)
+    return {"count": len(rs), "total": sum(r.seconds for r in rs),
+            "killer": sum(1 for r in rs if r.role == "killer" and not r.custom),
+            "survivor": sum(1 for r in rs if r.role == "survivor" and not r.custom),
+            "wait": sum(waits) / len(waits) if waits else None,
+            "top_killer": killers[0] if killers else "",
+            "ping": median([r.ping for r in rs if r.ping is not None])}
+
+
 def roles_per_map(rounds) -> dict:
     """{map label: (killer rounds, survivor rounds)} – custom games and unknown roles count for neither."""
     out = {}

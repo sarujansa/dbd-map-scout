@@ -248,7 +248,8 @@ class DetectionWorker(threading.Thread):
                         if d is not None:
                             self.post("detected", map_id=d.map_id, variant=d.variant, probability=d.probability,
                                       variant_probability=d.variant_probability, name_text=d.name_text,
-                                      realm_text=d.realm_text, frames=d.frames)
+                                      realm_text=d.realm_text, frames=d.frames, name_fit=d.name_fit,
+                                      unsure=d.unsure)
                         if self.settings.get("save_debug_images"):
                             self._save_debug(img, res, sep)
                 elif session and tick - last_seen > 1.5:

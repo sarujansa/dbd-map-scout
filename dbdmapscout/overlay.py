@@ -111,6 +111,9 @@ class Overlay:
         self.status = tk.Label(self.win, text="", fg="#ffffff", bg="#141416", anchor="center", justify="center",
                                font=("Segoe UI", 11, "bold"), padx=8, pady=4)
         self._waiting = ()          # lines of the waiting card: shown instead of everything else
+        self.note = tk.Label(self.win, text="", fg="#fbbf24", bg="#141416", anchor="center",
+                             font=("Segoe UI", 11, "bold"), padx=6, pady=1)
+        self._note_text = ""
         self._frames = []           # raw frames
         self._photos = []           # prepared PhotoImages for the current size
         self._frame_i = 0
@@ -176,13 +179,22 @@ class Overlay:
             self.ping.configure(text=ping_text, fg="#%02x%02x%02x" % ping_colour(ping)[:3])
         self._pack_info()
 
+    def set_note(self, text: str):
+        """Warning in amber below the timer, e.g. a doubtful detection; "" = none."""
+        text = (text or "").upper()
+        if text == self._note_text:
+            return
+        self._note_text = text
+        self.note.configure(text=text)
+        self._pack_info()
+
     def _pack_info(self):
         """Timer (big, centred), server region and ping below the map, in this order."""
         if self._waiting:
             return
         last = self.pic if self.pic.winfo_manager() else None      # info only: no picture above
-        for label, shown in ((self.timer, self._timer_text), (self.server, self._server_text),
-                             (self.ping, self._ping_text)):
+        for label, shown in ((self.timer, self._timer_text), (self.note, self._note_text),
+                             (self.server, self._server_text), (self.ping, self._ping_text)):
             label.pack_forget()
             if shown:
                 if last is not None:
@@ -208,7 +220,7 @@ class Overlay:
             return
         was, self._waiting = self._waiting, lines
         if lines:
-            for w in (self.caption, self.pic, self.timer, self.server, self.ping):
+            for w in (self.caption, self.pic, self.timer, self.note, self.server, self.ping):
                 w.pack_forget()
             self.status.pack(side="top", fill="x")
         elif was:
@@ -225,7 +237,7 @@ class Overlay:
         return self._frames[0][0].size if self._frames and self.show_map and not self._waiting else (0, 0)
 
     def has_info(self) -> bool:
-        return bool(self._timer_text or self._server_text)
+        return bool(self._timer_text or self._server_text or self._note_text)
 
     def set_show_map(self, on: bool):
         self.show_map = bool(on)

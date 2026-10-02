@@ -57,6 +57,9 @@ TIPS = {
     "Zuordnen …": "Der gelesene Name gehört zu einer vorhandenen Map (z. B. anders geschrieben)? Einmal "
                   "zuordnen – danach wird er automatisch erkannt.",
     "✕": "Hinweis ausblenden.",
+    "Falsch erkannt": "Die erkannte Map stimmt nicht: Karte ausblenden, Timer zurücksetzen, die Runde wird nicht "
+                      "gezählt. Geht auch im Spiel mit dem Hotkey (Standard Strg+Alt+X).",
+    "Stimmt": "Die Map stimmt – Hinweis „unsicher“ ausblenden.",
     # maps tab
     "Kartenbild hinzufügen …": "Eigenes Bild für eine Map wählen: vorhandenes Bild ersetzen oder neue Map "
                                "anlegen. Rand und Hintergrund werden automatisch entfernt.",

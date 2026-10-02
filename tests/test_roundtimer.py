@@ -41,3 +41,10 @@ def test_detection_resets_except_same_banner():
     r.stop(700.0)
     assert r.detected(710.0)                                 # stopped -> always a new round
     assert r.running
+
+
+def test_clear_forgets_the_round():
+    r = RoundTimer()
+    r.start(100.0)
+    r.clear()
+    assert not r.running and r.start_t is None and r.elapsed(200.0) == 0.0
