@@ -47,6 +47,7 @@ DEFAULTS = {
         "smaller": "ctrl+alt+down",
         "edit_position": "ctrl+alt+p",
         "rotate_map": "ctrl+alt+r",
+        "reject_map": "ctrl+alt+x",
     },
     "ui_language": "auto",            # auto (Windows language) | de | en
     "dark_mode": True,
