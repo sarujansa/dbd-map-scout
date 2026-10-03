@@ -110,6 +110,10 @@ def collect(app) -> str:
         hist = list(getattr(w, "end_history", []))
         lines.append(f"Letzte Prüfungen ({len(hist)}):" if hist else "Letzte Prüfungen: keine")
         lines.extend("  " + h for h in hist[-40:])
+    try:
+        lines.extend(app._official_diag())
+    except Exception as e:
+        lines.append(f"Offizielle Daten: {e}")
     errs = getattr(app, "_errors_seen", set())
     lines.append(f"Fehler seit Start: {sorted(errs) if errs else 'keine'}")
     return "\n".join(lines)

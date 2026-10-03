@@ -821,4 +821,77 @@ EN = {
     "Ø Wartezeit {time}": "avg. wait {time}",
     "meist {killer}": "mostly {killer}",
     "Ping {ms} ms": "ping {ms} ms",
+    # official match data (stats.deadbydaylight.com, page "Kills & Escapes")
+    "Kills & Escapes": "Kills & Escapes",
+    "Ø Kills": "Avg. kills",
+    "4K": "4K",
+    "Entkommen": "Escaped",
+    "Ergebnis": "Result",
+    "entkommen": "escaped",
+    "tot": "died",
+    "getrennt": "disconnected",
+    "Laut stats.deadbydaylight.com, nur Runden mit zugeordnetem offiziellem Match (gleiche Map, Start höchstens 3 min "
+    "auseinander). Ø Kills = getötete oder geopferte Survivors pro Killer-Match, 4K = alle vier. Custom Games zählen "
+    "nur unter „Custom Games“.":
+        "From stats.deadbydaylight.com, only rounds tied to an official match (same map, starts at most 3 min apart). "
+        "Avg. kills = survivors killed or sacrificed per killer match, 4K = all four. Custom games count only under "
+        "\"Custom games\".",
+    "Stats-Seite öffnen, wenn DBD beendet wird": "Open the stats page when DBD is closed",
+    "Userscript kopieren": "Copy userscript",
+    "Stats-Seite öffnen": "Open stats page",
+    "Einrichten (einmal): Tampermonkey (oder Violentmonkey) im Browser installieren, „Userscript kopieren“ und dort "
+    "als neues Skript einfügen, auf stats.deadbydaylight.com anmelden. Beim Öffnen der Seite speichert das Skript die "
+    "letzten 30 Matches als Datei in den Download-Ordner; das Programm liest sie ein und löscht sie. Das Programm "
+    "selbst geht dafür nicht ins Internet.":
+        "Setup (once): install Tampermonkey (or Violentmonkey) in the browser, \"Copy userscript\" and paste it there "
+        "as a new script, sign in on stats.deadbydaylight.com. When the page opens, the script saves the last 30 "
+        "matches as a file into the download folder; the program reads it and deletes it. The program itself does "
+        "not go online for this.",
+    "Noch keine offiziellen Daten. Erwartet {file} in {folder}.": "No official data yet. Expecting {file} in {folder}.",
+    "{linked} von {rounds} Runden mit offiziellen Daten · gespeichert {n} Matches, neuestes {when}":
+        "{linked} of {rounds} rounds with official data · {n} matches stored, newest {when}",
+    "Killer: {n} Matches, Ø {kills} Kills, {four}× 4K": "Killer: {n} matches, avg. {kills} kills, {four}× 4K",
+    "Survivor: {n} Matches, {share} entkommen": "Survivor: {n} matches, {share} escaped",
+    "⚠ Unbekannter Status auf der Stats-Seite: {list} – zählt nicht. Bitte melden („Diagnose kopieren“).":
+        "⚠ Unknown status on the stats page: {list} – not counted. Please report (\"Copy diagnostics\").",
+    "⚠ Lücke: zwischen {start} und {end} fehlen vielleicht Matches – die Seite zeigt nur die letzten 30. Seite öfter "
+    "öffnen.":
+        "⚠ Gap: matches between {start} and {end} may be missing – the page shows only the last 30. Open the page "
+        "more often.",
+    "⚠ {n}× andere Map als erkannt, zuletzt {when}: erkannt {ours}, laut Seite {theirs}.":
+        "⚠ {n}× a different map than detected, last {when}: detected {ours}, the page says {theirs}.",
+    "⚠ Das Userscript ist veraltet (Version {old}, aktuell {new}) – „Userscript kopieren“ und in Tampermonkey "
+    "ersetzen.":
+        "⚠ The userscript is outdated (version {old}, current {new}) – \"Copy userscript\" and replace it in "
+        "Tampermonkey.",
+    "Stats-Seite konnte nicht geöffnet werden: {error}": "Could not open the stats page: {error}",
+    "DBD beendet – Stats-Seite geöffnet; das Userscript speichert die Matches.":
+        "DBD closed – stats page opened; the userscript saves the matches.",
+    "Userscript nicht gefunden: {error}": "Userscript not found: {error}",
+    "Userscript in die Zwischenablage kopiert. In Tampermonkey: „Neues Skript erstellen“ → alles ersetzen (Strg+A, "
+    "Strg+V) → Speichern. Danach stats.deadbydaylight.com öffnen und anmelden.":
+        "Userscript copied to the clipboard. In Tampermonkey: \"Create a new script\" → replace everything (Ctrl+A, "
+        "Ctrl+V) → Save. Then open stats.deadbydaylight.com and sign in.",
+    "Offizielle Match-Daten: {n} Matches gelesen, {new} neu – Datei gelöscht.":
+        "Official match data: {n} matches read, {new} new – file deleted.",
+    "Offizielle Match-Daten: zwischen {start} und {end} fehlen vielleicht Matches (die Seite zeigt nur die letzten 30).":
+        "Official match data: matches between {start} and {end} may be missing (the page shows only the last 30).",
+    "{name} gelesen, aber nicht gelöscht: {error}": "{name} read, but not deleted: {error}",
+    "{name} ist keine Match-Datei von DbD Map Scout – bleibt liegen.":
+        "{name} is not a DbD Map Scout match file – left alone.",
+    "Unbekannter Status auf der Stats-Seite: „{status}“ – zählt nicht für Kills/Escapes. Bitte melden.":
+        "Unknown status on the stats page: \"{status}\" – not counted for kills/escapes. Please report.",
+    "Schliesst du DBD nach mindestens einer Runde, öffnet das Programm stats.deadbydaylight.com im Browser. Das "
+    "Userscript speichert dann die letzten 30 Matches, das Programm liest sie ein und löscht die Datei. Nie während "
+    "DBD läuft.":
+        "When you close DBD after at least one round, the program opens stats.deadbydaylight.com in the browser. The "
+        "userscript then saves the last 30 matches; the program reads them and deletes the file. Never while DBD is "
+        "running.",
+    "Kopiert das Userscript in die Zwischenablage. In Tampermonkey „Neues Skript erstellen“, alles ersetzen und "
+    "speichern. Es liest nur die Match-Liste, die die Seite selbst lädt – keine Konto- oder Login-Daten – und schickt "
+    "nichts irgendwohin.":
+        "Copies the userscript to the clipboard. In Tampermonkey \"Create a new script\", replace everything and save. "
+        "It only reads the match list the page loads itself – no account or login data – and sends nothing anywhere.",
+    "Öffnet stats.deadbydaylight.com jetzt. Mit installiertem Userscript kommen die Matches gleich danach an.":
+        "Opens stats.deadbydaylight.com now. With the userscript installed, the matches arrive right after.",
 }
