@@ -107,6 +107,9 @@ def collect(app) -> str:
         q = getattr(w, "queue", None)
         lines.append(f"Lobby: letzter Blick {getattr(w, 'lobby_info', '?')} · Zustand "
                      f"{getattr(q, 'state', '?')}, Rolle {getattr(q, 'role', None)}")
+        seen = list(getattr(w, "banner_history", []))
+        lines.append(f"Letzte Banner ({len(seen)}):" if seen else "Letzte Banner: keine")
+        lines.extend("  " + h for h in seen)
         hist = list(getattr(w, "end_history", []))
         lines.append(f"Letzte Prüfungen ({len(hist)}):" if hist else "Letzte Prüfungen: keine")
         lines.extend("  " + h for h in hist[-40:])

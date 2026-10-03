@@ -582,6 +582,10 @@ EN = {
     "Rundentimer gestoppt: {time}.": "Round timer stopped: {time}.",
     "Erkannt: {map} – gelesen „{name}“ / „{realm}“": "Detected: {map} – read “{name}” / “{realm}”",
     "Layout unsicher – falls falsch: Layout-Knopf oder {keys}.": "Layout unsure – if wrong: layout button or {keys}.",
+    "Mitten in der Runde „{name}“ / „{realm}“ gelesen (am ehesten {map}) – ignoriert: Map-Banner gibt es nur am "
+    "Rundenstart, und die Lesung war nicht eindeutig.":
+        "Read “{name}” / “{realm}” in the middle of the round (closest: {map}) – ignored: map banners only appear "
+        "at the start of a round, and the read was not clear.",
     "Banner gesehen, aber keine bekannte Map: „{text}“. Map manuell wählen oder mit „Zuordnen …“ dauerhaft "
     "zuordnen.":
         "Banner seen, but no known map: “{text}”. Choose the map by hand or assign it for good with “Assign …”.",
