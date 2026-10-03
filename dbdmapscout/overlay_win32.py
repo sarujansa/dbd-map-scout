@@ -15,6 +15,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from .capture import is_above
+from .mapimage import floor_frames
 from .overlay import BACKDROP, load_frames
 
 IS_WIN = sys.platform == "win32"
@@ -296,6 +297,7 @@ class Win32Overlay:
         self._key = None
         self._frame_i = 0
         self._anim_job = None
+        self._floor = None              # frame index of the floor on display; None = the animation runs
         self._shown = False
         self._editing = False
         self._pos = None
@@ -334,6 +336,7 @@ class Win32Overlay:
     def set_map(self, path, caption: str = "", rotation: int = 0):
         self._stop_anim()
         self._frames = load_frames(path, rotation) if path else []
+        self._floor = None
         self._caption = caption
         self._base_key = self._key = None
 
@@ -356,6 +359,26 @@ class Win32Overlay:
 
     def has_map(self) -> bool:
         return bool(self._frames)
+
+    def floors(self) -> list:
+        """Frame indices of the floors of the map (Midwich: bottom, top); [] = one floor."""
+        return floor_frames(self._frames)
+
+    def frame_index(self) -> int:
+        return self._frame_i
+
+    def set_floor(self, index):
+        """Show this frame (a floor) and stop the animation; None = let the floors change by themselves."""
+        self._floor = index if index is not None and 0 <= index < len(self._frames) else None
+        if self._waiting or len(self._prepared) < 2:
+            return                            # applied when the map is rendered
+        self._stop_anim()
+        if self._floor is not None:
+            self._frame_i = self._floor
+            if self._shown:
+                self._push()
+        else:
+            self._restart_anim()
 
     def map_size(self):
         """Size of the map picture as loaded (w, h) – to fit it without rendering it first."""
@@ -403,7 +426,8 @@ class Win32Overlay:
             self._key = key
             self._size = (self._prepared[0][1], self._prepared[0][2])
             if new_base or self._frame_i >= len(self._prepared):
-                self._frame_i = 0
+                fl = self._floor
+                self._frame_i = fl if fl is not None and fl < len(self._prepared) else 0
                 if self._shown:
                     self._push()
                 self._restart_anim()
@@ -463,8 +487,8 @@ class Win32Overlay:
     # ----------------------------------------------------------- animation
     def _restart_anim(self):
         self._stop_anim()
-        if len(self._prepared) > 1:
-            self._anim_job = self.root.after(self._prepared[0][3], self._next_frame)
+        if len(self._prepared) > 1 and self._floor is None:
+            self._anim_job = self.root.after(self._prepared[self._frame_i][3], self._next_frame)
 
     def _next_frame(self):
         if not self._prepared:

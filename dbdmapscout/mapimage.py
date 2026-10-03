@@ -164,6 +164,25 @@ def rotate_frames(frames, degrees: int):
     return [(rotate(img, degrees, split), d) for img, d in frames]
 
 
+# ------------------------------------------------------------------ floors (Midwich)
+FLOOR_MIN_MS = 1000         # a frame shown this long is a floor; the short ones in between only cross-fade
+
+
+def floor_frames(frames) -> list:
+    """Indices of the floors of an animated map: the frames that stay on screen (Midwich: 0 = bottom,
+    3 = top, the 100 ms frames between them only fade over). [] for maps with fewer than two."""
+    idx = [i for i, (_img, d) in enumerate(frames) if d >= FLOOR_MIN_MS]
+    return idx if len(idx) >= 2 else []
+
+
+def next_floor(floors, pos, visible: int) -> int:
+    """Position in ``floors`` after one press of "Etage": the next one after ``pos``; while the floors
+    still change by themselves (``pos`` None), the one after the floor on display (frame ``visible``)."""
+    if pos is None:
+        pos = max((k for k, f in enumerate(floors) if f <= visible), default=0)
+    return (pos + 1) % len(floors)
+
+
 # ------------------------------------------------------------------ map name on top
 FONT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts", "FiraSans-ExtraBold.ttf")
 # measured on the supplied pictures (1280 px high, map ~1172 px below the name): letters 67 px high,
