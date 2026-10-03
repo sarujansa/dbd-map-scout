@@ -23,7 +23,7 @@ STATS_ROLES = [("all", N_("Alle Rollen")), ("killer", N_("Killer")), ("survivor"
 STATS_WAIT_GROUPS = [("weekday", N_("nach Wochentag")), ("hour", N_("nach Uhrzeit")), ("region", N_("nach Region"))]
 WEEKDAYS = [N_("Montag"), N_("Dienstag"), N_("Mittwoch"), N_("Donnerstag"), N_("Freitag"), N_("Samstag"),
             N_("Sonntag")]
-RESULTS = {"escaped": N_("entkommen"), "dead": N_("tot"), "gone": N_("getrennt")}
+RESULTS = {"escaped": N_("entkommen"), "dead": N_("tot"), "abandoned": N_("aufgegeben"), "gone": N_("verlassen")}
 STATS_PERIODS = [("all", N_("Gesamter Zeitraum")), ("day", N_("Heute")), ("week", N_("Diese Woche")), ("month", N_("Dieser Monat")),
                  ("year", N_("Dieses Jahr"))]
 
@@ -162,8 +162,10 @@ class StatsTab:
                                                 ("kills", _("Ø Kills"), 65, "e"), ("four", _("4K"), 40, "e"),
                                                 ("s", _("Survivor"), 80, "e"), ("esc", _("Entkommen"), 95, "e")), 6)
         ttk.Label(box, text=_("Laut stats.deadbydaylight.com, nur Runden mit zugeordnetem offiziellem Match (gleiche "
-                              "Map, Start höchstens 3 min auseinander). Ø Kills = getötete oder geopferte Survivors pro "
-                              "Killer-Match, 4K = alle vier. Custom Games zählen nur unter „Custom Games“."),
+                              "Map, Start passt zum Map-Banner). Ø Kills = getötete, geopferte oder aufgegebene "
+                              "(Abandon) Survivors pro Killer-Match, 4K = alle vier; wer das Match verlassen hat, zählt "
+                              "nicht als Kill. Als Survivor ist Aufgeben nicht entkommen. Custom Games zählen nur unter "
+                              "„Custom Games“."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         self.off_open_var = tk.BooleanVar(value=self.settings.get("official_open_after_dbd", False))
         ttk.Checkbutton(box, text=_("Stats-Seite öffnen, wenn DBD beendet wird"), variable=self.off_open_var,
@@ -514,6 +516,8 @@ class StatsTab:
             if s["killer"]:
                 lines.append(_("Killer: {n} Matches, Ø {kills} Kills, {four}× 4K", n=s["killer"],
                                kills=f"{s['kills']:.2f}", four=s["four"]))
+                if s["abandons"]:
+                    lines.append(_("davon {n}× aufgegeben (Abandon, zählt als Kill)", n=s["abandons"]))
             if s["survivor"]:
                 lines.append(_("Survivor: {n} Matches, {share} entkommen", n=s["survivor"],
                                share=f"{s['escaped']:.0%}"))

@@ -84,32 +84,44 @@ def test_bundled_userscript_version():
 
 
 # ------------------------------------------------------------------ status -> result
-def test_classify():
-    assert o.classify("Escaped") == "escaped"
-    assert o.classify("Sacrificed") == o.classify("Killed") == o.classify("BledOut") == o.classify("Dead") == "dead"
-    assert o.classify("", "status_mori") == "dead"
-    assert o.classify("Disconnected") == "gone"
-    assert o.classify("Abandoned") is None and o.classify("") is None and o.classify("Killer") is None
-    assert o.classify("Escaped", "killed") is None              # contradicting: rather unknown than wrong
+def test_classify_the_statuses_seen_on_the_page():
+    # name / picture as in the user's diagnostics (Oct 2026)
+    assert o.classify("ESCAPED", "VE_Escaped") == "escaped"
+    assert o.classify("SACRIFICED", "VE_Sacrificed") == o.classify("DEAD", "VE_Killed") == "dead"
+    assert o.classify("VE_SurrenderLoss", "VE_SurrenderDraw") == "abandoned"
+    assert o.classify("ESCAPED", "VE_SurrenderDraw") == "abandoned"   # the page calls some abandons "escaped"
+    assert o.classify("VE_ManuallyLeftMatch", "VE_ManuallyLeftMatch") == "gone"
+
+
+def test_classify_other_names():
+    assert o.classify("BledOut") == o.classify("", "status_mori") == "dead"
+    assert o.classify("Abandoned") == "abandoned" and o.classify("Disconnected") == "gone"
+    assert o.classify("Escaped", "killed") == "escaped"           # the name decides, the picture only without one
+    assert o.classify("EscapedButKilled") is None                 # contradicting: rather unknown than wrong
+    assert o.classify("") is None and o.classify("Killer") is None and o.classify("VE_Unknown") is None
 
 
 def test_kills_and_escapes():
     ms, _s = o.parse(export(entry(T0, statuses=("Sacrificed", "Killed", "Escaped", "Disconnected")),
-                            entry(T0 + 1, statuses=("Sacrificed", "Abandoned", "Escaped", "Escaped")),
-                            entry(T0 + 2, role="VE_Camper", own={"name": "Escaped"}),
-                            entry(T0 + 3, role="VE_Camper", own={"name": "Sacrificed"}),
-                            entry(T0 + 4, role="VE_Camper", own=None)), now=T0)
-    assert [o.kills(m) for m in ms] == [2, None, None, None, None]
-    assert [o.escaped(m) for m in ms] == [None, None, True, False, None]
-    assert o.unknown_statuses(ms) == {"Abandoned": 1, "–": 1}
+                            entry(T0 + 1, statuses=("Sacrificed", "VE_SurrenderLoss", "VE_SurrenderLoss", "Dead")),
+                            entry(T0 + 2, statuses=("Sacrificed", "VE_Mystery", "Escaped", "Escaped")),
+                            entry(T0 + 3, role="VE_Camper", own={"name": "Escaped"}),
+                            entry(T0 + 4, role="VE_Camper", own={"name": "Sacrificed"}),
+                            entry(T0 + 5, role="VE_Camper", own={"name": "ESCAPED", "image": "x/VE_SurrenderDraw.png"}),
+                            entry(T0 + 6, role="VE_Camper", own=None)), now=T0)
+    assert [o.kills(m) for m in ms] == [2, 4, None, None, None, None, None]
+    assert [o.abandons(m) for m in ms] == [0, 2, 0, 0, 0, 0, 0]
+    assert [o.escaped(m) for m in ms] == [None, None, None, True, False, False, None]
+    assert o.unknown_statuses(ms) == {"VE_Mystery": 1, "–": 1}
     s = o.summary(ms)
-    assert (s["killer"], s["kills"], s["four"], s["survivor"], s["escaped"]) == (1, 2.0, 0, 2, 0.5)
+    assert (s["killer"], s["kills"], s["four"], s["abandons"], s["survivor"], s["escaped"]) == \
+        (2, 3.0, 1, 2, 3, 1 / 3)
 
 
 def test_per_map():
     ms, _s = o.parse(export(entry(T0), entry(T0 + 1, statuses=("Escaped",) * 4), entry(T0 + 2, map_name="Coal Tower"),
                             entry(T0 + 3, role="VE_Camper", own={"name": "Escaped"}),
-                            entry(T0 + 4, statuses=("Abandoned",) * 4, map_name="Dead Dawg Saloon")), now=T0)
+                            entry(T0 + 4, statuses=("VE_Mystery",) * 4, map_name="Dead Dawg Saloon")), now=T0)
     rows = o.per_map(ms)
     assert rows[0] == ("Mother's Dwelling", 2, 2.0, 1, 1, 1.0)
     assert rows[1] == ("Coal Tower", 1, 4.0, 1, 0, None)
@@ -193,6 +205,7 @@ def test_map_index_over_all_names_and_aliases():
 
 
 def test_link_prefers_the_same_map():
+    # banner minus start: the user's data says +31 … +51 s
     ids = {"Coal Tower": "coal", "Treatment Theater": "tt"}
     rounds = [rnd(T0 + 20, "coal"), rnd(T0 + 900, "coal"), rnd(T0 + 2000, "coal"), rnd(T0 + 4000, "tt")]
     matches = [match(T0 + 900 - 60, "Treatment Theater"),   # other map, close to round 1 …
@@ -207,16 +220,18 @@ def test_link_prefers_the_same_map():
 
 
 def test_link_other_map_only_when_close_and_unknown_maps_are_not_flagged():
-    rounds = [rnd(T0, "coal"), rnd(T0 + 5000, "coal")]
-    matches = [match(T0 + 120, "Groaning Storehouse"), match(T0 + 5100, "Brand New Map")]
-    tied, other = o.link(rounds, matches, {"Groaning Storehouse": "gs"}.get)
+    rounds = [rnd(T0, "coal"), rnd(T0 + 5000, "coal"), rnd(T0 + 9000, "coal")]
+    matches = [match(T0 - 120, "Groaning Storehouse"),        # other map 120 s before the banner: too far
+               match(T0 + 5000 - 100, "Brand New Map"),       # unknown map: counts as the same one
+               match(T0 + 9000 + 90, "Coal Tower")]           # starts 90 s after the banner: not this round
+    tied, other = o.link(rounds, matches, {"Groaning Storehouse": "gs", "Coal Tower": "coal"}.get)
     assert tied == {1: matches[1]} and other == []
     assert o.link([], matches, {}.get) == ({}, []) and o.link(rounds, [], {}.get) == ({}, [])
 
 
 def test_each_match_and_round_used_once():
     rounds = [rnd(T0, "coal"), rnd(T0 + 30, "coal")]
-    matches = [match(T0 + 10, "Coal Tower")]
+    matches = [match(T0 - 30, "Coal Tower")]                 # +30 s / +60 s: the first is closer to the usual +38
     tied, _other = o.link(rounds, matches, {"Coal Tower": "coal"}.get)
     assert tied == {0: matches[0]}
 
