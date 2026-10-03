@@ -326,6 +326,16 @@ def set_role(path: str, t: float, role: str):
     return hit
 
 
+def delete(path: str, t: float):
+    """Remove the round that started at ``t`` (e.g. a false detection). Returns the removed round or None."""
+    rounds = load(path)
+    hit = next((r for r in rounds if abs(r.t - t) < 1e-6), None)
+    if hit is None:
+        return None
+    _rewrite(path, [r for r in rounds if r is not hit], _lost_lines(path))
+    return hit
+
+
 def set_killer(path: str, t: float, killer: str):
     """Set the killer of the round that started at ``t`` (also makes it a killer round – e.g. a round
     wrongly counted as survivor has no name from the lobby). Returns the changed round or None."""

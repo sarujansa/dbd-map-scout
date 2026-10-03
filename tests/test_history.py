@@ -116,6 +116,15 @@ def test_role_can_be_corrected(tmp_path):
         h.set_role(p, 100.5, "hacker")
 
 
+
+def test_a_round_can_be_deleted(tmp_path):
+    p = str(tmp_path / h.FILE)
+    h.append(p, h.Round(t=100.5, seconds=600, map_id="a", map="A"))
+    h.append(p, h.Round(t=200.25, seconds=300, map_id="b", map="B"))
+    h.append_lost(p, 150.0, "C", "banner")
+    assert h.delete(p, 200.25).map == "B"
+    assert [r.map for r in h.load(p)] == ["A"] and len(h.load_lost(p)) == 1     # lost lines stay
+    assert h.delete(p, 999.0) is None
 def test_ping_per_round_and_region(tmp_path):
     assert h.median([30, None, 10, 20]) == 20 and h.median([10, 20]) == 15 and h.median([]) is None
     p = str(tmp_path / h.FILE)
