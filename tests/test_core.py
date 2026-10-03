@@ -183,3 +183,23 @@ def test_doubtful_read_is_marked_and_cleared_by_a_clean_frame():
     acc.reset()
     d = acc.add(clean)
     assert d is not None and not d.unsure                         # a clean banner is never doubtful
+
+
+def test_mid_match_needs_a_clean_read_over_several_frames():
+    # well into a round DBD shows no banner: neon strips or signs that look like one must not switch the map
+    meh = FrameResult(scores={("b", 1): -5.0, ("a", 1): -60.0}, best=("b", 1), name_fit=-5.0)
+    acc = Accumulator()
+    assert all(acc.add(meh, strict=True) is None for _ in range(10))   # doubtful: never, however often
+    assert acc.decided is None and acc.best()[0] == "b"
+    clean = FrameResult(scores={("b", 1): -0.5, ("a", 1): -60.0}, best=("b", 1), name_fit=-0.2)
+    acc = Accumulator()
+    assert acc.add(clean, strict=True) is None                         # no single-frame decision
+    assert acc.add(clean, strict=True) is None and acc.add(clean, strict=True) is None
+    d = acc.add(clean, strict=True)                                    # a real banner: 4 clean frames
+    assert d is not None and d.map_id == "b" and not d.unsure and d.frames == 4
+    acc = Accumulator()
+    assert acc.add(clean) is not None                                  # at the start of a round: as before
+    acc = Accumulator()
+    assert all(acc.add(clean, strict=True, hold=True) is None for _ in range(6))   # not on screen long enough yet
+    d = acc.add(clean, strict=True)
+    assert d is not None and d.map_id == "b" and d.frames == 7

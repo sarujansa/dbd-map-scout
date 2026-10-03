@@ -23,6 +23,9 @@ log = logging.getLogger("dbdmapscout")
 END_CHECK_INTERVAL = 0.5          # seconds between two looks for result screen / lobby / loading screen …
 END_IDLE_INTERVAL = 1.0           # … and while nothing points to the end yet (whole-screen grab: ~14 MB each)
 IN_MATCH_RATE = 1.0               # scans per second while a detected map is being played (banner only at the start)
+MID_MATCH_AFTER = 30.0            # s after the map appeared: a "banner" now is in the game world -> strict reading
+MID_MATCH_SPAN = 2.0              # … and it must stay on screen this long (a real banner stands still for ~5 s,
+                                  # light strips in the world move with the camera)
 LOBBY_INTERVAL = 1.0              # seconds between two looks at the lobby button (never during a match)
 LOBBY_RATE = 1.0                  # banner scans per second while the lobby button is on screen: the banner
 LOBBY_HOLD = 3.0                  # only comes after the loading screen; full rate again 3 s after the button went
@@ -63,6 +66,7 @@ class DetectionWorker(threading.Thread):
         self.end_history = collections.deque(maxlen=80)     # for the diagnosis
         self.queue = QueueTracker()                          # lobby: search / waiting time / role
         self.lobby_info = "–"                                # last look at the lobby button (diagnosis)
+        self.banner_history = collections.deque(maxlen=20)  # every banner-like sighting and its outcome (diagnosis)
         self._scanner = None
         self._reported = set()
         self._last_frame_save = 0.0
@@ -80,6 +84,19 @@ class DetectionWorker(threading.Thread):
 
     def set_catalog(self, catalog):
         self.commands.put(("catalog", catalog))
+
+    def _banner_seen(self, t, strict, frames, acc):
+        """One line per banner-like sighting for the diagnosis: what was read and what came of it."""
+        best = max(frames, key=lambda f: f[2]) if frames else ("", "", None)
+        lead = acc.best()
+        outcome = ("erkannt " + acc.decided[0] + (" (unsicher)" if acc.decided_unsure else "") if acc.decided
+                   else "ignoriert" if strict and frames else "unbekannt" if frames else "kein Text")
+        fit = "–" if best[2] is None else f"{best[2]:.1f}"
+        like = f" · am ehesten {lead[0]} p={lead[1]:.2f}" if lead else ""
+        self.banner_history.append(
+            f"{time.strftime('%H:%M:%S', time.localtime(t))} {'mitten in der Runde' if strict else 'Rundenstart'} · "
+            f"{len(frames)} Bilder, {acc.good_frames} lesbar · „{best[0]}“ / „{best[1]}“ Passung {fit}{like} "
+            f"→ {outcome}")
 
     def _report(self, key, text):
         """An unexpected error: full text to the log file, one line to the UI (once per kind)."""
@@ -117,8 +134,10 @@ class DetectionWorker(threading.Thread):
 
         window, window_checked = None, 0.0
         session, last_seen, session_frames = False, 0.0, []
+        session_strict, session_t = False, 0.0
         tracker = MatchEndTracker()
         tracker_gen = None
+        trial_since = 0.0                 # when the map on display appeared (tracker reset)
         last_end_check = 0.0
         last_hist = 0.0
         last_status = None
@@ -238,13 +257,19 @@ class DetectionWorker(threading.Thread):
                 sep, res = reader.read(img, fw, fh)
                 if sep is not None:
                     if not session:
-                        session, session_frames = True, []
+                        session, session_frames, session_t = True, [], tick
+                        # DBD shows the banner only at the start of a trial: well into a running round it is
+                        # something in the game world (neon strips, signs) – only a clean read may switch
+                        session_strict = (self.map_on_screen and tracker.in_trial
+                                          and tick - trial_since >= MID_MATCH_AFTER)
                         acc.reset()
-                        self.post("banner", t=tick)
+                        if not session_strict:
+                            self.post("banner", t=tick)
                     last_seen = tick
                     if res is not None:
                         session_frames.append((res.name_text, res.realm_text, res.name_fit))
-                        d = acc.add(res)
+                        d = acc.add(res, strict=session_strict,
+                                    hold=session_strict and tick - session_t < MID_MATCH_SPAN)
                         if d is not None:
                             self.post("detected", map_id=d.map_id, variant=d.variant, probability=d.probability,
                                       variant_probability=d.variant_probability, name_text=d.name_text,
@@ -254,9 +279,15 @@ class DetectionWorker(threading.Thread):
                             self._save_debug(img, res, sep)
                 elif session and tick - last_seen > 1.5:
                     session = False
+                    self._banner_seen(session_t, session_strict, session_frames, acc)
                     if acc.decided is None and session_frames:
                         best = max(session_frames, key=lambda f: f[2])
-                        self.post("unknown", name_text=best[0], realm_text=best[1])
+                        if session_strict:            # mid-match: only a note in the log, no "unknown map" bar
+                            lead = acc.best()
+                            self.post("ignored", name_text=best[0], realm_text=best[1],
+                                      map_id=lead[0] if lead else None, name_fit=best[2], frames=acc.good_frames)
+                        else:
+                            self.post("unknown", name_text=best[0], realm_text=best[1])
 
             # ------------------------------------- lobby: searching / found / role (never in a match)
             if (self.settings.get("auto_detect", True) and sep is None and not session
@@ -283,6 +314,7 @@ class DetectionWorker(threading.Thread):
             if gen != tracker_gen:
                 tracker.reset(gen[0] if gen else None, gen[1] if gen else None, tick)
                 tracker_gen = gen
+                trial_since = tick
             use_end = bool(self.settings.get("hide_after_match", True))
             use_menu = bool(self.settings.get("pause_in_menus", True))
             watching = (self.map_on_screen and gen is not None and (use_end or use_menu)
