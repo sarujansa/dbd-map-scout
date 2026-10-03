@@ -118,16 +118,18 @@ def test_kills_and_escapes():
         (2, 3.0, 1, 2, 3, 1 / 3)
 
 
-def test_per_map():
+def test_results_grouped_by_round():
     ms, _s = o.parse(export(entry(T0), entry(T0 + 1, statuses=("Escaped",) * 4), entry(T0 + 2, map_name="Coal Tower"),
                             entry(T0 + 3, role="VE_Camper", own={"name": "Escaped"}),
                             entry(T0 + 4, statuses=("VE_Mystery",) * 4, map_name="Dead Dawg Saloon")), now=T0)
-    rows = o.per_map(ms)
-    assert rows[0] == ("Mother's Dwelling", 2, 2.0, 1, 1, 1.0, 241377)
-    assert rows[1] == ("Coal Tower", 1, 4.0, 1, 0, None, 241377)
-    assert rows[2] == ("Dead Dawg Saloon", 0, None, 0, 0, None, 241377)    # result unknown, BP still count
-    ms[4].bp = 0
-    assert o.per_map(ms[4:]) == []                             # nothing known at all: no row
+    rounds = [rnd(m.t, "x") for m in ms]
+    for r, m in zip(rounds, ms):
+        r.map = m.map                                          # the label the program stored
+    got = o.results(list(zip(rounds, ms)), lambda r: r.map)
+    assert got["Mother's Dwelling"] == {"kills": [4, 0], "escaped": [True], "bp": [241377] * 3}
+    assert got["Coal Tower"]["kills"] == [4]
+    assert got["Dead Dawg Saloon"] == {"kills": [], "escaped": [], "bp": [241377]}   # result unknown, BP count
+    assert o.mean([1, 2, 6]) == 3 and o.mean([]) is None and o.mean(None) is None
 
 
 # ------------------------------------------------------------------ official.jsonl
@@ -202,8 +204,7 @@ def test_bloodpoints():
     ms[1].bp, ms[1].seconds = 100000, 360
     s = o.summary(ms)
     assert (s["bp"], s["bp_matches"]) == (341377, 2)
-    assert s["bp_hour"] == pytest.approx(341377 / (800 / 3600))
-    assert o.summary([])["bp_hour"] is None
+    assert (o.summary([])["bp"], o.summary([])["kills"]) == (0, None)
 
 
 def test_end_offset_and_rescued_length():
