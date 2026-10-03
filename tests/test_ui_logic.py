@@ -4,7 +4,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dbdmapscout.hotkeys import combo_from_keys, modifier_name, parse  # noqa: E402
+from dbdmapscout.hotkeys import combo_from_keys, game_only, modifier_name, parse, pretty  # noqa: E402
 from dbdmapscout.status import DOT_STYLE, user_state  # noqa: E402
 
 
@@ -60,8 +60,23 @@ def test_combo_from_keys():
 def test_keys_that_would_steal_normal_typing_are_refused():
     assert combo_from_keys(set(), "m")[0] is None                  # plain letter: gone in every program
     assert combo_from_keys({"shift"}, "M")[0] is None              # capital letters in the chat
-    assert combo_from_keys(set(), "F8")[0] is None
+    assert combo_from_keys(set(), "space")[0] is None               # DBD needs it
+    assert combo_from_keys(set(), "1")[0] is None
     assert "Strg" in combo_from_keys({"shift"}, "a")[1]
+
+
+def test_single_keys_only_while_dbd_is_in_front():
+    assert combo_from_keys(set(), "F8") == ("f8", None)
+    assert combo_from_keys(set(), "KP_1") == ("numpad1", None)
+    assert combo_from_keys(set(), "1", 0x61) == ("numpad1", None)        # Windows Tk: keysym "1", VK_NUMPAD1
+    assert combo_from_keys(set(), "1", 0x31)[0] is None                  # the normal 1 stays refused
+    assert combo_from_keys(set(), "Pause") == ("pause", None)
+    assert combo_from_keys(set(), "Prior") == ("pageup", None)
+    assert combo_from_keys({"shift"}, "KP_1")[0] is None                # Shift alone still needs Ctrl/Alt
+    assert game_only("f8") and game_only("numpad1") and game_only("pageup")
+    assert not game_only("f13")                                         # no keyboard has it: always on
+    assert not game_only("ctrl+alt+m") and not game_only("shift+f8") and not game_only("")
+    assert pretty("numpad1") == "Num 1" and pretty("pageup") == "Bild↑" and pretty("f8") == "F8"
 
 
 def test_still_holding_modifiers_and_unknown_keys():
