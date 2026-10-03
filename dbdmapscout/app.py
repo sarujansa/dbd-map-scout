@@ -469,6 +469,11 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
             ttk.Checkbutton(grid, text=label, variable=v, command=self._langs_changed).grid(
                 row=i // 5, column=i % 5, sticky="w", padx=(0, 12), pady=1)
 
+        chk = ttk.LabelFrame(f, text=_("Abgleich mit der Stats-Seite"), padding=8)
+        chk.pack(fill="x", pady=(8, 0))
+        self.off_check_var = tk.StringVar(value="")         # filled when the tab is opened (_official_check_render)
+        ttk.Label(chk, textvariable=self.off_check_var, wraplength=420, justify="left").pack(anchor="w")
+
         # technical options: folded away, only needed when something does not work
         self.adv_open = tk.BooleanVar(value=bool(self.settings.get("show_advanced", False)))
         self.adv_btn = ttk.Button(f, command=self._toggle_advanced)
@@ -1656,6 +1661,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
     def _tab_changed(self):
         if self.nb.select() == str(self.tab_stats):
             self._stats_render()
+        if self.nb.select() == str(self.tab_detect):
+            self._official_check_render()
         if self.nb.select() == str(self.tab_log):
             self.nb.tab(self.tab_log, text="Log")
         if self.nb.select() == str(self.tab_server):

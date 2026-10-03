@@ -9,6 +9,7 @@ import time
 import tkinter as tk
 import webbrowser
 from tkinter import messagebox, ttk
+from types import SimpleNamespace
 
 from . import history, official, regions
 from .i18n import N_, _
@@ -72,23 +73,25 @@ class StatsTab:
         self.stats_var = tk.StringVar(value="")
         self.stats_sum_label = ttk.Label(f, textvariable=self.stats_var, style="Big.TLabel", wraplength=540)
         self.stats_sum_label.pack(anchor="w")
+        self.stats_res_var = tk.StringVar(value="")       # kills / escapes / bloodpoints (official data)
+        self.stats_res_label = ttk.Label(f, textvariable=self.stats_res_var, wraplength=540)     # only when needed
         self.stats_lost_var = tk.StringVar(value="")
         self.stats_lost_label = ttk.Label(f, textvariable=self.stats_lost_var, wraplength=540)   # only when needed
-        ttk.Label(f, text=_("Gezählt werden Runden mit automatisch erkannter Map, vom Map-Banner bis zum erkannten "
-                            "Rundenende (mindestens 1 Minute). Gespeichert nur lokal in rounds.jsonl."),
+        ttk.Label(f, text=_("Runden vom Map-Banner bis zum Rundenende (ab 1 min), nur lokal gespeichert. Kills, Escapes "
+                            "und Bloodpoints laut stats.deadbydaylight.com, sobald eine Runde dort zugeordnet ist."),
                   style="Dim.TLabel", wraplength=540).pack(anchor="w", pady=(2, 6))
         # one table at a time: sub-tabs instead of five tables below each other
         self.stats_nb = ttk.Notebook(f)
         self.stats_nb.pack(fill="both", expand=True)
         box = self._stats_page(_("Maps"))
-        self.stats_maps = self._stats_tree(box, (("map", _("Map"), 160, "w"), ("n", _("Runden"), 75, "e"),
-                                                 ("k", _("Killer"), 60, "e"), ("s", _("Survivor"), 85, "e"),
-                                                 ("avg", _("Ø Dauer"), 85, "e"), ("max", _("Längste"), 75, "e")), 9)
-        self._tab_official()
+        self.stats_maps = self._stats_tree(box, (("map", _("Map"), 130, "w"), ("n", _("Runden"), 62, "e"),
+                                                 ("k", _("Killer"), 58, "e"), ("kills", _("Ø Kills"), 62, "e"),
+                                                 ("s", _("Survivor"), 75, "e"), ("esc", _("Entkommen"), 90, "e"),
+                                                 ("avg", _("Ø Dauer"), 70, "e"), ("bp", _("Ø BP"), 62, "e")), 9)
         box_k = self._stats_page(_("Killer"))
-        self.stats_kill = self._stats_tree(box_k, (("killer", _("Killer"), 140, "w"), ("n", _("Runden"), 65, "e"),
-                                                   ("avg", _("Ø Dauer"), 75, "e"), ("kills", _("Ø Kills"), 65, "e"),
-                                                   ("map", _("Häufigste Map"), 160, "w")),
+        self.stats_kill = self._stats_tree(box_k, (("killer", _("Killer"), 130, "w"), ("n", _("Runden"), 60, "e"),
+                                                   ("kills", _("Ø Kills"), 60, "e"), ("four", _("4K"), 40, "e"),
+                                                   ("avg", _("Ø Dauer"), 65, "e"), ("map", _("Häufigste Map"), 150, "w")),
                                            5, select=True)
         self.stats_kill.bind("<<TreeviewSelect>>", lambda e: self._stats_alias_buttons())
         ar = ttk.Frame(box_k)
@@ -102,9 +105,8 @@ class StatsTab:
         self.stats_alias_btn.pack(side="left", padx=(6, 0))
         self.stats_alias_clear = ttk.Button(ar, text=_("Zuordnungen löschen"), command=self._stats_alias_reset)
         self.stats_alias_clear.pack(side="left", padx=(6, 0))
-        ttk.Label(box_k, text=_("Name unter dem Lobby-Knopf, nur wenn du Killer spielst. Manche Skins zeigen dort ihren "
-                                "eigenen Namen – dann Zeile markieren und dem Killer zuordnen (gilt auch rückwirkend). "
-                                "Killer auswählen (oben) zeigt Maps und Dauer nur für ihn."),
+        ttk.Label(box_k, text=_("Ein Skin oder neuer Killer steht unter seinem eigenen Namen? Zeile markieren, Killer "
+                                "wählen, „Zuordnen“ – gilt auch rückwirkend."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         box_r = self._stats_page(_("Serverregionen"))
         self.stats_regs = self._stats_tree(box_r, (("reg", _("Region"), 190, "w"), ("n", _("Runden"), 65, "e"),
@@ -156,41 +158,10 @@ class StatsTab:
         self.stats_round_killer_btn.pack(side="left", padx=(6, 0))
         row = ttk.Frame(f)
         row.pack(fill="x", pady=(8, 0))
-        ttk.Button(row, text=_("Verlauf löschen"), command=self._stats_clear).pack(side="left")
+        ttk.Button(row, text=_("Stats-Seite öffnen"), command=lambda: self._official_open(False)).pack(side="left")
+        ttk.Button(row, text=_("Verlauf löschen"), command=self._stats_clear).pack(side="left", padx=(6, 0))
         self._stats_sort = ("n", True)
         return outer
-
-    def _tab_official(self):
-        """Page "Kills & Escapes": official match data (stats.deadbydaylight.com via the own userscript)."""
-        box = self._stats_page(_("Kills & Escapes"))
-        self.off_var = tk.StringVar(value="")
-        ttk.Label(box, textvariable=self.off_var, wraplength=520).pack(anchor="w")
-        self.off_warn_var = tk.StringVar(value="")
-        self.off_warn_label = ttk.Label(box, textvariable=self.off_warn_var, wraplength=520)   # only when needed
-        self.stats_off = self._stats_tree(box, (("map", _("Map"), 140, "w"), ("k", _("Killer"), 55, "e"),
-                                                ("kills", _("Ø Kills"), 65, "e"), ("four", _("4K"), 40, "e"),
-                                                ("s", _("Survivor"), 80, "e"), ("esc", _("Entkommen"), 95, "e"),
-                                                ("bp", _("Ø BP"), 70, "e")), 6)
-        ttk.Label(box, text=_("Alle Matches laut stats.deadbydaylight.com im gewählten Zeitraum – Rolle und Killer "
-                              "laut Seite, die Region nur bei Matches, die das Programm selbst erkannt hat. Ø Kills = "
-                              "getötete, geopferte oder aufgegebene (Abandon) Survivors pro Killer-Match, 4K = alle "
-                              "vier; wer das Match verlassen hat, zählt nicht als Kill. Als Survivor ist Aufgeben nicht "
-                              "entkommen. Custom Games zählen nur unter „Custom Games“."),
-                  style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
-        self.off_open_var = tk.BooleanVar(value=self.settings.get("official_open_after_dbd", False))
-        ttk.Checkbutton(box, text=_("Stats-Seite öffnen, wenn DBD beendet wird"), variable=self.off_open_var,
-                        command=self._official_setting).pack(anchor="w", pady=(6, 0))
-        row = ttk.Frame(box)
-        row.pack(fill="x", pady=(6, 0))
-        ttk.Button(row, text=_("Userscript kopieren"), command=self._official_copy_script).pack(side="left")
-        ttk.Button(row, text=_("Stats-Seite öffnen"), command=lambda: self._official_open(False)).pack(
-            side="left", padx=(6, 0))
-        ttk.Label(box, text=_("Einrichten (einmal): Tampermonkey (oder Violentmonkey) im Browser installieren, "
-                              "„Userscript kopieren“ und dort als neues Skript einfügen, auf stats.deadbydaylight.com "
-                              "anmelden. Beim Öffnen der Seite speichert das Skript die letzten 30 Matches als Datei in "
-                              "den Download-Ordner; das Programm liest sie ein und löscht sie. Das Programm selbst geht "
-                              "dafür nicht ins Internet."),
-                  style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
 
     def _stats_page(self, title):
         page = ttk.Frame(self.stats_nb, padding=6)
@@ -237,7 +208,9 @@ class StatsTab:
             parts.append(_("Ping {ms} ms", ms=f"{d['ping']:.0f}"))
         return " · ".join(parts)
 
-    def _stats_render(self):
+    def _official_join(self):
+        """The rounds (rounds.jsonl) with their official matches – the base of the statistics and the check.
+        Rounds whose end was never detected count with the page's length once a match fits them."""
         all_rounds = history.load(self._hist_path())
         lost_rounds = history.load_lost_rounds(self._hist_path())
         for r in all_rounds + lost_rounds:           # skins / new killers: the user's assignment
@@ -248,11 +221,9 @@ class StatsTab:
         candidates = all_rounds + lost_rounds
         tied, other = official.link(candidates, matches, self._official_map_id)
         off = {}                                     # id(round) -> its official match
-        round_of = {}                                # id(match) -> the round tied to it
         rescued = []                                 # end never detected: counts with the page's length
         for i, m in tied.items():
             r = candidates[i]
-            round_of[id(m)] = r
             if i >= len(all_rounds):
                 seconds = official.rescued_seconds(r, m)
                 if seconds is None:
@@ -266,7 +237,12 @@ class StatsTab:
             k = self._killer_of(m.character)
             if m.role == "killer" and r.role == "killer" and k in KILLERS:
                 r.killer = k                         # exact name instead of the lobby reading (skins!)
-        all_rounds = sorted(all_rounds + rescued, key=lambda r: r.t)
+        return SimpleNamespace(rounds=sorted(all_rounds + rescued, key=lambda r: r.t), off=off, tied=tied,
+                               other=other, rescued=rescued, matches=matches, candidates=candidates)
+
+    def _stats_render(self):
+        j = self._official_join()
+        all_rounds, off, rescued = j.rounds, j.off, j.rescued
         self._off_rescued = {repr(r.t) for r in rescued}   # rows in "Letzte Runden" not in rounds.jsonl
         # region filter: the regions that occur (kept selected even if the list changes)
         wanted = next((c for c, lbl in self._stats_regions if lbl == self.stats_region_var.get()), None)
@@ -301,11 +277,16 @@ class StatsTab:
         if n_saved:
             notes.append(_("✓ {n} × Rundenende nicht erkannt, aber mit der Dauer laut Stats-Seite gezählt.",
                            n=n_saved))
+        pairs = [(r, off[id(r)]) for r in rounds if id(r) in off and (role == "custom" or not r.custom)]
+        self.stats_res_var.set(self._results_text(official.summary([m for _r, m in pairs])))
         self.stats_lost_var.set("\n".join(notes))
-        if notes:
-            self.stats_lost_label.pack(anchor="w", after=self.stats_sum_label)
-        else:
-            self.stats_lost_label.pack_forget()
+        below = self.stats_sum_label
+        for label, var in ((self.stats_res_label, self.stats_res_var), (self.stats_lost_label, self.stats_lost_var)):
+            if var.get():
+                label.pack(anchor="w", after=below)
+                below = label
+            else:
+                label.pack_forget()
         if not all_rounds:
             self.stats_var.set(_("Noch keine Runden gespeichert."))
         elif not s["count"]:
@@ -314,30 +295,29 @@ class StatsTab:
             self.stats_var.set(_("{n} Runden · Ø {avg} · gesamt {total}", n=s["count"], avg=fmt_duration(s["avg"]),
                                  total=fmt_duration(s["total"])))
         roles = history.roles_per_map(rounds)               # rounds = killer + survivor + custom/unknown
-        rows = [(name, n, *roles.get(name, (0, 0)), avg, longest) for name, n, avg, longest in history.per_map(rounds)]
+        res = official.results(pairs, lambda r: r.map)
+        rows = []
+        for name, n, avg, _longest in history.per_map(rounds):
+            g = res.get(name, {})
+            rows.append((name, n, *roles.get(name, (0, 0)), official.mean(g.get("kills")),
+                         official.mean(g.get("escaped")), avg, official.mean(g.get("bp"))))
         col, desc = self._stats_sort
-        idx = {"map": 0, "n": 1, "k": 2, "s": 3, "avg": 4, "max": 5}[col]
-        rows.sort(key=lambda r: r[idx].lower() if idx == 0 else r[idx], reverse=desc)
+        idx = {"map": 0, "n": 1, "k": 2, "s": 3, "kills": 4, "esc": 5, "avg": 6, "bp": 7}[col]
+        rows.sort(key=lambda r: r[0].lower() if idx == 0 else (-1 if r[idx] is None else r[idx]), reverse=desc)
         t = self.stats_maps
         t.delete(*t.get_children())
-        for name, n, k, s, avg, longest in rows:
-            t.insert("", "end", values=(name, n, k, s, fmt_duration(avg), fmt_duration(longest)))
-        ends = [official.end_offset(r, off[id(r)]) for r in rounds if id(r) in off and r.t not in saved]
-        self._official_render(self._official_select(matches, round_of, since, wanted, role, killer), matches,
-                              {id(m) for m in tied.values()}, min((r.t for r in candidates), default=None),
-                              [(r, m) for r, m in other if id(r) in ids], ends, since)
-        kills_of = {}
-        for r in rounds:
-            k = official.kills(off[id(r)]) if id(r) in off and r.role == "killer" else None
-            if k is not None and not r.custom:
-                kills_of.setdefault(r.killer, []).append(k)
+        for name, n, k, s_, kills, esc, avg, bp in rows:
+            t.insert("", "end", values=(name, n, k, f"{kills:.2f}" if kills is not None else "–", s_,
+                                        f"{esc:.0%}" if esc is not None else "–", fmt_duration(avg),
+                                        _bp(bp) if bp is not None else "–"))
+        res = official.results([(r, m) for r, m in pairs if r.role == "killer"], lambda r: r.killer)
         t = self.stats_kill
         t.delete(*t.get_children())
         keep = t.selection()
         for name, n, avg, top in history.per_killer(rounds):
-            ks = kills_of.get(name)
-            t.insert("", "end", iid=name, values=(killer_label(name), n, fmt_duration(avg),
-                                                  f"{sum(ks) / len(ks):.1f}" if ks else "–", top))
+            ks = res.get(name, {}).get("kills") or []
+            t.insert("", "end", iid=name, values=(killer_label(name), n, f"{sum(ks) / len(ks):.2f}" if ks else "–",
+                                                  ks.count(4) if ks else "–", fmt_duration(avg), top))
         if keep and t.exists(keep[0]):
             t.selection_set(keep[0])
         self._stats_alias_buttons()
@@ -511,7 +491,7 @@ class StatsTab:
     def _hist_path(self):
         return os.path.join(self.root_dir, history.FILE)
 
-    # ---------------------------------------------------------- official match data (page "Kills & Escapes")
+    # ---------------------------------------------------------- official match data (stats.deadbydaylight.com)
     def _official_path(self):
         return os.path.join(self.root_dir, official.FILE)
 
@@ -538,94 +518,67 @@ class StatsTab:
             return _(RESULTS[kind]) if kind else "?"
         return "–"
 
-    def _official_select(self, matches, round_of, since, region, role, killer):
-        """The official matches the filters above pick: role, custom game and killer as the page says,
-        the region only for matches tied to a round of the program."""
-        out = []
-        for m in matches:
-            if since is not None and m.t < since:
-                continue
-            if (role == "custom") != m.custom or (role in history.ROLES and m.role != role):
-                continue
-            r = round_of.get(id(m))
-            if region == history.NO_REGION and r is not None and r.region:
-                continue
-            if region not in (None, history.NO_REGION) and (r is None or r.region != region):
-                continue
-            if killer:
-                k = self._killer_of(m.character)
-                if k not in KILLERS:
-                    k = r.killer if r is not None else ""
-                if m.role != "killer" or k != killer:
-                    continue
-            out.append(m)
-        return out
+    def _results_text(self, s):
+        """Line below the number of rounds: kills, escapes, bloodpoints of the rounds with official data."""
+        parts = []
+        if s["killer"]:
+            text = _("Killer: Ø {kills} Kills, {four}× 4K ({n} Runden)", kills=f"{s['kills']:.2f}", four=s["four"],
+                     n=s["killer"])
+            if s["abandons"]:
+                text += " · " + _("{n}× Abandon", n=s["abandons"])
+            parts.append(text)
+        if s["survivor"]:
+            parts.append(_("Survivor: {share} entkommen ({n} Runden)", share=f"{s['escaped']:.0%}", n=s["survivor"]))
+        if s["bp_matches"]:
+            parts.append(_("Bloodpoints: {total} (Ø {avg})", total=_bp(s["bp"]), avg=_bp(s["bp"] / s["bp_matches"])))
+        return "\n".join(parts)
 
-    def _official_render(self, sel, matches, linked, first_t, other, ends, since):
+    def _official_check_render(self):
+        """Tab Erkennung, "Abgleich mit der Stats-Seite": how well the program's rounds fit the page (all data)."""
+        j = self._official_join()
+        if not j.matches:
+            self.off_check_var.set(_("Noch keine offiziellen Daten. Einrichten: Einstellungen → Mehr → Offizielle "
+                                     "Match-Daten."))
+            return
         lines = []
-        if not matches:
-            lines.append(_("Noch keine offiziellen Daten. Erwartet {file} in {folder}.",
-                           file=official.PREFIX + ".json", folder=self._official_folder()))
-        else:
-            lines.append(_("{n} offizielle Matches in dieser Auswahl · gespeichert {total}, neuestes {when}",
-                           n=len(sel), total=len(matches),
-                           when=time.strftime("%d.%m.%y %H:%M", time.localtime(matches[-1].t))))
-            seen, missed = official.detection(sel, linked, None if first_t is None else first_t - official.LINK_AFTER)
-            if seen or missed:
-                lines.append(_("Vom Programm erkannt: {seen} von {n} ({share})", seen=len(seen),
-                               n=len(seen) + len(missed), share=f"{len(seen) / (len(seen) + len(missed)):.0%}"))
-            if missed:
-                lines.append(_("Nicht erkannt (oder das Programm lief nicht): {list}", list=", ".join(
-                    f"{m.map} {time.strftime('%d.%m. %H:%M', time.localtime(m.t))}" for m in missed[::-1][:5])
-                    + (" …" if len(missed) > 5 else "")))
-            s = official.summary(sel)
-            if s["killer"]:
-                lines.append(_("Killer: {n} Matches, Ø {kills} Kills, {four}× 4K", n=s["killer"],
-                               kills=f"{s['kills']:.2f}", four=s["four"]))
-                if s["abandons"]:
-                    lines.append(_("davon {n}× aufgegeben (Abandon, zählt als Kill)", n=s["abandons"]))
-            if s["survivor"]:
-                lines.append(_("Survivor: {n} Matches, {share} entkommen", n=s["survivor"],
-                               share=f"{s['escaped']:.0%}"))
-            if s["bp_matches"]:
-                lines.append(_("Bloodpoints: {total} in {n} Matches · Ø {avg} pro Match · {hour} pro Stunde im Match",
-                               total=_bp(s["bp"]), n=s["bp_matches"], avg=_bp(s["bp"] / s["bp_matches"]),
-                               hour=_bp(s["bp_hour"]) if s["bp_hour"] else "–"))
-            if ends:
-                lines.append(_("Rundenende erkannt: Median {off} gegenüber dem Ende laut Seite ({n} Runden; + = "
-                               "später)", off=f"{history.median(ends):+.0f} s", n=len(ends)))
-        self.off_var.set("\n".join(lines))
-        warn = []
-        unknown = official.unknown_statuses(matches)
+        first = min((r.t for r in j.candidates), default=None)
+        seen, missed = official.detection(j.matches, {id(m) for m in j.tied.values()},
+                                          None if first is None else first - official.LINK_AFTER)
+        if seen or missed:
+            lines.append(_("Vom Programm erkannt: {seen} von {n} ({share})", seen=len(seen),
+                           n=len(seen) + len(missed), share=f"{len(seen) / (len(seen) + len(missed)):.0%}"))
+        if missed:
+            lines.append(_("Nicht erkannt (oder das Programm lief nicht): {list}", list=", ".join(
+                f"{m.map} {time.strftime('%d.%m. %H:%M', time.localtime(m.t))}" for m in missed[::-1][:5])
+                + (" …" if len(missed) > 5 else "")))
+        saved = {id(r) for r in j.rescued}
+        ends = [official.end_offset(r, j.off[id(r)]) for r in j.rounds if id(r) in j.off and id(r) not in saved]
+        if ends:
+            lines.append(_("Rundenende erkannt: Median {off} gegenüber dem Ende laut Seite ({n} Runden; + = "
+                           "später)", off=f"{history.median(ends):+.0f} s", n=len(ends)))
+        if j.rescued:
+            lines.append(_("✓ {n} × Rundenende nicht erkannt, aber mit der Dauer laut Stats-Seite gezählt.",
+                           n=len(j.rescued)))
+        unknown = official.unknown_statuses(j.matches)
         if unknown:
-            warn.append(_("⚠ Unbekannter Status auf der Stats-Seite: {list} – zählt nicht. Bitte melden "
-                          "(„Diagnose kopieren“).", list=", ".join(f"„{k}“ ({n}×)" for k, n in unknown.items())))
-        gaps = [g for g in official.load_gaps(self._official_path()) if since is None or g[1] >= since]
+            lines.append(_("⚠ Unbekannter Status auf der Stats-Seite: {list} – zählt nicht. Bitte melden "
+                           "(„Diagnose kopieren“).", list=", ".join(f"„{k}“ ({n}×)" for k, n in unknown.items())))
+        gaps = official.load_gaps(self._official_path())
         if gaps:
             a, b = gaps[-1]
-            warn.append(_("⚠ Lücke: zwischen {start} und {end} fehlen vielleicht Matches – die Seite zeigt nur die "
-                          "letzten 30. Seite öfter öffnen.", start=time.strftime("%d.%m. %H:%M", time.localtime(a)),
-                          end=time.strftime("%d.%m. %H:%M", time.localtime(b))))
-        if other:
-            r, m = other[-1]
-            warn.append(_("⚠ {n}× andere Map als erkannt, zuletzt {when}: erkannt {ours}, laut Seite {theirs}.",
-                          n=len(other), when=time.strftime("%d.%m. %H:%M", time.localtime(r.t)), ours=r.map,
-                          theirs=m.map))
+            lines.append(_("⚠ Lücke: zwischen {start} und {end} fehlen vielleicht Matches – die Seite zeigt nur die "
+                           "letzten 30. Seite öfter öffnen.", start=time.strftime("%d.%m. %H:%M", time.localtime(a)),
+                           end=time.strftime("%d.%m. %H:%M", time.localtime(b))))
+        if j.other:
+            r, m = j.other[-1]
+            lines.append(_("⚠ {n}× andere Map als erkannt, zuletzt {when}: erkannt {ours}, laut Seite {theirs}.",
+                           n=len(j.other), when=time.strftime("%d.%m. %H:%M", time.localtime(r.t)), ours=r.map,
+                           theirs=m.map))
         bundled = official.script_version(os.path.join(os.path.dirname(official.__file__), official.SCRIPT))
         if 0 < getattr(self, "_off_script", 0) < bundled:
-            warn.append(_("⚠ Das Userscript ist veraltet (Version {old}, aktuell {new}) – „Userscript kopieren“ und "
-                          "in Tampermonkey ersetzen.", old=self._off_script, new=bundled))
-        self.off_warn_var.set("\n".join(warn))
-        if warn:
-            self.off_warn_label.pack(anchor="w", pady=(4, 0), before=self.stats_off.master)
-        else:
-            self.off_warn_label.pack_forget()
-        t = self.stats_off
-        t.delete(*t.get_children())
-        for name, kn, avg, four, sn, esc, bp in official.per_map(sel):
-            t.insert("", "end", values=(name, kn or "–", f"{avg:.2f}" if avg is not None else "–", four if kn else "–",
-                                        sn or "–", f"{esc:.0%}" if esc is not None else "–",
-                                        _bp(bp) if bp is not None else "–"))
+            lines.append(_("⚠ Das Userscript ist veraltet (Version {old}, aktuell {new}) – „Userscript kopieren“ und "
+                           "in Tampermonkey ersetzen.", old=self._off_script, new=bundled))
+        self.off_check_var.set("\n".join(lines))
 
     def _official_setting(self):
         self.settings.set("official_open_after_dbd", bool(self.off_open_var.get()))
@@ -698,6 +651,8 @@ class StatsTab:
                                 "Bitte melden.", status=key), "System")
             if self.nb.select() == str(self.tab_stats):
                 self._stats_render()
+            if self.nb.select() == str(self.tab_detect):
+                self._official_check_render()
 
     def _official_diag(self):
         """Lines for "Diagnose kopieren" (not translated): how well rounds and official matches fit."""
