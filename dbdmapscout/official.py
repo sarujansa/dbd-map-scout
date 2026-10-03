@@ -35,14 +35,23 @@ MAX_MATCHES = 500                       # per file
 KEEP = 5000                             # newest matches kept in official.jsonl
 PAGE_LIMIT = 30                         # the page gives the newest 30 matches only
 EARLIEST = 1598918400.0                 # 2020-09-01: the page's stats begin here
-LINK_WINDOW = 180.0                     # same map: banner (rounds.jsonl) at most this far from the start
-OTHER_MAP_WINDOW = 90.0                 # other map (detection wrong?): only this close
+# banner (rounds.jsonl) minus the page's start: measured +31 … +51 s, median +38 (user's data, Oct 2026)
+LINK_TYPICAL = 38.0
+LINK_BEFORE = 60.0                      # same map: banner at most this long before the start (clocks) …
+LINK_AFTER = 180.0                      # … and this long after it
+OTHER_MAP = (0.0, 90.0)                 # other map (detection wrong?): only this close
 ROLES = {"VE_Slasher": "killer", "VE_Camper": "survivor"}
 
-# status words of the page (lower case, substrings); a status matching none or two kinds is "unknown"
-STATUS_WORDS = (("escaped", ("escap",)),
-                ("dead", ("sacrific", "killed", "dead", "died", "death", "bled", "mori")),
-                ("gone", ("disconnect", "quit")))
+# Status of a survivor as the page names it / its picture (seen Oct 2026): ESCAPED / VE_Escaped,
+# SACRIFICED / VE_Sacrificed, DEAD / VE_Killed, VE_SurrenderLoss / VE_SurrenderDraw (abandoned),
+# ESCAPED / VE_SurrenderDraw (also abandoned: the page calls some abandons "escaped", a known bug of the
+# page – the picture is right), VE_ManuallyLeftMatch (left the match). Lower case substrings; abandoning
+# and leaving win when found in the name or the picture, otherwise the name decides (the picture only
+# without a name); a name matching two kinds is unknown.
+STATUS_KINDS = (("abandoned", ("surrender", "abandon")),
+                ("gone", ("leftmatch", "disconnect", "quit")),
+                ("escaped", ("escap",)),
+                ("dead", ("sacrific", "killed", "dead", "died", "death", "bled", "mori")))
 
 
 @dataclass
@@ -294,11 +303,18 @@ def take_downloads(folder: str, store: str, now=None) -> Taken:
 
 
 # ------------------------------------------------------------------ evaluation
-def classify(*texts) -> str | None:
-    """"escaped" | "dead" | "gone" (disconnected) | None (unknown) for a status name / picture name."""
-    t = " ".join(x.lower() for x in texts if x)
-    kinds = {kind for kind, words in STATUS_WORDS if any(w in t for w in words)}
-    return kinds.pop() if len(kinds) == 1 else None
+def classify(status: str, img: str = "") -> str | None:
+    """"escaped" | "dead" | "abandoned" | "gone" (left the match) | None (unknown) for a status
+    name and the name of its picture."""
+    texts = [t.lower() for t in (status, img) if t]
+    for kind, words in STATUS_KINDS[:2]:
+        if any(w in t for t in texts for w in words):
+            return kind
+    for t in texts:
+        kinds = {kind for kind, words in STATUS_KINDS[2:] if any(w in t for w in words)}
+        if kinds:
+            return kinds.pop() if len(kinds) == 1 else None
+    return None
 
 
 def survivors(m: Match) -> list:
@@ -306,15 +322,21 @@ def survivors(m: Match) -> list:
 
 
 def kills(m: Match):
-    """Survivors that died in a killer match; None: no killer match or a status is unknown."""
+    """Survivors that died or abandoned in a killer match (an abandon counts as a kill, like the killer's
+    result in the game); None: no killer match or a status is unknown."""
     if m.role != "killer" or not survivors(m):
         return None
     kinds = [classify(p.status, p.img) for p in survivors(m)]
-    return None if None in kinds else kinds.count("dead")
+    return None if None in kinds else kinds.count("dead") + kinds.count("abandoned")
+
+
+def abandons(m: Match) -> int:
+    """Survivors that abandoned in a killer match."""
+    return sum(1 for p in survivors(m) if classify(p.status, p.img) == "abandoned") if m.role == "killer" else 0
 
 
 def escaped(m: Match):
-    """Survivor match: True = escaped, False = died / disconnected, None = no survivor match or unknown."""
+    """Survivor match: True = escaped, False = died / abandoned / left, None = no survivor match or unknown."""
     if m.role != "survivor":
         return None
     kind = classify(m.status, m.img)
@@ -345,7 +367,8 @@ def map_index(maps) -> dict:
 
 
 def link(rounds, matches, map_id_of) -> tuple:
-    """Tie rounds (rounds.jsonl) to official matches by start time; same map first.
+    """Tie rounds (rounds.jsonl) to official matches by start time; same map first, then the offset
+    closest to the usual one.
 
     -> ({index in rounds: Match}, [(round, Match)] tied although the maps differ). A match is used
     once; an official map the catalog does not know never counts as "different"."""
@@ -354,14 +377,14 @@ def link(rounds, matches, map_id_of) -> tuple:
     mids = {}
     pairs = []
     for ri, r in enumerate(rounds):
-        for mi in order[bisect.bisect_left(times, r.t - LINK_WINDOW):bisect.bisect_right(times, r.t + LINK_WINDOW)]:
+        for mi in order[bisect.bisect_left(times, r.t - LINK_AFTER):bisect.bisect_right(times, r.t + LINK_BEFORE)]:
             m = matches[mi]
-            dt = abs(r.t - m.t)
+            off = r.t - m.t                          # banner minus start
             if m.map not in mids:
                 mids[m.map] = map_id_of(m.map)
             same = mids[m.map] is None or mids[m.map] == r.map_id
-            if same or dt <= OTHER_MAP_WINDOW:
-                pairs.append((not same, dt, ri, mi))
+            if same or OTHER_MAP[0] <= off <= OTHER_MAP[1]:
+                pairs.append((not same, abs(off - LINK_TYPICAL), ri, mi))
     tied, used, other = {}, set(), []
     for differs, _dt, ri, mi in sorted(pairs):
         if ri in tied or mi in used:
@@ -399,6 +422,7 @@ def summary(matches) -> dict:
     ks = [k for k in (kills(m) for m in matches) if k is not None]
     es = [e for e in (escaped(m) for m in matches) if e is not None]
     return {"killer": len(ks), "kills": sum(ks) / len(ks) if ks else None, "four": ks.count(4),
+            "abandons": sum(abandons(m) for m in matches if kills(m) is not None),
             "survivor": len(es), "escaped": sum(es) / len(es) if es else None}
 
 
