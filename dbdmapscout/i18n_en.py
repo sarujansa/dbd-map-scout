@@ -895,4 +895,23 @@ EN = {
         "in on stats.deadbydaylight.com. When the page opens, the script saves the last 30 matches into the download "
         "folder; the program reads the file and deletes it. It does not go online for this itself.",
     "Mehr (Map-Zuordnungen, Match-Daten, Sicherung, Ordner)": "More (map assignments, match data, backup, folders)",
+    # statistics: trend page, today line (1.37)
+    "Verlauf": "Trend",
+    "Nur Runden, die einem Match auf der Stats-Seite zugeordnet sind. Die Maus über einer Säule zeigt Wert und Anzahl "
+    "der Runden.":
+        "Only rounds tied to a match on the stats page. Hover over a column for its value and number of rounds.",
+    "Killer – Ø Kills {per}": "Killer – avg. kills {per}",
+    "Survivor – entkommen {per}": "Survivor – escaped {per}",
+    "pro Stunde": "per hour",
+    "pro Tag": "per day",
+    "pro Woche": "per week",
+    "KW {n}": "W{n}",
+    "{when}: Ø {kills} Kills · {n} Runden": "{when}: avg. {kills} kills · {n} rounds",
+    "{when}: {share} entkommen · {n} Runden": "{when}: {share} escaped · {n} rounds",
+    "Keine Killer-Runden mit offiziellen Daten in dieser Auswahl.": "No killer rounds with official data in this selection.",
+    "Keine Survivor-Runden mit offiziellen Daten in dieser Auswahl.":
+        "No survivor rounds with official data in this selection.",
+    "Ø {kills} Kills": "avg. {kills} kills",
+    "{share} entkommen": "{share} escaped",
+    "{bp} BP": "{bp} BP",
 }

@@ -358,3 +358,54 @@ def test_userscript_saves_a_file_the_program_reads(tmp_path):
     ms, script = o.parse(json.loads(saved["xhr"][0]), now=T0)
     assert script == o.script_version(SCRIPT)
     assert len(ms) == 1 and o.kills(ms[0]) == 4 and ms[0].opp[0].img == "sacrificed"
+
+
+# ------------------------------------------------------------------ map correction, trend
+def test_correct_maps_takes_the_page_map_as_layout_one():
+    ids = {"Coal Tower": "coal", "Groaning Storehouse": "gs"}.get
+    a, b, c = rnd(T0, "coal"), rnd(T0 + 600, "coal"), rnd(T0 + 1200, "")
+    a.map, b.map, c.map = "Coal Tower II", "Coal Tower II", "Old Label"
+    fixed = o.correct_maps([(a, match(T0, "Coal Tower")), (b, match(T0 + 600, "Groaning Storehouse")),
+                            (c, match(T0 + 1200, "Brand New Map"))], ids,
+                           lambda mid: {"gs": "Groaning Storehouse I"}.get(mid))
+    assert (a.map_id, a.map) == ("coal", "Coal Tower II")          # same map: layout stays as detected
+    assert (b.map_id, b.map) == ("gs", "Groaning Storehouse I")     # other map: the page wins
+    assert (c.map_id, c.map) == ("", "Old Label")                   # unknown map on the page: left alone
+    assert fixed == {id(b): "Coal Tower II"}
+
+
+def test_bucket_start_hour_day_week():
+    import time as _time
+    t = T0                                                         # Saturday
+    for unit, fmt in (("hour", "%a %H:%M"), ("day", "%a %H:%M"), ("week", "%a %H:%M")):
+        b = o.bucket_start(t, unit)
+        assert b <= t and o.bucket_start(b, unit) == b
+        nxt = o._next_bucket(b, unit)
+        assert nxt > t and o.bucket_start(nxt, unit) == nxt
+    assert _time.localtime(o.bucket_start(t, "week")).tm_wday == 0  # weeks start on Monday
+    assert _time.localtime(o.bucket_start(t, "day")).tm_hour == 0
+
+
+def test_trend_keeps_empty_buckets_and_the_newest_30(monkeypatch):
+    week = 7 * 86400
+    ms, _s = o.parse(export(entry(T0), entry(T0 + 60, statuses=("Escaped",) * 4),
+                            entry(T0 + 2 * week, role="VE_Camper", own={"name": "Escaped"}),
+                            entry(T0 + 3 * week, statuses=("VE_Mystery",) * 4)), now=T0 + 4 * week)
+    pairs = [(rnd(m.t, "x"), m) for m in ms]
+    got = o.trend(pairs, "week")
+    assert [(len(k), len(e)) for _b, k, e in got] == [(2, 0), (0, 0), (0, 1)]   # unknown result: no bucket
+    assert got[0][1] == [4, 0] and got[2][2] == [True]
+    assert [b for b, _k, _e in got] == sorted(b for b, _k, _e in got)
+    assert o.trend([], "day") == []
+    monkeypatch.setattr(o, "MAX_BUCKETS", 2)
+    assert len(o.trend(pairs, "week")) == 2
+
+
+def test_chart_columns_stay_thin():
+    trendchart = pytest.importorskip("dbdmapscout.trendchart")
+    cols = trendchart.columns(3, 600)
+    assert len(cols) == 3 and all(x1 - x0 <= trendchart.BAR_MAX + 1e-9 for x0, x1 in cols)
+    assert all(a[1] < b[0] for a, b in zip(cols, cols[1:]))     # air between columns
+    many = trendchart.columns(30, 400)
+    assert all(x1 > x0 for x0, x1 in many) and many[-1][1] <= 400 - trendchart.RIGHT
+    assert trendchart.columns(0, 600) == []
