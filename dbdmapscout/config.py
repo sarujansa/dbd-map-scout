@@ -35,6 +35,7 @@ DEFAULTS = {
         "keep_in_bar": True,            # ultrawide: shrink/move the map so it stays inside the black bar
         "map_heights": {},              # map id -> own size (hotkeys / mouse wheel with that map on display)
         "map_rotations": {},            # map id -> map turned clockwise by 90/180/270° (button / hotkey)
+        "floor_auto": True,             # maps with floors (Midwich): they alternate until "Etage" is pressed
         "show_map": True,               # off: overlay shows only timer, server and ping
     },
     "hotkeys": {
@@ -47,6 +48,7 @@ DEFAULTS = {
         "smaller": "ctrl+alt+down",
         "edit_position": "ctrl+alt+p",
         "rotate_map": "ctrl+alt+r",
+        "next_floor": "ctrl+alt+f",     # not E: Ctrl+Alt+E is AltGr+E = € on German keyboards
         "reject_map": "ctrl+alt+x",
     },
     "ui_language": "auto",            # auto (Windows language) | de | en

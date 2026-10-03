@@ -89,6 +89,8 @@ How well the program itself works is shown in the **Detection** tab → **Check 
 
 **Rotate the map:** the **Rotate ↻** button in the main window or `Ctrl+Alt+R` turns the map on display by 90° clockwise, so it lies the way you picture the map. The rotation is remembered per map (Overlay tab: "Reset for this map"). The map name above the map stays upright; numbers and labels inside the map turn with it because they are part of the picture. All supplied maps carry their name on top in the same style; only on Midwich (animated GIF with its own background) does the name turn with the map. A map that turns with the camera by itself is not possible: only the game knows the camera angle, and its memory is never read.
 
+**Change floor (Midwich):** Midwich has two floors; the map switches between bottom and top every 7 s. The **Floor ▸** button in the main window (only shown for maps with floors) or `Ctrl+Alt+F` shows the other floor and holds it – from then on the map only changes when you press it, until the next map. The button shows what is on display ("Floor 2 of 2" or "Floors alternating"). If Midwich should not alternate at all, switch off "Alternate the floors (Midwich) until I press “Floor”" in the Overlay tab – the map then starts at the bottom. The program does not know which floor you are on (that would need the game's memory).
+
 **Keep in the black bar** (Overlay tab, on by default): on ultrawide the map stays inside the bar it is in, whatever the position – "top/bottom left" in the left bar, "top/bottom right" in the right one, a custom position in the bar where it starts. If it is too wide, it is made smaller instead of reaching into the game picture. A map placed over the middle of the game on purpose stays as it is. Switch it off if the map may be bigger than the bar.
 
 The overlay is a native Windows window of its own: always on top, click-through, and it never takes the focus away from the game.
@@ -104,6 +106,7 @@ The overlay is a native Windows window of its own: always on top, click-through,
 | `Ctrl+Alt+↑` / `↓` | overlay bigger / smaller – applies to the map on display and is remembered per map (Overlay tab: "Reset for this map"; the "Size" slider is the default size for all others) |
 | `Ctrl+Alt+P` | change position (drag the overlay with the mouse, mouse wheel = size, press again = done) |
 | `Ctrl+Alt+R` | turn the map on display by 90° (remembered per map) |
+| `Ctrl+Alt+F` | change floor (Midwich: bottom ↔ top; holds the floor) |
 | `Ctrl+Alt+X` | **Wrong map:** hide the detected map, reset the timer, do not count the round |
 
 **Backing up settings:** Settings → Backup → "Export settings …" saves everything (hotkeys, size and rotation per map, own map assignments, overlay, regions) to a file, "Import settings …" loads it again and restarts the program. The statistics are not part of it.

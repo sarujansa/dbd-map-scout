@@ -182,3 +182,26 @@ def test_oversized_pictures_shrink_on_load():
     assert len(frames) > 1 and all(img.height == overlay.MAX_LOAD_H for img, _d in frames)
     small = overlay.load_frames(os.path.join(ROOT, "maps", "McMillan", "Coal Tower.webp"))
     assert small[0][0].height == 1280                       # normal pictures stay as they are
+
+
+def test_midwich_has_two_floors_between_the_fades():
+    from dbdmapscout import overlay
+    frames = overlay.load_frames(os.path.join(ROOT, "maps", "Other", "Midwich.gif"))
+    assert mi.floor_frames(frames) == [0, 3]                 # bottom, top – the 100 ms frames only fade over
+    assert mi.floor_frames(mi.rotate_frames(frames, 90)) == [0, 3]
+    still = overlay.load_frames(os.path.join(ROOT, "maps", "McMillan", "Coal Tower.webp"))
+    assert mi.floor_frames(still) == []
+    img = Image.new("RGBA", (4, 4))
+    assert mi.floor_frames([(img, 100)] * 5) == []           # a plain animation is no map with floors
+    assert mi.floor_frames([(img, 7000), (img, 100)]) == []
+
+
+def test_next_floor_follows_the_floor_on_display():
+    floors = [0, 3]
+    assert mi.next_floor(floors, 0, 0) == 1 and mi.next_floor(floors, 1, 3) == 0
+    # still alternating: the press goes to the other floor than the one on display
+    assert mi.next_floor(floors, None, 0) == 1
+    assert mi.next_floor(floors, None, 2) == 1                # fading towards the top: still counts as bottom
+    assert mi.next_floor(floors, None, 3) == 0
+    assert mi.next_floor(floors, None, 5) == 0
+    assert mi.next_floor([0, 2, 4], 2, 4) == 0
