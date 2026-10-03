@@ -83,6 +83,10 @@ class StatsTab:
         ttk.Label(f, text=_("Runden vom Map-Banner bis zum Rundenende (ab 1 min), nur lokal gespeichert. Kills, Escapes "
                             "und Bloodpoints laut stats.deadbydaylight.com, sobald eine Runde dort zugeordnet ist."),
                   style="Dim.TLabel", wraplength=540).pack(anchor="w", pady=(2, 6))
+        row = ttk.Frame(f)                              # above the tables: they fill the rest of the tab
+        row.pack(fill="x", pady=(0, 6))
+        ttk.Button(row, text=_("Stats-Seite öffnen"), command=lambda: self._official_open(False)).pack(side="left")
+        ttk.Button(row, text=_("Verlauf löschen"), command=self._stats_clear).pack(side="left", padx=(6, 0))
         # one table at a time: sub-tabs instead of five tables below each other
         self.stats_nb = ttk.Notebook(f)
         self.stats_nb.pack(fill="both", expand=True)
@@ -165,10 +169,6 @@ class StatsTab:
         self.stats_round_killer_btn = ttk.Button(kr, text=_("Killer setzen"), command=self._stats_set_killer,
                                                  state="disabled")
         self.stats_round_killer_btn.pack(side="left", padx=(6, 0))
-        row = ttk.Frame(f)
-        row.pack(fill="x", pady=(8, 0))
-        ttk.Button(row, text=_("Stats-Seite öffnen"), command=lambda: self._official_open(False)).pack(side="left")
-        ttk.Button(row, text=_("Verlauf löschen"), command=self._stats_clear).pack(side="left", padx=(6, 0))
         self._stats_sort = ("n", True)
         return outer
 
