@@ -7,9 +7,10 @@ import logging
 import os
 import time
 import tkinter as tk
+import webbrowser
 from tkinter import messagebox, ttk
 
-from . import history, regions
+from . import history, official, regions
 from .i18n import N_, _
 from .lobby import KILLERS, killer_label
 from .textnorm import fold
@@ -22,6 +23,7 @@ STATS_ROLES = [("all", N_("Alle Rollen")), ("killer", N_("Killer")), ("survivor"
 STATS_WAIT_GROUPS = [("weekday", N_("nach Wochentag")), ("hour", N_("nach Uhrzeit")), ("region", N_("nach Region"))]
 WEEKDAYS = [N_("Montag"), N_("Dienstag"), N_("Mittwoch"), N_("Donnerstag"), N_("Freitag"), N_("Samstag"),
             N_("Sonntag")]
+RESULTS = {"escaped": N_("entkommen"), "dead": N_("tot"), "gone": N_("getrennt")}
 STATS_PERIODS = [("all", N_("Gesamter Zeitraum")), ("day", N_("Heute")), ("week", N_("Diese Woche")), ("month", N_("Dieser Monat")),
                  ("year", N_("Dieses Jahr"))]
 
@@ -73,9 +75,11 @@ class StatsTab:
         self.stats_maps = self._stats_tree(box, (("map", _("Map"), 160, "w"), ("n", _("Runden"), 75, "e"),
                                                  ("k", _("Killer"), 60, "e"), ("s", _("Survivor"), 85, "e"),
                                                  ("avg", _("Ø Dauer"), 85, "e"), ("max", _("Längste"), 75, "e")), 9)
+        self._tab_official()
         box_k = self._stats_page(_("Killer"))
-        self.stats_kill = self._stats_tree(box_k, (("killer", _("Killer"), 150, "w"), ("n", _("Runden"), 70, "e"),
-                                                   ("avg", _("Ø Dauer"), 80, "e"), ("map", _("Häufigste Map"), 160, "w")),
+        self.stats_kill = self._stats_tree(box_k, (("killer", _("Killer"), 140, "w"), ("n", _("Runden"), 65, "e"),
+                                                   ("avg", _("Ø Dauer"), 75, "e"), ("kills", _("Ø Kills"), 65, "e"),
+                                                   ("map", _("Häufigste Map"), 160, "w")),
                                            5, select=True)
         self.stats_kill.bind("<<TreeviewSelect>>", lambda e: self._stats_alias_buttons())
         ar = ttk.Frame(box_k)
@@ -117,9 +121,10 @@ class StatsTab:
                                 "die Suche gesehen hat. Custom Games haben keine Wartezeit."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         box2 = self._stats_page(_("Letzte Runden"))
-        self.stats_last = self._stats_tree(box2, (("when", _("Wann"), 120, "w"), ("map", _("Map"), 140, "w"),
+        self.stats_last = self._stats_tree(box2, (("when", _("Wann"), 120, "w"), ("map", _("Map"), 130, "w"),
                                                   ("dur", _("Dauer"), 60, "e"), ("wait", _("Warten"), 65, "e"),
-                                                  ("role", _("Rolle"), 115, "w"), ("srv", _("Server"), 115, "w")), 7,
+                                                  ("role", _("Rolle"), 115, "w"), ("res", _("Ergebnis"), 75, "w"),
+                                                  ("srv", _("Server"), 100, "w")), 7,
                                            select=True)
         self.stats_last.bind("<<TreeviewSelect>>", lambda e: self._stats_role_buttons())
         rr = ttk.Frame(box2)
@@ -145,6 +150,35 @@ class StatsTab:
         ttk.Button(row, text=_("Verlauf löschen"), command=self._stats_clear).pack(side="left")
         self._stats_sort = ("n", True)
         return outer
+
+    def _tab_official(self):
+        """Page "Kills & Escapes": official match data (stats.deadbydaylight.com via the own userscript)."""
+        box = self._stats_page(_("Kills & Escapes"))
+        self.off_var = tk.StringVar(value="")
+        ttk.Label(box, textvariable=self.off_var, wraplength=520).pack(anchor="w")
+        self.off_warn_var = tk.StringVar(value="")
+        self.off_warn_label = ttk.Label(box, textvariable=self.off_warn_var, wraplength=520)   # only when needed
+        self.stats_off = self._stats_tree(box, (("map", _("Map"), 150, "w"), ("k", _("Killer"), 55, "e"),
+                                                ("kills", _("Ø Kills"), 65, "e"), ("four", _("4K"), 40, "e"),
+                                                ("s", _("Survivor"), 80, "e"), ("esc", _("Entkommen"), 95, "e")), 6)
+        ttk.Label(box, text=_("Laut stats.deadbydaylight.com, nur Runden mit zugeordnetem offiziellem Match (gleiche "
+                              "Map, Start höchstens 3 min auseinander). Ø Kills = getötete oder geopferte Survivors pro "
+                              "Killer-Match, 4K = alle vier. Custom Games zählen nur unter „Custom Games“."),
+                  style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
+        self.off_open_var = tk.BooleanVar(value=self.settings.get("official_open_after_dbd", False))
+        ttk.Checkbutton(box, text=_("Stats-Seite öffnen, wenn DBD beendet wird"), variable=self.off_open_var,
+                        command=self._official_setting).pack(anchor="w", pady=(6, 0))
+        row = ttk.Frame(box)
+        row.pack(fill="x", pady=(6, 0))
+        ttk.Button(row, text=_("Userscript kopieren"), command=self._official_copy_script).pack(side="left")
+        ttk.Button(row, text=_("Stats-Seite öffnen"), command=lambda: self._official_open(False)).pack(
+            side="left", padx=(6, 0))
+        ttk.Label(box, text=_("Einrichten (einmal): Tampermonkey (oder Violentmonkey) im Browser installieren, "
+                              "„Userscript kopieren“ und dort als neues Skript einfügen, auf stats.deadbydaylight.com "
+                              "anmelden. Beim Öffnen der Seite speichert das Skript die letzten 30 Matches als Datei in "
+                              "den Download-Ordner; das Programm liest sie ein und löscht sie. Das Programm selbst geht "
+                              "dafür nicht ins Internet."),
+                  style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
 
     def _stats_page(self, title):
         page = ttk.Frame(self.stats_nb, padding=6)
@@ -195,6 +229,18 @@ class StatsTab:
         all_rounds = history.load(self._hist_path())
         for r in all_rounds:                         # skins / new killers: the user's assignment
             r.killer = self._killer_of(r.killer)
+        matches = official.load(self._official_path())
+        tied, other = official.link(all_rounds, matches, self._official_map_id)
+        off = {}                                     # id(round) -> its official match
+        for i, m in tied.items():
+            r = all_rounds[i]
+            off[id(r)] = m
+            if m.role and not r.role:                # the page knows it for sure
+                r.role = m.role
+            r.custom = m.custom
+            k = self._killer_of(m.character)
+            if m.role == "killer" and r.role == "killer" and k in KILLERS:
+                r.killer = k                         # exact name instead of the lobby reading (skins!)
         # region filter: the regions that occur (kept selected even if the list changes)
         wanted = next((c for c, lbl in self._stats_regions if lbl == self.stats_region_var.get()), None)
         self._stats_regions = [(None, _("Alle Regionen"))] + \
@@ -242,11 +288,19 @@ class StatsTab:
         t.delete(*t.get_children())
         for name, n, k, s, avg, longest in rows:
             t.insert("", "end", values=(name, n, k, s, fmt_duration(avg), fmt_duration(longest)))
+        self._official_render(rounds, off, other, matches, since, role)
+        kills_of = {}
+        for r in rounds:
+            k = official.kills(off[id(r)]) if id(r) in off and r.role == "killer" else None
+            if k is not None and not r.custom:
+                kills_of.setdefault(r.killer, []).append(k)
         t = self.stats_kill
         t.delete(*t.get_children())
         keep = t.selection()
         for name, n, avg, top in history.per_killer(rounds):
-            t.insert("", "end", iid=name, values=(killer_label(name), n, fmt_duration(avg), top))
+            ks = kills_of.get(name)
+            t.insert("", "end", iid=name, values=(killer_label(name), n, fmt_duration(avg),
+                                                  f"{sum(ks) / len(ks):.1f}" if ks else "–", top))
         if keep and t.exists(keep[0]):
             t.selection_set(keep[0])
         self._stats_alias_buttons()
@@ -282,6 +336,7 @@ class StatsTab:
             t.insert("", "end", iid=repr(r.t), values=(time.strftime("%d.%m.%y %H:%M", time.localtime(r.t)), r.map,
                                                        fmt_duration(r.seconds),
                                                        fmt_duration(r.wait) if r.wait is not None else "–", role,
+                                                       self._official_result(off.get(id(r))),
                                                        (_(regions.NAMES.get(r.region, r.region))
                                                         + (f" · {r.ping:.0f} ms" if r.ping is not None else ""))
                                                        if r.region else "–"))
@@ -409,8 +464,181 @@ class StatsTab:
         except OSError as e:
             self._report_once("history", f"{e}")
             return
+        self._off_open.round_recorded()              # worth opening the stats page once DBD is closed
         if self.nb.select() == str(self.tab_stats):
             self._stats_render()
 
     def _hist_path(self):
         return os.path.join(self.root_dir, history.FILE)
+
+    # ---------------------------------------------------------- official match data (page "Kills & Escapes")
+    def _official_path(self):
+        return os.path.join(self.root_dir, official.FILE)
+
+    def _official_folder(self):
+        if not getattr(self, "_off_downloads", None):
+            self._off_downloads = official.downloads_dir()
+        return self.settings.get("official_dir") or self._off_downloads
+
+    def _official_map_id(self, name):
+        idx = getattr(self, "_off_index", None)
+        if idx is None or idx[0] is not self.catalog:         # the catalog is rebuilt after own assignments
+            idx = self._off_index = (self.catalog, official.map_index(self.catalog.maps))
+        return idx[1].get(fold(name))
+
+    def _official_result(self, m):
+        """Column "Ergebnis" in "Letzte Runden": 3K / escaped / died / – (no official match)."""
+        if m is None:
+            return "–"
+        if m.role == "killer":
+            k = official.kills(m)
+            return "?" if k is None else f"{k}K"
+        if m.role == "survivor":
+            kind = official.classify(m.status, m.img)
+            return _(RESULTS[kind]) if kind else "?"
+        return "–"
+
+    def _official_render(self, rounds, off, other, matches, since, role):
+        sel = [off[id(r)] for r in rounds if id(r) in off]
+        if role != "custom":
+            sel = [m for m in sel if not m.custom]    # games with bots would distort the kill rate
+        lines = []
+        if not matches:
+            lines.append(_("Noch keine offiziellen Daten. Erwartet {file} in {folder}.",
+                           file=official.PREFIX + ".json", folder=self._official_folder()))
+        else:
+            lines.append(_("{linked} von {rounds} Runden mit offiziellen Daten · gespeichert {n} Matches, neuestes "
+                           "{when}", linked=sum(1 for r in rounds if id(r) in off), rounds=len(rounds), n=len(matches),
+                           when=time.strftime("%d.%m.%y %H:%M", time.localtime(matches[-1].t))))
+            s = official.summary(sel)
+            if s["killer"]:
+                lines.append(_("Killer: {n} Matches, Ø {kills} Kills, {four}× 4K", n=s["killer"],
+                               kills=f"{s['kills']:.2f}", four=s["four"]))
+            if s["survivor"]:
+                lines.append(_("Survivor: {n} Matches, {share} entkommen", n=s["survivor"],
+                               share=f"{s['escaped']:.0%}"))
+        self.off_var.set("\n".join(lines))
+        warn = []
+        unknown = official.unknown_statuses(matches)
+        if unknown:
+            warn.append(_("⚠ Unbekannter Status auf der Stats-Seite: {list} – zählt nicht. Bitte melden "
+                          "(„Diagnose kopieren“).", list=", ".join(f"„{k}“ ({n}×)" for k, n in unknown.items())))
+        gaps = [g for g in official.load_gaps(self._official_path()) if since is None or g[1] >= since]
+        if gaps:
+            a, b = gaps[-1]
+            warn.append(_("⚠ Lücke: zwischen {start} und {end} fehlen vielleicht Matches – die Seite zeigt nur die "
+                          "letzten 30. Seite öfter öffnen.", start=time.strftime("%d.%m. %H:%M", time.localtime(a)),
+                          end=time.strftime("%d.%m. %H:%M", time.localtime(b))))
+        ids = {id(r) for r in rounds}
+        other = [(r, m) for r, m in other if id(r) in ids]
+        if other:
+            r, m = other[-1]
+            warn.append(_("⚠ {n}× andere Map als erkannt, zuletzt {when}: erkannt {ours}, laut Seite {theirs}.",
+                          n=len(other), when=time.strftime("%d.%m. %H:%M", time.localtime(r.t)), ours=r.map,
+                          theirs=m.map))
+        bundled = official.script_version(os.path.join(os.path.dirname(official.__file__), official.SCRIPT))
+        if 0 < getattr(self, "_off_script", 0) < bundled:
+            warn.append(_("⚠ Das Userscript ist veraltet (Version {old}, aktuell {new}) – „Userscript kopieren“ und "
+                          "in Tampermonkey ersetzen.", old=self._off_script, new=bundled))
+        self.off_warn_var.set("\n".join(warn))
+        if warn:
+            self.off_warn_label.pack(anchor="w", pady=(4, 0), before=self.stats_off.master)
+        else:
+            self.off_warn_label.pack_forget()
+        t = self.stats_off
+        t.delete(*t.get_children())
+        for name, kn, avg, four, sn, esc in official.per_map(sel):
+            t.insert("", "end", values=(name, kn or "–", f"{avg:.2f}" if avg is not None else "–", four if kn else "–",
+                                        sn or "–", f"{esc:.0%}" if esc is not None else "–"))
+
+    def _official_setting(self):
+        self.settings.set("official_open_after_dbd", bool(self.off_open_var.get()))
+        self._save_soon()
+
+    def _official_open(self, after_game):
+        """Open the stats page in the browser; the userscript then saves the matches (download folder)."""
+        try:
+            webbrowser.open(official.URL)
+        except Exception as e:
+            self._log(_("Stats-Seite konnte nicht geöffnet werden: {error}", error=e), "Fehler")
+            return
+        self._off_fast_until = time.time() + 300      # look for the file more often for a while
+        if after_game:
+            self._log(_("DBD beendet – Stats-Seite geöffnet; das Userscript speichert die Matches."), "System")
+
+    def _official_copy_script(self):
+        path = os.path.join(os.path.dirname(official.__file__), official.SCRIPT)
+        try:
+            with open(path, encoding="utf-8") as fh:
+                text = fh.read()
+        except OSError as e:
+            self._log(_("Userscript nicht gefunden: {error}", error=e), "Fehler")
+            return
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        msg = _("Userscript in die Zwischenablage kopiert. In Tampermonkey: „Neues Skript erstellen“ → alles ersetzen "
+                "(Strg+A, Strg+V) → Speichern. Danach stats.deadbydaylight.com öffnen und anmelden.")
+        self._log(msg, "System")
+        messagebox.showinfo(_("Userscript kopieren"), msg, parent=self.root)
+
+    def _official_tick(self):
+        """Every tick: open the stats page once DBD was closed (if wanted), look for the userscript's files."""
+        now = time.time()
+        if self._off_open.update(now, self.game is not None) and self.settings.get("official_open_after_dbd") \
+                and not self.simulate:
+            self._official_open(True)
+        if now >= self._off_next:
+            self._off_next = now + (3.0 if now < self._off_fast_until else 20.0)
+            self._official_take()
+
+    def _official_take(self):
+        res = official.take_downloads(self._official_folder(), self._official_path(), time.time())
+        done = res.files - len(res.undeleted)
+        if res.files:
+            self._off_script = res.script
+        if done:
+            self._log(_("Offizielle Match-Daten: {n} Matches gelesen, {new} neu – Datei gelöscht.", n=res.matches,
+                        new=res.new), "System")
+        for a, b in res.gaps:
+            self._log(_("Offizielle Match-Daten: zwischen {start} und {end} fehlen vielleicht Matches (die Seite "
+                        "zeigt nur die letzten 30).", start=time.strftime("%d.%m. %H:%M", time.localtime(a)),
+                        end=time.strftime("%d.%m. %H:%M", time.localtime(b))), "System")
+        told = self._off_told
+        for path, err in res.undeleted:
+            if path not in told:
+                told.add(path)
+                self._log(_("{name} gelesen, aber nicht gelöscht: {error}", name=os.path.basename(path), error=err),
+                          "Fehler")
+        for path in res.foreign:
+            if path not in told:
+                told.add(path)
+                self._log(_("{name} ist keine Match-Datei von DbD Map Scout – bleibt liegen.",
+                            name=os.path.basename(path)), "System")
+        if res.files:
+            for key in official.unknown_statuses(official.load(self._official_path())):
+                if key not in told:
+                    told.add(key)
+                    self._log(_("Unbekannter Status auf der Stats-Seite: „{status}“ – zählt nicht für Kills/Escapes. "
+                                "Bitte melden.", status=key), "System")
+            if self.nb.select() == str(self.tab_stats):
+                self._stats_render()
+
+    def _official_diag(self):
+        """Lines for "Diagnose kopieren" (not translated): how well rounds and official matches fit."""
+        matches = official.load(self._official_path())
+        rounds = history.load(self._hist_path())
+        tied, other = official.link(rounds, matches, self._official_map_id)
+        offs = sorted(rounds[i].t - m.t for i, m in tied.items())
+        statuses = {}
+        for m in matches:
+            for p in [official.Player(role=m.role, status=m.status, img=m.img)] + m.opp:
+                key = f"{p.role or '?'}: {p.status or '–'} / {p.img or '–'}"
+                statuses[key] = statuses.get(key, 0) + 1
+        bundled = official.script_version(os.path.join(os.path.dirname(official.__file__), official.SCRIPT))
+        lines = [f"Offizielle Daten: {len(matches)} Matches, {len(tied)} von {len(rounds)} Runden zugeordnet, "
+                 f"andere Map {len(other)}, Lücken {len(official.load_gaps(self._official_path()))}, "
+                 f"Userscript {getattr(self, '_off_script', 0)}/{bundled}, Ordner {self._official_folder()}"]
+        if offs:
+            lines.append(f"  Banner minus Start: Median {history.median(offs):+.0f} s, {offs[0]:+.0f} … {offs[-1]:+.0f} s")
+        lines.extend(f"  Status {k}: {n}×" for k, n in sorted(statuses.items(), key=lambda x: -x[1])[:20])
+        return lines
