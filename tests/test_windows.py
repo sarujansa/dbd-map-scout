@@ -169,3 +169,20 @@ def test_window_capture_package_is_the_checked_version():
     from importlib.metadata import version
     assert version("windows-capture") == "2.0.1"             # CLAUDE.md: re-audit before changing it
     importlib.import_module("windows_capture")
+
+
+def test_native_overlay_holds_a_floor(root):
+    from dbdmapscout.overlay_win32 import Win32Overlay, make_overlay
+    ov = make_overlay(root, prefer_native=True)
+    assert isinstance(ov, Win32Overlay), getattr(ov, "last_error", "")
+    ov.set_map(os.path.join(ROOT, "maps", "Other", "Midwich.gif"), "Midwich")
+    assert ov.floors() == [0, 3]
+    ov.render(300)
+    assert ov._anim_job                                       # floors alternate by themselves
+    ov.set_floor(3)
+    assert ov.frame_index() == 3 and not ov._anim_job
+    ov.render(320)                                            # new size: stays on the floor
+    assert ov.frame_index() == 3 and not ov._anim_job
+    ov.set_floor(None)
+    assert ov._anim_job
+    ov.destroy()
