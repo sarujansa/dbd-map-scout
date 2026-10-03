@@ -731,8 +731,9 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
                             _("Karte direkt mit der Maus ziehen, Mausrad ändert die Grösse.")
                             + self._hk_hint("edit_position"))
         if w in hk:
-            return _("Klicken und die neue Tastenkombination drücken (Strg/Alt + Taste oder F-Taste). "
-                     "Esc bricht ab, Entf schaltet den Hotkey aus.")
+            return _("Klicken und die neue Tastenkombination drücken: Strg/Alt + Taste, oder eine Taste allein "
+                     "(F1–F12, Numpad, Pause, Rollen, Einfg, Pos1, Ende, Bild↑/↓ – die gilt nur, solange DBD vorne "
+                     "ist). Esc bricht ab, Entf schaltet den Hotkey aus.")
         text = str(w.cget("text"))
         if text in dict(LANGS).values():
             return _("Map-Namen in dieser Spielsprache erkennen. Nur die Sprachen anhaken, in denen du spielst – "
@@ -919,6 +920,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
                 ev = self.events.get_nowait()
                 if isinstance(ev, tuple) and ev[0] == "hotkey":
                     self._hotkey(ev[1])
+                elif isinstance(ev, tuple) and ev[0] == "hotkey_failed":
+                    self._hotkey_failed(*ev[1:])
                 elif isinstance(ev, tuple) and ev[0] == "srv_ping":
                     self._srv_ping_done(ev[1])
                 elif isinstance(ev, tuple) and ev[0] == "srv_fw":
@@ -1146,6 +1149,10 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
             self._official_tick()
         except Exception:
             self._report_once("offizielle Daten", traceback.format_exc())
+        try:
+            self._hotkeys_tick()
+        except Exception:
+            self._report_once("hotkeys", traceback.format_exc())
         try:
             self._update_state()
             self._layout_pages()
