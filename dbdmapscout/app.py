@@ -432,6 +432,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         self.show_map_var = tk.BooleanVar(value=o.get("show_map", True))
         self.waiting_var = tk.BooleanVar(value=o.get("show_waiting", True))
         self.floor_auto_var = tk.BooleanVar(value=o.get("floor_auto", True))
+        self.record_var = tk.BooleanVar(value=o.get("show_record", True))
         ttk.Checkbutton(pos, text=_("Karte im schwarzen Rand halten (Ultrawide: nie ins Spielbild ragen)"),
                         variable=self.keep_bar_var, command=self._overlay_flags_changed).pack(anchor="w", pady=(4, 0))
         for text, var in ((N_("Karte anzeigen (aus: nur Timer, Ort und Ping)"), self.show_map_var),
@@ -441,6 +442,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
                           (N_("Verbundenen Server unter der Karte anzeigen (Tab Server)"), self.server_show_var),
                           (N_("Ohne Karte: „Warte auf Map“ und Lobby-Status anzeigen"), self.waiting_var),
                           (N_("Etagen (Midwich) im Wechsel zeigen, bis ich „Etage“ drücke"), self.floor_auto_var),
+                          (N_("Eigene Bilanz auf der Map unter dem Timer (Stats-Seite)"), self.record_var),
                           (N_("Transparenter Rand um die Karte"), self.transp_var)):
             ttk.Checkbutton(look, text=_(text), variable=var, command=self._overlay_flags_changed).pack(anchor="w", pady=1)
         return outer
@@ -596,6 +598,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         if not same_map:                         # a new map/round starts as set, the same one keeps its floor
             self._floor = None if self.settings["overlay"].get("floor_auto", True) else 0
         self._apply_floor()
+        self._update_record()
         if not was_on and not keep_timer:
             self._round_started(time.time())     # map appears -> timer from zero (a switch while on keeps it)
         self.user_visible = True
@@ -1434,6 +1437,9 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         o["show_server"] = bool(self.server_show_var.get())
         o["keep_in_bar"] = bool(self.keep_bar_var.get())
         o["show_waiting"] = bool(self.waiting_var.get())
+        if bool(self.record_var.get()) != o.get("show_record", True):
+            o["show_record"] = bool(self.record_var.get())
+            self._update_record()
         if bool(self.floor_auto_var.get()) != o.get("floor_auto", True):
             o["floor_auto"] = bool(self.floor_auto_var.get())
             self._floor = None if o["floor_auto"] else 0          # the map on display follows right away

@@ -36,6 +36,7 @@ DEFAULTS = {
         "map_heights": {},              # map id -> own size (hotkeys / mouse wheel with that map on display)
         "map_rotations": {},            # map id -> map turned clockwise by 90/180/270° (button / hotkey)
         "floor_auto": True,             # maps with floors (Midwich): they alternate until "Etage" is pressed
+        "show_record": True,            # own record on the map below the timer (official match data)
         "show_map": True,               # off: overlay shows only timer, server and ping
     },
     "hotkeys": {

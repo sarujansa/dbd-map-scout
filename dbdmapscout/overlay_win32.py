@@ -175,16 +175,17 @@ def _tracked_width(d, text, font, track):
 
 
 def add_info(pic: Image.Image, timer: str, server: str, height: int, backdrop: bool = False,
-             ping: float | None = None, status=(), note: str = "") -> Image.Image:
+             ping: float | None = None, status=(), note: str = "", record: str = "") -> Image.Image:
     """Round timer, connected server and its ping below the map, styled like the map title: white heavy
     digits with a soft shadow (no box); below them a green "connected" dot with the region in small
     caps, and the ping coloured by quality. The ping is only shown together with a server.
     ``status``: lines of the waiting card (no map on screen) – first one white, the others dimmer.
     ``note``: a warning in amber right below the timer (doubtful detection).
+    ``record``: own results on this map (stats page), dimmer, below the timer/note.
     ``backdrop``: the map sits on a dark rectangle (transparent edge off) – extend it behind the info."""
     if not server:
         ping = None
-    if not timer and not server and not status and not note:
+    if not timer and not server and not status and not note and not record:
         return pic
     d0 = ImageDraw.Draw(pic)
     tfont, sfont = _font(max(22, height // 11), heavy=True), _font(max(14, height // 24))
@@ -197,6 +198,8 @@ def add_info(pic: Image.Image, timer: str, server: str, height: int, backdrop: b
         rows.append(("timer", [(timer, INFO_TIMER)], tfont))
     if note:
         rows.append(("note", [(note.upper(), INFO_WARN)], sfont))
+    if record:
+        rows.append(("record", [(record.upper(), INFO_SERVER)], sfont))
     for i, line in enumerate(status):          # waiting card: above the server, like the timer on the map
         rows.append(("status", [(line.upper(), INFO_TIMER if i == 0 else INFO_SERVER)], sfont))
     if server:
@@ -291,6 +294,7 @@ class Win32Overlay:
         self._ping = None               # ping to that region in ms, below the region
         self._waiting = ()              # lines of the waiting card: shown instead of everything else
         self._note = ""                 # warning below the timer ("" = none)
+        self._record = ""               # own results on this map below the timer ("" = none)
         self._base = []                 # [(PIL RGBA, duration)] scaled map (+ caption), cached per size
         self._base_key = None
         self._prepared = []             # [(bytes, w, h, duration)]
@@ -357,6 +361,10 @@ class Win32Overlay:
         """Warning in amber below the timer, e.g. a doubtful detection; "" = none."""
         self._note = text or ""
 
+    def set_record(self, text: str):
+        """Own results on the map on display ("Ø 2.8 Kills · 12 Runden"); "" = none."""
+        self._record = text or ""
+
     def has_map(self) -> bool:
         return bool(self._frames)
 
@@ -385,7 +393,7 @@ class Win32Overlay:
         return self._frames[0][0].size if self._frames and self.show_map and not self._waiting else (0, 0)
 
     def has_info(self) -> bool:
-        return bool(self._timer or self._server or self._note)
+        return bool(self._timer or self._server or self._note or self._record)
 
     def set_show_map(self, on: bool):
         self.show_map = bool(on)
@@ -413,13 +421,13 @@ class Win32Overlay:
             else:                         # info only: an empty picture, the info block is drawn below it
                 self._base = [(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), 0)]
             self._base_key = base_key
-        key = (base_key, self._editing, self._timer, self._server, self._ping, self._note)
+        key = (base_key, self._editing, self._timer, self._server, self._ping, self._note, self._record)
         if key != self._key:
             self._prepared = []
             for pic, dur in self._base:
                 if self.has_info():
                     pic = add_info(pic, self._timer, self._server, height, backdrop=not self.transparent,
-                                   ping=self._ping, note=self._note)
+                                   ping=self._ping, note=self._note, record=self._record)
                 if self._editing:
                     pic = add_border(pic.copy())
                 self._prepared.append((premultiplied_bgra(pic), pic.width, pic.height, dur))
