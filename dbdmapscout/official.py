@@ -41,6 +41,7 @@ LINK_BEFORE = 60.0                      # same map: banner at most this long bef
 LINK_AFTER = 180.0                      # … and this long after it
 OTHER_MAP = (0.0, 90.0)                 # other map (detection wrong?): only this close
 ROLES = {"VE_Slasher": "killer", "VE_Camper": "survivor"}
+MIN_ROUND = 60.0                        # shorter rounds are not stored (history.MIN_SECONDS)
 
 # Status of a survivor as the page names it / its picture (seen Oct 2026): ESCAPED / VE_Escaped,
 # SACRIFICED / VE_Sacrificed, DEAD / VE_Killed, VE_SurrenderLoss / VE_SurrenderDraw (abandoned),
@@ -357,10 +358,12 @@ def unknown_statuses(matches) -> dict:
 
 
 def map_index(maps) -> dict:
-    """{fold(name): map id} over all names, languages and aliases of the catalog's maps."""
+    """{fold(name): map id} over all names, languages and aliases of the catalog's maps, and the
+    labels with layout ("Coal Tower II") as rounds.jsonl stores them."""
     out = {}
     for m in maps.values():
-        for name in list(m.names.values()) + list(m.aliases or []):
+        labels = [m.label(v) for v in getattr(m, "variants", None) or {}]
+        for name in list(m.names.values()) + list(m.aliases or []) + labels:
             if fold(name):
                 out.setdefault(fold(name), m.id)
     return out
@@ -397,23 +400,25 @@ def link(rounds, matches, map_id_of) -> tuple:
 
 
 def per_map(matches) -> list:
-    """[(map, killer matches, Ø kills, 4K, survivor matches, escape share 0..1 or None)], most matches first.
-    Only matches whose result is known count."""
+    """[(map, killer matches, Ø kills, 4K, survivor matches, escape share 0..1 or None, Ø BP or None)],
+    most matches first. Kills and escapes count only where the result is known, BP for every match."""
     groups = {}
     for m in matches:
-        g = groups.setdefault(m.map or "?", {"k": [], "s": []})
+        g = groups.setdefault(m.map or "?", {"k": [], "s": [], "bp": []})
         k, e = kills(m), escaped(m)
         if k is not None:
             g["k"].append(k)
         if e is not None:
             g["s"].append(e)
+        if m.bp > 0:
+            g["bp"].append(m.bp)
     rows = []
     for name, g in groups.items():
-        k, s = g["k"], g["s"]
-        if not k and not s:
+        k, s, bp = g["k"], g["s"], g["bp"]
+        if not k and not s and not bp:
             continue
         rows.append((name, len(k), sum(k) / len(k) if k else None, k.count(4), len(s),
-                     sum(s) / len(s) if s else None))
+                     sum(s) / len(s) if s else None, sum(bp) / len(bp) if bp else None))
     return sorted(rows, key=lambda r: (-(r[1] + r[4]), r[0].lower()))
 
 
@@ -421,9 +426,37 @@ def summary(matches) -> dict:
     """Totals for the line above the table."""
     ks = [k for k in (kills(m) for m in matches) if k is not None]
     es = [e for e in (escaped(m) for m in matches) if e is not None]
+    bp = [m for m in matches if m.bp > 0]
+    hours = sum(m.seconds for m in bp) / 3600
     return {"killer": len(ks), "kills": sum(ks) / len(ks) if ks else None, "four": ks.count(4),
             "abandons": sum(abandons(m) for m in matches if kills(m) is not None),
-            "survivor": len(es), "escaped": sum(es) / len(es) if es else None}
+            "survivor": len(es), "escaped": sum(es) / len(es) if es else None,
+            "bp": sum(m.bp for m in bp), "bp_matches": len(bp),
+            "bp_hour": sum(m.bp for m in bp) / hours if hours > 0 else None}
+
+
+def end_offset(r, m: Match) -> float:
+    """End of the round as the program saw it (banner + length) minus the end of the match on the page
+    (start + own time): how late the end of the round was detected."""
+    return (r.t + r.seconds) - (m.t + m.seconds)
+
+
+def rescued_seconds(r, m: Match):
+    """Length of a round whose end was never detected, from its banner to the end of the match on the
+    page – None if that is shorter than a counted round."""
+    seconds = m.t + m.seconds - r.t
+    return seconds if seconds >= MIN_ROUND else None
+
+
+def detection(matches, linked_ids, since=None) -> tuple:
+    """How many official matches the program detected: ([detected], [missed]) of the matches since
+    ``since`` (the first round the program stored) that were long enough to be a round."""
+    seen, missed = [], []
+    for m in matches:
+        if (since is not None and m.t < since) or m.seconds < MIN_ROUND:
+            continue
+        (seen if id(m) in linked_ids else missed).append(m)
+    return seen, missed
 
 
 class OpenAfterGame:
