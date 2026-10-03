@@ -21,6 +21,7 @@ from .catalog import Catalog
 from .config import Settings
 from .toast import Toast
 from .connwatch import ConnectionWatch, IdlePause
+from .official import OpenAfterGame
 from .i18n import N_, _
 from .hotkeys import pretty
 from .overlay import load_frames
@@ -90,6 +91,10 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         self._watch_gen = 0
         self.round = RoundTimer()        # runs while a map is on display
         self._hist = None                # round for the statistics: detected map -> detected end of the match
+        self._off_open = OpenAfterGame()  # official match data: open the stats page once DBD was closed
+        self._off_next = self._off_fast_until = 0.0     # next look into the download folder / look often until
+        self._off_script = 0             # version of the userscript that saved the last file
+        self._off_told = set()           # files / statuses already reported in the log
         self.toast = Toast(self.root)
         self._queue = {"state": "idle"}  # lobby (worker "queue" events): search since / role / found lobby
         self.game = None
@@ -1086,6 +1091,10 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
             self._conn_tick()
         except Exception:
             self._report_once("verbindung", traceback.format_exc())
+        try:
+            self._official_tick()
+        except Exception:
+            self._report_once("offizielle Daten", traceback.format_exc())
         try:
             self._update_state()
             self._layout_pages()

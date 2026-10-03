@@ -65,6 +65,8 @@ DEFAULTS = {
     "user_aliases": {},                 # own assignments of unknown banner texts: {map_id: [text, ...]}
     "welcome_seen": False,              # the "So geht's" line on the very first start was dismissed
     "killer_aliases": {},               # killer names as read (skins, new killers): {fold(name): "The Nurse"}
+    "official_open_after_dbd": False,   # open stats.deadbydaylight.com once DBD was closed (userscript saves the matches)
+    "official_dir": "",                 # where the userscript's files land ("" = the Windows download folder)
 }
 
 
@@ -87,7 +89,7 @@ def export_settings(data: dict, path: str) -> None:
 
 
 # per-PC values that must not come along from a backup (other folder / other machine)
-LOCAL_KEYS = ("setup_version", "setup_root", "window_geometry")
+LOCAL_KEYS = ("setup_version", "setup_root", "window_geometry", "official_dir")
 
 
 def read_backup(path: str, current: dict) -> dict:

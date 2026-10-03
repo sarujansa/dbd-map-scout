@@ -125,6 +125,15 @@ TIPS = {
     "Aktualisieren und neu starten": "Beendet das Programm und startet es über start.bat neu – dabei wird das "
                                      "Update installiert.",
     "Verlauf löschen": "Löscht alle gespeicherten Runden (Datei rounds.jsonl).",
+    "Stats-Seite öffnen, wenn DBD beendet wird":
+        "Schliesst du DBD nach mindestens einer Runde, öffnet das Programm stats.deadbydaylight.com im Browser. Das "
+        "Userscript speichert dann die letzten 30 Matches, das Programm liest sie ein und löscht die Datei. Nie "
+        "während DBD läuft.",
+    "Userscript kopieren": "Kopiert das Userscript in die Zwischenablage. In Tampermonkey „Neues Skript erstellen“, "
+                           "alles ersetzen und speichern. Es liest nur die Match-Liste, die die Seite selbst lädt – "
+                           "keine Konto- oder Login-Daten – und schickt nichts irgendwohin.",
+    "Stats-Seite öffnen": "Öffnet stats.deadbydaylight.com jetzt. Mit installiertem Userscript kommen die Matches "
+                          "gleich danach an.",
     "Alle löschen": "Alle eigenen Map-Zuordnungen löschen (die Namen werden dann wieder als unbekannt "
                     "gemeldet).",
     "Programmordner öffnen": "Öffnet den Ordner des Programms im Explorer.",
