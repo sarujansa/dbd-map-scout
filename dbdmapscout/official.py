@@ -399,6 +399,65 @@ def link(rounds, matches, map_id_of) -> tuple:
     return tied, other
 
 
+def correct_maps(pairs, map_id_of, label_of) -> dict:
+    """Rounds tied to a match on another map (the detection was wrong) take the page's map – as layout I:
+    since patch 8.6.0 the other layouts exist only in custom games. pairs: [(round, match)];
+    -> {id(round): the label as detected}."""
+    fixed = {}
+    for r, m in pairs:
+        mid = map_id_of(m.map)
+        if mid and mid != r.map_id:
+            fixed[id(r)] = r.map
+            r.map_id, r.map = mid, label_of(mid) or m.map
+    return fixed
+
+
+TREND_UNITS = ("hour", "day", "week")
+MAX_BUCKETS = 30
+
+
+def bucket_start(t: float, unit: str) -> float:
+    """Start of the hour / day / week (Monday) that ``t`` falls in, local time."""
+    import datetime
+    d = datetime.datetime.fromtimestamp(t).replace(minute=0, second=0, microsecond=0)
+    if unit != "hour":
+        d = d.replace(hour=0)
+    if unit == "week":
+        d -= datetime.timedelta(days=d.weekday())
+    return d.timestamp()
+
+
+def _next_bucket(start: float, unit: str) -> float:
+    import datetime
+    d = datetime.datetime.fromtimestamp(start)
+    d += {"hour": datetime.timedelta(hours=1), "day": datetime.timedelta(days=1),
+          "week": datetime.timedelta(days=7)}[unit]
+    return bucket_start(d.timestamp() + 1, unit)       # a DST change shifts the clock, not the bucket
+
+
+def trend(pairs, unit: str) -> list:
+    """Kills and escapes over time: [(bucket start, [kills …], [escaped …])] per hour / day / week from the
+    first to the last round with a known result, buckets without one included (empty lists) so the time axis
+    stays honest; the newest MAX_BUCKETS. pairs: [(round, match)]."""
+    groups = {}
+    for r, m in pairs:
+        k, e = kills(m), escaped(m)
+        if k is None and e is None:
+            continue
+        g = groups.setdefault(bucket_start(r.t, unit), ([], []))
+        if k is not None:
+            g[0].append(k)
+        if e is not None:
+            g[1].append(e)
+    if not groups:
+        return []
+    out, b, last = [], min(groups), max(groups)
+    while b <= last:
+        out.append((b, *groups.get(b, ([], []))))
+        b = _next_bucket(b, unit)
+    return out[-MAX_BUCKETS:]
+
+
 def results(pairs, key) -> dict:
     """Known results of rounds tied to a match, grouped by ``key(round)``: {group: {"kills": [...],
     "escaped": [True/False ...], "bp": [...]}} (pairs: [(round, match)])."""
