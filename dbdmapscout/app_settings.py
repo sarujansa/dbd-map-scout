@@ -115,6 +115,18 @@ class SettingsTab:
         ttk.Button(own, text=_("Alle löschen"), command=self._clear_aliases).pack(side="right")
         self._show_aliases()
 
+        om = ttk.LabelFrame(more, text=_("Offizielle Match-Daten"), padding=8)
+        om.pack(fill="x", pady=(8, 0))
+        self.off_open_var = tk.BooleanVar(value=self.settings.get("official_open_after_dbd", False))
+        ttk.Checkbutton(om, text=_("Stats-Seite öffnen, wenn DBD beendet wird"), variable=self.off_open_var,
+                        command=self._official_setting).pack(anchor="w")
+        ttk.Button(om, text=_("Userscript kopieren"), command=self._official_copy_script).pack(anchor="w", pady=(6, 0))
+        ttk.Label(om, text=_("Einmal einrichten: Tampermonkey im Browser installieren, „Userscript kopieren“ und dort "
+                             "als neues Skript einfügen, auf stats.deadbydaylight.com anmelden. Beim Öffnen der Seite "
+                             "speichert das Skript die letzten 30 Matches im Download-Ordner; das Programm liest die "
+                             "Datei und löscht sie. Es geht dafür selbst nicht ins Internet."),
+                  style="Dim.TLabel", wraplength=420).pack(anchor="w", pady=(4, 0))
+
         bk = ttk.LabelFrame(more, text=_("Sicherung"), padding=8)
         bk.pack(fill="x", pady=(8, 0))
         ttk.Button(bk, text=_("Einstellungen exportieren …"), command=self._export_settings).pack(side="left")
@@ -139,7 +151,7 @@ class SettingsTab:
 
     def _show_more(self):
         arrow = "▾ " if self._more_open else "▸ "
-        self.more_btn.configure(text=arrow + _("Mehr (Map-Zuordnungen, Sicherung, Ordner)"))
+        self.more_btn.configure(text=arrow + _("Mehr (Map-Zuordnungen, Match-Daten, Sicherung, Ordner)"))
         if self._more_open:
             self.more_frame.pack(fill="x", pady=(4, 0), before=self.version_label)
         else:
