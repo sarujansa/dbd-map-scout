@@ -186,3 +186,32 @@ def test_native_overlay_holds_a_floor(root):
     ov.set_floor(None)
     assert ov._anim_job
     ov.destroy()
+
+
+def test_single_key_hotkeys_only_while_dbd_is_in_front():
+    import ctypes
+    import time
+    from dbdmapscout.hotkeys import VK, HotkeyThread
+    user32 = ctypes.windll.user32
+
+    def free(vk):                      # can another program still take the key?
+        if user32.RegisterHotKey(None, 0x7ABC, 0, vk):
+            user32.UnregisterHotKey(None, 0x7ABC)
+            return True
+        return False
+
+    vk = VK["f9"]
+    assert free(vk), "F9 is taken by another program on this machine"
+    t = HotkeyThread({"next_floor": "f9"}, lambda name: None)
+    t.start()
+    assert t.ready.wait(3)
+    assert free(vk)                                           # DBD not in front: the key stays free
+    t.set_game_active(True)
+    time.sleep(0.3)
+    assert not free(vk)                                       # DBD in front: ours
+    t.set_game_active(False)
+    time.sleep(0.3)
+    assert free(vk)
+    t.stop()
+    t.join(timeout=3)
+    assert not t.is_alive()

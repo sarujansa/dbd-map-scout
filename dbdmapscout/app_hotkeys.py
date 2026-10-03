@@ -3,9 +3,9 @@
 Mixin of App (app.py) – the methods use App's attributes; split out of app.py unchanged."""
 from __future__ import annotations
 
-from .capture import IS_WIN
+from .capture import IS_WIN, foreground_root, is_game_window
 from .i18n import N_, _
-from .hotkeys import HotkeyThread, combo_from_keys, modifier_name, pretty
+from .hotkeys import HotkeyThread, combo_from_keys, game_only, modifier_name, pretty
 
 HOTKEY_LABELS = [("toggle_overlay", N_("Overlay ein/aus")), ("next_variant", N_("Layout-Variante")),
                  ("scan_now", N_("Bildschirm scannen")), ("prev_map", N_("Vorherige Map")),
@@ -18,9 +18,20 @@ class Hotkeys:
     # ============================================================ hotkeys
     def _start_hotkeys(self):
         t = HotkeyThread(self.settings["hotkeys"], lambda name: self.events.put(("hotkey", name)))
+        t.on_failed = lambda name, combo, why: self.events.put(("hotkey_failed", name, combo, why))
         t.start()
         self.root.after(300, lambda: self._report_hotkeys(t))
         return t
+
+    def _hotkeys_tick(self):
+        """Single keys (F5, Numpad …) are hotkeys only while DBD is the active window – every other program
+        keeps them."""
+        fg = self.game is not None and not self.simulate and is_game_window(foreground_root())
+        self.hotkeys.set_game_active(fg)
+
+    def _hotkey_failed(self, name, combo, why):
+        self._log(_("Hotkey {keys} ({action}) nicht verfügbar: {why}.", keys=pretty(combo),
+                    action=_(dict(HOTKEY_LABELS).get(name, name)), why=why), "Fehler")
 
     def _report_hotkeys(self, t):
         if not t.ready.is_set():
@@ -102,7 +113,9 @@ class Hotkeys:
             self._save_soon()
             label = _(dict(HOTKEY_LABELS)[key])
             keys = pretty(combo) if combo else _("aus")
-            self.hk_status.set(f"{label}: {keys}")
+            self.hk_status.set(f"{label}: {keys}" + ("  " + _("Gilt nur, solange DBD im Vordergrund ist – DBD selbst "
+                                                               "bekommt {keys} dann nicht mehr (in DBD nicht belegt?).",
+                                                               keys=keys) if game_only(combo) else ""))
             self._log(_("Hotkey {action}: {keys}.", action=label, keys=keys), "System")
         else:
             self.hk_status.set(_("Zum Ändern anklicken und die neue Tastenkombination drücken."))
