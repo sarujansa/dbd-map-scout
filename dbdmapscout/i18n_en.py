@@ -688,10 +688,20 @@ EN = {
 
     # ------------------------------------------------------------------ tooltips
     "Technische Optionen für die Fehlersuche ein- oder ausklappen.": "Show or hide technical options for troubleshooting.",
-    "Klicken und die neue Tastenkombination drücken (Strg/Alt + Taste oder F-Taste). Esc bricht ab, Entf "
-    "schaltet den Hotkey aus.":
-        "Click and press the new key combination (Ctrl/Alt + key or an F key). Esc cancels, Delete switches the "
-        "hotkey off.",
+    "Klicken und die neue Tastenkombination drücken: Strg/Alt + Taste, oder eine Taste allein (F1–F12, Numpad, "
+    "Pause, Rollen, Einfg, Pos1, Ende, Bild↑/↓ – die gilt nur, solange DBD vorne ist). Esc bricht ab, Entf schaltet "
+    "den Hotkey aus.":
+        "Click and press the new key combination: Ctrl/Alt + key, or a single key (F1–F12, numpad, Pause, Scroll "
+        "Lock, Insert, Home, End, Page Up/Down – it only works while DBD is in front). Esc cancels, Delete "
+        "switches the hotkey off.",
+    "Bild↑": "PgUp",
+    "Bild↓": "PgDn",
+    "Einfg": "Insert",
+    "Pos1": "Home",
+    "Ende": "End",
+    "Rollen": "Scroll Lock",
+    "Gilt nur, solange DBD im Vordergrund ist – DBD selbst bekommt {keys} dann nicht mehr (in DBD nicht belegt?).":
+        "Only works while DBD is in front – DBD itself no longer gets {keys} (not bound in DBD?).",
     "Map-Namen in dieser Spielsprache erkennen. Nur die Sprachen anhaken, in denen du spielst – weniger "
     "Sprachen, weniger Verwechslungen.":
         "Recognise map names in this game language. Only tick the languages you play in – fewer languages, fewer "
