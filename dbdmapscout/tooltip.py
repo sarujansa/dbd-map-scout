@@ -132,6 +132,9 @@ TIPS = {
     "Userscript kopieren": "Kopiert das Userscript in die Zwischenablage. In Tampermonkey „Neues Skript erstellen“, "
                            "alles ersetzen und speichern. Es liest nur die Match-Liste, die die Seite selbst lädt – "
                            "keine Konto- oder Login-Daten – und schickt nichts irgendwohin.",
+    "Meldung, wenn Match-Daten eingelesen und gelöscht wurden":
+        "Zeigt unten rechts kurz, wie viele Matches gelesen wurden und dass die Datei gelöscht ist – nicht, solange "
+        "DBD im Vordergrund ist. Im Log steht es immer.",
     "Stats-Seite öffnen": "Öffnet stats.deadbydaylight.com jetzt. Mit installiertem Userscript kommen die Matches "
                           "gleich danach an.",
     "Alle löschen": "Alle eigenen Map-Zuordnungen löschen (die Namen werden dann wieder als unbekannt "

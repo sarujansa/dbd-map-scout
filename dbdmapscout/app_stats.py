@@ -13,6 +13,7 @@ from tkinter import messagebox, ttk
 from types import SimpleNamespace
 
 from . import history, official, regions
+from .capture import foreground_root, is_game_window
 from .i18n import N_, _
 from .lobby import KILLERS, killer_label
 from .textnorm import fold
@@ -640,6 +641,7 @@ class StatsTab:
 
     def _official_setting(self):
         self.settings.set("official_open_after_dbd", bool(self.off_open_var.get()))
+        self.settings.set("official_notify", bool(self.off_notify_var.get()))
         self._save_soon()
 
     def _official_open(self, after_game):
@@ -696,6 +698,11 @@ class StatsTab:
                 told.add(path)
                 self._log(_("{name} gelesen, aber nicht gelöscht: {error}", name=os.path.basename(path), error=err),
                           "Fehler")
+                self._official_toast(_("{name} wurde gelesen, konnte aber nicht gelöscht werden – Details im Log.",
+                                       name=os.path.basename(path)))
+        if done:
+            self._official_toast(_("{n} Matches gelesen, davon {new} neu. Die Datei wurde gelöscht.", n=res.matches,
+                                   new=res.new))
         for path in res.foreign:
             if path not in told:
                 told.add(path)
@@ -711,6 +718,14 @@ class StatsTab:
                 self._stats_render()
             if self.nb.select() == str(self.tab_detect):
                 self._official_check_render()
+
+    def _official_toast(self, text):
+        """Small notification bottom right (like "Lobby gefunden", no sound) – not while DBD is in front."""
+        if not self.settings.get("official_notify", True):
+            return
+        if self.game is not None and not self.simulate and is_game_window(foreground_root()):
+            return
+        self.toast.show(_("Offizielle Match-Daten"), text)
 
     def _official_diag(self):
         """Lines for "Diagnose kopieren" (not translated): how well rounds and official matches fit."""
