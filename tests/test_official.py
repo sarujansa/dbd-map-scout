@@ -123,9 +123,11 @@ def test_per_map():
                             entry(T0 + 3, role="VE_Camper", own={"name": "Escaped"}),
                             entry(T0 + 4, statuses=("VE_Mystery",) * 4, map_name="Dead Dawg Saloon")), now=T0)
     rows = o.per_map(ms)
-    assert rows[0] == ("Mother's Dwelling", 2, 2.0, 1, 1, 1.0)
-    assert rows[1] == ("Coal Tower", 1, 4.0, 1, 0, None)
-    assert len(rows) == 2                                     # Dead Dawg Saloon: nothing known
+    assert rows[0] == ("Mother's Dwelling", 2, 2.0, 1, 1, 1.0, 241377)
+    assert rows[1] == ("Coal Tower", 1, 4.0, 1, 0, None, 241377)
+    assert rows[2] == ("Dead Dawg Saloon", 0, None, 0, 0, None, 241377)    # result unknown, BP still count
+    ms[4].bp = 0
+    assert o.per_map(ms[4:]) == []                             # nothing known at all: no row
 
 
 # ------------------------------------------------------------------ official.jsonl
@@ -195,11 +197,39 @@ def match(t, name):
     return o.Match(t=t, map=name)
 
 
+def test_bloodpoints():
+    ms, _s = o.parse(export(entry(T0), entry(T0 + 1, role="VE_Camper", own={"name": "Escaped"})), now=T0)
+    ms[1].bp, ms[1].seconds = 100000, 360
+    s = o.summary(ms)
+    assert (s["bp"], s["bp_matches"]) == (341377, 2)
+    assert s["bp_hour"] == pytest.approx(341377 / (800 / 3600))
+    assert o.summary([])["bp_hour"] is None
+
+
+def test_end_offset_and_rescued_length():
+    m = o.Match(t=T0, map="Coal Tower", seconds=600)
+    r = rnd(T0 + 38, "coal")                                  # banner 38 s after the start, 600 s counted
+    assert o.end_offset(r, m) == 38                           # end detected 38 s after the end on the page
+    assert o.rescued_seconds(r, m) == 562                     # from the banner to the page's end
+    assert o.rescued_seconds(rnd(T0 + 550, "coal"), m) is None   # under a minute: not a round
+
+
+def test_detection_rate():
+    ms = [o.Match(t=T0 + i * 600, map="Coal Tower", seconds=500) for i in range(5)]
+    ms[4].seconds = 30                                        # too short to be stored as a round
+    seen, missed = o.detection(ms, {id(ms[1]), id(ms[2])}, since=T0 + 300)
+    assert seen == [ms[1], ms[2]] and missed == [ms[3]]       # ms[0] is older than the program's first round
+    assert o.detection(ms, set())[1] == ms[:4]
+
+
 def test_map_index_over_all_names_and_aliases():
     maps = {"coal-tower": SimpleNamespace(id="coal-tower", names={"en": "Coal Tower", "de": "Kohlelager"},
                                           aliases=["Kohleturm"]),
-            "x": SimpleNamespace(id="x", names={"en": "Mother’s Dwelling"}, aliases=None)}
+            "x": SimpleNamespace(id="x", names={"en": "Mother’s Dwelling"}, aliases=None),
+            "gs": SimpleNamespace(id="gs", names={"en": "Groaning Storehouse"}, aliases=[], variants={1: "a", 2: "b"},
+                                  label=lambda v: "Groaning Storehouse" + (" II" if v == 2 else ""))}
     idx = o.map_index(maps)
+    assert idx[fold("Groaning Storehouse II")] == "gs"          # labels as rounds.jsonl stores them
     assert idx[fold("Kohlelager")] == idx[fold("kohleturm")] == "coal-tower"
     assert idx[fold("Mother's Dwelling")] == "x"                # typographic apostrophe
 
