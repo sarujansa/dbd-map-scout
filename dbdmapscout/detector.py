@@ -400,6 +400,7 @@ class Accumulator:
     base_variant_prior: float = 1.0  # nats in favour of layout I
     variant_decay: float = 0.6
     unsure_fit: float = -3.0         # real banners fit ≈ 0; below this on every frame the read is doubtful
+    strict_frames: int = 4           # mid-match (strict): good frames needed – a real banner gives ~20 at 5/s
     maps: dict = field(default_factory=dict)       # map_id -> tempered score sum
     variants: dict = field(default_factory=dict)   # (map_id, v) -> score sum relative to that map's best
     frames: int = 0
@@ -425,8 +426,21 @@ class Accumulator:
               for (m, v), s in self.variants.items() if m == map_id}
         return _softmax(vs)
 
-    def add(self, fr: FrameResult) -> Decision | None:
-        """Add one frame; returns a Decision when a (new) map/variant is certain."""
+    def best(self):
+        """(map_id, probability, best name fit) of the leading map so far, or None."""
+        post = self.map_posterior()
+        if not post:
+            return None
+        m = max(post, key=post.get)
+        return m, float(post[m]), self.fits.get(m, -1e9)
+
+    def add(self, fr: FrameResult, strict: bool = False, hold: bool = False) -> Decision | None:
+        """Add one frame; returns a Decision when a (new) map/variant is certain.
+
+        ``strict``: in the middle of a running round, where DBD never shows a banner – something in the game
+        world (neon strips, signs) can look like one. Then only a clean read over several frames counts:
+        no single-frame decision, ``strict_frames`` good frames, and never a doubtful (unsure) read.
+        ``hold``: collect the evidence, but do not decide yet (the caller waits for the banner to stay)."""
         if fr is None or fr.best is None:
             return None
         self.frames += 1
@@ -449,8 +463,10 @@ class Accumulator:
         post = self.map_posterior()
         best_map = max(post, key=post.get)
         p = float(post[best_map])
-        fast = self.good_frames == 1 and p >= self.fast_prob and fr.name_fit >= self.fit_fast
-        steady = self.good_frames >= 2 and p >= self.min_prob
+        if hold:
+            return None
+        fast = self.good_frames == 1 and p >= self.fast_prob and fr.name_fit >= self.fit_fast and not strict
+        steady = self.good_frames >= (self.strict_frames if strict else 2) and p >= self.min_prob
         if not (fast or steady):
             return None
         vpost = self.variant_posterior(best_map)
@@ -458,6 +474,8 @@ class Accumulator:
         choice = (best_map, best_v)
         fit = self.fits.get(best_map, fr.name_fit)
         unsure = fit < self.unsure_fit
+        if strict and unsure:
+            return None                   # mid-match: a doubtful read never switches the map
         if choice == self.decided and not (self.decided_unsure and not unsure):
             return None                   # nothing new (a doubtful read that became sure is news)
         if self.decided is not None and self.decided[0] != best_map and self.good_frames < 4:

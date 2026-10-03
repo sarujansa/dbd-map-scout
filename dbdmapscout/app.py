@@ -996,6 +996,13 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
                     self._update_layout_btn()
                     self._log(_("Layout unsicher – falls falsch: Layout-Knopf oder {keys}.",
                                 keys=pretty(self.settings["hotkeys"].get("next_variant") or "–")), "Erkennung")
+        elif k == "ignored":                       # banner-like text well into a round (worker: strict reading)
+            m = self.catalog.maps.get(d.get("map_id") or "")
+            if m is None or (self.current and self.current[0] == m.id):
+                return                              # nothing that looked like another map
+            self._log(_("Mitten in der Runde „{name}“ / „{realm}“ gelesen (am ehesten {map}) – ignoriert: Map-Banner "
+                        "gibt es nur am Rundenstart, und die Lesung war nicht eindeutig.", name=d.get("name_text") or "",
+                        realm=d.get("realm_text") or "", map=m.label(1)), "Erkennung")
         elif k == "unknown":
             txt = d.get("name_text") or "?"
             self._log(_("Banner gesehen, aber keine bekannte Map: „{text}“. Map manuell wählen "
