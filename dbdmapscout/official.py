@@ -1,4 +1,4 @@
-"""Official match data from stats.deadbydaylight.com (tab Statistik, page "Kills & Escapes").
+"""Official match data from stats.deadbydaylight.com: kills, escapes and bloodpoints of the rounds (tab Statistik).
 
 The program itself never goes online for this. The user's browser does: the own userscript
 ``matchexport.user.js`` (installed once in Tampermonkey & co.) saves the page's recent match
@@ -399,40 +399,34 @@ def link(rounds, matches, map_id_of) -> tuple:
     return tied, other
 
 
-def per_map(matches) -> list:
-    """[(map, killer matches, Ø kills, 4K, survivor matches, escape share 0..1 or None, Ø BP or None)],
-    most matches first. Kills and escapes count only where the result is known, BP for every match."""
-    groups = {}
-    for m in matches:
-        g = groups.setdefault(m.map or "?", {"k": [], "s": [], "bp": []})
+def results(pairs, key) -> dict:
+    """Known results of rounds tied to a match, grouped by ``key(round)``: {group: {"kills": [...],
+    "escaped": [True/False ...], "bp": [...]}} (pairs: [(round, match)])."""
+    out = {}
+    for r, m in pairs:
+        g = out.setdefault(key(r), {"kills": [], "escaped": [], "bp": []})
         k, e = kills(m), escaped(m)
         if k is not None:
-            g["k"].append(k)
+            g["kills"].append(k)
         if e is not None:
-            g["s"].append(e)
+            g["escaped"].append(e)
         if m.bp > 0:
             g["bp"].append(m.bp)
-    rows = []
-    for name, g in groups.items():
-        k, s, bp = g["k"], g["s"], g["bp"]
-        if not k and not s and not bp:
-            continue
-        rows.append((name, len(k), sum(k) / len(k) if k else None, k.count(4), len(s),
-                     sum(s) / len(s) if s else None, sum(bp) / len(bp) if bp else None))
-    return sorted(rows, key=lambda r: (-(r[1] + r[4]), r[0].lower()))
+    return out
+
+
+def mean(values):
+    return sum(values) / len(values) if values else None
 
 
 def summary(matches) -> dict:
     """Totals for the line above the table."""
     ks = [k for k in (kills(m) for m in matches) if k is not None]
     es = [e for e in (escaped(m) for m in matches) if e is not None]
-    bp = [m for m in matches if m.bp > 0]
-    hours = sum(m.seconds for m in bp) / 3600
-    return {"killer": len(ks), "kills": sum(ks) / len(ks) if ks else None, "four": ks.count(4),
+    bp = [m.bp for m in matches if m.bp > 0]
+    return {"killer": len(ks), "kills": mean(ks), "four": ks.count(4),
             "abandons": sum(abandons(m) for m in matches if kills(m) is not None),
-            "survivor": len(es), "escaped": sum(es) / len(es) if es else None,
-            "bp": sum(m.bp for m in bp), "bp_matches": len(bp),
-            "bp_hour": sum(m.bp for m in bp) / hours if hours > 0 else None}
+            "survivor": len(es), "escaped": mean(es), "bp": sum(bp), "bp_matches": len(bp)}
 
 
 def end_offset(r, m: Match) -> float:

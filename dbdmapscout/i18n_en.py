@@ -283,7 +283,6 @@ EN = {
         "DBD window is narrower than 16:9 ({w}×{h}): this shape is untested, map and round-end "
         "detection may be off. Safest: 16:9 or wider.",
     "Regler bewegen = eigene Position.": "Moving a slider = own position.",
-    "Mehr (Map-Zuordnungen, Sicherung, Ordner)": "More (map assignments, backup, folders)",
     "Selten gebrauchte Einstellungen ein- oder ausklappen.": "Show or hide rarely used settings.",
     "Verbunden mit: {server}": "Connected to: {server}",
     "pausiert, bis DBD läuft": "paused until DBD runs",
@@ -378,15 +377,10 @@ EN = {
 
     # ------------------------------------------------------------------ tab statistics
     "Statistik": "Statistics",
-    "Gezählt werden Runden mit automatisch erkannter Map, vom Map-Banner bis zum erkannten Rundenende (mindestens "
-    "1 Minute). Gespeichert nur lokal in rounds.jsonl.":
-        "Counted are rounds with an automatically detected map, from the map banner to the detected end of the "
-        "round (at least 1 minute). Stored only locally in rounds.jsonl.",
     "Maps": "Maps",
     "Map": "Map",
     "Runden": "Rounds",
     "Ø Dauer": "Avg. length",
-    "Längste": "Longest",
     "Letzte Runden": "Last rounds",
     "Gesamter Zeitraum": "All time",
     "Heute": "Today",
@@ -396,12 +390,6 @@ EN = {
     "Alle Regionen": "All regions",
     "Alle Killer": "All killers",
     "Häufigste Map": "Most frequent map",
-    "Name unter dem Lobby-Knopf, nur wenn du Killer spielst. Manche Skins zeigen dort ihren eigenen Namen – dann Zeile "
-    "markieren und dem Killer zuordnen (gilt auch rückwirkend). Killer auswählen (oben) zeigt Maps und Dauer nur für "
-    "ihn.":
-        "Name below the lobby button, only when you play killer. Some skins show their own name there – then select "
-        "the row and assign it to the killer (also applies to past rounds). Picking a killer (above) shows maps and "
-        "durations for that killer only.",
     "Der markierte Name (Skin oder neuer Killer) zählt ab jetzt als der gewählte Killer – auch in allen bisherigen "
     "Runden.": "The selected name (skin or new killer) counts as the chosen killer from now on – in all past rounds "
                "too.",
@@ -821,8 +809,7 @@ EN = {
     "Ø Wartezeit {time}": "avg. wait {time}",
     "meist {killer}": "mostly {killer}",
     "Ping {ms} ms": "ping {ms} ms",
-    # official match data (stats.deadbydaylight.com, page "Kills & Escapes")
-    "Kills & Escapes": "Kills & Escapes",
+    # official match data (stats.deadbydaylight.com)
     "Ø Kills": "Avg. kills",
     "4K": "4K",
     "Entkommen": "Escaped",
@@ -831,21 +818,9 @@ EN = {
     "tot": "died",
     "aufgegeben": "abandoned",
     "verlassen": "left",
-    "davon {n}× aufgegeben (Abandon, zählt als Kill)": "{n}× of them abandoned (counts as a kill)",
     "Stats-Seite öffnen, wenn DBD beendet wird": "Open the stats page when DBD is closed",
     "Userscript kopieren": "Copy userscript",
     "Stats-Seite öffnen": "Open stats page",
-    "Einrichten (einmal): Tampermonkey (oder Violentmonkey) im Browser installieren, „Userscript kopieren“ und dort "
-    "als neues Skript einfügen, auf stats.deadbydaylight.com anmelden. Beim Öffnen der Seite speichert das Skript die "
-    "letzten 30 Matches als Datei in den Download-Ordner; das Programm liest sie ein und löscht sie. Das Programm "
-    "selbst geht dafür nicht ins Internet.":
-        "Setup (once): install Tampermonkey (or Violentmonkey) in the browser, \"Copy userscript\" and paste it there "
-        "as a new script, sign in on stats.deadbydaylight.com. When the page opens, the script saves the last 30 "
-        "matches as a file into the download folder; the program reads it and deletes it. The program itself does "
-        "not go online for this.",
-    "Noch keine offiziellen Daten. Erwartet {file} in {folder}.": "No official data yet. Expecting {file} in {folder}.",
-    "Killer: {n} Matches, Ø {kills} Kills, {four}× 4K": "Killer: {n} matches, avg. {kills} kills, {four}× 4K",
-    "Survivor: {n} Matches, {share} entkommen": "Survivor: {n} matches, {share} escaped",
     "⚠ Unbekannter Status auf der Stats-Seite: {list} – zählt nicht. Bitte melden („Diagnose kopieren“).":
         "⚠ Unknown status on the stats page: {list} – not counted. Please report (\"Copy diagnostics\").",
     "⚠ Lücke: zwischen {start} und {end} fehlen vielleicht Matches – die Seite zeigt nur die letzten 30. Seite öfter "
@@ -888,24 +863,36 @@ EN = {
         "It only reads the match list the page loads itself – no account or login data – and sends nothing anywhere.",
     "Öffnet stats.deadbydaylight.com jetzt. Mit installiertem Userscript kommen die Matches gleich danach an.":
         "Opens stats.deadbydaylight.com now. With the userscript installed, the matches arrive right after.",
-    "Alle Matches laut stats.deadbydaylight.com im gewählten Zeitraum – Rolle und Killer laut Seite, die Region nur "
-    "bei Matches, die das Programm selbst erkannt hat. Ø Kills = getötete, geopferte oder aufgegebene (Abandon) "
-    "Survivors pro Killer-Match, 4K = alle vier; wer das Match verlassen hat, zählt nicht als Kill. Als Survivor ist "
-    "Aufgeben nicht entkommen. Custom Games zählen nur unter „Custom Games“.":
-        "All matches on stats.deadbydaylight.com in the chosen period – role and killer as the page says, the region "
-        "only for matches the program detected itself. Avg. kills = survivors killed, sacrificed or abandoned per "
-        "killer match, 4K = all four; a survivor who left the match is no kill. As survivor, abandoning is no escape. "
-        "Custom games count only under \"Custom games\".",
-    "{n} offizielle Matches in dieser Auswahl · gespeichert {total}, neuestes {when}":
-        "{n} official matches in this selection · {total} stored, newest {when}",
     "Vom Programm erkannt: {seen} von {n} ({share})": "Detected by the program: {seen} of {n} ({share})",
     "Nicht erkannt (oder das Programm lief nicht): {list}": "Not detected (or the program was not running): {list}",
-    "Bloodpoints: {total} in {n} Matches · Ø {avg} pro Match · {hour} pro Stunde im Match":
-        "Bloodpoints: {total} in {n} matches · avg. {avg} per match · {hour} per hour in a match",
     "Rundenende erkannt: Median {off} gegenüber dem Ende laut Seite ({n} Runden; + = später)":
         "End of round detected: median {off} against the end on the page ({n} rounds; + = later)",
     "{n} Mio.": "{n}M",
     "Ø BP": "Avg. BP",
     "✓ {n} × Rundenende nicht erkannt, aber mit der Dauer laut Stats-Seite gezählt.":
         "✓ {n} × end of round not detected, but counted with the length from the stats page.",
+    # statistics: official data in the tables, check in tab Erkennung (1.36)
+    "Runden vom Map-Banner bis zum Rundenende (ab 1 min), nur lokal gespeichert. Kills, Escapes und Bloodpoints laut "
+    "stats.deadbydaylight.com, sobald eine Runde dort zugeordnet ist.":
+        "Rounds from the map banner to the end of the round (from 1 min), stored only locally. Kills, escapes and "
+        "bloodpoints from stats.deadbydaylight.com as soon as a round is tied to a match there.",
+    "Killer: Ø {kills} Kills, {four}× 4K ({n} Runden)": "Killer: avg. {kills} kills, {four}× 4K ({n} rounds)",
+    "{n}× Abandon": "{n}× abandon",
+    "Survivor: {share} entkommen ({n} Runden)": "Survivor: {share} escaped ({n} rounds)",
+    "Bloodpoints: {total} (Ø {avg})": "Bloodpoints: {total} (avg. {avg})",
+    "Ein Skin oder neuer Killer steht unter seinem eigenen Namen? Zeile markieren, Killer wählen, „Zuordnen“ – gilt "
+    "auch rückwirkend.":
+        "An outfit or new killer shows under its own name? Select the row, pick the killer, \"Assign\" – also applies "
+        "to past rounds.",
+    "Abgleich mit der Stats-Seite": "Check against the stats page",
+    "Noch keine offiziellen Daten. Einrichten: Einstellungen → Mehr → Offizielle Match-Daten.":
+        "No official data yet. Set up: Settings → More → Official match data.",
+    "Offizielle Match-Daten": "Official match data",
+    "Einmal einrichten: Tampermonkey im Browser installieren, „Userscript kopieren“ und dort als neues Skript einfügen, "
+    "auf stats.deadbydaylight.com anmelden. Beim Öffnen der Seite speichert das Skript die letzten 30 Matches im "
+    "Download-Ordner; das Programm liest die Datei und löscht sie. Es geht dafür selbst nicht ins Internet.":
+        "Set up once: install Tampermonkey in the browser, \"Copy userscript\" and paste it there as a new script, sign "
+        "in on stats.deadbydaylight.com. When the page opens, the script saves the last 30 matches into the download "
+        "folder; the program reads the file and deletes it. It does not go online for this itself.",
+    "Mehr (Map-Zuordnungen, Match-Daten, Sicherung, Ordner)": "More (map assignments, match data, backup, folders)",
 }
