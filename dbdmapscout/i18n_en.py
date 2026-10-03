@@ -829,13 +829,16 @@ EN = {
     "Ergebnis": "Result",
     "entkommen": "escaped",
     "tot": "died",
-    "getrennt": "disconnected",
-    "Laut stats.deadbydaylight.com, nur Runden mit zugeordnetem offiziellem Match (gleiche Map, Start höchstens 3 min "
-    "auseinander). Ø Kills = getötete oder geopferte Survivors pro Killer-Match, 4K = alle vier. Custom Games zählen "
+    "aufgegeben": "abandoned",
+    "verlassen": "left",
+    "Laut stats.deadbydaylight.com, nur Runden mit zugeordnetem offiziellem Match (gleiche Map, Start passt zum "
+    "Map-Banner). Ø Kills = getötete, geopferte oder aufgegebene (Abandon) Survivors pro Killer-Match, 4K = alle vier; "
+    "wer das Match verlassen hat, zählt nicht als Kill. Als Survivor ist Aufgeben nicht entkommen. Custom Games zählen "
     "nur unter „Custom Games“.":
-        "From stats.deadbydaylight.com, only rounds tied to an official match (same map, starts at most 3 min apart). "
-        "Avg. kills = survivors killed or sacrificed per killer match, 4K = all four. Custom games count only under "
-        "\"Custom games\".",
+        "From stats.deadbydaylight.com, only rounds tied to an official match (same map, start fits the map banner). "
+        "Avg. kills = survivors killed, sacrificed or abandoned per killer match, 4K = all four; a survivor who left "
+        "the match is no kill. As survivor, abandoning is no escape. Custom games count only under \"Custom games\".",
+    "davon {n}× aufgegeben (Abandon, zählt als Kill)": "{n}× of them abandoned (counts as a kill)",
     "Stats-Seite öffnen, wenn DBD beendet wird": "Open the stats page when DBD is closed",
     "Userscript kopieren": "Copy userscript",
     "Stats-Seite öffnen": "Open stats page",
