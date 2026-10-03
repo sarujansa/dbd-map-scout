@@ -914,4 +914,14 @@ EN = {
     "Ø {kills} Kills": "avg. {kills} kills",
     "{share} entkommen": "{share} escaped",
     "{bp} BP": "{bp} BP",
+    # notification after an import (1.37.1)
+    "Meldung, wenn Match-Daten eingelesen und gelöscht wurden": "Notify when match data was read and deleted",
+    "Zeigt unten rechts kurz, wie viele Matches gelesen wurden und dass die Datei gelöscht ist – nicht, solange DBD "
+    "im Vordergrund ist. Im Log steht es immer.":
+        "Briefly shows bottom right how many matches were read and that the file was deleted – not while DBD is in "
+        "front. The log always has it.",
+    "{n} Matches gelesen, davon {new} neu. Die Datei wurde gelöscht.":
+        "{n} matches read, {new} of them new. The file was deleted.",
+    "{name} wurde gelesen, konnte aber nicht gelöscht werden – Details im Log.":
+        "{name} was read but could not be deleted – details in the log.",
 }

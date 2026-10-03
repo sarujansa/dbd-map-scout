@@ -120,6 +120,9 @@ class SettingsTab:
         self.off_open_var = tk.BooleanVar(value=self.settings.get("official_open_after_dbd", False))
         ttk.Checkbutton(om, text=_("Stats-Seite öffnen, wenn DBD beendet wird"), variable=self.off_open_var,
                         command=self._official_setting).pack(anchor="w")
+        self.off_notify_var = tk.BooleanVar(value=self.settings.get("official_notify", True))
+        ttk.Checkbutton(om, text=_("Meldung, wenn Match-Daten eingelesen und gelöscht wurden"),
+                        variable=self.off_notify_var, command=self._official_setting).pack(anchor="w")
         ttk.Button(om, text=_("Userscript kopieren"), command=self._official_copy_script).pack(anchor="w", pady=(6, 0))
         ttk.Label(om, text=_("Einmal einrichten: Tampermonkey im Browser installieren, „Userscript kopieren“ und dort "
                              "als neues Skript einfügen, auf stats.deadbydaylight.com anmelden. Beim Öffnen der Seite "
