@@ -443,6 +443,27 @@ EN = {
     "Wann": "When",
     "Dauer": "Length",
     "Verlauf löschen": "Delete history",
+    "Runde löschen": "Delete round",
+    "Ø {kills} Kills · {n} Runden": "Avg. {kills} kills · {n} rounds",
+    "Killer: Ø {kills} Kills, {four}× 4K ({n})": "Killer: avg. {kills} kills, {four}× 4K ({n})",
+    "Survivor: {share} entkommen ({n})": "Survivor: {share} escaped ({n})",
+    "{share} entkommen · {n} Runden": "{share} escaped · {n} rounds",
+    "Eigene Bilanz auf der Map unter dem Timer (Stats-Seite)": "Own record on the map below the timer (stats page)",
+    "Zeigt unter dem Rundentimer, wie es dir auf dieser Map bisher ging: als Killer Ø Kills, als Survivor den "
+    "Anteil Escapes – aus den Runden mit Daten der Stats-Seite, ab 3 Runden.":
+        "Shows below the round timer how you have done on this map so far: average kills as killer, share of "
+        "escapes as survivor – from the rounds with stats-page data, from 3 rounds on.",
+    "Entfernt die markierte Runde aus der Statistik – z. B. eine Map, die mitten im Match falsch erkannt wurde. "
+    "Fragt vorher nach.":
+        "Removes the marked round from the statistics – e.g. a map read wrongly in the middle of a match. Asks "
+        "first.",
+    "Runde {what} aus der Statistik löschen?": "Delete round {what} from the statistics?",
+    "Runde konnte nicht gelöscht werden: {error}": "Could not delete the round: {error}",
+    "Runde gelöscht: {map} ({when}).": "Round deleted: {map} ({when}).",
+    "✓ {n} × Map mitten im Match falsch erkannt (laut Stats-Seite lief da schon ein Match) – nicht gezählt. "
+    "Zuletzt: {map}, {when}.":
+        "✓ {n} × map read wrongly in the middle of a match (the stats page already had a match running) – not "
+        "counted. Last: {map}, {when}.",
     "Noch keine Runden gespeichert.": "No rounds saved yet.",
     "{n} Runden · Ø {avg} · gesamt {total}": "{n} rounds · avg. {avg} · total {total}",
     "Alle gespeicherten Runden löschen?": "Delete all saved rounds?",

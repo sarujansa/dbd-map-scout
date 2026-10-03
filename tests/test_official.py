@@ -409,3 +409,28 @@ def test_chart_columns_stay_thin():
     many = trendchart.columns(30, 400)
     assert all(x1 > x0 for x0, x1 in many) and many[-1][1] <= 400 - trendchart.RIGHT
     assert trendchart.columns(0, 600) == []
+
+
+def test_a_second_round_inside_a_match_is_a_false_detection():
+    # Trickster's Delusion: the real round was lost (new "banner" mid-match), the false one ran to the end
+    m = o.Match(t=T0, map="Trickster's Delusion", seconds=900)
+    real = rnd(T0 + 38, "trickster")                          # lost round, rescued with the page's length
+    ghost = rnd(T0 + 400, "ormond")                           # read from a neon strip 6 min into the match
+    later = rnd(T0 + 1000, "coal")                            # the next match (not on the page yet)
+    rounds = [ghost, later, real]
+    tied, _other = o.link(rounds, [m], {"Trickster's Delusion": "trickster"}.get)
+    assert tied == {2: m}
+    assert o.phantoms(rounds, tied) == {0}
+    assert o.phantoms(rounds, {}) == set()                    # without the page nothing is thrown out
+    m.seconds = 0                                             # page without a length: no guess
+    assert o.phantoms(rounds, tied) == set()
+
+
+def test_take_downloads_hands_over_the_new_matches(tmp_path):
+    store = str(tmp_path / o.FILE)
+    write(str(tmp_path), "dbdmapscout-matches.json", export(entry(T0), entry(T0 + 900)))
+    assert [m.t for m in o.take_downloads(str(tmp_path), store, now=T0 + 3600).fresh] == [T0, T0 + 900]
+    write(str(tmp_path), "dbdmapscout-matches.json", export(entry(T0 + 900), entry(T0 + 1800)))
+    write(str(tmp_path), "dbdmapscout-matches (1).json", export(entry(T0 + 1800)))      # the same match twice
+    res = o.take_downloads(str(tmp_path), store, now=T0 + 3600)
+    assert [m.t for m in res.fresh] == [T0 + 1800] and res.new == 1                      # only the unknown one

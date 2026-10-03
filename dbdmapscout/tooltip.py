@@ -44,6 +44,9 @@ TIPS = {
     "Etagen (Midwich) im Wechsel zeigen, bis ich „Etage“ drücke":
         "An: Karten mit Etagen (Midwich) wechseln zu Beginn alle 7 s zwischen unten und oben, bis du den Knopf "
         "„Etage“ oder den Hotkey drückst. Aus: Sie starten unten und wechseln nur auf Knopfdruck.",
+    "Eigene Bilanz auf der Map unter dem Timer (Stats-Seite)":
+        "Zeigt unter dem Rundentimer, wie es dir auf dieser Map bisher ging: als Killer Ø Kills, als Survivor den "
+        "Anteil Escapes – aus den Runden mit Daten der Stats-Seite, ab 3 Runden.",
     "Verstanden": "Hinweis schliessen – er erscheint nicht wieder.",
     "Killer setzen": "Setzt den Killer nur für die markierte Runde und zählt sie als Killer-Runde – z. B. wenn sie "
                      "fälschlich als Survivor gezählt wurde oder der Name falsch gelesen wurde.",
@@ -128,6 +131,8 @@ TIPS = {
     "Aktualisieren und neu starten": "Beendet das Programm und startet es über start.bat neu – dabei wird das "
                                      "Update installiert.",
     "Verlauf löschen": "Löscht alle gespeicherten Runden (Datei rounds.jsonl).",
+    "Runde löschen": "Entfernt die markierte Runde aus der Statistik – z. B. eine Map, die mitten im Match falsch "
+                     "erkannt wurde. Fragt vorher nach.",
     "Stats-Seite öffnen, wenn DBD beendet wird":
         "Schliesst du DBD nach mindestens einer Runde, öffnet das Programm stats.deadbydaylight.com im Browser. Das "
         "Userscript speichert dann die letzten 30 Matches, das Programm liest sie ein und löscht die Datei. Nie "

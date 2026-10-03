@@ -26,6 +26,7 @@ IN_MATCH_RATE = 1.0               # scans per second while a detected map is bei
 MID_MATCH_AFTER = 30.0            # s after the map appeared: a "banner" now is in the game world -> strict reading
 MID_MATCH_SPAN = 2.0              # … and it must stay on screen this long (a real banner stands still for ~5 s,
                                   # light strips in the world move with the camera)
+SIGHTINGS_KEPT = 20               # mid-match sightings kept in debug/midmatch (picture + text each), newest first
 LOBBY_INTERVAL = 1.0              # seconds between two looks at the lobby button (never during a match)
 LOBBY_RATE = 1.0                  # banner scans per second while the lobby button is on screen: the banner
 LOBBY_HOLD = 3.0                  # only comes after the loading screen; full rate again 3 s after the button went
@@ -70,6 +71,7 @@ class DetectionWorker(threading.Thread):
         self._scanner = None
         self._reported = set()
         self._last_frame_save = 0.0
+        self._last_sighting_save = 0.0
 
     # ------------------------------------------------------------- helpers
     def post(self, kind, **data):
@@ -85,7 +87,7 @@ class DetectionWorker(threading.Thread):
     def set_catalog(self, catalog):
         self.commands.put(("catalog", catalog))
 
-    def _banner_seen(self, t, strict, frames, acc):
+    def _banner_seen(self, t, strict, frames, acc, picture=None):
         """One line per banner-like sighting for the diagnosis: what was read and what came of it."""
         best = max(frames, key=lambda f: f[2]) if frames else ("", "", None)
         lead = acc.best()
@@ -96,7 +98,7 @@ class DetectionWorker(threading.Thread):
         self.banner_history.append(
             f"{time.strftime('%H:%M:%S', time.localtime(t))} {'mitten in der Runde' if strict else 'Rundenstart'} · "
             f"{len(frames)} Bilder, {acc.good_frames} lesbar · „{best[0]}“ / „{best[1]}“ Passung {fit}{like} "
-            f"→ {outcome}")
+            f"→ {outcome}" + (f" · Bild debug/midmatch/{picture}" if picture else ""))
 
     def _report(self, key, text):
         """An unexpected error: full text to the log file, one line to the UI (once per kind)."""
@@ -134,7 +136,7 @@ class DetectionWorker(threading.Thread):
 
         window, window_checked = None, 0.0
         session, last_seen, session_frames = False, 0.0, []
-        session_strict, session_t = False, 0.0
+        session_strict, session_t, session_saved = False, 0.0, None
         tracker = MatchEndTracker()
         tracker_gen = None
         trial_since = 0.0                 # when the map on display appeared (tracker reset)
@@ -257,7 +259,7 @@ class DetectionWorker(threading.Thread):
                 sep, res = reader.read(img, fw, fh)
                 if sep is not None:
                     if not session:
-                        session, session_frames, session_t = True, [], tick
+                        session, session_frames, session_t, session_saved = True, [], tick, None
                         # DBD shows the banner only at the start of a trial: well into a running round it is
                         # something in the game world (neon strips, signs) – only a clean read may switch
                         session_strict = (self.map_on_screen and tracker.in_trial
@@ -270,6 +272,11 @@ class DetectionWorker(threading.Thread):
                         session_frames.append((res.name_text, res.realm_text, res.name_fit))
                         d = acc.add(res, strict=session_strict,
                                     hold=session_strict and tick - session_t < MID_MATCH_SPAN)
+                        if session_strict and (d is not None or (session_saved is None
+                                                                 and tick - self._last_sighting_save >= 10)):
+                            # always kept (no debug switch needed): the only way to see what fooled the reader
+                            self._last_sighting_save = tick
+                            session_saved = self._save_sighting(img, res, sep, "umgeschaltet" if d else "gesehen")
                         if d is not None:
                             self.post("detected", map_id=d.map_id, variant=d.variant, probability=d.probability,
                                       variant_probability=d.variant_probability, name_text=d.name_text,
@@ -279,7 +286,7 @@ class DetectionWorker(threading.Thread):
                             self._save_debug(img, res, sep)
                 elif session and tick - last_seen > 1.5:
                     session = False
-                    self._banner_seen(session_t, session_strict, session_frames, acc)
+                    self._banner_seen(session_t, session_strict, session_frames, acc, session_saved)
                     if acc.decided is None and session_frames:
                         best = max(session_frames, key=lambda f: f[2])
                         if session_strict:            # mid-match: only a note in the log, no "unknown map" bar
@@ -487,6 +494,29 @@ class DetectionWorker(threading.Thread):
             pass
 
     # --------------------------------------------------------------- debug
+    def _save_sighting(self, img, res, sep, tag):
+        """Mid-match banner-like sighting: the captured region (separator marked) + what was read, in
+        debug/midmatch – only the newest SIGHTINGS_KEPT. Returns the file name (None on failure)."""
+        try:
+            d = os.path.join(self.root_dir, "debug", "midmatch")
+            os.makedirs(d, exist_ok=True)
+            stamp = time.strftime("%Y%m%d-%H%M%S") + f"-{int(time.time() * 1000) % 1000:03d}"
+            name = f"{stamp}-{tag}.jpg"
+            vis = img.copy()
+            cv2.line(vis, (sep.x0, sep.y), (sep.x1, sep.y), (0, 0, 255), 1)
+            cv2.imencode(".jpg", vis, [cv2.IMWRITE_JPEG_QUALITY, 90])[1].tofile(os.path.join(d, name))
+            with open(os.path.join(d, f"{stamp}-{tag}.txt"), "w", encoding="utf-8") as fh:
+                fh.write(f"name: {res.name_text}\nrealm: {res.realm_text}\nbest: {res.best}\nfit: {res.name_fit:.2f}\n"
+                         f"separator: x {sep.x0}-{sep.x1}, y {sep.y}, frac {sep.frac:.2f}\n")
+            stamps = sorted({f.rsplit("-", 1)[0] for f in os.listdir(d)})
+            for old in stamps[:-SIGHTINGS_KEPT]:
+                for f in os.listdir(d):
+                    if f.startswith(old + "-"):
+                        os.remove(os.path.join(d, f))
+            return name
+        except Exception:
+            return None
+
     def _save_debug(self, img, res, sep):
         try:
             d = os.path.join(self.root_dir, "debug")
