@@ -3,6 +3,7 @@
 Mixin of App (app.py) – the methods use App's attributes; split out of app.py unchanged."""
 from __future__ import annotations
 
+import datetime
 import logging
 import os
 import time
@@ -16,6 +17,7 @@ from .i18n import N_, _
 from .lobby import KILLERS, killer_label
 from .textnorm import fold
 from .textnorm import fmt_duration
+from .trendchart import TrendChart
 
 log = logging.getLogger("dbdmapscout")
 
@@ -108,6 +110,12 @@ class StatsTab:
         ttk.Label(box_k, text=_("Ein Skin oder neuer Killer steht unter seinem eigenen Namen? Zeile markieren, Killer "
                                 "wählen, „Zuordnen“ – gilt auch rückwirkend."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
+        box_v = self._stats_page(_("Verlauf"))
+        self.trend = TrendChart(box_v, bool(self.settings.get("dark_mode", True)),
+                                ttk.Style().lookup("TFrame", "background") or "#1e1f22")
+        ttk.Label(box_v, text=_("Nur Runden, die einem Match auf der Stats-Seite zugeordnet sind. Die Maus über einer "
+                                "Säule zeigt Wert und Anzahl der Runden."),
+                  style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         box_r = self._stats_page(_("Serverregionen"))
         self.stats_regs = self._stats_tree(box_r, (("reg", _("Region"), 190, "w"), ("n", _("Runden"), 65, "e"),
                                                    ("avg", _("Ø Dauer"), 75, "e"), ("share", _("Anteil"), 65, "e"),
@@ -194,12 +202,19 @@ class StatsTab:
             return _("ohne Region")
         return _(regions.NAMES.get(code, code))
 
-    def _today_text(self, d):
+    def _today_text(self, d, s=None):
+        """``s``: official.summary() of today's rounds with official data (kills, escapes, bloodpoints)."""
         if not d["count"]:
             return _("Heute: noch keine Runde.")
         parts = [_("Heute: {n} Runden ({time})", n=d["count"], time=fmt_duration(d["total"]))]
         if d["killer"] or d["survivor"]:
             parts.append(_("{k} Killer / {s} Survivor", k=d["killer"], s=d["survivor"]))
+        if s and s["killer"]:
+            parts.append(_("Ø {kills} Kills", kills=f"{s['kills']:.1f}"))
+        if s and s["survivor"]:
+            parts.append(_("{share} entkommen", share=f"{s['escaped']:.0%}"))
+        if s and s["bp_matches"]:
+            parts.append(_("{bp} BP", bp=_bp(s["bp"])))
         if d["wait"] is not None:
             parts.append(_("Ø Wartezeit {time}", time=fmt_duration(d["wait"])))
         if d["top_killer"]:
@@ -220,6 +235,8 @@ class StatsTab:
         matches = official.load(self._official_path())
         candidates = all_rounds + lost_rounds
         tied, other = official.link(candidates, matches, self._official_map_id)
+        fixed = official.correct_maps([(candidates[i], m) for i, m in tied.items()], self._official_map_id,
+                                      lambda mid: self.catalog.maps[mid].label(1) if mid in self.catalog.maps else None)
         off = {}                                     # id(round) -> its official match
         rescued = []                                 # end never detected: counts with the page's length
         for i, m in tied.items():
@@ -238,7 +255,7 @@ class StatsTab:
             if m.role == "killer" and r.role == "killer" and k in KILLERS:
                 r.killer = k                         # exact name instead of the lobby reading (skins!)
         return SimpleNamespace(rounds=sorted(all_rounds + rescued, key=lambda r: r.t), off=off, tied=tied,
-                               other=other, rescued=rescued, matches=matches, candidates=candidates)
+                               other=other, fixed=fixed, rescued=rescued, matches=matches, candidates=candidates)
 
     def _stats_render(self):
         j = self._official_join()
@@ -262,7 +279,9 @@ class StatsTab:
             killer = None
         self.stats_killer_cb.configure(values=[lbl for _k, lbl in self._stats_killers])
         self.stats_killer_var.set(dict(self._stats_killers)[killer])
-        self.stats_today_var.set(self._today_text(history.today(all_rounds, time.time())))
+        day = history.period_start("day", time.time())
+        today = [off[id(r)] for r in all_rounds if r.t >= day and id(r) in off and not r.custom]
+        self.stats_today_var.set(self._today_text(history.today(all_rounds, time.time()), official.summary(today)))
         since = history.period_start(period, time.time())
         rounds = history.select(all_rounds, since=since, region=wanted, role=role, killer=killer)
         s = history.summary(rounds)
@@ -321,6 +340,7 @@ class StatsTab:
         if keep and t.exists(keep[0]):
             t.selection_set(keep[0])
         self._stats_alias_buttons()
+        self._trend_render(pairs, {"day": "hour", "week": "day", "month": "day"}.get(period, "week"))
         t = self.stats_regs
         t.delete(*t.get_children())
         pings = history.ping_by_region(rounds)
@@ -518,6 +538,44 @@ class StatsTab:
             return _(RESULTS[kind]) if kind else "?"
         return "–"
 
+    def _trend_render(self, pairs, unit):
+        """Page "Verlauf": Ø kills (killer) and share escaped (survivor) per hour / day / week."""
+        def label(b):
+            if unit == "week":
+                return _("KW {n}", n=datetime.date.fromtimestamp(b).isocalendar()[1])
+            return time.strftime("%H:00" if unit == "hour" else "%d.%m.", time.localtime(b))
+
+        def when(b):
+            if unit == "week":
+                return f"{label(b)} ({time.strftime('%d.%m.', time.localtime(b))}–" \
+                       f"{time.strftime('%d.%m.', time.localtime(b + 6 * 86400))})"
+            if unit == "hour":
+                return time.strftime("%d.%m. %H:00", time.localtime(b))
+            return _(WEEKDAYS[time.localtime(b).tm_wday])[:2] + time.strftime(" %d.%m.", time.localtime(b))
+
+        per = {"hour": _("pro Stunde"), "day": _("pro Tag"), "week": _("pro Woche")}[unit]
+        data = official.trend(pairs, unit)
+        kb, sb = [], []
+        for b, ks, es in data:
+            k, e = official.mean(ks), official.mean(es)
+            kb.append((k, label(b), _("{when}: Ø {kills} Kills · {n} Runden", when=when(b), kills=f"{k:.2f}",
+                                      n=len(ks)) if ks else ""))
+            sb.append((None if e is None else 100 * e, label(b),
+                       _("{when}: {share} entkommen · {n} Runden", when=when(b), share=f"{e:.0%}", n=len(es))
+                       if es else ""))
+        last_k = next((v for v, _l, _t in reversed(kb) if v is not None), None)
+        last_s = next((v for v, _l, _t in reversed(sb) if v is not None), None)
+        self.trend.dark = bool(self.settings.get("dark_mode", True))
+        self.trend.canvas.configure(background=ttk.Style().lookup("TFrame", "background") or "#1e1f22")
+        self.trend.draw({
+            "killer": {"title": _("Killer – Ø Kills {per}", per=per), "bars": kb, "max": 4,
+                       "ticks": [(v, str(v)) for v in range(5)], "last": f"{last_k:.1f}" if last_k is not None else "",
+                       "empty": _("Keine Killer-Runden mit offiziellen Daten in dieser Auswahl.")},
+            "survivor": {"title": _("Survivor – entkommen {per}", per=per), "bars": sb, "max": 100,
+                         "ticks": [(v, f"{v} %") for v in (0, 50, 100)],
+                         "last": f"{last_s:.0f} %" if last_s is not None else "",
+                         "empty": _("Keine Survivor-Runden mit offiziellen Daten in dieser Auswahl.")}})
+
     def _results_text(self, s):
         """Line below the number of rounds: kills, escapes, bloodpoints of the rounds with official data."""
         parts = []
@@ -572,8 +630,8 @@ class StatsTab:
         if j.other:
             r, m = j.other[-1]
             lines.append(_("⚠ {n}× andere Map als erkannt, zuletzt {when}: erkannt {ours}, laut Seite {theirs}.",
-                           n=len(j.other), when=time.strftime("%d.%m. %H:%M", time.localtime(r.t)), ours=r.map,
-                           theirs=m.map))
+                           n=len(j.other), when=time.strftime("%d.%m. %H:%M", time.localtime(r.t)),
+                           ours=j.fixed.get(id(r), r.map), theirs=m.map))
         bundled = official.script_version(os.path.join(os.path.dirname(official.__file__), official.SCRIPT))
         if 0 < getattr(self, "_off_script", 0) < bundled:
             lines.append(_("⚠ Das Userscript ist veraltet (Version {old}, aktuell {new}) – „Userscript kopieren“ und "
