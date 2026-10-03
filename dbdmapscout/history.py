@@ -48,15 +48,15 @@ def _tidy(path: str) -> None:
         if len(rounds) <= KEEP:
             return
         kept = rounds[-KEEP:]
-        _rewrite(path, kept, [x for x in load_lost(path) if x[0] >= kept[0].t])
+        _rewrite(path, kept, [d for d in _lost_lines(path) if d["t"] >= kept[0].t])
     except OSError:
         pass
 
 
 def _rewrite(path: str, rounds, lost) -> None:
-    """Write rounds and lost-round lines back in time order (atomic)."""
+    """Write rounds and lost-round lines (as ``_lost_lines()`` returns them) back in time order (atomic)."""
     lines = [(r.t, json.dumps(asdict(r), ensure_ascii=False)) for r in rounds] + \
-        [(t, json.dumps({"lost": True, "t": t, "map": m, "reason": why}, ensure_ascii=False)) for t, m, why in lost]
+        [(d["t"], json.dumps(d, ensure_ascii=False)) for d in lost]
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
         for _t, line in sorted(lines, key=lambda x: x[0]):
@@ -64,15 +64,21 @@ def _rewrite(path: str, rounds, lost) -> None:
     os.replace(tmp, path)
 
 
-def append_lost(path: str, t: float, map_label: str, reason: str) -> None:
+LOST_KEYS = ("map_id", "region", "source", "wait", "role", "custom", "killer", "ping")   # kept since 1.35
+
+
+def append_lost(path: str, t: float, map_label: str, reason: str, **known) -> None:
     """A round whose end was not detected (not counted): kept as its own line so the statistics can
-    say how many rounds are missing. load() skips these lines."""
+    say how many rounds are missing – with what was known about it (``LOST_KEYS``), so it can still
+    count once the official match data brings its length. load() skips these lines."""
+    rec = {"lost": True, "t": t, "map": map_label, "reason": reason}
+    rec.update({k: v for k, v in known.items() if k in LOST_KEYS and v not in (None, "")})
     with open(path, "a", encoding="utf-8") as fh:
-        fh.write(json.dumps({"lost": True, "t": t, "map": map_label, "reason": reason}, ensure_ascii=False) + "\n")
+        fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
 
-def load_lost(path: str) -> list:
-    """[(t, map label, reason)] of the rounds that were not counted, oldest first."""
+def _lost_lines(path: str) -> list:
+    """The lost-round lines as stored (dicts with a float ``t``), oldest first."""
     out = []
     try:
         with open(path, encoding="utf-8") as fh:
@@ -80,11 +86,34 @@ def load_lost(path: str) -> list:
                 try:
                     d = json.loads(line)
                     if isinstance(d, dict) and d.get("lost"):
-                        out.append((float(d["t"]), str(d.get("map") or ""), str(d.get("reason") or "")))
+                        d["t"] = float(d["t"])
+                        out.append(d)
                 except (ValueError, KeyError, TypeError):
                     continue
     except OSError:
         return []
+    return out
+
+
+def load_lost(path: str) -> list:
+    """[(t, map label, reason)] of the rounds that were not counted, oldest first."""
+    return [(d["t"], str(d.get("map") or ""), str(d.get("reason") or "")) for d in _lost_lines(path)]
+
+
+def load_lost_rounds(path: str) -> list:
+    """The rounds that were not counted as Round objects without a length (``seconds`` = 0);
+    lines from before 1.35 only know time and map label (``map_id`` = "")."""
+    out = []
+    for d in _lost_lines(path):
+        wait, ping = d.get("wait"), d.get("ping")
+        out.append(Round(t=d["t"], seconds=0.0, map_id=str(d.get("map_id") or ""),
+                         map=str(d.get("map") or d.get("map_id") or ""), region=str(d.get("region") or ""),
+                         source=str(d.get("source") or ""),
+                         wait=float(wait) if isinstance(wait, (int, float)) and wait >= 0 else None,
+                         role=str(d.get("role") or "") if d.get("role") in ROLES else "",
+                         custom=bool(d.get("custom")),
+                         ping=float(ping) if isinstance(ping, (int, float)) and ping >= 0 else None,
+                         killer=str(d.get("killer") or "")))
     return out
 
 
@@ -293,7 +322,7 @@ def set_role(path: str, t: float, role: str):
         return None
     hit.custom = role == "custom"
     hit.role = "" if hit.custom else role       # the waiting time stays (ignored for custom games): undo-able
-    _rewrite(path, rounds, load_lost(path))
+    _rewrite(path, rounds, _lost_lines(path))
     return hit
 
 
@@ -307,7 +336,7 @@ def set_killer(path: str, t: float, killer: str):
     if hit is None:
         return None
     hit.killer, hit.role, hit.custom = killer, "killer", False
-    _rewrite(path, rounds, load_lost(path))
+    _rewrite(path, rounds, _lost_lines(path))
     return hit
 
 

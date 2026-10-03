@@ -200,3 +200,20 @@ def test_today_at_a_glance():
     assert d["wait"] == 90 and d["top_killer"] == "The Nurse" and d["ping"] == 35
     empty = h.today(rounds[3:], now)
     assert empty["count"] == 0 and empty["wait"] is None and empty["ping"] is None and not empty["top_killer"]
+
+
+def test_lost_rounds_keep_what_was_known(tmp_path):
+    p = str(tmp_path / h.FILE)
+    h.append(p, rnd("Coal Tower", 600, 1.0))
+    h.append_lost(p, 2.0, "Coal Tower II", "banner", map_id="coal-tower", region="eu-central-1", wait=95.0,
+                  role="killer", killer="The Nurse", ping=None, pings=[1, 2])      # unknown keys are dropped
+    with open(p, "a", encoding="utf-8") as fh:
+        fh.write('{"lost": true, "t": 3.0, "map": "Old Line", "reason": "banner"}\n')   # written before 1.35
+    assert h.load_lost(p) == [(2.0, "Coal Tower II", "banner"), (3.0, "Old Line", "banner")]
+    a, b = h.load_lost_rounds(p)
+    assert (a.t, a.seconds, a.map_id, a.map, a.region, a.wait, a.role, a.killer, a.ping) == \
+        (2.0, 0.0, "coal-tower", "Coal Tower II", "eu-central-1", 95.0, "killer", "The Nurse", None)
+    assert (b.map_id, b.map, b.role, b.wait) == ("", "Old Line", "", None)
+    h.set_role(p, 1.0, "survivor")                         # rewriting the file keeps the lost lines whole
+    assert [r.wait for r in h.load_lost_rounds(p)] == [95.0, None]
+    assert [r.role for r in h.load(p)] == ["survivor"]

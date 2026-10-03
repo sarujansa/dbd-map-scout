@@ -831,13 +831,6 @@ EN = {
     "tot": "died",
     "aufgegeben": "abandoned",
     "verlassen": "left",
-    "Laut stats.deadbydaylight.com, nur Runden mit zugeordnetem offiziellem Match (gleiche Map, Start passt zum "
-    "Map-Banner). Ø Kills = getötete, geopferte oder aufgegebene (Abandon) Survivors pro Killer-Match, 4K = alle vier; "
-    "wer das Match verlassen hat, zählt nicht als Kill. Als Survivor ist Aufgeben nicht entkommen. Custom Games zählen "
-    "nur unter „Custom Games“.":
-        "From stats.deadbydaylight.com, only rounds tied to an official match (same map, start fits the map banner). "
-        "Avg. kills = survivors killed, sacrificed or abandoned per killer match, 4K = all four; a survivor who left "
-        "the match is no kill. As survivor, abandoning is no escape. Custom games count only under \"Custom games\".",
     "davon {n}× aufgegeben (Abandon, zählt als Kill)": "{n}× of them abandoned (counts as a kill)",
     "Stats-Seite öffnen, wenn DBD beendet wird": "Open the stats page when DBD is closed",
     "Userscript kopieren": "Copy userscript",
@@ -851,8 +844,6 @@ EN = {
         "matches as a file into the download folder; the program reads it and deletes it. The program itself does "
         "not go online for this.",
     "Noch keine offiziellen Daten. Erwartet {file} in {folder}.": "No official data yet. Expecting {file} in {folder}.",
-    "{linked} von {rounds} Runden mit offiziellen Daten · gespeichert {n} Matches, neuestes {when}":
-        "{linked} of {rounds} rounds with official data · {n} matches stored, newest {when}",
     "Killer: {n} Matches, Ø {kills} Kills, {four}× 4K": "Killer: {n} matches, avg. {kills} kills, {four}× 4K",
     "Survivor: {n} Matches, {share} entkommen": "Survivor: {n} matches, {share} escaped",
     "⚠ Unbekannter Status auf der Stats-Seite: {list} – zählt nicht. Bitte melden („Diagnose kopieren“).":
@@ -897,4 +888,24 @@ EN = {
         "It only reads the match list the page loads itself – no account or login data – and sends nothing anywhere.",
     "Öffnet stats.deadbydaylight.com jetzt. Mit installiertem Userscript kommen die Matches gleich danach an.":
         "Opens stats.deadbydaylight.com now. With the userscript installed, the matches arrive right after.",
+    "Alle Matches laut stats.deadbydaylight.com im gewählten Zeitraum – Rolle und Killer laut Seite, die Region nur "
+    "bei Matches, die das Programm selbst erkannt hat. Ø Kills = getötete, geopferte oder aufgegebene (Abandon) "
+    "Survivors pro Killer-Match, 4K = alle vier; wer das Match verlassen hat, zählt nicht als Kill. Als Survivor ist "
+    "Aufgeben nicht entkommen. Custom Games zählen nur unter „Custom Games“.":
+        "All matches on stats.deadbydaylight.com in the chosen period – role and killer as the page says, the region "
+        "only for matches the program detected itself. Avg. kills = survivors killed, sacrificed or abandoned per "
+        "killer match, 4K = all four; a survivor who left the match is no kill. As survivor, abandoning is no escape. "
+        "Custom games count only under \"Custom games\".",
+    "{n} offizielle Matches in dieser Auswahl · gespeichert {total}, neuestes {when}":
+        "{n} official matches in this selection · {total} stored, newest {when}",
+    "Vom Programm erkannt: {seen} von {n} ({share})": "Detected by the program: {seen} of {n} ({share})",
+    "Nicht erkannt (oder das Programm lief nicht): {list}": "Not detected (or the program was not running): {list}",
+    "Bloodpoints: {total} in {n} Matches · Ø {avg} pro Match · {hour} pro Stunde im Match":
+        "Bloodpoints: {total} in {n} matches · avg. {avg} per match · {hour} per hour in a match",
+    "Rundenende erkannt: Median {off} gegenüber dem Ende laut Seite ({n} Runden; + = später)":
+        "End of round detected: median {off} against the end on the page ({n} rounds; + = later)",
+    "{n} Mio.": "{n}M",
+    "Ø BP": "Avg. BP",
+    "✓ {n} × Rundenende nicht erkannt, aber mit der Dauer laut Stats-Seite gezählt.":
+        "✓ {n} × end of round not detected, but counted with the length from the stats page.",
 }
