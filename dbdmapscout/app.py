@@ -15,7 +15,7 @@ from tkinter import messagebox, ttk
 
 from PIL import Image, ImageTk
 
-from . import __version__, i18n, layout, regions, theme, tooltip
+from . import __version__, i18n, layout, mapimage, regions, theme, tooltip
 from .capture import IS_WIN, describe_window, find_game_window, foreground_root, is_game_window
 from .catalog import Catalog
 from .config import Settings
@@ -84,6 +84,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         self.root.report_callback_exception = self._tk_error
 
         self.current = None            # (map_id, variant)
+        self._floor = None             # maps with floors (Midwich): position of the floor shown, None = changing
         self.source = None             # "auto" | "manual" | "scan"
         self.user_visible = True       # overlay toggle
         self.hidden_after_match = False  # match over -> hidden until the next map
@@ -194,6 +195,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         # only shown for maps with several layouts (7 of 45), labelled with the one on display
         self.layout_btn = ttk.Button(btns, text="Layout ▸", command=self.next_variant)
         self._layout_unsure = False
+        # only shown for maps with floors (Midwich), labelled with the floor on display
+        self.floor_btn = ttk.Button(btns, text=_("Etagen im Wechsel") + " ▸", command=self.next_floor)
         self.rotate_btn = ttk.Button(btns, text=_("Drehen ↻"), command=self.rotate_map)
         self.rotate_btn.pack(side="left", padx=(4, 0))
         self.scan_btn = ttk.Button(btns, text=_("Scannen"), command=self.scan_now)
@@ -428,6 +431,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         self.keep_bar_var = tk.BooleanVar(value=o.get("keep_in_bar", True))
         self.show_map_var = tk.BooleanVar(value=o.get("show_map", True))
         self.waiting_var = tk.BooleanVar(value=o.get("show_waiting", True))
+        self.floor_auto_var = tk.BooleanVar(value=o.get("floor_auto", True))
         ttk.Checkbutton(pos, text=_("Karte im schwarzen Rand halten (Ultrawide: nie ins Spielbild ragen)"),
                         variable=self.keep_bar_var, command=self._overlay_flags_changed).pack(anchor="w", pady=(4, 0))
         for text, var in ((N_("Karte anzeigen (aus: nur Timer, Ort und Ping)"), self.show_map_var),
@@ -436,6 +440,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
                           (N_("Rundentimer unter der Karte anzeigen"), self.timer_show_var),
                           (N_("Verbundenen Server unter der Karte anzeigen (Tab Server)"), self.server_show_var),
                           (N_("Ohne Karte: „Warte auf Map“ und Lobby-Status anzeigen"), self.waiting_var),
+                          (N_("Etagen (Midwich) im Wechsel zeigen, bis ich „Etage“ drücke"), self.floor_auto_var),
                           (N_("Transparenter Rand um die Karte"), self.transp_var)):
             ttk.Checkbutton(look, text=_(text), variable=var, command=self._overlay_flags_changed).pack(anchor="w", pady=1)
         return outer
@@ -581,12 +586,16 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
             self._log(_("Bild konnte nicht geladen werden: {path} ({error})", path=path, error=e), "Fehler")
             return
         was_on = self._map_on()
+        same_map = was_on and self.current is not None and self.current[0] == map_id
         self._test_map = False                   # a real/manual choice replaces the test picture
         self._clear_unsure()                     # another map on display: the doubt was about the old one
         self._layout_unsure = False
         self.current = (map_id, shown)
         self.source = source
         self.overlay.set_map(path, m.label(shown), rotation)
+        if not same_map:                         # a new map/round starts as set, the same one keeps its floor
+            self._floor = None if self.settings["overlay"].get("floor_auto", True) else 0
+        self._apply_floor()
         if not was_on and not keep_timer:
             self._round_started(time.time())     # map appears -> timer from zero (a switch while on keeps it)
         self.user_visible = True
@@ -662,6 +671,32 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         if not self.layout_btn.winfo_manager():
             self.layout_btn.pack(side="left", padx=(4, 0), before=self.rotate_btn)
 
+    def next_floor(self):
+        """Button/hotkey: next floor of a map with several (Midwich) – from then on the floors no longer
+        change by themselves until the next map."""
+        floors = self.overlay.floors() if self.current else []
+        if not floors:
+            self._log(_("Diese Map hat nur eine Etage."), "Overlay")
+            return
+        self._floor = mapimage.next_floor(floors, self._floor, self.overlay.frame_index())
+        self._apply_floor()
+
+    def _apply_floor(self):
+        """Hand the chosen floor to the overlay (after loading a map); the button only shows for maps with floors."""
+        floors = self.overlay.floors() if self.current else []
+        if not floors:
+            self._floor = None
+        elif self._floor is not None:
+            self._floor %= len(floors)
+        self.overlay.set_floor(floors[self._floor] if self._floor is not None else None)
+        if not floors:
+            self.floor_btn.pack_forget()
+            return
+        self.floor_btn.configure(text=(_("Etage {n} von {total}", n=self._floor + 1, total=len(floors))
+                                       if self._floor is not None else _("Etagen im Wechsel")) + " ▸")
+        if not self.floor_btn.winfo_manager():
+            self.floor_btn.pack(side="left", padx=(4, 0), before=self.rotate_btn)
+
     def _hk_hint(self, name):
         combo = (self.settings.get("hotkeys") or {}).get(name)
         return " " + _("Hotkey: {keys}", keys=pretty(combo)) if combo else ""
@@ -680,6 +715,9 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
                   "gibt es seit Patch 8.6.0 nur noch in Custom Games.") + self._hk_hint("next_variant")
         if w is self.rotate_btn:
             return lambda: tooltip.tip_for_label(self.rotate_btn.cget("text")) + self._hk_hint("rotate_map")
+        if w is self.floor_btn:
+            return lambda: _("Zeigt die nächste Etage (Midwich: unten ↔ oben). Ab dem ersten Druck wechseln die "
+                             "Etagen nicht mehr von selbst – bis zur nächsten Map.") + self._hk_hint("next_floor")
         if w is self.test_btn:
             return lambda: (_("Test sofort beenden.") if self.test_btn.cget("text") == _("Test beenden") else
                             _("Zeigt die Karte 10 s an ihrer normalen Position – auch wenn sie gerade ausgeblendet "
@@ -840,6 +878,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
             self._log(_("Bild konnte nicht geladen werden: {path} ({error})", path=path, error=e), "Fehler")
             return
         self.overlay.set_map(path, m.label(self.current[1]), rotation)
+        self._apply_floor()
         self._set_thumb(frames[0][0])
         self._tick_overlay(reschedule=False)
 
@@ -914,7 +953,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         {"toggle_overlay": self.toggle_overlay, "next_variant": self.next_variant, "scan_now": self.scan_now,
          "next_map": lambda: self.step_map(1), "prev_map": lambda: self.step_map(-1),
          "bigger": lambda: self._resize(0.03), "smaller": lambda: self._resize(-0.03),
-         "edit_position": self.toggle_edit, "rotate_map": self.rotate_map,
+         "edit_position": self.toggle_edit, "rotate_map": self.rotate_map, "next_floor": self.next_floor,
          "reject_map": self.reject_detection}.get(name, lambda: None)()
 
     def _event(self, ev):
@@ -1381,6 +1420,9 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         o["show_server"] = bool(self.server_show_var.get())
         o["keep_in_bar"] = bool(self.keep_bar_var.get())
         o["show_waiting"] = bool(self.waiting_var.get())
+        if bool(self.floor_auto_var.get()) != o.get("floor_auto", True):
+            o["floor_auto"] = bool(self.floor_auto_var.get())
+            self._floor = None if o["floor_auto"] else 0          # the map on display follows right away
         if bool(self.show_map_var.get()) != o.get("show_map", True):
             o["show_map"] = bool(self.show_map_var.get())
             self.overlay.set_show_map(o["show_map"])

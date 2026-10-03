@@ -11,7 +11,7 @@ HOTKEY_LABELS = [("toggle_overlay", N_("Overlay ein/aus")), ("next_variant", N_(
                  ("scan_now", N_("Bildschirm scannen")), ("prev_map", N_("Vorherige Map")),
                  ("next_map", N_("Nächste Map")), ("bigger", N_("Grösser")), ("smaller", N_("Kleiner")),
                  ("edit_position", N_("Mit Maus verschieben")), ("rotate_map", N_("Karte drehen")),
-                 ("reject_map", N_("Falsch erkannt"))]
+                 ("next_floor", N_("Etage wechseln")), ("reject_map", N_("Falsch erkannt"))]
 
 
 class Hotkeys:
