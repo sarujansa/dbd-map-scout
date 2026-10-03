@@ -37,6 +37,7 @@ def _bp(n) -> str:
     return f"{n / 1000:.0f}k" if n >= 1000 else f"{n:.0f}"
 
 
+RECORD_MIN = 3        # rounds with official results on a map before the overlay shows the own record there
 STATS_PERIODS = [("all", N_("Gesamter Zeitraum")), ("day", N_("Heute")), ("week", N_("Diese Woche")), ("month", N_("Dieser Monat")),
                  ("year", N_("Dieses Jahr"))]
 
@@ -159,6 +160,9 @@ class StatsTab:
             b = ttk.Button(rr, text=_(label), command=lambda r=role: self._stats_set_role(r), state="disabled")
             b.pack(side="left", padx=(6, 0))
             self.stats_role_btns.append(b)
+        self.stats_delete_btn = ttk.Button(rr, text=_("Runde löschen"), command=self._stats_delete_round,
+                                           state="disabled")
+        self.stats_delete_btn.pack(side="right")
         kr = ttk.Frame(box2)
         kr.pack(fill="x", pady=(6, 0))
         ttk.Label(kr, text=_("Killer der markierten Runde:")).pack(side="left")
@@ -255,8 +259,13 @@ class StatsTab:
             k = self._killer_of(m.character)
             if m.role == "killer" and r.role == "killer" and k in KILLERS:
                 r.killer = k                         # exact name instead of the lobby reading (skins!)
-        return SimpleNamespace(rounds=sorted(all_rounds + rescued, key=lambda r: r.t), off=off, tied=tied,
-                               other=other, fixed=fixed, rescued=rescued, matches=matches, candidates=candidates)
+        # a second "round" inside a match that already has one: a mid-match false detection – not counted
+        ghost = official.phantoms(candidates[:len(all_rounds)], tied)
+        phantoms = [all_rounds[i] for i in sorted(ghost)]
+        kept = [r for i, r in enumerate(all_rounds) if i not in ghost]
+        return SimpleNamespace(rounds=sorted(kept + rescued, key=lambda r: r.t), off=off, tied=tied,
+                               other=other, fixed=fixed, rescued=rescued, matches=matches, candidates=candidates,
+                               phantoms=phantoms)
 
     def _stats_render(self):
         j = self._official_join()
@@ -297,6 +306,11 @@ class StatsTab:
         if n_saved:
             notes.append(_("✓ {n} × Rundenende nicht erkannt, aber mit der Dauer laut Stats-Seite gezählt.",
                            n=n_saved))
+        ghosts = [r for r in j.phantoms if since is None or r.t >= since]
+        if ghosts:
+            notes.append(_("✓ {n} × Map mitten im Match falsch erkannt (laut Stats-Seite lief da schon ein Match) – "
+                           "nicht gezählt. Zuletzt: {map}, {when}.", n=len(ghosts), map=ghosts[-1].map,
+                           when=time.strftime("%d.%m.%y %H:%M", time.localtime(ghosts[-1].t))))
         pairs = [(r, off[id(r)]) for r in rounds if id(r) in off and (role == "custom" or not r.custom)]
         self.stats_res_var.set(self._results_text(official.summary([m for _r, m in pairs])))
         self.stats_lost_var.set("\n".join(notes))
@@ -389,6 +403,7 @@ class StatsTab:
             b.configure(state=state)
         self.stats_round_killer_cb.configure(state="readonly" if state == "normal" else "disabled")
         self.stats_round_killer_btn.configure(state=state)
+        self.stats_delete_btn.configure(state=state)
 
     def _stats_alias_buttons(self):
         sel = self.stats_kill.selection()
@@ -435,6 +450,26 @@ class StatsTab:
             self._log(_("Rolle für {map} ({when}) auf {role} geändert.", map=r.map,
                         when=time.strftime("%d.%m.%y %H:%M", time.localtime(r.t)),
                         role=_("Custom Game") if role == "custom" else self._role_name(role)), "System")
+        self._stats_render()
+
+    def _stats_delete_round(self):
+        """Remove the round marked in "Letzte Runden" (e.g. a map read wrongly in the middle of a match)."""
+        sel = self.stats_last.selection()
+        if not sel:
+            return
+        values = self.stats_last.item(sel[0], "values")
+        what = f"{values[1]} ({values[0]})" if len(values) > 1 else sel[0]
+        if not messagebox.askokcancel(_("Runde löschen"), _("Runde {what} aus der Statistik löschen?", what=what),
+                                      parent=self.root):
+            return
+        try:
+            r = history.delete(self._hist_path(), float(sel[0]))
+        except OSError as e:
+            self._log(_("Runde konnte nicht gelöscht werden: {error}", error=e), "Fehler")
+            return
+        if r is not None:
+            self._log(_("Runde gelöscht: {map} ({when}).", map=r.map,
+                        when=time.strftime("%d.%m.%y %H:%M", time.localtime(r.t))), "System")
         self._stats_render()
 
     def _stats_set_killer(self):
@@ -511,6 +546,43 @@ class StatsTab:
 
     def _hist_path(self):
         return os.path.join(self.root_dir, history.FILE)
+
+    # ---------------------------------------------------------- own record on the map on display (overlay)
+    def _map_records(self):
+        """{map_id: {"kills": [...], "escaped": [...]}} of the rounds with official results (no custom games);
+        rebuilt only when rounds.jsonl or official.jsonl changed, so a detection never waits for it."""
+        key = tuple(os.path.getmtime(p) if os.path.exists(p) else 0.0
+                    for p in (self._hist_path(), self._official_path()))
+        key += (repr(sorted((self.settings.get("killer_aliases") or {}).items())),)
+        if getattr(self, "_record_key", None) != key:
+            j = self._official_join()
+            pairs = [(r, j.off[id(r)]) for r in j.rounds if id(r) in j.off and not r.custom]
+            self._record_cache, self._record_key = official.results(pairs, lambda r: r.map_id), key
+        return self._record_cache
+
+    def _record_text(self, map_id, role):
+        """Line under the timer: Ø kills (killer) or share escaped (survivor) on this map – the role of the
+        round if known, else the one played more often there; "" with fewer than RECORD_MIN rounds."""
+        g = self._map_records().get(map_id) or {}
+        ks, es = g.get("kills") or [], g.get("escaped") or []
+        if role not in ("killer", "survivor"):
+            role = "killer" if len(ks) >= len(es) else "survivor"
+        if role == "killer" and len(ks) >= RECORD_MIN:
+            return _("Ø {kills} Kills · {n} Runden", kills=f"{sum(ks) / len(ks):.1f}", n=len(ks))
+        if role == "survivor" and len(es) >= RECORD_MIN:
+            return _("{share} entkommen · {n} Runden", share=f"{sum(es) / len(es):.0%}", n=len(es))
+        return ""
+
+    def _update_record(self):
+        """Own record for the map on display into the overlay (setting overlay.show_record)."""
+        text = ""
+        hist = self._hist or {}
+        if self.current and self.settings["overlay"].get("show_record", True) and not hist.get("custom"):
+            try:
+                text = self._record_text(self.current[0], hist.get("role") or self._queue.get("role"))
+            except Exception:
+                log.exception("record")
+        self.overlay.set_record(text)
 
     # ---------------------------------------------------------- official match data (stats.deadbydaylight.com)
     def _official_path(self):
@@ -701,8 +773,9 @@ class StatsTab:
                 self._official_toast(_("{name} wurde gelesen, konnte aber nicht gelöscht werden – Details im Log.",
                                        name=os.path.basename(path)))
         if done:
+            fresh = self._fresh_text(res.fresh)
             self._official_toast(_("{n} Matches gelesen, davon {new} neu. Die Datei wurde gelöscht.", n=res.matches,
-                                   new=res.new))
+                                   new=res.new) + ("\n" + fresh if fresh else ""))
         for path in res.foreign:
             if path not in told:
                 told.add(path)
@@ -718,6 +791,19 @@ class StatsTab:
                 self._stats_render()
             if self.nb.select() == str(self.tab_detect):
                 self._official_check_render()
+
+    def _fresh_text(self, matches):
+        """Results of the newly read matches for the notification (custom games left out)."""
+        s = official.summary([m for m in matches if not m.custom])
+        parts = []
+        if s["killer"] and s["kills"] is not None:
+            parts.append(_("Killer: Ø {kills} Kills, {four}× 4K ({n})", kills=f"{s['kills']:.1f}", four=s["four"],
+                           n=s["killer"]))
+        if s["survivor"] and s["escaped"] is not None:
+            parts.append(_("Survivor: {share} entkommen ({n})", share=f"{s['escaped']:.0%}", n=s["survivor"]))
+        if s["bp_matches"]:
+            parts.append(_("{bp} BP", bp=_bp(s["bp"])))
+        return "\n".join(parts)
 
     def _official_toast(self, text):
         """Small notification bottom right (like "Lobby gefunden", no sound) – not while DBD is in front."""

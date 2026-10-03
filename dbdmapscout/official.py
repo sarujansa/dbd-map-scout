@@ -268,6 +268,7 @@ class Taken:
     unreadable: list = field(default_factory=list)   # not (yet) readable: still being written, locked, broken
     foreign: list = field(default_factory=list)      # the name fits, the content is not ours: left alone
     undeleted: list = field(default_factory=list)    # [(path, error)] read, but could not be deleted
+    fresh: list = field(default_factory=list)        # the matches not stored before (for the summary)
 
 
 def take_downloads(folder: str, store: str, now=None) -> Taken:
@@ -289,6 +290,8 @@ def take_downloads(folder: str, store: str, now=None) -> Taken:
             res.foreign.append(path)
             continue
         if matches:
+            known = {round(m.t) for m in load(store)} | {round(m.t) for m in res.fresh}
+            res.fresh.extend(m for m in matches if round(m.t) not in known)
             new, gap = merge(store, matches)
             res.new += new
             if gap:
@@ -397,6 +400,22 @@ def link(rounds, matches, map_id_of) -> tuple:
         if differs:
             other.append((rounds[ri], matches[mi]))
     return tied, other
+
+
+def phantoms(rounds, tied) -> set:
+    """Indices of untied rounds whose banner falls into the middle of a match that already belongs to another
+    round: DBD shows the banner only at the start, so it was something in the game world that looked like one
+    (the overlay switched maps mid-match). They do not count – display only, rounds.jsonl stays as it is."""
+    spans = sorted((m.t + OTHER_MAP[1], m.t + m.seconds) for m in tied.values() if m.seconds)
+    starts = [a for a, _b in spans]
+    out = set()
+    for i, r in enumerate(rounds):
+        if i in tied:
+            continue
+        k = bisect.bisect_left(starts, r.t) - 1          # the latest match whose banner time lies before r
+        if k >= 0 and spans[k][0] < r.t < spans[k][1]:
+            out.add(i)
+    return out
 
 
 def correct_maps(pairs, map_id_of, label_of) -> dict:
