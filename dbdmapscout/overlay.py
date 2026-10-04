@@ -8,7 +8,7 @@ import tkinter as tk
 from PIL import Image, ImageSequence, ImageTk
 
 from .capture import is_above
-from .mapimage import floor_frames, rotate_frames
+from .mapimage import floor_frames, floor_view, rotate_frames
 
 IS_WIN = sys.platform == "win32"
 KEY = "#ff00fe"                 # colour that Windows makes fully transparent
@@ -121,7 +121,8 @@ class Overlay:
         self._photos = []           # prepared PhotoImages for the current size
         self._frame_i = 0
         self._anim_job = None
-        self._floor = None          # frame index of the floor on display; None = the animation runs
+        self._floor = None          # frame index of the floor on display; None = all floors one below the other
+        self._view = None           # (frames on display, floors stacked) – mapimage.floor_view, cached
         self._height = 0
         self._shown = False
         self._click_through = True
@@ -154,7 +155,7 @@ class Overlay:
     def set_map(self, path: str | None, caption: str = "", rotation: int = 0):
         self._stop_anim()
         self._frames = load_frames(path, rotation) if path else []
-        self._floor = None
+        self._floor = self._view = None
         self._height = 0
         self.caption.configure(text=caption)
         if self._waiting:
@@ -251,24 +252,25 @@ class Overlay:
         """Frame indices of the floors of the map (Midwich: bottom, top); [] = one floor."""
         return floor_frames(self._frames)
 
-    def frame_index(self) -> int:
-        return self._frame_i
-
     def set_floor(self, index):
-        """Show this frame (a floor) and stop the animation; None = let the floors change by themselves."""
-        self._floor = index if index is not None and 0 <= index < len(self._frames) else None
-        if not self._photos:
-            return                            # applied by _render
-        self._stop_anim()
-        if self._floor is not None:
-            self._frame_i = self._floor
-            self.pic.configure(image=self._photos[self._frame_i][0])
-        elif len(self._photos) > 1:
-            self._anim_job = self.root.after(self._photos[self._frame_i][1], self._next_frame)
+        """Show this frame (a floor) alone; None = all floors one below the other. The size changes with it:
+        applied by the next render()."""
+        index = index if index in floor_frames(self._frames) else None
+        if index != self._floor:
+            self._floor, self._view, self._height = index, None, 0
+
+    def _view_frames(self):
+        if self._view is None:
+            self._view = floor_view(self._frames, self._floor, MAX_LOAD_H)
+        return self._view
+
+    def stacked(self) -> int:
+        """Floors shown one below the other (Midwich: 2), else 1 – the app makes the overlay that much taller."""
+        return self._view_frames()[1] if self._frames and self.show_map and not self._waiting else 1
 
     def map_size(self):
         """Size of the map picture as loaded (w, h) – to fit it without rendering it first."""
-        return self._frames[0][0].size if self._frames and self.show_map and not self._waiting else (0, 0)
+        return self._view_frames()[0][0][0].size if self._frames and self.show_map and not self._waiting else (0, 0)
 
     def has_info(self) -> bool:
         return bool(self._timer_text or self._server_text or self._note_text or self._record_text)
@@ -290,11 +292,12 @@ class Overlay:
         if height == self._height and self._photos:
             return
         self._height = height
-        self._photos = [(ImageTk.PhotoImage(_prepare(img, height, self.transparent)), d) for img, d in self._frames]
-        self._frame_i = self._floor if self._floor is not None else 0
-        self.pic.configure(image=self._photos[self._frame_i][0])
+        self._photos = [(ImageTk.PhotoImage(_prepare(img, height, self.transparent)), d)
+                        for img, d in self._view_frames()[0]]
+        self._frame_i = 0
+        self.pic.configure(image=self._photos[0][0])
         self._stop_anim()
-        if len(self._photos) > 1 and self._floor is None:
+        if len(self._photos) > 1:
             self._anim_job = self.root.after(self._photos[0][1], self._next_frame)
 
     def _next_frame(self):

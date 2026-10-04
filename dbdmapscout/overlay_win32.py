@@ -15,8 +15,8 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from .capture import is_above
-from .mapimage import floor_frames
-from .overlay import BACKDROP, load_frames
+from .mapimage import floor_frames, floor_view
+from .overlay import BACKDROP, MAX_LOAD_H, load_frames
 
 IS_WIN = sys.platform == "win32"
 
@@ -121,8 +121,10 @@ def _font(size: int, heavy: bool = False):
     return ImageFont.load_default()
 
 
-def compose(img: Image.Image, height: int, caption: str, transparent: bool, border: bool) -> Image.Image:
-    """Scaled map + optional caption bar (+ edit border) as one RGBA picture."""
+def compose(img: Image.Image, height: int, caption: str, transparent: bool, border: bool,
+            text_h: int = 0) -> Image.Image:
+    """Scaled map + optional caption bar (+ edit border) as one RGBA picture; ``text_h``: height the
+    caption is sized for (stacked floors: one floor), 0 = ``height``."""
     w = max(1, round(img.width * height / img.height))
     pic = img.resize((w, height), Image.LANCZOS)
     if not transparent:
@@ -130,7 +132,7 @@ def compose(img: Image.Image, height: int, caption: str, transparent: bool, bord
         bg.alpha_composite(pic)
         pic = bg
     if caption:
-        size = max(12, height // 34)
+        size = max(12, (text_h or height) // 34)
         font = _font(size)
         x0, y0, x1, y1 = ImageDraw.Draw(pic).textbbox((0, 0), caption, font=font)
         cap_h = (y1 - y0) + size // 2 + 4
@@ -301,7 +303,8 @@ class Win32Overlay:
         self._key = None
         self._frame_i = 0
         self._anim_job = None
-        self._floor = None              # frame index of the floor on display; None = the animation runs
+        self._floor = None              # frame index of the floor on display; None = all floors one below the other
+        self._view = None               # (frames on display, floors stacked) – mapimage.floor_view, cached
         self._shown = False
         self._editing = False
         self._pos = None
@@ -340,7 +343,7 @@ class Win32Overlay:
     def set_map(self, path, caption: str = "", rotation: int = 0):
         self._stop_anim()
         self._frames = load_frames(path, rotation) if path else []
-        self._floor = None
+        self._floor = self._view = None
         self._caption = caption
         self._base_key = self._key = None
 
@@ -372,25 +375,26 @@ class Win32Overlay:
         """Frame indices of the floors of the map (Midwich: bottom, top); [] = one floor."""
         return floor_frames(self._frames)
 
-    def frame_index(self) -> int:
-        return self._frame_i
-
     def set_floor(self, index):
-        """Show this frame (a floor) and stop the animation; None = let the floors change by themselves."""
-        self._floor = index if index is not None and 0 <= index < len(self._frames) else None
-        if self._waiting or len(self._prepared) < 2:
-            return                            # applied when the map is rendered
-        self._stop_anim()
-        if self._floor is not None:
-            self._frame_i = self._floor
-            if self._shown:
-                self._push()
-        else:
-            self._restart_anim()
+        """Show this frame (a floor) alone; None = all floors one below the other. The size changes with it:
+        applied by the next render()."""
+        index = index if index in floor_frames(self._frames) else None
+        if index != self._floor:
+            self._floor, self._view = index, None
+            self._base_key = self._key = None
+
+    def _view_frames(self):
+        if self._view is None:
+            self._view = floor_view(self._frames, self._floor, MAX_LOAD_H)
+        return self._view
+
+    def stacked(self) -> int:
+        """Floors shown one below the other (Midwich: 2), else 1 – the app makes the overlay that much taller."""
+        return self._view_frames()[1] if self._frames and self.show_map and not self._waiting else 1
 
     def map_size(self):
         """Size of the map picture as loaded (w, h) – to fit it without rendering it first."""
-        return self._frames[0][0].size if self._frames and self.show_map and not self._waiting else (0, 0)
+        return self._view_frames()[0][0][0].size if self._frames and self.show_map and not self._waiting else (0, 0)
 
     def has_info(self) -> bool:
         return bool(self._timer or self._server or self._note or self._record)
@@ -414,10 +418,12 @@ class Win32Overlay:
             return 0, 0                   # nothing to show without the map
         base_key = (height, self._caption if self.show_caption else "", self.transparent, self.show_map)
         new_base = base_key != self._base_key
+        # text below/above the map is sized for one floor: stacked floors would double it
+        text_h = max(40, height // self.stacked())
         if new_base:                      # scaling is the slow part: done once per size, not per timer tick
             if self.show_map:
-                self._base = [(compose(img, height, base_key[1], self.transparent, False), dur)
-                              for img, dur in self._frames]
+                self._base = [(compose(img, height, base_key[1], self.transparent, False, text_h), dur)
+                              for img, dur in self._view_frames()[0]]
             else:                         # info only: an empty picture, the info block is drawn below it
                 self._base = [(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), 0)]
             self._base_key = base_key
@@ -426,7 +432,7 @@ class Win32Overlay:
             self._prepared = []
             for pic, dur in self._base:
                 if self.has_info():
-                    pic = add_info(pic, self._timer, self._server, height, backdrop=not self.transparent,
+                    pic = add_info(pic, self._timer, self._server, text_h, backdrop=not self.transparent,
                                    ping=self._ping, note=self._note, record=self._record)
                 if self._editing:
                     pic = add_border(pic.copy())
@@ -434,8 +440,7 @@ class Win32Overlay:
             self._key = key
             self._size = (self._prepared[0][1], self._prepared[0][2])
             if new_base or self._frame_i >= len(self._prepared):
-                fl = self._floor
-                self._frame_i = fl if fl is not None and fl < len(self._prepared) else 0
+                self._frame_i = 0
                 if self._shown:
                     self._push()
                 self._restart_anim()
@@ -495,7 +500,7 @@ class Win32Overlay:
     # ----------------------------------------------------------- animation
     def _restart_anim(self):
         self._stop_anim()
-        if len(self._prepared) > 1 and self._floor is None:
+        if len(self._prepared) > 1:
             self._anim_job = self.root.after(self._prepared[self._frame_i][3], self._next_frame)
 
     def _next_frame(self):

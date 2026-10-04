@@ -35,7 +35,7 @@ DEFAULTS = {
         "keep_in_bar": True,            # ultrawide: shrink/move the map so it stays inside the black bar
         "map_heights": {},              # map id -> own size (hotkeys / mouse wheel with that map on display)
         "map_rotations": {},            # map id -> map turned clockwise by 90/180/270° (button / hotkey)
-        "floor_auto": True,             # maps with floors (Midwich): they alternate until "Etage" is pressed
+        "floor_auto": True,             # maps with floors (Midwich): all one below the other (False: bottom only)
         "show_record": True,            # own record on the map below the timer (official match data)
         "show_map": True,               # off: overlay shows only timer, server and ping
     },
