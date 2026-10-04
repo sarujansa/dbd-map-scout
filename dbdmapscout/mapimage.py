@@ -166,6 +166,7 @@ def rotate_frames(frames, degrees: int):
 
 # ------------------------------------------------------------------ floors (Midwich)
 FLOOR_MIN_MS = 1000         # a frame shown this long is a floor; the short ones in between only cross-fade
+FLOOR_GAP = 0.03            # transparent space between stacked floors (share of one floor's height)
 
 
 def floor_frames(frames) -> list:
@@ -175,12 +176,40 @@ def floor_frames(frames) -> list:
     return idx if len(idx) >= 2 else []
 
 
-def next_floor(floors, pos, visible: int) -> int:
-    """Position in ``floors`` after one press of "Etage": the next one after ``pos``; while the floors
-    still change by themselves (``pos`` None), the one after the floor on display (frame ``visible``)."""
+def stack_floors(frames, floors, max_h: int = 0) -> Image.Image:
+    """All floors one below the other, the top one (last) first, centred, with a small transparent gap;
+    scaled down to ``max_h`` px height if it is taller (0 = keep)."""
+    pics = [frames[i][0].convert("RGBA") for i in reversed(floors)]
+    gap = round(max(p.height for p in pics) * FLOOR_GAP)
+    w = max(p.width for p in pics)
+    out = Image.new("RGBA", (w, sum(p.height for p in pics) + gap * (len(pics) - 1)), (0, 0, 0, 0))
+    y = 0
+    for p in pics:
+        out.alpha_composite(p, ((w - p.width) // 2, y))
+        y += p.height + gap
+    if max_h and out.height > max_h:
+        out = out.resize((max(1, round(out.width * max_h / out.height)), max_h), Image.BOX)
+    return out
+
+
+def floor_view(frames, floor, max_h: int = 0):
+    """What the overlay shows of a map, as ([(image, duration)], floors stacked): maps without floors
+    unchanged (animated GIFs keep running); ``floor`` (a frame index from floor_frames) alone; None =
+    all floors one below the other in one picture."""
+    floors = floor_frames(frames)
+    if not floors:
+        return frames, 1
+    if floor in floors:
+        return [(frames[floor][0], 0)], 1
+    return [(stack_floors(frames, floors, max_h), 0)], len(floors)
+
+
+def next_floor(floors, pos):
+    """Position in ``floors`` after one press of "Etage": all floors (None) -> first (bottom) -> ... ->
+    last -> all floors again."""
     if pos is None:
-        pos = max((k for k, f in enumerate(floors) if f <= visible), default=0)
-    return (pos + 1) % len(floors)
+        return 0
+    return pos + 1 if pos + 1 < len(floors) else None
 
 
 # ------------------------------------------------------------------ map name on top
