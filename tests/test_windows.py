@@ -171,20 +171,25 @@ def test_window_capture_package_is_the_checked_version():
     importlib.import_module("windows_capture")
 
 
-def test_native_overlay_holds_a_floor(root):
+def test_native_overlay_stacks_the_floors(root):
     from dbdmapscout.overlay_win32 import Win32Overlay, make_overlay
     ov = make_overlay(root, prefer_native=True)
     assert isinstance(ov, Win32Overlay), getattr(ov, "last_error", "")
     ov.set_map(os.path.join(ROOT, "maps", "Other", "Midwich.gif"), "Midwich")
     assert ov.floors() == [0, 3]
-    ov.render(300)
-    assert ov._anim_job                                       # floors alternate by themselves
+    assert ov.stacked() == 2
+    w, h = ov.map_size()
+    assert 1.9 < h / w < 2.2                                  # both floors, one below the other
+    ov.set_timer("1:23")
+    both = ov.render(600)
+    assert both[0] < 330 and not ov._anim_job                 # one still picture
     ov.set_floor(3)
-    assert ov.frame_index() == 3 and not ov._anim_job
-    ov.render(320)                                            # new size: stays on the floor
-    assert ov.frame_index() == 3 and not ov._anim_job
+    assert ov.stacked() == 1 and ov.map_size()[0] == ov.map_size()[1]
+    one = ov.render(both[0])                                  # square floor, as high as the stack is wide
+    assert not ov._anim_job and abs(one[0] - both[0]) <= 1    # one floor as wide as each stacked one
+    assert abs((both[1] - 600) - (one[1] - both[0])) <= 2     # timer below: same size either way
     ov.set_floor(None)
-    assert ov._anim_job
+    assert ov.stacked() == 2
     ov.destroy()
 
 

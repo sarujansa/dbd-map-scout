@@ -41,6 +41,7 @@ LANGS = [("en", "EN"), ("de", "DE"), ("fr", "FR"), ("es", "ES"), ("es-MX", "ES-M
 REJECT_HOLD = 60.0        # s: a rejected map is not shown again by the same banner
 UNSURE_DELAY = 2.5        # s: a doubtful read is shown only if the banner did not read cleanly meanwhile
 SMALL_PICTURE = 1080      # 16:9 picture lines below which detection gets less reliable (log hint)
+MAX_HEIGHT = 0.9          # overlay at most this share of the game height (room for the timer below)
 ANCHORS = [("auto", N_("automatisch")), ("top-left", N_("oben links")), ("top-right", N_("oben rechts")),
            ("bottom-left", N_("unten links")), ("bottom-right", N_("unten rechts")), ("custom", N_("eigene Position"))]
 CATS = [N_("Erkennung"), N_("Overlay"), N_("System"), N_("Fehler")]   # log categories (keys; shown translated)
@@ -84,7 +85,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         self.root.report_callback_exception = self._tk_error
 
         self.current = None            # (map_id, variant)
-        self._floor = None             # maps with floors (Midwich): position of the floor shown, None = changing
+        self._floor = None             # maps with floors (Midwich): position of the floor shown, None = all of them
         self.source = None             # "auto" | "manual" | "scan"
         self.user_visible = True       # overlay toggle
         self.hidden_after_match = False  # match over -> hidden until the next map
@@ -196,7 +197,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         self.layout_btn = ttk.Button(btns, text="Layout ▸", command=self.next_variant)
         self._layout_unsure = False
         # only shown for maps with floors (Midwich), labelled with the floor on display
-        self.floor_btn = ttk.Button(btns, text=_("Etagen im Wechsel") + " ▸", command=self.next_floor)
+        self.floor_btn = ttk.Button(btns, text=_("Beide Etagen") + " ▸", command=self.next_floor)
         self.rotate_btn = ttk.Button(btns, text=_("Drehen ↻"), command=self.rotate_map)
         self.rotate_btn.pack(side="left", padx=(4, 0))
         self.scan_btn = ttk.Button(btns, text=_("Scannen"), command=self.scan_now)
@@ -441,7 +442,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
                           (N_("Rundentimer unter der Karte anzeigen"), self.timer_show_var),
                           (N_("Verbundenen Server unter der Karte anzeigen (Tab Server)"), self.server_show_var),
                           (N_("Ohne Karte: „Warte auf Map“ und Lobby-Status anzeigen"), self.waiting_var),
-                          (N_("Etagen (Midwich) im Wechsel zeigen, bis ich „Etage“ drücke"), self.floor_auto_var),
+                          (N_("Etagen (Midwich) untereinander zeigen (aus: nur die untere)"), self.floor_auto_var),
                           (N_("Eigene Bilanz auf der Map unter dem Timer (Stats-Seite)"), self.record_var),
                           (N_("Transparenter Rand um die Karte"), self.transp_var)):
             ttk.Checkbutton(look, text=_(text), variable=var, command=self._overlay_flags_changed).pack(anchor="w", pady=1)
@@ -675,14 +676,14 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
             self.layout_btn.pack(side="left", padx=(4, 0), before=self.rotate_btn)
 
     def next_floor(self):
-        """Button/hotkey: next floor of a map with several (Midwich) – from then on the floors no longer
-        change by themselves until the next map."""
+        """Button/hotkey: maps with floors (Midwich) – all one below the other -> bottom -> ... -> top -> all."""
         floors = self.overlay.floors() if self.current else []
         if not floors:
             self._log(_("Diese Map hat nur eine Etage."), "Overlay")
             return
-        self._floor = mapimage.next_floor(floors, self._floor, self.overlay.frame_index())
+        self._floor = mapimage.next_floor(floors, self._floor)
         self._apply_floor()
+        self._tick_overlay(reschedule=False)          # the size changes: place it again right away
 
     def _apply_floor(self):
         """Hand the chosen floor to the overlay (after loading a map); the button only shows for maps with floors."""
@@ -696,7 +697,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
             self.floor_btn.pack_forget()
             return
         self.floor_btn.configure(text=(_("Etage {n} von {total}", n=self._floor + 1, total=len(floors))
-                                       if self._floor is not None else _("Etagen im Wechsel")) + " ▸")
+                                       if self._floor is not None else _("Beide Etagen")) + " ▸")
         if not self.floor_btn.winfo_manager():
             self.floor_btn.pack(side="left", padx=(4, 0), before=self.rotate_btn)
 
@@ -719,8 +720,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         if w is self.rotate_btn:
             return lambda: tooltip.tip_for_label(self.rotate_btn.cget("text")) + self._hk_hint("rotate_map")
         if w is self.floor_btn:
-            return lambda: _("Zeigt die nächste Etage (Midwich: unten ↔ oben). Ab dem ersten Druck wechseln die "
-                             "Etagen nicht mehr von selbst – bis zur nächsten Map.") + self._hk_hint("next_floor")
+            return lambda: _("Wechselt die Anzeige bei Karten mit Etagen (Midwich): beide untereinander → "
+                             "unten → oben → beide. Gilt bis zur nächsten Map.") + self._hk_hint("next_floor")
         if w is self.test_btn:
             return lambda: (_("Test sofort beenden.") if self.test_btn.cget("text") == _("Test beenden") else
                             _("Zeigt die Karte 10 s an ihrer normalen Position – auch wenn sie gerade ausgeblendet "
@@ -833,7 +834,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
     def _resize(self, delta):
         """Hotkeys and mouse wheel: size of the map on display (remembered for that map)."""
         o = self.settings["overlay"]
-        new = round(min(0.9, max(0.15, self._map_height() + delta)), 3)
+        new = round(min(MAX_HEIGHT, max(0.15, self._map_height() + delta)), 3)
         if self.current:
             o.setdefault("map_heights", {})[self.current[0]] = new
         else:
@@ -1234,7 +1235,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
             return                                           # user is dragging
         self.overlay.opacity = o["opacity"]
         margin = int(gh * o["margin"])
-        height = int(gh * self._map_height())
+        # floors one below the other (Midwich): each as big as one map, as far as the screen allows
+        height = int(gh * min(MAX_HEIGHT, self._map_height() * self.overlay.stacked()))
         a = o["anchor"]
         bar = layout.bar_width(gw, gh)          # black bar left/right of a 16:9 picture (ultrawide)
         slot = None
