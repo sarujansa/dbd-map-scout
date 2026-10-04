@@ -213,19 +213,21 @@ EN = {
     "Drehen ↻": "Rotate ↻",
     "Karte drehen": "Rotate map",
     "Etage wechseln": "Change floor",
-    "Etagen im Wechsel": "Floors alternating",
+    "Beide Etagen": "Both floors",
     "Etage {n} von {total}": "Floor {n} of {total}",
     "Diese Map hat nur eine Etage.": "This map has only one floor.",
-    "Zeigt die nächste Etage (Midwich: unten ↔ oben). Ab dem ersten Druck wechseln die Etagen nicht mehr von "
-    "selbst – bis zur nächsten Map.":
-        "Shows the next floor (Midwich: bottom ↔ top). From the first press on, the floors no longer change by "
-        "themselves – until the next map.",
-    "Etagen (Midwich) im Wechsel zeigen, bis ich „Etage“ drücke":
-        "Alternate the floors (Midwich) until I press “Floor”",
-    "An: Karten mit Etagen (Midwich) wechseln zu Beginn alle 7 s zwischen unten und oben, bis du den Knopf "
-    "„Etage“ oder den Hotkey drückst. Aus: Sie starten unten und wechseln nur auf Knopfdruck.":
-        "On: maps with floors (Midwich) switch between bottom and top every 7 s until you press the “Floor” "
-        "button or the hotkey. Off: they start at the bottom and only change when you press it.",
+    "Wechselt die Anzeige bei Karten mit Etagen (Midwich): beide untereinander → unten → oben → beide. Gilt "
+    "bis zur nächsten Map.":
+        "Switches what maps with floors (Midwich) show: both one below the other → bottom → top → both. Lasts "
+        "until the next map.",
+    "Etagen (Midwich) untereinander zeigen (aus: nur die untere)":
+        "Show the floors (Midwich) one below the other (off: only the bottom one)",
+    "An: Karten mit Etagen (Midwich) zeigen alle Etagen untereinander, oben über unten – jede so groß wie "
+    "eine normale Karte, soweit der Platz reicht. Aus: Sie starten mit der unteren Etage. Der Knopf „Etage“ "
+    "oder der Hotkey schaltet jederzeit um.":
+        "On: maps with floors (Midwich) show all floors one below the other, top above bottom – each as big as "
+        "a normal map, as far as the space allows. Off: they start with the bottom floor. The “Floor” button or "
+        "the hotkey switches at any time.",
     "{map} um {deg}° gedreht.": "{map} turned by {deg}°.",
     "Drehung für {map} entfernt.": "Rotation for {map} removed.",
     "Dreht die angezeigte Karte um 90° im Uhrzeigersinn (für jede Map gemerkt). Der Map-Name darüber bleibt "

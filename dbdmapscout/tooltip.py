@@ -41,9 +41,10 @@ TIPS = {
         "Solange DBD läuft und keine Karte eingeblendet ist, zeigt das Overlay eine kleine Karte: „Warte auf "
         "Map“, darunter Suche/Lobby (z. B. „Suche läuft: 02:13 · Nurse“) oder die letzte Runde. Gilt nicht, "
         "wenn du die Karte selbst ausgeblendet hast.",
-    "Etagen (Midwich) im Wechsel zeigen, bis ich „Etage“ drücke":
-        "An: Karten mit Etagen (Midwich) wechseln zu Beginn alle 7 s zwischen unten und oben, bis du den Knopf "
-        "„Etage“ oder den Hotkey drückst. Aus: Sie starten unten und wechseln nur auf Knopfdruck.",
+    "Etagen (Midwich) untereinander zeigen (aus: nur die untere)":
+        "An: Karten mit Etagen (Midwich) zeigen alle Etagen untereinander, oben über unten – jede so groß wie "
+        "eine normale Karte, soweit der Platz reicht. Aus: Sie starten mit der unteren Etage. Der Knopf „Etage“ "
+        "oder der Hotkey schaltet jederzeit um.",
     "Eigene Bilanz auf der Map unter dem Timer (Stats-Seite)":
         "Zeigt unter dem Rundentimer, wie es dir auf dieser Map bisher ging: als Killer Ø Kills, als Survivor den "
         "Anteil Escapes – aus den Runden mit Daten der Stats-Seite, ab 3 Runden.",

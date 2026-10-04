@@ -196,12 +196,41 @@ def test_midwich_has_two_floors_between_the_fades():
     assert mi.floor_frames([(img, 7000), (img, 100)]) == []
 
 
-def test_next_floor_follows_the_floor_on_display():
+def test_next_floor_cycles_through_both_and_each_floor():
     floors = [0, 3]
-    assert mi.next_floor(floors, 0, 0) == 1 and mi.next_floor(floors, 1, 3) == 0
-    # still alternating: the press goes to the other floor than the one on display
-    assert mi.next_floor(floors, None, 0) == 1
-    assert mi.next_floor(floors, None, 2) == 1                # fading towards the top: still counts as bottom
-    assert mi.next_floor(floors, None, 3) == 0
-    assert mi.next_floor(floors, None, 5) == 0
-    assert mi.next_floor([0, 2, 4], 2, 4) == 0
+    assert mi.next_floor(floors, None) == 0                   # both -> bottom
+    assert mi.next_floor(floors, 0) == 1                      # bottom -> top
+    assert mi.next_floor(floors, 1) is None                   # top -> both again
+    assert [mi.next_floor([0, 2, 4], p) for p in (None, 0, 1, 2)] == [0, 1, 2, None]
+
+
+def test_midwich_floors_stack_top_above_bottom():
+    from dbdmapscout import overlay
+    frames = overlay.load_frames(os.path.join(ROOT, "maps", "Other", "Midwich.gif"))
+    side = frames[0][0].width
+    view, n = mi.floor_view(frames, None, overlay.MAX_LOAD_H)
+    assert n == 2 and len(view) == 1 and view[0][1] == 0       # one still picture, no animation
+    pic = view[0][0]
+    assert pic.height == overlay.MAX_LOAD_H                   # shrunk on load like any tall picture
+    assert 1.9 < pic.height / pic.width < 2.2                  # two squares and a small gap
+    full = mi.stack_floors(frames, [0, 3])
+    gap = round(side * mi.FLOOR_GAP)
+    assert full.size == (side, 2 * side + gap)
+    top, bottom = np.asarray(frames[3][0]), np.asarray(frames[0][0])
+    assert np.array_equal(np.asarray(full)[:side], top)          # top floor first
+    assert np.array_equal(np.asarray(full)[side + gap:], bottom)
+    assert not np.asarray(full)[side:side + gap, :, 3].any()     # transparent between them
+    one, n = mi.floor_view(frames, 3)
+    assert n == 1 and len(one) == 1 and one[0][0] is frames[3][0]
+    assert mi.floor_view(frames, 1)[1] == 2                      # a fade frame is no floor: both again
+
+
+def test_floor_view_leaves_other_maps_alone():
+    img = Image.new("RGBA", (4, 4))
+    anim = [(img, 100)] * 3
+    assert mi.floor_view(anim, None) == (anim, 1)                # plain animations keep running
+    still = [(img, 0)]
+    assert mi.floor_view(still, 0) == (still, 1)
+    rotated = mi.rotate_frames([(Image.new("RGBA", (4, 2)), 7000), (Image.new("RGBA", (4, 2)), 7000)], 90)
+    view, n = mi.floor_view(rotated, None)
+    assert n == 2 and view[0][0].size == (2, 8)                  # turned floors are stacked as turned
