@@ -12,7 +12,8 @@ from dataclasses import dataclass
 
 import cv2
 
-from .capture import IS_WIN, ImageSource, ScreenGrabber, cursor_state, find_game_window, foreground_root
+from .capture import (IS_WIN, ImageSource, ScreenGrabber, cursor_state, find_game_window, foreground_root,
+                      overlaps, windows_above)
 from .i18n import _
 from .detector import ROI, Accumulator, BannerReader, OutOfMatchWatcher
 from .lobby import LobbyReader, QueueTracker, corner_box, result_box
@@ -133,6 +134,7 @@ class DetectionWorker(threading.Thread):
         wcap_failed = None                # hwnd the window capture could not be started for
         wcap_told = False
         via = {"screen": True}            # last picture came from the screen (-> our overlay is in it)
+        self.hidden_looks = 0             # looks skipped: DBD in the background, another window over it
 
         window, window_checked = None, 0.0
         session, last_seen, session_frames = False, 0.0, []
@@ -218,15 +220,30 @@ class DetectionWorker(threading.Thread):
                     wcap.stop()
                     wcap = None
                 self.capture_info = describe(wcap, policy.active)
+                if wcap is not None and via["screen"]:
+                    self.capture_info += " · letztes Bild vom Bildschirm (Fensteraufnahme ohne Bild)"
+                if self.hidden_looks:
+                    self.capture_info += f" · {self.hidden_looks}× verdeckt, ausgelassen"
+                covers = []                       # windows over DBD (looked up once per tick, when needed)
 
-                def grab(box, _o=origin, _cap=wcap, _win=window):
+                def grab(box, _o=origin, _cap=wcap, _win=window, _fg=fg_now, _covers=covers):
+                    """Part of the game picture, or None: DBD is in the background, the window capture had
+                    no picture and another window lies over that part of the screen (e.g. our own
+                    statistics) – then nothing is read rather than someone else's pixels."""
                     if _cap is not None and _win is not None:
                         img = _wgc_grab(_cap, _win, box)
                         if img is not None:
                             via["screen"] = False
                             return img
                     via["screen"] = True
-                    return grabber.grab(_o[0] + box[0], _o[1] + box[1], box[2], box[3])
+                    rect = (_o[0] + box[0], _o[1] + box[1], box[2], box[3])
+                    if _win is not None and not _fg:
+                        if not _covers:
+                            _covers.append(windows_above(_win.hwnd))
+                        if overlaps(rect, _covers[0]):
+                            self.hidden_looks += 1
+                            return None
+                    return grabber.grab(*rect)
 
             if not self.settings.get("auto_detect", True):
                 status = _("Automatische Erkennung ist aus")
@@ -245,7 +262,7 @@ class DetectionWorker(threading.Thread):
                     last_status = warn
                     time.sleep(1.0)
                     continue
-                if img.size and float(img.mean()) < 1.0 and window is not None:
+                if img is not None and img.size and float(img.mean()) < 1.0 and window is not None:
                     black_since = black_since or tick
                     if tick - black_since > 8:
                         warn = _("Aufnahme ist schwarz – DBD im Modus „Fenster-Vollbild“ betreiben")
@@ -254,9 +271,12 @@ class DetectionWorker(threading.Thread):
                 else:
                     black_since = None
 
-                if source is None and via["screen"] and self.overlay_rect:
-                    self._mask_overlay(img, origin[0] + box[0], origin[1] + box[1])
-                sep, res = reader.read(img, fw, fh)
+                if img is None:
+                    sep = res = None                # covered by another window: nothing of DBD to read
+                else:
+                    if source is None and via["screen"] and self.overlay_rect:
+                        self._mask_overlay(img, origin[0] + box[0], origin[1] + box[1])
+                    sep, res = reader.read(img, fw, fh)
                 if sep is not None:
                     if not session:
                         session, session_frames, session_t, session_saved = True, [], tick, None
@@ -304,15 +324,17 @@ class DetectionWorker(threading.Thread):
                 try:
                     cb = corner_box(fw, fh)
                     corner = grab(cb)
-                    if source is None and via["screen"] and self.overlay_rect:
-                        self._mask_overlay(corner, origin[0] + cb[0], origin[1] + cb[1])
-                    view = lobby_reader.read(corner, fw, fh)
-                    if view.button is not None:
-                        lobby_button_t = tick
-                    self.lobby_info = (f"{view.button or '–'} ({'–' if view.fit is None else f'{view.fit:.1f}'}) "
-                                       f"„{view.name}“ „{view.time_text}“ → {view.kind or '–'}")
-                    for ev in self.queue.update(view, tick):
-                        self._queue_event(ev, tick)
+                    if corner is not None:
+                        if source is None and via["screen"] and self.overlay_rect:
+                            self._mask_overlay(corner, origin[0] + cb[0], origin[1] + cb[1])
+                        view = lobby_reader.read(corner, fw, fh)
+                        if view.button is not None:
+                            lobby_button_t = tick
+                        fit = "–" if view.fit is None else f"{view.fit:.1f}"
+                        self.lobby_info = (f"{view.button or '–'} ({fit}) "
+                                           f"„{view.name}“ „{view.time_text}“ → {view.kind or '–'}")
+                        for ev in self.queue.update(view, tick):
+                            self._queue_event(ev, tick)
                 except Exception:
                     self._report("Lobby-Erkennung", traceback.format_exc())
 
@@ -346,10 +368,11 @@ class DetectionWorker(threading.Thread):
                     last_end_check = tick
                     try:
                         full = look = grab((0, 0, fw, fh))
-                        ignore = None
-                        if source is None and via["screen"] and self.overlay_rect:
-                            ignore = self._mask_overlay(look, origin[0], origin[1])   # in place: no 14 MB copy
-                        obs = out_of_match.observe(look, ignore)
+                        if look is not None:                 # None: covered -> no observation, nothing changes
+                            ignore = None
+                            if source is None and via["screen"] and self.overlay_rect:
+                                ignore = self._mask_overlay(look, origin[0], origin[1])   # in place: no 14 MB copy
+                            obs = out_of_match.observe(look, ignore)
                     except Exception:
                         self._report("Rundenende-Prüfung", traceback.format_exc())
                 events = tracker.update(Signals(t=tick, game=game, foreground=foreground, cursor=pointer,

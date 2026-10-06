@@ -94,6 +94,38 @@ def test_window_geometry_of_a_real_window(root):
     assert monitor[2] > 0 and monitor[3] > 0
 
 
+def test_windows_above_see_what_covers_a_window(root):
+    import tkinter as tk
+    from dbdmapscout import capture
+    from dbdmapscout.overlay_win32 import Win32Overlay, make_overlay
+    low = tk.Toplevel(root)
+    low.geometry("400x300+80+80")
+    low.update()
+    high = tk.Toplevel(root)
+    high.geometry("200x150+150+150")
+    high.update()
+    high.lift()
+    high.update()
+    lo, hi = int(low.wm_frame(), 16), int(high.wm_frame(), 16)
+    hi_rect = capture.window_geometry(hi)[1]
+    above = capture.windows_above(lo)
+    assert hi_rect in above and capture.overlaps(capture.window_geometry(lo)[0], above)
+    assert capture.window_geometry(lo)[1] not in capture.windows_above(hi)     # below, not above
+    ov = make_overlay(root, prefer_native=True)
+    assert isinstance(ov, Win32Overlay), getattr(ov, "last_error", "")
+    ov.set_map(os.path.join(ROOT, "maps", "McMillan", "Coal Tower.webp"))
+    ov.render(200)
+    ov.show_at(100, 100)
+    root.update()
+    assert ov.shown and capture.window_geometry(ov._hwnd)[1] not in capture.windows_above(lo)  # click-through
+    ov.destroy()
+    high.withdraw()
+    high.update()
+    assert hi_rect not in capture.windows_above(lo)                            # hidden windows hide nothing
+    high.destroy()
+    low.destroy()
+
+
 def test_hotkeys_register_and_stop():
     import time
     from dbdmapscout.config import DEFAULTS
