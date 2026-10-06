@@ -4,7 +4,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dbdmapscout.capture import GameWindow  # noqa: E402
+from dbdmapscout.capture import GameWindow, overlaps  # noqa: E402
 
 
 def test_borderless_picture_is_the_whole_capture():
@@ -22,3 +22,15 @@ def test_window_mode_capture_includes_the_title_bar():
     assert g.capture_offset((1718, 1360)) == (0, 0)           # client only
     assert g.capture_offset((800, 600)) is None               # unknown size: screen capture instead
     assert g.capture_offset(None) is None
+
+
+def test_covered_parts_of_the_game_picture():
+    # user's diagnose 1.41.0: DBD as a 1920×1080 window at (-3422, 254) on the left monitor; banner region
+    # (detector.ROI) of that window on screen – another window over it must not be read as the game
+    banner = (-3422 + 0, 254 + int(0.52 * 1080), int(0.64 * 1920), int(0.47 * 1080))
+    assert overlaps(banner, [(-3000, 600, 900, 700)])            # our own window over the lower left part
+    assert not overlaps(banner, [(100, 0, 1200, 800)])           # a browser on the other monitor
+    assert not overlaps(banner, [(-3440, 0, 18, 1440)])           # ends where DBD's picture starts
+    assert not overlaps(banner, [(-3422, 254, 1920, banner[1] - 254)])   # only above the banner region
+    assert overlaps(banner, [(0, 0, 10, 10), (-2300, 1300, 50, 50)])
+    assert not overlaps(banner, [])
