@@ -7,11 +7,13 @@ file, so DBD cannot reach them and uses the chosen ones. The game itself is
 not touched; the hosts file is a Windows system file (administrator rights,
 Windows asks via UAC).
 
-Latency is measured the way GameLift intends it: a small UDP packet to the
-region's ping beacon (``gamelift-ping.<region>.api.aws``, port 7770), which
-echoes it back. The name is resolved with the DNS server directly (ignoring
-the hosts file), so blocked regions can be measured too. If UDP gets no
-answer, ICMP (normal ping) is used.
+Latency: a normal ping (ICMP echo) to the region's GameLift service name
+(``gamelift.<region>.amazonaws.com``), as Make Your Choice measures it – Windows
+times the round trip itself (IcmpSendEcho), so a busy program (OCR) cannot add
+to it. If it gets no answer, a small UDP packet to the region's ping beacon
+(``gamelift-ping.<region>.api.aws``, port 7770) is used, timed here. Names are
+resolved with the DNS server directly (ignoring the hosts file), so blocked
+regions can be measured too.
 """
 from __future__ import annotations
 
@@ -183,27 +185,35 @@ def icmp_ping(ip: str, timeout_ms: int = 1000) -> float | None:
         return None
 
 
+def ping_once(code: str, ips: dict | None = None) -> tuple:
+    """One latency sample of a region: (ms or None, "ICMP"|"UDP"|"", address). ICMP to the GameLift service
+    name first (timed by Windows), else UDP to the ping beacon. ``ips``: cache {name: address}."""
+    ips = {} if ips is None else ips
+    for name, how, ping in ((hosts_for(code)[0], "ICMP", icmp_ping), (hosts_for(code)[1], "UDP", udp_ping)):
+        ip = ips.get(name)
+        if ip is None:
+            found = resolve(name)
+            ip = ips[name] = found[0] if found else ""
+        if ip:
+            t = ping(ip)
+            if t is not None:
+                return t, how, ip
+    return None, "", ""
+
+
 def measure(code: str, samples: int = 3) -> dict:
-    """Latency of one region: {"ms": float|None, "how": "UDP"|"ICMP"|"", "ip": str}."""
-    ping_host = hosts_for(code)[1]
-    ips = resolve(ping_host)
-    if not ips:
-        return {"ms": None, "how": "", "ip": "", "error": _("Name nicht auflösbar")}
-    ip = ips[0]
-    times = []
+    """Latency of one region: {"ms": float|None, "how": "ICMP"|"UDP"|"", "ip": str} (median of the samples)."""
+    ips, times, how, ip = {}, [], "", ""
     for i in range(samples):
         if i:
             time.sleep(0.35)                      # GameLift allows 3 pings/s per sender
-        t = udp_ping(ip)
+        t, h, a = ping_once(code, ips)
         if t is not None:
             times.append(t)
-    if times:
-        return {"ms": statistics.median(times), "how": "UDP", "ip": ip}
-    t = icmp_ping(ip)
-    if t is None:
-        svc = resolve(hosts_for(code)[0])
-        t = icmp_ping(svc[0]) if svc else None
-    return {"ms": t, "how": "ICMP" if t is not None else "", "ip": ip}
+            how, ip = how or h, ip or a
+    if not times and not any(ips.values()):
+        return {"ms": None, "how": "", "ip": "", "error": _("Name nicht auflösbar")}
+    return {"ms": statistics.median(times) if times else None, "how": how, "ip": ip}
 
 
 def measure_all(codes=None, workers: int = 8) -> dict:
