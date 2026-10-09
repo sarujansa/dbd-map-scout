@@ -38,6 +38,16 @@ PING_EVERY = 5.0       # one ping to the region's beacon this often while connec
 PING_KEEP = 3          # shown value = median of the last pings (one slow packet does not jump the display)
 PEAK_KEEP = 1800.0     # diagnostics: busiest partners of the last 30 min (the match is over when it is copied)
 PEAK_MAX = 8
+UNKNOWN = "?"          # region of a game server that AWS does not tell (see AWS_GLOBAL_EC2)
+# EC2 address ranges AWS publishes with region "GLOBAL" (ip-ranges.json, service EC2, as of 2026-10-09): machines
+# there have no reverse DNS name, so the region cannot be read from the address. GameLift runs DBD servers in
+# 54.115.0.0/16 (seen 2026-10). Bundled instead of downloaded: the server display opens no new connection.
+AWS_GLOBAL_EC2 = tuple(ipaddress.ip_network(n) for n in (
+    "3.4.8.0/24", "15.177.0.0/18", "15.193.32.0/19", "23.228.196.0/24", "23.228.197.0/24", "23.228.198.0/24",
+    "31.220.247.0/24", "35.54.16.0/20", "40.168.224.0/24", "40.168.225.0/24", "40.168.226.0/24",
+    "40.168.227.0/24", "40.168.228.0/24", "40.168.229.0/24", "40.168.230.0/24", "40.168.231.0/24",
+    "54.25.32.0/19", "54.25.192.0/18", "54.115.0.0/16", "63.249.128.0/18", "63.249.192.0/19", "64.73.192.0/19",
+    "159.248.232.0/21", "159.248.240.0/21", "216.39.168.0/21"))
 _REGION_RE = re.compile(r"\.([a-z]{2}(?:-[a-z]+)+-\d)\.compute\.amazonaws\.com$")
 
 
@@ -62,7 +72,18 @@ def pick_server(flows, region_of) -> dict | None:
     return None
 
 
+def aws_global(ip: str) -> bool:
+    """EC2 address whose region AWS does not publish (no reverse DNS name either)."""
+    try:
+        a = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return any(a in n for n in AWS_GLOBAL_EC2)
+
+
 def region_name(code: str) -> str:
+    if code == UNKNOWN:
+        return _("Region unbekannt")
     return _(regions.NAMES.get(code, code))
 
 
@@ -126,6 +147,7 @@ class ConnectionWatch:
         self._names = {}               # ip -> reverse DNS name or error (diagnostics only)
         self._local = ""               # address of the captured interface (diagnostics only)
         self._result_t = 0.0
+        self.region_hint = None        # the only region the hosts file leaves open (set by the app), else None
         self.peaks = {}                # ip -> busiest moment {"pps", "port", "sent", "recv", "t"} (diagnostics)
 
     @property
@@ -209,6 +231,8 @@ class ConnectionWatch:
         self._local, self._result_t = str(data.get("local") or ""), float(data.get("t", 0))
         self._note_peaks(data.get("flows") or [], now)
         found = pick_server(data.get("flows") or [], self._region)
+        if found and found["region"] == UNKNOWN and self.region_hint:
+            found = {**found, "region": self.region_hint, "hint": True}     # only region the hosts file allows
         if found:
             self.server, self._seen = found, now
         elif self.server and now - self._seen > LOST_AFTER:
@@ -218,6 +242,8 @@ class ConnectionWatch:
     # --------------------------------------------------------------- ping
     def _update_ping(self, now: float) -> None:
         region = self.server["region"] if self.server else None
+        if region == UNKNOWN:
+            region = None                            # no beacon to ping; the game server itself never gets a packet
         with self._lock:
             if region != self._ping_region:          # other region / no server: old values are void
                 self._ping_region = region
@@ -259,6 +285,8 @@ class ConnectionWatch:
             return None                          # not written yet / being written right now
 
     def _region(self, ip: str) -> str | None:
+        if aws_global(ip):
+            return UNKNOWN                       # no reverse DNS name to look up
         now = time.time()
         with self._lock:
             code, t = self._rdns.get(ip, (None, 0.0))
@@ -312,6 +340,8 @@ class ConnectionWatch:
         for ip, p in sorted(self.peaks.items(), key=lambda kv: -kv[1]["pps"]):
             code = (rdns.get(ip) or (None,))[0]
             name = names.get(ip)
+            if aws_global(ip):
+                code, name = f"AWS EC2 GLOBAL (Region laut hosts: {self.region_hint or '—'})", "nicht gefragt"
             region = code or ("ausstehend" if name is None else "kein AWS-EC2-Name")
             lines.append(f"  {_mask_ip(ip)} Port {p['port']} · {p['pps']}/s ({p['sent']} gesendet/{p['recv']} "
                          f"empfangen in 5 s) vor {now - p['t']:.0f} s · rDNS {_mask_name(name) if name else '—'} → {region}")
