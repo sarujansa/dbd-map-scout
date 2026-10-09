@@ -14,6 +14,7 @@ the way DBD itself measures region latency. The game server is never sent anythi
 from __future__ import annotations
 
 import collections
+import ipaddress
 import json
 import os
 import re
@@ -35,6 +36,8 @@ NO_DATA_AFTER = 8.0    # result file not updated for this long -> the helper is 
 RDNS_RETRY = 60.0      # look up an address again after this long if it gave no AWS region
 PING_EVERY = 5.0       # one ping to the region's beacon this often while connected (GameLift allows 3/s)
 PING_KEEP = 3          # shown value = median of the last pings (one slow packet does not jump the display)
+PEAK_KEEP = 1800.0     # diagnostics: busiest partners of the last 30 min (the match is over when it is copied)
+PEAK_MAX = 8
 _REGION_RE = re.compile(r"\.([a-z]{2}(?:-[a-z]+)+-\d)\.compute\.amazonaws\.com$")
 
 
@@ -120,6 +123,10 @@ class ConnectionWatch:
         self._next_ping = 0.0
         self._pinging = False
         self._beacons = {}             # region -> ping beacon IP
+        self._names = {}               # ip -> reverse DNS name or error (diagnostics only)
+        self._local = ""               # address of the captured interface (diagnostics only)
+        self._result_t = 0.0
+        self.peaks = {}                # ip -> busiest moment {"pps", "port", "sent", "recv", "t"} (diagnostics)
 
     @property
     def running(self) -> bool:
@@ -199,6 +206,8 @@ class ConnectionWatch:
             self.no_data = now - self._started > NO_DATA_AFTER
             return
         self.no_data = now - float(data.get("t", 0)) > NO_DATA_AFTER
+        self._local, self._result_t = str(data.get("local") or ""), float(data.get("t", 0))
+        self._note_peaks(data.get("flows") or [], now)
         found = pick_server(data.get("flows") or [], self._region)
         if found:
             self.server, self._seen = found, now
@@ -261,11 +270,52 @@ class ConnectionWatch:
 
     def _lookup(self, ip):
         try:
-            code = region_from_ptr(socket.gethostbyaddr(ip)[0]) or ""
-        except OSError:
-            code = ""
+            name = socket.gethostbyaddr(ip)[0]
+            code = region_from_ptr(name) or ""
+        except OSError as e:
+            name, code = f"({type(e).__name__}: {e})", ""
         with self._lock:
             self._rdns[ip] = (code, time.time())
+            self._names[ip] = name
+
+    # --------------------------------------------------------------- diagnostics
+    def _note_peaks(self, flows, now: float) -> None:
+        for f in flows:
+            p = self.peaks.get(f["ip"])
+            if p is None or f.get("pps", 0) >= p["pps"]:
+                p = self.peaks[f["ip"]] = {k: f.get(k, 0) for k in ("pps", "port", "sent", "recv")} | {"t": now}
+            p["seen"] = now
+        old = [ip for ip, p in self.peaks.items() if now - p["seen"] > PEAK_KEEP]
+        for ip in old:
+            del self.peaks[ip]
+        if len(self.peaks) > PEAK_MAX:
+            for ip in sorted(self.peaks, key=lambda i: self.peaks[i]["pps"])[:len(self.peaks) - PEAK_MAX]:
+                del self.peaks[ip]
+            for ip in [i for i in self._names if i not in self.peaks]:
+                self._names.pop(ip, None)
+
+    def diag_lines(self, now: float | None = None) -> list:
+        """Diagnostics text (German, not translated): why no server is chosen. Addresses are masked –
+        the text is saved as diagnose.txt, and the server address never goes to a file."""
+        now = now or time.time()
+        srv = self.server
+        lines = [f"Verbunden mit: läuft={self.running} als_thread={self.in_process} keine_daten={self.no_data} "
+                 f"fehler={self.error or '—'} server={srv['region'] if srv else '—'} ping={self.ping_ms} "
+                 f"schnittstelle={_mask_local(self._local)} ergebnis_vor="
+                 f"{f'{now - self._result_t:.0f} s' if self._result_t else '—'} (Server ab {MIN_PPS:.0f}/s + AWS-EC2-Name)"]
+        if not self.peaks:
+            lines.append("  Gegenstellen: keine (kein UDP-Verkehr mit öffentlichen Adressen gesehen)")
+            return lines
+        lines.append(f"  Gegenstellen (Spitze je Adresse, letzte {PEAK_KEEP / 60:.0f} min):")
+        with self._lock:
+            names, rdns = dict(self._names), dict(self._rdns)
+        for ip, p in sorted(self.peaks.items(), key=lambda kv: -kv[1]["pps"]):
+            code = (rdns.get(ip) or (None,))[0]
+            name = names.get(ip)
+            region = code or ("ausstehend" if name is None else "kein AWS-EC2-Name")
+            lines.append(f"  {_mask_ip(ip)} Port {p['port']} · {p['pps']}/s ({p['sent']} gesendet/{p['recv']} "
+                         f"empfangen in 5 s) vor {now - p['t']:.0f} s · rDNS {_mask_name(name) if name else '—'} → {region}")
+        return lines
 
     # --------------------------------------------------------------- text
     def text(self) -> str:
@@ -277,6 +327,27 @@ class ConnectionWatch:
             ping = f" · {self.ping_ms:.0f} ms" if self.ping_ms is not None else ""
             return f"{region_name(self.server['region'])} ({self.server['ip']}){ping}"
         return _("Warte auf Match …")
+
+
+def _mask_ip(ip: str) -> str:
+    parts = ip.split(".")
+    return ".".join(parts[:2] + ["x", "x"]) if len(parts) == 4 else "?"
+
+
+def _mask_local(ip: str) -> str:
+    """Private addresses as they are (they tell VPN/virtual adapters apart), public ones masked."""
+    if not ip:
+        return "—"
+    try:
+        private = ipaddress.ip_address(ip).is_private
+    except ValueError:
+        private = False
+    return ip if private else _mask_ip(ip) + " (öffentlich)"
+
+
+def _mask_name(name: str) -> str:
+    """Reverse DNS name without the address in it (ec2-3-120-1-2.eu-… → ec2-….eu-…)."""
+    return re.sub(r"\d{1,3}([-.])\d{1,3}\1\d{1,3}\1\d{1,3}", "…", name)
 
 
 def _remove(*paths):
