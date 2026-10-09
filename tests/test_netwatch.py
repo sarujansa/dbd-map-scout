@@ -313,3 +313,28 @@ def test_public_check_is_cached():
     assert netwatch.is_public("3.120.19.250") and not netwatch.is_public("192.168.1.20")
     assert netwatch._PUBLIC == {"3.120.19.250": True, "192.168.1.20": False}
     assert not netwatch.is_public("not an ip")
+
+
+def test_diagnostics_keep_peaks_and_mask_addresses(tmp_path, monkeypatch):
+    """After the match the diagnostics still show the busiest partners, without any full address."""
+    w, control, result = _watch(tmp_path, monkeypatch)
+    w._rdns = {SERVER: ("", time.time()), "52.1.2.3": ("", time.time())}
+    w._names = {SERVER: "server-3-120-45-67.fra50.r.cloudfront.net"}
+
+    def write(t, flows):
+        result.write_text(json.dumps({"ok": True, "t": t, "local": "192.168.1.20", "flows": flows}))
+
+    write(1000.0, [{"ip": SERVER, "port": 7777, "pps": 45.0, "sent": 100, "recv": 125},
+                   {"ip": "52.1.2.3", "port": 3478, "pps": 2.0, "sent": 5, "recv": 5}])
+    w.poll(1000.5)
+    assert w.server is None                                   # no EC2 name: not chosen
+    write(1100.0, [])
+    w.poll(1100.5)
+    text = "\n".join(w.diag_lines(1101.0))
+    assert "schnittstelle=192.168.1.20" in text
+    assert "3.120.x.x Port 7777 · 45.0/s" in text and "kein AWS-EC2-Name" in text
+    assert "server-….fra50.r.cloudfront.net" in text and "ausstehend" in text
+    assert text.index("3.120.x.x") < text.index("52.1.x.x")   # busiest first
+    assert SERVER not in text and "52.1.2.3" not in text and "45-67" not in text
+    w._note_peaks([], 1100.5 + connwatch.PEAK_KEEP + 1)
+    assert not w.peaks                                         # forgotten after 30 min
