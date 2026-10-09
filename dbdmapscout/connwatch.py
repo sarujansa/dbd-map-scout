@@ -7,9 +7,9 @@ The game server is the busiest UDP partner on a public address whose
 reverse DNS name is an AWS EC2 machine (GameLift runs on EC2); the region
 is part of that name, e.g. ``ec2-3-120-1-2.eu-central-1.compute.amazonaws.com``.
 
-Ping: while connected, the GameLift UDP ping beacon of that region
-(``gamelift-ping.<region>.api.aws``, port 7770) is measured every few seconds,
-the way DBD itself measures region latency. The game server is never sent anything.
+Ping: while connected, the region is measured every few seconds like in the
+Server tab (``regions.ping_once``: ICMP to ``gamelift.<region>.amazonaws.com``,
+else the UDP ping beacon). The game server is never sent anything.
 """
 from __future__ import annotations
 
@@ -143,7 +143,7 @@ class ConnectionWatch:
         self._ping_region = None
         self._next_ping = 0.0
         self._pinging = False
-        self._beacons = {}             # region -> ping beacon IP
+        self._beacons = {}             # host name -> address (regions.ping_once cache)
         self._names = {}               # ip -> reverse DNS name or error (diagnostics only)
         self._local = ""               # address of the captured interface (diagnostics only)
         self._result_t = 0.0
@@ -259,16 +259,7 @@ class ConnectionWatch:
     def _ping(self, region: str) -> None:
         ms = None
         try:
-            ip = self._beacons.get(region)
-            if not ip:
-                ips = regions.resolve(regions.hosts_for(region)[1])   # DNS server, ignores the hosts file
-                ip = ips[0] if ips else None
-                if ip:
-                    self._beacons[region] = ip
-            if ip:
-                ms = regions.udp_ping(ip)
-                if ms is None:
-                    ms = regions.icmp_ping(ip)
+            ms = regions.ping_once(region, self._beacons)[0]   # DNS server, ignores the hosts file
         except Exception:
             ms = None
         with self._lock:

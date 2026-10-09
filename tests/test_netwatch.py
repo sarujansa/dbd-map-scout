@@ -253,14 +253,14 @@ def test_capture_refuses_instead_of_promiscuous_fallback(tmp_path, monkeypatch):
     assert err["ok"] is False and "RCVALL_IPLEVEL" in err["error"]
 
 
-def test_ping_to_region_beacon_median_and_reset(monkeypatch):
-    """Ping goes to the region's GameLift beacon (never the game server), median of the last values,
+def test_ping_to_region_median_and_reset(monkeypatch):
+    """Ping goes to the region's GameLift service name (never the game server), median of the last values,
     starts over when the region changes and is gone without a server."""
     resolved, pinged = [], []
     answers = iter([30.0, 90.0, 32.0, 31.0, 150.0])
     monkeypatch.setattr(connwatch.regions, "resolve", lambda name: resolved.append(name) or ["35.1.1.1"])
-    monkeypatch.setattr(connwatch.regions, "udp_ping", lambda ip: pinged.append(ip) or next(answers))
-    monkeypatch.setattr(connwatch.regions, "icmp_ping", lambda ip: None)
+    monkeypatch.setattr(connwatch.regions, "icmp_ping", lambda ip: pinged.append(ip) or next(answers))
+    monkeypatch.setattr(connwatch.regions, "udp_ping", lambda ip: None)
     monkeypatch.setattr(connwatch.threading, "Thread", _InlineThread)
     w = connwatch.ConnectionWatch()
     w.server = {"ip": SERVER, "port": 7777, "region": "eu-central-1"}
@@ -271,11 +271,11 @@ def test_ping_to_region_beacon_median_and_reset(monkeypatch):
         t += connwatch.PING_EVERY
     w._update_ping(t - 1)                                              # too soon: no extra packet
     assert len(pinged) == 3
-    assert resolved == ["gamelift-ping.eu-central-1.api.aws"]          # resolved once, then cached
+    assert resolved == ["gamelift.eu-central-1.amazonaws.com"]         # resolved once, then cached
     assert SERVER not in pinged                                         # the game server gets nothing
     w.server = {"ip": "3.2.2.2", "port": 7777, "region": "eu-west-1"}  # other region: start over
     w._update_ping(t)
-    assert w.ping_ms == 31.0 and resolved[-1] == "gamelift-ping.eu-west-1.api.aws"
+    assert w.ping_ms == 31.0 and resolved[-1] == "gamelift.eu-west-1.amazonaws.com"
     w.server = None
     w._update_ping(t + 100)
     assert w.ping_ms is None
@@ -355,3 +355,20 @@ def test_server_in_aws_global_range_without_region(tmp_path, monkeypatch):
     w.poll(1001.0)
     assert w.server["region"] == "eu-central-1" and w.server["hint"]
     assert connwatch.aws_global("54.115.0.1") and not connwatch.aws_global("3.120.45.67")
+
+
+def test_ping_once_icmp_first_then_udp_beacon(monkeypatch):
+    """Like Make Your Choice: ICMP to the GameLift service name (timed by Windows); UDP beacon only without answer."""
+    names = {"gamelift.eu-central-1.amazonaws.com": ["52.1.1.1"], "gamelift-ping.eu-central-1.api.aws": ["35.1.1.1"]}
+    monkeypatch.setattr(connwatch.regions, "resolve", lambda name: names.get(name, []))
+    monkeypatch.setattr(connwatch.regions, "icmp_ping", lambda ip: 21.0)
+    monkeypatch.setattr(connwatch.regions, "udp_ping", lambda ip: 25.0)
+    assert connwatch.regions.ping_once("eu-central-1") == (21.0, "ICMP", "52.1.1.1")
+    monkeypatch.setattr(connwatch.regions, "icmp_ping", lambda ip: None)
+    assert connwatch.regions.ping_once("eu-central-1") == (25.0, "UDP", "35.1.1.1")
+    monkeypatch.setattr(connwatch.regions, "udp_ping", lambda ip: None)
+    assert connwatch.regions.ping_once("eu-central-1") == (None, "", "")
+    monkeypatch.setattr(connwatch.regions, "time", type("T", (), {"sleep": staticmethod(lambda s: None)}))
+    assert connwatch.regions.measure("eu-central-1")["ms"] is None
+    monkeypatch.setattr(connwatch.regions, "resolve", lambda name: [])
+    assert connwatch.regions.measure("eu-central-1")["error"] == "Name nicht auflösbar"
