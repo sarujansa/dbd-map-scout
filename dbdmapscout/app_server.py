@@ -8,7 +8,7 @@ import time
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from . import regions
+from . import connwatch, regions
 from .capture import IS_WIN
 from .i18n import _
 
@@ -132,8 +132,10 @@ class ServerTab:
         self.conn.poll(now)
         if was_running and not self.conn.running and self.conn.error:
             self._log(_("Spielserver-Anzeige beendet: {error}", error=self.conn.error), "Fehler")
+        free = [c for c, s in self.srv_state.get("regions", {}).items() if s == "frei"]
+        self.conn.region_hint = free[0] if len(free) == 1 else None
         srv = self.conn.server
-        if srv and self._hist is not None:
+        if srv and self._hist is not None and srv["region"] != connwatch.UNKNOWN:
             self._hist["region"] = srv["region"]           # region only, never the address
             if self.conn.ping_ms is not None:
                 self._hist.setdefault("pings", []).append(float(self.conn.ping_ms))
@@ -141,9 +143,10 @@ class ServerTab:
         if key != self._conn_last:
             self._conn_last = key
             if srv:
-                note = "" if srv["region"] in self.srv_sel else _(" – nicht in deiner Regionsauswahl")
+                note = "" if srv["region"] in self.srv_sel or srv["region"] == connwatch.UNKNOWN \
+                    else _(" – nicht in deiner Regionsauswahl")
                 # region only: the log file is kept on disk, the server address is shown live in the window only
-                self._log(_("Verbunden mit Spielserver: {region}{note}.", region=_(regions.NAMES.get(srv["region"], srv["region"])),
+                self._log(_("Verbunden mit Spielserver: {region}{note}.", region=connwatch.region_name(srv["region"]),
                             note=note), "System")
         text = self.conn.text()
         if self._conn_busy:
@@ -154,7 +157,7 @@ class ServerTab:
             text = _("Aus")                              # the explanation is its own (small) line below
         self.conn_tab_var.set(_("Verbunden mit: {server}", server=text) if text and self.conn.running else text)
         show = self.settings["overlay"].get("show_server", True)
-        self.overlay.set_server(_(regions.NAMES.get(srv["region"], srv["region"])) if srv and show else "",
+        self.overlay.set_server(connwatch.region_name(srv["region"]) if srv and show else "",
                                 self.conn.ping_ms)
         main = _("Verbunden mit: {server}", server=text) if self.conn.running else ""
         if main != self.conn_var.get():
