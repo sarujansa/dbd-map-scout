@@ -341,8 +341,8 @@ def test_diagnostics_keep_peaks_and_mask_addresses(tmp_path, monkeypatch):
 
 
 def test_server_in_aws_global_range_without_region(tmp_path, monkeypatch):
-    """GameLift servers in 54.115.0.0/16 have no reverse DNS name: shown as server with unknown region, no ping –
-    unless the hosts file leaves exactly one region open."""
+    """GameLift servers in 54.115.0.0/16 have no reverse DNS name: shown as server with unknown region, no ping.
+    No guess from the hosts file: in a friend's party their matchmaking picks the region."""
     monkeypatch.setattr(connwatch.socket, "gethostbyaddr", lambda ip: (_ for _ in ()).throw(AssertionError))
     w, control, result = _watch(tmp_path, monkeypatch)
     pinged = []
@@ -351,9 +351,8 @@ def test_server_in_aws_global_range_without_region(tmp_path, monkeypatch):
     w.poll(1000.5)
     assert w.server["region"] == connwatch.UNKNOWN and w.ping_ms is None and not pinged
     assert w.text() == "Region unbekannt (54.115.7.8)"
-    w.region_hint = "eu-central-1"
     w.poll(1001.0)
-    assert w.server["region"] == "eu-central-1" and w.server["hint"]
+    assert w.server["region"] == connwatch.UNKNOWN and not pinged
     assert connwatch.aws_global("54.115.0.1") and not connwatch.aws_global("3.120.45.67")
 
 
