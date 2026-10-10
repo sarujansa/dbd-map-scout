@@ -147,7 +147,6 @@ class ConnectionWatch:
         self._names = {}               # ip -> reverse DNS name or error (diagnostics only)
         self._local = ""               # address of the captured interface (diagnostics only)
         self._result_t = 0.0
-        self.region_hint = None        # the only region the hosts file leaves open (set by the app), else None
         self.peaks = {}                # ip -> busiest moment {"pps", "port", "sent", "recv", "t"} (diagnostics)
 
     @property
@@ -231,8 +230,8 @@ class ConnectionWatch:
         self._local, self._result_t = str(data.get("local") or ""), float(data.get("t", 0))
         self._note_peaks(data.get("flows") or [], now)
         found = pick_server(data.get("flows") or [], self._region)
-        if found and found["region"] == UNKNOWN and self.region_hint:
-            found = {**found, "region": self.region_hint, "hint": True}     # only region the hosts file allows
+        # No guess from the hosts file for UNKNOWN: in a friend's party their matchmaking picks the server
+        # (1.41.5, user saw "Singapore" while playing on Frankfurt).
         if found:
             self.server, self._seen = found, now
         elif self.server and now - self._seen > LOST_AFTER:
@@ -332,7 +331,7 @@ class ConnectionWatch:
             code = (rdns.get(ip) or (None,))[0]
             name = names.get(ip)
             if aws_global(ip):
-                code, name = f"AWS EC2 GLOBAL (Region laut hosts: {self.region_hint or '—'})", "nicht gefragt"
+                code, name = "AWS EC2 GLOBAL (Region unbekannt)", "nicht gefragt"
             region = code or ("ausstehend" if name is None else "kein AWS-EC2-Name")
             lines.append(f"  {_mask_ip(ip)} Port {p['port']} · {p['pps']}/s ({p['sent']} gesendet/{p['recv']} "
                          f"empfangen in 5 s) vor {now - p['t']:.0f} s · rDNS {_mask_name(name) if name else '—'} → {region}")
