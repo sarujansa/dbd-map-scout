@@ -132,8 +132,6 @@ class ServerTab:
         self.conn.poll(now)
         if was_running and not self.conn.running and self.conn.error:
             self._log(_("Spielserver-Anzeige beendet: {error}", error=self.conn.error), "Fehler")
-        free = [c for c, s in self.srv_state.get("regions", {}).items() if s == "frei"]
-        self.conn.region_hint = free[0] if len(free) == 1 else None
         srv = self.conn.server
         if srv and self._hist is not None and srv["region"] != connwatch.UNKNOWN:
             self._hist["region"] = srv["region"]           # region only, never the address
