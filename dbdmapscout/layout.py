@@ -88,7 +88,8 @@ def hud_x(side: str, gx: float, gw: float, margin: float, w: float) -> float:
 
 def below_hud(hud_side, anchor: str) -> bool:
     """Map at the top of the same bar as the system values: it moves down below them."""
-    return bool(hud_side) and anchor in (("auto", "top-left") if hud_side == "left" else ("top-right",))
+    tops = {"left": ("auto", "top-left"), "right": ("top-right",), "above": ("auto", "top-left", "top-right")}
+    return bool(hud_side) and anchor in tops.get(hud_side, ())
 
 
 def vbars(measured, gw: float, gh: float, now: float):

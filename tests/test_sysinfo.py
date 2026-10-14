@@ -71,6 +71,8 @@ def test_hud_fits_the_bar_and_map_moves_below():
     assert layout.below_hud("left", "auto") and layout.below_hud("left", "top-left")
     assert not layout.below_hud("right", "auto") and layout.below_hud("right", "top-right")
     assert not layout.below_hud(None, "auto") and not layout.below_hud("left", "bottom-left")
+    assert layout.below_hud("above", "auto") and layout.below_hud("above", "top-right")      # map moves down
+    assert not layout.below_hud("above", "custom") and not layout.below_hud("above", "bottom-left")
 
 
 def test_recorder_averages_and_maxima_per_round():
@@ -187,3 +189,30 @@ def test_info_beside_the_map_for_low_bars():
     assert below.height > pic.height and below.width < pic.width + 20      # under the map (normal)
     assert beside.height == pic.height and beside.width > pic.width + 40   # right of it: no extra height
     assert beside.getpixel((10, 80))[3] == 255 and beside.getpixel((beside.width - 1, 0))[3] == 0
+
+
+def test_system_values_follow_the_map():
+    from types import SimpleNamespace
+    from dbdmapscout.app_sysinfo import SysInfo
+    shown = []
+    hud = SimpleNamespace(size=(300, 120), show_at=lambda x, y: shown.append((x, y)), hide=lambda: shown.append(None))
+    app = SysInfo()
+    app.hud, app.overlay, app.worker = hud, SimpleNamespace(shown=True), SimpleNamespace(hud_rect=None)
+    app._hud_pending = "above"
+    app._hud_follow_map((47, 300, 346, 500), 0, 0, 3440, 1440, 17)       # map in the left bar, room above it
+    assert shown[-1] == (70, 300 - 8 - 120) and app.worker.hud_rect == (70, 172, 300, 120)
+    app._hud_pending = "above"
+    app._hud_follow_map((10, 5, 200, 400), 0, 0, 3440, 1440, 17)          # no room above: below the map
+    assert shown[-1][1] == 5 + 400 + 8 and 8 <= shown[-1][0] <= 440 - 8 - 300   # and inside the left bar
+    app._hud_pending = "above"
+    app.overlay.shown = False
+    app._hud_follow_map((10, 5, 200, 400), 0, 0, 3440, 1440, 17)          # map hidden: values hidden too
+    assert shown[-1] is None and app.worker.hud_rect is None
+    shown.clear()
+    app._hud_follow_map((10, 5, 200, 400), 0, 0, 3440, 1440, 17)          # nothing pending: untouched
+    assert shown == []
+
+    app.overlay.shown = True
+    app._hud_pending = "beside"                                          # narrow window: right of the map
+    app._hud_follow_map((17, 1180, 281, 166), 0, 0, 1718, 1359, 16)
+    assert shown[-1] == (17 + 281 + 24, 1180 + 23) and app.worker.hud_rect[1] == 1203
