@@ -57,6 +57,12 @@ QLabel[class="dim"] {{ color: {c['dim']}; font-size: {px(12)}; }}
 QLabel[class="h1"] {{ font-size: {px(24)}; font-weight: 700; color: {c['head']}; }}
 QLabel[class="map"] {{ font-family: 'Fira Sans ExtraBold', 'Segoe UI'; font-size: {px(26)}; color: {c['head']}; }}
 QLabel[class="h2"] {{ font-size: {px(12)}; font-weight: 700; color: {c['accent']}; letter-spacing: 1px; }}
+QLabel[class="big"] {{ font-size: {px(16)}; font-weight: 700; color: {c['head']}; }}
+QFrame#question {{ background: {rgba(c['accent'], 0.18)}; border-bottom: 1px solid {c['accent']}; }}
+QTabWidget::pane {{ border: 1px solid {c['border']}; border-radius: 8px; top: -1px; }}
+QTabBar::tab {{ background: transparent; color: {c['dim']}; padding: 7px 14px; border: none; }}
+QTabBar::tab:selected {{ color: {c['accent']}; border-bottom: 2px solid {c['accent']}; }}
+QTabBar::tab:hover:!selected {{ color: {c['fg']}; }}
 QLabel[class="kpi"] {{ font-size: {px(24)}; font-weight: 700; color: {c['head']}; }}
 QLabel[class="note"] {{ color: {DOT['warn']}; }}
 QLabel#thumb {{ background: {DARK['field']}; border-radius: 8px; }}  /* map pictures need a dark backdrop */

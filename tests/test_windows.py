@@ -371,3 +371,42 @@ def test_qt_window_runs_in_tks_loop(root):
     assert len(ticks) == 41 and posted == ["scan"]
     win.allow_close = True
     win.close()
+
+
+def test_tk_tab_structure_for_the_qt_window(root):
+    """app_qt.tk_layout/tk_state/tk_act on real Tk widgets: what the Qt pages Statistik/Server are built from."""
+    import tkinter as tk
+    from tkinter import ttk
+    from dbdmapscout.app_qt import tk_act, tk_layout, tk_state
+    top = tk.Toplevel(root)
+    nb = ttk.Notebook(top)
+    nb.pack()
+    tab = ttk.Frame(nb)
+    nb.add(tab, text="Statistik")
+    card = ttk.LabelFrame(tab, text="Regionen")
+    card.pack(fill="x")
+    clicked, sorted_by = [], []
+    row = ttk.Frame(card)
+    row.pack(fill="x")
+    ttk.Button(row, text="Ping messen", command=lambda: clicked.append("ping")).pack(side="left")
+    ttk.Label(row, text="rechts", style="Dim.TLabel").pack(side="right")
+    t = ttk.Treeview(card, columns=("ping",), show="tree headings", selectmode="browse")
+    t.heading("ping", text="Ping", command=lambda: sorted_by.append("ping"))
+    t.insert("", "end", iid="g:eu", text="Europa")
+    t.insert("g:eu", "end", iid="r:fra", text="Frankfurt", values=("31 ms",), tags=("p_good",))
+    t.tag_configure("p_good", foreground="#7cc47f")
+    t.pack()
+    reg = {}
+    node = tk_layout(tab, reg)
+    top.update()
+    assert node["kind"] == "box" and node["children"][0]["kind"] == "card"
+    rowdesc = node["children"][0]["children"][0]
+    assert rowdesc["row"] and [c["side"] for c in rowdesc["children"]] == ["left", "right"]
+    st = tk_state(t)
+    assert st["rows"][1][:4] == ("r:fra", 1, "Frankfurt", ["31 ms"]) and st["colours"] == {"p_good": "#7cc47f"}
+    tk_act(t, ("click", "r:fra"))
+    assert t.selection() == ("r:fra",)
+    tk_act(t, ("sort", "ping"))
+    tk_act(reg[str(row.winfo_children()[0])], None)
+    assert sorted_by == ["ping"] and clicked == ["ping"]
+    top.destroy()
