@@ -298,6 +298,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         canvas = tk.Canvas(outer, highlightthickness=0, borderwidth=0, yscrollincrement=8)
         sb = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
         inner = ttk.Frame(canvas, padding=8)
+        outer._dbdms_inner = inner                 # the content, for the Qt window (app_qt.tk_layout)
         item = canvas.create_window(0, 0, window=inner, anchor="nw")
         canvas.configure(yscrollcommand=sb.set)
         canvas.pack(side="left", fill="both", expand=True)
