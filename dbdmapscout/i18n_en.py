@@ -1038,4 +1038,5 @@ EN = {
         "map via \"Move with the mouse\" (Overlay tab); in a narrow window it stays in the bar at the top. GPU values "
         "from NVIDIA cards (driver), CPU temperature only with HWiNFO (\"Shared Memory Support\" on) – the program "
         "loads no driver of its own.",
+    "Direkt über der Karte (wandert mit)": "Right above the map (moves with it)",
 }
