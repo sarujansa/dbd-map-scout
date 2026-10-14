@@ -16,7 +16,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from .capture import is_above
-from .mapimage import floor_frames, floor_view
+from .mapimage import FONT as FIRA, floor_frames, floor_view
 from .overlay import BACKDROP, MAX_LOAD_H, load_frames
 
 IS_WIN = sys.platform == "win32"
@@ -319,10 +319,15 @@ def push_layered(hwnd, data: bytes, w: int, h: int, pos, opacity: float) -> str:
 
 
 def render_hud(rows, height: int) -> Image.Image:
-    """System values (sysinfo.hud_rows) as small tracked caps with the soft shadow of the info block,
-    left-aligned; ``height``: game height (the text is sized like the server line below the map)."""
-    font = _font(max(13, height // 64))
-    track = max(1, height // 400)
+    """System values (sysinfo.hud_rows) in Fira Sans ExtraBold like the map titles (user's choice of five
+    variants, 1.49: labels grey, values bright, same font and size, no letter spacing) with the soft shadow of
+    the info block, left-aligned; ``height``: game height."""
+    size = max(13, height // 60)
+    try:
+        font = ImageFont.truetype(FIRA, size)
+    except OSError:
+        font = _font(size)
+    track = 0
     gap = max(3, height // 160)
     blur = max(2, height // 300)
     pad = 3 * blur
