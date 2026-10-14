@@ -4,6 +4,7 @@ Mixin of App (app.py) – the methods use App's attributes."""
 from __future__ import annotations
 
 import logging
+import time
 
 from . import layout, sysinfo
 from .capture import IS_WIN
@@ -32,6 +33,7 @@ class SysInfo:
         self.sysmon.start()
         self.hud = make_hud()
         self._hud_reserved = None          # (side, height) taken at the top of a bar, for the map below
+        self._sysrec = None                # readings of the open round (tab Statistik → System)
 
     def _hud_place(self, gx, gy, gw, gh, show: bool):
         """Show/hide the system values; returns (side, height) when they take the top of a bar."""
@@ -39,7 +41,10 @@ class SysInfo:
         on = side in ("left", "right") and self.hud is not None
         self.sysmon.active = on and self.game is not None
         bar = layout.bar_width(gw, gh)
-        rows = sysinfo.hud_rows(self.sysmon.snapshot) if on else []
+        snap = self.sysmon.snapshot
+        if self._hist is not None and self._sysrec is not None and on and time.time() - snap.t < 3:
+            self._sysrec.add(snap)
+        rows = sysinfo.hud_rows(snap) if on else []
         if not (on and show and rows and bar >= layout.MIN_BAR and self.game is not None):
             if self.hud is not None:
                 self.hud.hide()
