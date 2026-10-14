@@ -27,6 +27,7 @@ class Round:
     custom: bool = False    # custom game (no queue)
     ping: float | None = None   # median ping (ms) to the server region during the round
     killer: str = ""        # own killer, read in the lobby ("The Nurse"); counts only while role == killer
+    sys: dict | None = None     # system values during the round (sysinfo.SysRecorder: averages and maxima)
 
 
 def should_record(seconds: float) -> bool:
@@ -64,7 +65,7 @@ def _rewrite(path: str, rounds, lost) -> None:
     os.replace(tmp, path)
 
 
-LOST_KEYS = ("map_id", "region", "source", "wait", "role", "custom", "killer", "ping")   # kept since 1.35
+LOST_KEYS = ("map_id", "region", "source", "wait", "role", "custom", "killer", "ping", "sys")   # since 1.35/1.43
 
 
 def append_lost(path: str, t: float, map_label: str, reason: str, **known) -> None:
@@ -113,7 +114,7 @@ def load_lost_rounds(path: str) -> list:
                          role=str(d.get("role") or "") if d.get("role") in ROLES else "",
                          custom=bool(d.get("custom")),
                          ping=float(ping) if isinstance(ping, (int, float)) and ping >= 0 else None,
-                         killer=str(d.get("killer") or "")))
+                         killer=str(d.get("killer") or ""), sys=_sys(d.get("sys"))))
     return out
 
 
@@ -136,12 +137,20 @@ def load(path: str) -> list:
                                      custom=bool(d.get("custom")),
                                      ping=float(d["ping"]) if isinstance(d.get("ping"), (int, float))
                                      and d["ping"] >= 0 else None,
-                                     killer=str(d.get("killer") or "")))
+                                     killer=str(d.get("killer") or ""), sys=_sys(d.get("sys"))))
                 except (ValueError, KeyError, TypeError):
                     continue
     except OSError:
         return []
     return out
+
+
+def _sys(d):
+    """System values of a round as stored: only numbers, None without any."""
+    if not isinstance(d, dict):
+        return None
+    out = {str(k): float(v) for k, v in d.items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
+    return out or None
 
 
 def clear(path: str) -> None:
@@ -366,3 +375,59 @@ def ping_by_region(rounds) -> dict:
         if r.ping is not None and r.region:
             groups.setdefault(r.region, []).append(r.ping)
     return {c: sum(p) / len(p) for c, p in groups.items()}
+
+
+# ------------------------------------------------------------------ system values (tab Statistik → System)
+SYS_COLUMNS = ("gpu_temp", "gpu_temp_max", "cpu_temp", "cpu_temp_max", "gpu_load", "gpu_power", "vram_used_max")
+SYS_PEAKS = ("gpu_temp_max", "cpu_temp_max", "gpu_power_max", "vram_used_max", "ram_used_max")
+
+
+def _sys_key(r, by: str):
+    if by == "map":
+        return r.map
+    if by == "killer":
+        return r.killer if r.role == "killer" and r.killer and not r.custom else None
+    return _wait_key(r, by)
+
+
+def sys_by(rounds, by: str) -> list:
+    """[(key, rounds, {column: value})] for rounds with system values: averages of the round averages,
+    maxima of the round maxima. Maps/killers hottest GPU first, weekday and hour blocks in calendar order."""
+    groups = {}
+    for r in rounds:
+        if r.sys:
+            key = _sys_key(r, by)
+            if key is not None:
+                groups.setdefault(key, []).append(r.sys)
+    rows = []
+    for key, items in groups.items():
+        vals = {}
+        for col in SYS_COLUMNS:
+            got = [s[col] for s in items if col in s]
+            if got:
+                vals[col] = max(got) if col.endswith("_max") else sum(got) / len(got)
+        rows.append((key, len(items), vals))
+    if by in ("map", "killer"):
+        return sorted(rows, key=lambda row: (-row[2].get("gpu_temp", -1), -row[2].get("cpu_temp", -1), str(row[0])))
+    return sorted(rows, key=lambda row: row[0])
+
+
+def sys_peaks(rounds) -> list:
+    """[(value key, highest value, round)] – the hottest / most loaded round of the selection."""
+    out = []
+    for key in SYS_PEAKS:
+        best = max((r for r in rounds if r.sys and key in r.sys), key=lambda r: r.sys[key], default=None)
+        if best is not None:
+            out.append((key, best.sys[key], best))
+    return out
+
+
+def sys_average(rounds) -> dict:
+    """Average of the round averages over the selection: {"gpu_temp": …, "cpu_temp": …, "n": rounds}."""
+    items = [r.sys for r in rounds if r.sys]
+    out = {"n": len(items)}
+    for col in ("gpu_temp", "cpu_temp", "gpu_load", "cpu_load", "gpu_power"):
+        got = [s[col] for s in items if col in s]
+        if got:
+            out[col] = sum(got) / len(got)
+    return out
