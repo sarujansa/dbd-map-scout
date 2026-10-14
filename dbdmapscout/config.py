@@ -70,7 +70,8 @@ DEFAULTS = {
     "killer_aliases": {},               # killer names as read (skins, new killers): {fold(name): "The Nurse"}
     "official_open_after_dbd": False,   # open stats.deadbydaylight.com once DBD was closed (userscript saves the matches)
     "official_dir": "",                 # where the userscript's files land ("" = the Windows download folder)
-    "official_notify": True,            # small notification when a file was read and deleted (not while DBD is in front)
+    "official_notify": True,
+    "sysinfo": "right",                 # system values at the top of a black bar: off | left | right            # small notification when a file was read and deleted (not while DBD is in front)
 }
 
 

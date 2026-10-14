@@ -274,6 +274,142 @@ def premultiplied_bgra(img: Image.Image) -> bytes:
     return out.tobytes()
 
 
+def push_layered(hwnd, data: bytes, w: int, h: int, pos, opacity: float) -> str:
+    """Show premultiplied BGRA pixels in a layered window at ``pos``; returns an error text or ""."""
+    screen = _u.GetDC(None)
+    mem = _g.CreateCompatibleDC(screen)
+    bmi = BITMAPINFO()
+    bmi.bmiHeader.biSize = ctypes.sizeof(BITMAPINFOHEADER)
+    bmi.bmiHeader.biWidth = w
+    bmi.bmiHeader.biHeight = -h                   # top-down rows
+    bmi.bmiHeader.biPlanes = 1
+    bmi.bmiHeader.biBitCount = 32
+    bits = ctypes.c_void_p()
+    hbmp = _g.CreateDIBSection(screen, ctypes.byref(bmi), 0, ctypes.byref(bits), None, 0)
+    err = ""
+    try:
+        if not hbmp or not bits.value:
+            raise OSError(f"CreateDIBSection fehlgeschlagen (Fehler {ctypes.get_last_error()})")
+        ctypes.memmove(bits.value, data, len(data))
+        old = _g.SelectObject(mem, hbmp)
+        blend = BLENDFUNCTION(0, 0, max(1, min(255, int(round(opacity * 255)))), 1)
+        ok = _u.UpdateLayeredWindow(hwnd, screen, ctypes.byref(wintypes.POINT(int(pos[0]), int(pos[1]))),
+                                    ctypes.byref(wintypes.SIZE(w, h)), mem,
+                                    ctypes.byref(wintypes.POINT(0, 0)), 0, ctypes.byref(blend), ULW_ALPHA)
+        if not ok:
+            err = f"UpdateLayeredWindow Fehler {ctypes.get_last_error()}"
+        _g.SelectObject(mem, old)
+    finally:
+        if hbmp:
+            _g.DeleteObject(hbmp)
+        _g.DeleteDC(mem)
+        _u.ReleaseDC(None, screen)
+    return err
+
+
+def render_hud(rows, height: int) -> Image.Image:
+    """System values (sysinfo.hud_rows) as small tracked caps with the soft shadow of the info block,
+    left-aligned; ``height``: game height (the text is sized like the server line below the map)."""
+    font = _font(max(13, height // 64))
+    track = max(1, height // 400)
+    gap = max(3, height // 160)
+    blur = max(2, height // 300)
+    pad = 3 * blur
+    halo = max(1, height // 400)
+    d0 = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    texts = ["".join(t for t, _ in row) for row in rows]
+    widths = [int(_tracked_width(d0, t, font, track)) for t in texts]
+    asc, desc = font.getmetrics()
+    line_h = asc + desc
+    w = max(widths, default=0) + 2 * pad
+    h = len(rows) * line_h + gap * max(0, len(rows) - 1) + 2 * pad
+    dark = (0, 0, 0, 230)
+
+    def draw(d, shadow):
+        y = pad
+        for row in rows:
+            x = pad
+            for text, colour in row:
+                for ch in text:
+                    d.text((x, y), ch, font=font, fill=dark if shadow else colour,
+                           stroke_width=halo if shadow else 0, stroke_fill=dark)
+                    x += d.textlength(ch, font=font) + track
+            y += line_h + gap
+
+    pic = Image.new("RGBA", (max(1, w), max(1, h)), (0, 0, 0, 0))
+    shadow = Image.new("RGBA", pic.size, (0, 0, 0, 0))
+    draw(ImageDraw.Draw(shadow), True)
+    pic.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(blur)), (0, 0))
+    draw(ImageDraw.Draw(pic), False)
+    return pic
+
+
+class HudWindow:
+    """Small click-through layered window for the system values at the top of a black bar."""
+
+    def __init__(self):
+        ex = WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
+        self._hwnd = _u.CreateWindowExW(ex, "Static", "DbD Map Scout Systemwerte", WS_POPUP, 0, 0, 16, 16,
+                                        None, None, _k.GetModuleHandleW(None), None)
+        if not self._hwnd:
+            raise OSError(f"CreateWindowExW fehlgeschlagen (Fehler {ctypes.get_last_error()})")
+        self._hwnd = int(self._hwnd)
+        self._key = None
+        self._data = None
+        self._pos = None
+        self._shown = False
+        self.size = (0, 0)
+        self.opacity = 0.85
+        self.last_error = ""
+
+    def render(self, rows, height: int):
+        """Prepare the picture; returns its size (0, 0 without rows)."""
+        key = (tuple(tuple(r) for r in rows), int(height))
+        if key != self._key:
+            self._key = key
+            if not rows:
+                self._data, self.size = None, (0, 0)
+            else:
+                pic = render_hud(rows, height)
+                self._data, self.size = premultiplied_bgra(pic), pic.size
+                self._pos = None                      # push again
+        return self.size
+
+    def show_at(self, x: int, y: int):
+        if not self._data:
+            self.hide()
+            return
+        pos = (int(x), int(y), round(self.opacity, 3))
+        if pos != self._pos:
+            self._pos = pos
+            err = push_layered(self._hwnd, self._data, self.size[0], self.size[1], pos[:2], self.opacity)
+            if err:
+                self.last_error = err
+        flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
+        if not self._shown:
+            _u.ShowWindow(self._hwnd, SW_SHOWNOACTIVATE)
+            self._shown = True
+        _u.SetWindowPos(self._hwnd, HWND_TOPMOST, 0, 0, 0, 0, flags)
+
+    def hide(self):
+        if self._shown:
+            _u.ShowWindow(self._hwnd, SW_HIDE)
+            self._shown = False
+
+    @property
+    def shown(self):
+        return self._shown
+
+    def hwnd(self) -> int:
+        return self._hwnd
+
+    def destroy(self):
+        try:
+            _u.DestroyWindow(self._hwnd)
+        except Exception:
+            pass
+
+
 class Win32Overlay:
     """Same interface as overlay.Overlay, implemented with plain Win32 calls."""
 
@@ -468,34 +604,9 @@ class Win32Overlay:
         if not self._prepared:
             return
         data, w, h, _ = self._prepared[self._frame_i]
-        pos = pos or self._pos or (0, 0)
-        screen = _u.GetDC(None)
-        mem = _g.CreateCompatibleDC(screen)
-        bmi = BITMAPINFO()
-        bmi.bmiHeader.biSize = ctypes.sizeof(BITMAPINFOHEADER)
-        bmi.bmiHeader.biWidth = w
-        bmi.bmiHeader.biHeight = -h                   # top-down rows
-        bmi.bmiHeader.biPlanes = 1
-        bmi.bmiHeader.biBitCount = 32
-        bits = ctypes.c_void_p()
-        hbmp = _g.CreateDIBSection(screen, ctypes.byref(bmi), 0, ctypes.byref(bits), None, 0)
-        try:
-            if not hbmp or not bits.value:
-                raise OSError(f"CreateDIBSection fehlgeschlagen (Fehler {ctypes.get_last_error()})")
-            ctypes.memmove(bits.value, data, len(data))
-            old = _g.SelectObject(mem, hbmp)
-            blend = BLENDFUNCTION(0, 0, max(1, min(255, int(round(self.opacity * 255)))), 1)
-            ok = _u.UpdateLayeredWindow(self._hwnd, screen, ctypes.byref(wintypes.POINT(int(pos[0]), int(pos[1]))),
-                                        ctypes.byref(wintypes.SIZE(w, h)), mem,
-                                        ctypes.byref(wintypes.POINT(0, 0)), 0, ctypes.byref(blend), ULW_ALPHA)
-            if not ok:
-                self.last_error = f"UpdateLayeredWindow Fehler {ctypes.get_last_error()}"
-            _g.SelectObject(mem, old)
-        finally:
-            if hbmp:
-                _g.DeleteObject(hbmp)
-            _g.DeleteDC(mem)
-            _u.ReleaseDC(None, screen)
+        err = push_layered(self._hwnd, data, w, h, pos or self._pos or (0, 0), self.opacity)
+        if err:
+            self.last_error = err
 
     # ----------------------------------------------------------- animation
     def _restart_anim(self):
