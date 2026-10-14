@@ -9,7 +9,7 @@ import os
 import time
 import tkinter as tk
 import webbrowser
-from tkinter import messagebox, ttk
+from tkinter import ttk
 from types import SimpleNamespace
 
 from . import history, official, regions, sysinfo
@@ -543,8 +543,8 @@ class StatsTab:
         self._stats_render()
 
     def _stats_alias_reset(self):
-        if not messagebox.askokcancel(_("Zuordnungen löschen"), _("Alle eigenen Killer-Zuordnungen löschen?"),
-                                      parent=self.root):
+        if not self._ask(_("Zuordnungen löschen"), _("Alle eigenen Killer-Zuordnungen löschen?"),
+                         self._stats_alias_reset):
             return
         self.settings.set("killer_aliases", {})
         self._save_soon()
@@ -574,8 +574,8 @@ class StatsTab:
             return
         values = self.stats_last.item(sel[0], "values")
         what = f"{values[1]} ({values[0]})" if len(values) > 1 else sel[0]
-        if not messagebox.askokcancel(_("Runde löschen"), _("Runde {what} aus der Statistik löschen?", what=what),
-                                      parent=self.root):
+        if not self._ask(_("Runde löschen"), _("Runde {what} aus der Statistik löschen?", what=what),
+                         self._stats_delete_round):
             return
         try:
             r = history.delete(self._hist_path(), float(sel[0]))
@@ -609,7 +609,7 @@ class StatsTab:
     def _stats_clear(self):
         if not os.path.exists(self._hist_path()):
             return
-        if not messagebox.askokcancel(_("Verlauf löschen"), _("Alle gespeicherten Runden löschen?"), parent=self.root):
+        if not self._ask(_("Verlauf löschen"), _("Alle gespeicherten Runden löschen?"), self._stats_clear):
             return
         history.clear(self._hist_path())
         self._stats_render()
@@ -875,7 +875,7 @@ class StatsTab:
         msg = _("Userscript in die Zwischenablage kopiert. In Tampermonkey: „Neues Skript erstellen“ → alles ersetzen "
                 "(Strg+A, Strg+V) → Speichern. Danach stats.deadbydaylight.com öffnen und anmelden.")
         self._log(msg, "System")
-        messagebox.showinfo(_("Userscript kopieren"), msg, parent=self.root)
+        self._inform(_("Userscript kopieren"), msg)
 
     def _official_tick(self):
         """Every tick: open the stats page once DBD was closed (if wanted), look for the userscript's files."""

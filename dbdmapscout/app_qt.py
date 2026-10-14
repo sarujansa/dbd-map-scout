@@ -13,7 +13,7 @@ import os
 import time
 import tkinter as tk
 import traceback
-from tkinter import ttk
+from tkinter import messagebox, ttk
 
 from . import overview, tooltip
 from .capture import IS_WIN
@@ -39,9 +39,88 @@ def tk_shown(w) -> bool:
     return True
 
 
+def _side(w) -> str:
+    try:
+        return str(w.pack_info().get("side", "top"))
+    except tk.TclError:                       # not packed (yet): shown later like a line of its own
+        return "top"
+
+
+def tk_layout(w, reg: dict):
+    """The structure of a Tk tab as nested nodes for the Qt window: {"kind", "key", "children", "side", ...}.
+    Every node's key (the Tk path name) goes into ``reg`` – the widgets the Qt page may read and press."""
+    key = str(w)
+    kids = [c for c in w.winfo_children() if not isinstance(c, (ttk.Scrollbar, tk.Menu))]
+    if isinstance(w, tk.Canvas):
+        if getattr(w, "_dbdms_chart", None) is None:
+            return None
+        reg[key] = w
+        return {"kind": "chart", "key": key}
+    if isinstance(w, ttk.Notebook):
+        reg[key] = w
+        pages = [w.nametowidget(t) for t in w.tabs()]
+        return {"kind": "tabs", "key": key, "children": [n for n in (tk_layout(p, reg) for p in pages) if n]}
+    kind = {ttk.Treeview: "table", ttk.Checkbutton: "check", ttk.Button: "button", ttk.Combobox: "combo",
+            ttk.Scale: "slider", ttk.Entry: "entry"}.get(type(w))
+    if kind is None and isinstance(w, ttk.Label):
+        style = str(w.cget("style"))
+        kind = "big" if style == "Big.TLabel" else "hint" if style == "Dim.TLabel" else "label"
+    if kind is not None:
+        reg[key] = w
+        return {"kind": kind, "key": key, "side": _side(w)}
+    if not isinstance(w, (ttk.Frame, ttk.LabelFrame, tk.Frame)):
+        return None
+    inner = getattr(w, "_dbdms_inner", None)       # a scrolling tab: its content
+    if inner is not None:
+        return tk_layout(inner, reg)
+    nodes = []
+    for c in kids:
+        n = tk_layout(c, reg)
+        if n is not None:
+            n["side"] = _side(c)                    # how this child sits in this frame (a scroll tab: its content)
+            nodes.append(n)
+    if not nodes:
+        return None
+    reg[key] = w
+    kind = "card" if isinstance(w, ttk.LabelFrame) else "box"
+    return {"kind": kind, "key": key, "side": _side(w), "children": nodes,
+            "row": any(n["side"] in ("left", "right") for n in nodes)}
+
+
+def _tree_rows(t, parent="", depth=0):
+    out = []
+    for iid in t.get_children(parent):
+        it = t.item(iid)
+        out.append((iid, depth, str(it.get("text", "")), [str(v) for v in it.get("values", "") or ()],
+                    [str(x) for x in it.get("tags", "") or ()], bool(it.get("open"))))
+        out += _tree_rows(t, iid, depth + 1)
+    return out
+
+
 def tk_state(w) -> dict:
     """What a Qt control needs to mirror a Tk widget (text, value, enabled, shown). Tk context only."""
     st = {"visible": tk_shown(w)}
+    chart = getattr(w, "_dbdms_chart", None)
+    if chart is not None:
+        st.update(data=chart.data, dark=chart.dark, panels=chart.panels)
+        return st
+    if isinstance(w, ttk.Notebook):
+        st.update(tabs=[str(w.tab(t, "text")) for t in w.tabs()], index=w.index("current") if w.tabs() else 0)
+        return st
+    if isinstance(w, ttk.Treeview):
+        show = str(w.cget("show"))
+        cols = [("#0", str(w.heading("#0", "text")), str(w.heading("#0", "anchor")))] if "tree" in show else []
+        cols += [(c, str(w.heading(c, "text")), str(w.heading(c, "anchor"))) for c in w["columns"]]
+        rows = _tree_rows(w)
+        tags = {tag for r in rows for tag in r[4]}
+        colours = {}
+        for tag in tags:
+            fg = str(w.tag_configure(tag, "foreground") or "")
+            if fg:
+                colours[tag] = fg
+        st.update(columns=cols, rows=rows, selection=list(w.selection()), colours=colours,
+                  selectable=str(w.cget("selectmode")) != "none" or hasattr(w, "_dbdms_click"))
+        return st
     if isinstance(w, ttk.Scale):
         value = float(w.get())
         st.update(value=value, lo=float(w.cget("from")), hi=float(w.cget("to")),
@@ -75,6 +154,24 @@ def tk_act(w, value=None):
             w.event_generate("<<ComboboxSelected>>")
     elif isinstance(w, ttk.Scale):
         w.set(float(value))                       # runs the scale's command (label + setting)
+    elif isinstance(w, ttk.Notebook):
+        tabs = w.tabs()
+        if isinstance(value, int) and 0 <= value < len(tabs):
+            w.select(tabs[value])
+    elif isinstance(w, ttk.Treeview):
+        what, arg = value
+        if what == "sort":
+            cmd = str(w.heading(arg, "command") or "")
+            if cmd:
+                w.tk.call(cmd)
+        elif what == "click" and w.exists(arg):
+            click = getattr(w, "_dbdms_click", None)
+            if click is not None:
+                click(arg)
+            elif str(w.cget("selectmode")) != "none":
+                w.selection_set(arg)
+                w.focus(arg)
+                w.event_generate("<<TreeviewSelect>>")
 
 
 class QtShell:
@@ -91,6 +188,8 @@ class QtShell:
         self._qt_mod = None
         self._qt_failed = ""
         self._qt_geo_due = 0.0
+        self._qt_auto = {}                  # Tk path name -> widget of the pages built from Tk tabs
+        self._qt_question = None            # (title, text, retry | None) shown as a bar in the Qt window
         if self.settings.get("ui_toolkit", "tk") != "qt":
             return
         try:
@@ -114,7 +213,9 @@ class QtShell:
             return
         try:
             ico = os.path.join(self.root_dir, "dbdmapscout.ico")
-            self.qt = self._qt_mod.MainWindow(self._qt_post, ico if os.path.exists(ico) else None)
+            self._qt_auto = {}
+            layouts = {key: tk_layout(getattr(self, f"tab_{key}"), self._qt_auto) for key in self._qt_mod.AUTO_PAGES}
+            self.qt = self._qt_mod.MainWindow(self._qt_post, ico if os.path.exists(ico) else None, layouts)
             self._qt_theme()
             # first start of the Qt window: the hint what to do (gone with "Verstanden" or from the next start)
             self._qt_welcome = not self.settings.get("welcome_seen") and not self.settings.get("qt_geometry")
@@ -131,6 +232,39 @@ class QtShell:
             self.root.protocol("WM_DELETE_WINDOW", self.quit)
             self.root.deiconify()
 
+    def _tk_shown(self) -> bool:
+        return self.root.state() in ("normal", "zoomed")
+
+    def _ask(self, title, text, retry) -> bool:
+        """OK/Cancel before something that cannot be undone. In the Tk window: a dialog. From the Qt window (Tk
+        window hidden): a bar there instead – no dialog over a hidden window; OK runs ``retry`` again, which
+        then gets True here."""
+        if getattr(self, "_confirmed", False):
+            self._confirmed = False
+            return True
+        if getattr(self, "qt", None) is None or self._tk_shown():
+            return messagebox.askokcancel(title, text, parent=self.root)
+        self._qt_question = (title, text, retry)
+        self.qt.bring_to_front()
+        self._qt_refresh(force=True)
+        return False
+
+    def _inform(self, title, text):
+        if getattr(self, "qt", None) is None or self._tk_shown():
+            messagebox.showinfo(title, text, parent=self.root)
+            return
+        self._qt_question = (title, text, None)
+        self._qt_refresh(force=True)
+
+    def _qt_answer(self, ok: bool):
+        q, self._qt_question = getattr(self, "_qt_question", None), None
+        if q is not None and ok and q[2] is not None:
+            self._confirmed = True
+            try:
+                q[2]()
+            finally:
+                self._confirmed = False
+
     def _qt_post(self, action, arg=None):
         """Called from Qt (any context): only hand the click over to the Tk side."""
         self.events.put(("ui", action, arg))
@@ -146,8 +280,16 @@ class QtShell:
         if action == "act":
             key, value = arg
             w = self.__dict__.get("_qt_reg", {}).get(key)
-            if w is not None and key in self._qt_mod.page_keys() and tk_shown(w):
+            if w is None or key not in self._qt_mod.page_keys():
+                w = self._qt_auto.get(key)               # pages built from a Tk tab (Statistik, Server)
+            if w is not None and tk_shown(w):
                 tk_act(w, value)
+        elif action == "answer":
+            self._qt_answer(bool(arg))
+        elif action == "page":
+            tab = getattr(self, f"tab_{arg}", None)
+            if tab is not None and self.nb.select() != str(tab):
+                self.nb.select(tab)                  # its "opened" work runs as in Tk (statistics computed, pings …)
         elif action == "search":
             self._qt_search = str(arg or "")
             self._qt_maps_rev = getattr(self, "_qt_maps_rev", 0) + 1
@@ -249,6 +391,10 @@ class QtShell:
         keys = self._qt_mod.page_keys(page)
         if keys:
             q.show_states(page, {k: tk_state(reg[k]) for k in keys if k in reg})
+        elif page in self._qt_mod.AUTO_PAGES:
+            q.show_states(page, {k: tk_state(self._qt_auto[k]) for k in q.visible_keys(page) if k in self._qt_auto})
+        qq = self._qt_question
+        q.show_question(None if qq is None else (qq[0], qq[1], qq[2] is not None))
 
     def _qt_map_items(self):
         """[(realm, label, map_id, variant)] like the Tk list (search with the catalog's own matching)."""
