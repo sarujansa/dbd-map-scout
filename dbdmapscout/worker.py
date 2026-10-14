@@ -15,7 +15,7 @@ import cv2
 from .capture import (IS_WIN, ImageSource, ScreenGrabber, cursor_state, find_game_window, foreground_root,
                       overlaps, windows_above)
 from .i18n import _
-from .detector import ROI, Accumulator, BannerReader, OutOfMatchWatcher
+from .detector import ROI, Accumulator, BannerReader, OutOfMatchWatcher, letterbox_rows
 from .lobby import LobbyReader, QueueTracker, corner_box, result_box
 from .matchend import MatchEndTracker, Signals
 from .ocr import Recognizer
@@ -24,6 +24,7 @@ log = logging.getLogger("dbdmapscout")
 END_CHECK_INTERVAL = 0.5          # seconds between two looks for result screen / lobby / loading screen …
 END_IDLE_INTERVAL = 1.0           # … and while nothing points to the end yet (whole-screen grab: ~14 MB each)
 IN_MATCH_RATE = 1.0               # scans per second while a detected map is being played (banner only at the start)
+VBAR_LOOKS = 5                    # looks (1/s) whose smallest black bar above/below counts (dark scenes at the edge)
 MID_MATCH_AFTER = 30.0            # s after the map appeared: a "banner" now is in the game world -> strict reading
 MID_MATCH_SPAN = 2.0              # … and it must stay on screen this long (a real banner stands still for ~5 s,
                                   # light strips in the world move with the camera)
@@ -64,6 +65,8 @@ class DetectionWorker(threading.Thread):
         self.watch_gen = None            # set by the UI: (number, source) of the map on display
         self.overlay_rect = None         # set by the UI: overlay position on screen (x, y, w, h) or None
         self.hud_rect = None             # … and of the system values at the top of a bar
+        self.vbars = None                # (top, bottom, time, (w, h)): black bars above/below the picture
+        self._vbar_looks = collections.deque(maxlen=VBAR_LOOKS)
         self.watch_status = _("keine Map angezeigt")
         self.capture_info = "Bildschirm"                     # where the pictures come from (diagnosis)
         self.end_history = collections.deque(maxlen=80)     # for the diagnosis
@@ -374,6 +377,7 @@ class DetectionWorker(threading.Thread):
                             if source is None and via["screen"] and (self.overlay_rect or self.hud_rect):
                                 ignore = self._mask_overlay(look, origin[0], origin[1])   # in place: no 14 MB copy
                             obs = out_of_match.observe(look, ignore)
+                            self._note_vbars(look, fw, fh)
                     except Exception:
                         self._report("Rundenende-Prüfung", traceback.format_exc())
                 events = tracker.update(Signals(t=tick, game=game, foreground=foreground, cursor=pointer,
@@ -485,6 +489,16 @@ class DetectionWorker(threading.Thread):
             self.post("scan_result", hits=[], seconds=time.time() - t0, error=str(e))
 
     # ------------------------------------------------------------- helpers
+    def _note_vbars(self, look, fw, fh):
+        """Black bars above/below the picture (window narrower than 16:9): the smallest of the last looks, so a
+        dark scene at the picture edge does not count as bar; smaller bars apply at once (intro → gameplay)."""
+        if self._vbar_looks and self._vbar_looks[-1][2] != (fw, fh):
+            self._vbar_looks.clear()                 # window resized: old looks are void
+        top, bottom = letterbox_rows(look)
+        self._vbar_looks.append((top, bottom, (fw, fh)))
+        self.vbars = (min(t for t, _b, _s in self._vbar_looks), min(b for _t, b, _s in self._vbar_looks),
+                      time.time(), (fw, fh))
+
     def _mask_overlay(self, img, left, top):
         """Black out our own overlay in a screenshot (it is always on top and would
         otherwise be read as part of the game picture)."""

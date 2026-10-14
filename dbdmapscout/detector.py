@@ -32,6 +32,12 @@ from .ocr import LexiconScorer, Recognizer, best_path_logp
 
 # Part of the game frame that is captured for detection (fractions of w/h).
 ROI = (0.0, 0.52, 0.64, 0.99)
+# Separator line: (brighter than the rows around it by, at least this bright). The second pass only runs when
+# the first finds nothing: a small game picture (window narrower than 16:9 shows the trial letterboxed, user
+# screenshot 1718×1360 → picture ~858 px high) draws the hairline below one pixel, it comes out at grey ~55
+# on a dark map instead of > 105. Unknown text still never maps to a wrong map (lexicon scoring).
+SEPARATOR_PASSES = ((12, 105), (25, 40))
+SMALL_PICTURE_H = 1200       # the second pass only for pictures below this height (1440p reads fine with the first)
 
 
 # --------------------------------------------------------------------------
@@ -67,7 +73,16 @@ def find_separator(img: np.ndarray, frame_w: int, frame_h: int) -> Separator | N
     dn = np.zeros_like(g)
     dn[:-k] = g[k:]
     ridge = g - np.maximum(up, dn)
-    mask = ((ridge > 12) & (g > 105)).astype(np.uint8)
+    small_picture = min(frame_h, frame_w * 9 / 16) < SMALL_PICTURE_H
+    for ridge_min, bright_min in SEPARATOR_PASSES[:None if small_picture else 1]:
+        sep = _separator_in(((ridge > ridge_min) & (g > bright_min)).astype(np.uint8), frame_w, frame_h, s)
+        if sep is not None:
+            return sep
+    return None
+
+
+def _separator_in(mask: np.ndarray, frame_w: int, frame_h: int, s: float) -> Separator | None:
+    """The banner line in one threshold mask of the (scaled) ROI."""
     # bridge small gaps (texture, compression) along the line
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (9, 1))) > 0
     h_img, w_img = mask.shape
@@ -521,6 +536,28 @@ def _right_region(frame, x0, y0, y1, full_width=False):
 
 
 BAR_FILLED = 0.6        # share of non-black pixels for a side bar to count as "picture"
+
+
+LETTERBOX_DARK = 0.95        # share of almost black pixels for a row to count as bar (FPS counters stay out)
+
+
+def letterbox_rows(frame) -> tuple:
+    """(top, bottom): rows of black bar above and below the picture. A DBD window narrower than 16:9 shows the
+    trial letterboxed (user screenshot 1718×1360: bars of ~250 px, picture ~858 px high). A screen that is dark
+    nearly everywhere (loading screen) is no letterbox: (0, 0). One look can mistake a dark scene at the edge for
+    bar – the worker keeps the smallest value of several looks."""
+    if frame is None or frame.size == 0:
+        return 0, 0
+    g = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    H = g.shape[0]
+    dark = (g < 16).mean(axis=1) >= LETTERBOX_DARK
+    if dark.all():
+        return 0, 0
+    top = int(np.argmin(dark))                       # first row that is not dark
+    bottom = int(np.argmin(dark[::-1]))
+    if top + bottom > 0.8 * H or min(top, bottom) < 0.6 * max(top, bottom):
+        return 0, 0                                  # letterbox bars are even; a loading screen is not
+    return top, bottom
 
 
 def has_bars(frame) -> bool:
