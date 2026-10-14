@@ -16,6 +16,7 @@ from .capture import (IS_WIN, ImageSource, ScreenGrabber, cursor_state, find_gam
                       overlaps, windows_above)
 from .i18n import _
 from .detector import ROI, Accumulator, BannerReader, OutOfMatchWatcher, letterbox_rows
+from .layout import MIN_VBAR
 from .lobby import LobbyReader, QueueTracker, corner_box, result_box
 from .matchend import MatchEndTracker, Signals
 from .ocr import Recognizer
@@ -280,7 +281,7 @@ class DetectionWorker(threading.Thread):
                 else:
                     if source is None and via["screen"] and (self.overlay_rect or self.hud_rect):
                         self._mask_overlay(img, origin[0] + box[0], origin[1] + box[1])
-                    sep, res = reader.read(img, fw, fh)
+                    sep, res = reader.read(img, fw, fh, letterboxed=self._letterboxed(fw, fh))
                 if sep is not None:
                     if not session:
                         session, session_frames, session_t, session_saved = True, [], tick, None
@@ -498,6 +499,11 @@ class DetectionWorker(threading.Thread):
         self._vbar_looks.append((top, bottom, (fw, fh)))
         self.vbars = (min(t for t, _b, _s in self._vbar_looks), min(b for _t, b, _s in self._vbar_looks),
                       time.time(), (fw, fh))
+
+    def _letterboxed(self, fw, fh) -> bool:
+        """The last whole-screen look (≤ ~1 s old) showed black bars above and below: a trial in a narrow window."""
+        last = self._vbar_looks[-1] if self._vbar_looks else None
+        return bool(last and last[2] == (fw, fh) and min(last[0], last[1]) >= MIN_VBAR)
 
     def _mask_overlay(self, img, left, top):
         """Black out our own overlay in a screenshot (it is always on top and would

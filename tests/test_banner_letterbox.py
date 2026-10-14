@@ -15,10 +15,11 @@ FRAME = (1718, 1359)
 
 def test_dim_separator_found_only_by_the_second_pass(monkeypatch):
     img = cv2.imread(CROP)
-    sep = find_separator(img, *FRAME)
+    sep = find_separator(img, *FRAME, letterboxed=True)
     assert sep is not None and 0.2 < sep.frac < 0.35 and sep.thickness <= 2
+    assert find_separator(img, *FRAME) is None                 # lobby/menus (no bars): first pass only
     monkeypatch.setattr(detector, "SMALL_PICTURE_H", 0)        # 1440p and bigger: first pass only, as before
-    assert find_separator(img, *FRAME) is None
+    assert find_separator(img, *FRAME, letterboxed=True) is None
 
 
 def test_letterboxed_banner_is_read():
@@ -26,7 +27,7 @@ def test_letterboxed_banner_is_read():
     from dbdmapscout.catalog import Catalog
     from dbdmapscout.ocr import Recognizer
     reader = BannerReader(Recognizer(os.path.join(ROOT, "models", "ch_PP-OCRv4_rec_infer.onnx")), Catalog(ROOT))
-    sep, res = reader.read(cv2.imread(CROP), *FRAME)
+    sep, res = reader.read(cv2.imread(CROP), *FRAME, letterboxed=True)
     assert sep is not None and res is not None
     assert res.best == ("badham-preschool", 1) and res.name_fit > -1
 
@@ -73,3 +74,14 @@ def test_worker_keeps_the_smallest_bars_of_the_last_looks():
     assert w.vbars[0] == 198
     w._note_vbars(look(198), 1718, 1360)                      # resized window: start over
     assert len(w._vbar_looks) == 1
+
+
+def test_empty_read_is_no_evidence():
+    from dbdmapscout.detector import Accumulator, FrameResult
+    acc = Accumulator()
+    fr = FrameResult(scores={("the-game", 1): -10.0, ("coal-tower", 1): -60.0}, best=("the-game", 1),
+                     name_text="", realm_text="", name_fit=-8.1, realm_fit=-20.0, ms=1.0)
+    assert acc.add(fr) is None and acc.add(fr) is None and acc.good_frames == 0     # 1.45.0: "the-game" from nothing
+    ok = FrameResult(scores={("the-game", 1): -1.0, ("coal-tower", 1): -60.0}, best=("the-game", 1),
+                     name_text="THE GAME", realm_text="GIDEON MEAT PLANT", name_fit=-0.2, realm_fit=-0.5, ms=1.0)
+    assert acc.add(ok) is not None

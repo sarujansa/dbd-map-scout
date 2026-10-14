@@ -1262,10 +1262,12 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
         drop = hud[1] + margin if hud and layout.below_hud(hud[0], a) else 0     # map below the system values
         height = min(height, gh - drop - 2 * margin)
         bar = layout.bar_width(gw, gh)          # black bar left/right of a 16:9 picture (ultrawide)
-        vb = layout.vbars(self.worker.vbars, gw, gh, time.time()) if a == "auto" else None
+        # window narrower than 16:9: the trial has bars above/below – the map goes there whatever the position
+        # setting says (user: own position at 1440p, the bar in the small window); not while dragging it
+        vb = None if self.overlay.editing else layout.vbars(self.worker.vbars, gw, gh, time.time())
         self.overlay.info_beside = bool(vb)     # Tk overlay: attribute unused
-        if vb:                                   # window narrower than 16:9: the trial has bars above/below
-            self._place_in_bottom_bar(gx, gy, gw, gh, vb[1], margin, height)
+        if vb:
+            self._place_in_bottom_bar(gx, gy, gw, gh, vb[1], margin, height, sliders=a != "custom")
             return
         slot = None
         if a == "auto" and bar < layout.MIN_BAR:
@@ -1305,7 +1307,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
         if a != "custom":                      # sliders follow the preset position
             self._set_pos_sliders((x - gx) / max(1, gw - w), (y - gy) / max(1, gh - h))
 
-    def _place_in_bottom_bar(self, gx, gy, gw, gh, bottom, margin, height):
+    def _place_in_bottom_bar(self, gx, gy, gw, gh, bottom, margin, height, sliders=True):
         """Map (+ timer, server) in the black bar below the picture, left, as big as the bar allows."""
         avail_w, avail_h = gw - 2 * margin, bottom - 2 * margin
         height = min(height, avail_h)
@@ -1320,7 +1322,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
         self.overlay.show_at(int(x), int(y))
         self._last_place = (int(x), int(y), w, h)
         self.worker.overlay_rect = self._last_place if self.overlay.shown else None
-        self._set_pos_sliders((x - gx) / max(1, gw - w), (y - gy) / max(1, gh - h))
+        if sliders:                              # an own position stays as it is (it applies again at 1440p)
+            self._set_pos_sliders((x - gx) / max(1, gw - w), (y - gy) / max(1, gh - h))
 
     def _outside_slot(self):
         """Free desktop space beside a DBD window that does not fill its monitor, or None."""
