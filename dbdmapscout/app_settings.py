@@ -9,7 +9,7 @@ import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from . import __version__, i18n
+from . import __version__, i18n, uiscale
 from .capture import IS_WIN
 from . import autostart
 from .connwatch import is_admin
@@ -88,6 +88,18 @@ class SettingsTab:
         self.dark_var = tk.BooleanVar(value=self.settings.get("dark_mode", True))
         ttk.Checkbutton(look, text=_("Dark Mode"), variable=self.dark_var, command=self._dark_changed).pack(
             anchor="w", pady=(4, 0))
+        zr = ttk.Frame(look)
+        zr.pack(fill="x", pady=(6, 0))
+        ttk.Label(zr, text=_("Schriftgröße")).pack(side="left")
+        self._zooms = [(z, f"{z:.0%}") for z in uiscale.ZOOMS]
+        zoom = float(self.settings.get("ui_zoom", 1.0))
+        self.zoom_var = tk.StringVar(value=dict(self._zooms).get(zoom, "100%"))
+        zcb = ttk.Combobox(zr, textvariable=self.zoom_var, values=[lbl for _z, lbl in self._zooms], state="readonly",
+                           width=8)
+        zcb.pack(side="left", padx=8)
+        zcb.bind("<<ComboboxSelected>>", lambda e: self._zoom_changed())
+        ttk.Label(look, text=_("Spaltenbreiten und kleinste Fenstergröße passen sich beim nächsten Start an."),
+                  style="Dim.TLabel", wraplength=400).pack(anchor="w")
 
         upd = ttk.LabelFrame(f, text=_("Updates"), padding=8)
         upd.pack(fill="x", pady=(8, 0))
@@ -205,6 +217,14 @@ class SettingsTab:
         else:
             messagebox.showinfo(_("Einstellungen importieren"), _("Bitte das Programm jetzt neu starten."),
                                 parent=self.root)
+
+    def _zoom_changed(self):
+        zoom = next((z for z, lbl in self._zooms if lbl == self.zoom_var.get()), 1.0)
+        self.settings.set("ui_zoom", zoom)
+        self._save_soon()
+        uiscale.apply_zoom(self.root, zoom)
+        if getattr(self, "_autowrap", None):
+            self._autowrap.soon()
 
     def _ui_lang_changed(self):
         code = next((c for c, lbl in self._ui_langs if lbl == self.ui_lang_var.get()), "auto")
