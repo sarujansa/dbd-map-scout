@@ -1078,4 +1078,10 @@ EN = {
         "New control window with the page \"Overview\" (map, timer, server, today, system values, last rounds). The "
         "other pages still open this window for now. Takes effect at the next start; switch it off here.",
     "Gilt ab dem nächsten Start. Jetzt neu starten?": "Takes effect at the next start. Restart now?",
+    "Hotkeys ändern …": "Change hotkeys …",
+    "Mehr (Map-Zuordnungen, Match-Daten, Sicherung, Ordner) …": "More (map assignments, match data, backup, folders) …",
+    "Hotkeys werden noch im bisherigen Fenster geändert (Tastendruck aufnehmen) – öffnet es.":
+        "Hotkeys are still changed in the previous window (records the key press) – opens it.",
+    "Öffnet den selten gebrauchten Teil der Einstellungen im bisherigen Fenster.":
+        "Opens the rarely needed part of the settings in the previous window.",
 }
