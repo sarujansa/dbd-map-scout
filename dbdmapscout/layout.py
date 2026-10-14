@@ -77,3 +77,13 @@ def slot_x(slot, w: float, margin: float) -> float:
     if side == "left":
         return max(x0 + margin, x0 + width - margin - w)
     return x0 + margin
+
+
+def hud_x(side: str, gx: float, gw: float, margin: float, w: float) -> float:
+    """x of the system values at the top of a bar: left bar from its left edge, right bar flush right."""
+    return gx + margin if side == "left" else gx + gw - margin - w
+
+
+def below_hud(hud_side, anchor: str) -> bool:
+    """Map at the top of the same bar as the system values: it moves down below them."""
+    return bool(hud_side) and anchor in (("auto", "top-left") if hud_side == "left" else ("top-right",))

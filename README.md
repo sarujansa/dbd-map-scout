@@ -115,6 +115,8 @@ Das Overlay ist ein eigenes, natives Windows-Fenster: immer im Vordergrund, durc
 
 Hotkeys lassen sich unter **Einstellungen → Hotkeys** ändern: Feld anklicken und die neue Kombination drücken (Esc bricht ab, Entf schaltet den Hotkey aus, „Standard“ stellt alle zurück). Buchstaben, Ziffern und Leertaste brauchen Strg oder Alt, damit der Hotkey nicht das normale Tippen (und DBD) blockiert; doppelt belegte Kombinationen werden abgelehnt. **Eine Taste allein** geht mit F1–F12, Numpad (0–9, +, −), Pause, Rollen, Einfg, Pos1, Ende und Bild↑/↓: Solche Hotkeys gelten nur, solange DBD das aktive Fenster ist – in allen anderen Programmen bleibt die Taste normal. DBD selbst bekommt die Taste dann nicht mehr, also eine nehmen, die du in DBD nicht belegt hast. F13–F24 gelten immer (praktisch für Maus-Seitentasten, die man in Logitech G Hub, Razer Synapse & Co. auf F13 legt). Alle Einstellungen landen in `settings.json`.
 
+**Systemwerte:** Oben im schwarzen Rand stehen während des Matches CPU- und GPU-Temperatur, Auslastung, GPU-Leistung, VRAM und RAM (Temperatur grün/gelb/rot; CPU ab 80/90 °C, GPU ab 75/85 °C). Einstellbar im Tab Overlay → Systemwerte: rechts oben (Standard), links oben (die Karte rutscht dann darunter) oder aus. Die GPU-Werte kommen von NVIDIA-Karten über den Treiber (`nvml.dll`). Für die **CPU-Temperatur** braucht es [HWiNFO](https://www.hwinfo.com/) mit „Shared Memory Support“ (HWiNFO → Einstellungen; in der kostenlosen Version alle 12 Stunden neu einschalten). Windows selbst verrät die CPU-Temperatur nur über einen Kernel-Treiber – den lädt das Programm bewusst nicht (Anti-Cheat, von Microsoft gesperrte Treiber wie WinRing0). Mit HWiNFO gibt es auch bei AMD-/Intel-Grafik eine GPU-Temperatur. In Lobby und Menüs (dort nutzt DBD die volle Breite) ist die Zeile aus.
+
 **Spielsprache:** Standardmässig werden englische und deutsche Map-Namen erkannt. Wenn DBD auf Französisch, Spanisch, Italienisch, Polnisch, Portugiesisch oder Türkisch läuft, die Sprache im Steuerfenster anhaken (Tab Erkennung). Das ist unabhängig von der Sprache des Programms selbst.
 
 ## Serverregion wählen (wie „Make Your Choice“)
@@ -193,6 +195,7 @@ Das Programm wurde bewusst so gebaut, dass es **nicht mit dem Spiel interagiert*
 - keine Tastatur- oder Mauseingaben ans Spiel, keine Automatisierung von Spielaktionen,
 - kein Zugriff auf den Spielprozess (kein Speicherlesen, keine Injection, nicht einmal ein Prozess-Handle), keine Netzwerkverbindung zum Spiel,
 - keine Spieldateien werden gelesen oder verändert,
+- die **Systemwerte** kommen vom NVIDIA-Treiber (nur Gerätewerte, keine Prozesslisten), von HWiNFO (falls es läuft) und von Windows selbst – kein eigener Treiber,
 - gelesen werden nur Bildschirmpixel (wie bei OBS/Discord) und ob der Windows-Mauszeiger gerade sichtbar ist (dieselbe Systeminfo, mit der OBS den Zeiger in Aufnahmen zeichnet). Genutzt wird nur der Map-Name, den das Spiel allen anzeigt,
 - angezeigt wird eine statische Community-Karte, keine versteckten Informationen (keine Generatoren, keine Positionen),
 - Map-Erkennung und Overlay bauen keine Internetverbindung auf (Updates: nur im Starter und auf Knopfdruck „Jetzt nach Updates suchen“, nur GitHub), die Texterkennung läuft komplett lokal. Nur der Tab **Server** misst auf Wunsch den Ping zu den GameLift-Servern von AWS.

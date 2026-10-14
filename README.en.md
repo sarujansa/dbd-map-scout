@@ -115,6 +115,8 @@ The overlay is a native Windows window of its own: always on top, click-through,
 
 Hotkeys can be changed under **Settings → Hotkeys**: click the field and press the new combination (Esc cancels, Delete switches the hotkey off, "Defaults" resets all). Letters, digits and space need Ctrl or Alt so the hotkey does not block normal typing (and DBD); combinations used twice are refused. **A single key** works with F1–F12, the numpad (0–9, +, −), Pause, Scroll Lock, Insert, Home, End and Page Up/Down: such hotkeys only apply while DBD is the active window – in every other program the key works as usual. DBD itself no longer gets the key, so pick one you have not bound in DBD. F13–F24 always apply (handy for mouse side buttons mapped to F13 in Logitech G Hub, Razer Synapse and the like). All settings are stored in `settings.json`.
 
+**System values:** during a match, CPU and GPU temperature, load, GPU power, VRAM and RAM are shown at the top of the black bar (temperature green/amber/red; CPU from 80/90 °C, GPU from 75/85 °C). Set in the Overlay tab → System values: top right (default), top left (the map moves below it) or off. GPU values come from NVIDIA cards through the driver (`nvml.dll`). The **CPU temperature** needs [HWiNFO](https://www.hwinfo.com/) with "Shared Memory Support" on (HWiNFO → settings; the free version needs it switched on again every 12 hours). Windows itself only tells the CPU temperature through a kernel driver – the program deliberately does not load one (anti-cheat, drivers blocked by Microsoft such as WinRing0). With HWiNFO there is also a GPU temperature for AMD/Intel graphics. In the lobby and menus (DBD uses the full width there) the line is off.
+
 **Game language:** English and German map names are recognised by default. If DBD runs in French, Spanish, Italian, Polish, Portuguese or Turkish, tick that language in the control window (Detection tab). This is independent of the language of the program itself.
 
 ## Choosing the server region (like "Make Your Choice")
@@ -193,6 +195,7 @@ The program was deliberately built so that it **does not interact with the game*
 - no keyboard or mouse input to the game, no automation of game actions,
 - no access to the game process (no memory reading, no injection, not even a process handle), no network connection to the game,
 - no game files are read or changed,
+- the **system values** come from the NVIDIA driver (device values only, no process lists), from HWiNFO (if it runs) and from Windows itself – no driver of our own,
 - only screen pixels are read (like OBS/Discord) and whether the Windows mouse pointer is currently visible (the same system information OBS uses to draw the pointer in recordings). Only the map name the game shows to everyone is used,
 - a static community map is shown, no hidden information (no generators, no positions),
 - map detection and overlay open no internet connection (updates: only in the starter and on the "Check for updates now" button, GitHub only), text recognition runs completely locally. Only the **Server** tab measures the ping to AWS GameLift servers on request.

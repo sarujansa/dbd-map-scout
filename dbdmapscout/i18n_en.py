@@ -976,4 +976,18 @@ EN = {
         "{n} matches read, {new} of them new. The file was deleted.",
     "{name} wurde gelesen, konnte aber nicht gelöscht werden – Details im Log.":
         "{name} was read but could not be deleted – details in the log.",
+    # system values (app_sysinfo)
+    "Anzeige": "Show",
+    "Links oben (über der Karte)": "Top left (above the map)",
+    "Rechts oben": "Top right",
+    "GPU: {name}": "GPU: {name}",
+    "GPU: keine NVIDIA-Karte gefunden": "GPU: no NVIDIA card found",
+    "CPU-Temperatur: aus HWiNFO": "CPU temperature: from HWiNFO",
+    "CPU-Temperatur: nur mit HWiNFO („Shared Memory Support“ an)":
+        "CPU temperature: only with HWiNFO (\"Shared Memory Support\" on)",
+    "Systemwerte (CPU/GPU-Temperatur, Auslastung, VRAM, RAM)": "System values (CPU/GPU temperature, load, VRAM, RAM)",
+    "Oben im schwarzen Rand, solange eine Karte im Match zu sehen ist. GPU-Werte von NVIDIA-Karten (Treiber), "
+    "CPU-Temperatur nur mit HWiNFO („Shared Memory Support“ an) – das Programm lädt keinen eigenen Treiber.":
+        "At the top of the black bar while a map is shown in a match. GPU values from NVIDIA cards (driver), CPU "
+        "temperature only with HWiNFO (\"Shared Memory Support\" on) – the program loads no driver of its own.",
 }
