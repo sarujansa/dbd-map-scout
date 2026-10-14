@@ -538,6 +538,28 @@ def _right_region(frame, x0, y0, y1, full_width=False):
 BAR_FILLED = 0.6        # share of non-black pixels for a side bar to count as "picture"
 
 
+LETTERBOX_DARK = 0.95        # share of almost black pixels for a row to count as bar (FPS counters stay out)
+
+
+def letterbox_rows(frame) -> tuple:
+    """(top, bottom): rows of black bar above and below the picture. A DBD window narrower than 16:9 shows the
+    trial letterboxed (user screenshot 1718×1360: bars of ~250 px, picture ~858 px high). A screen that is dark
+    nearly everywhere (loading screen) is no letterbox: (0, 0). One look can mistake a dark scene at the edge for
+    bar – the worker keeps the smallest value of several looks."""
+    if frame is None or frame.size == 0:
+        return 0, 0
+    g = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    H = g.shape[0]
+    dark = (g < 16).mean(axis=1) >= LETTERBOX_DARK
+    if dark.all():
+        return 0, 0
+    top = int(np.argmin(dark))                       # first row that is not dark
+    bottom = int(np.argmin(dark[::-1]))
+    if top + bottom > 0.8 * H or min(top, bottom) < 0.6 * max(top, bottom):
+        return 0, 0                                  # letterbox bars are even; a loading screen is not
+    return top, bottom
+
+
 def has_bars(frame) -> bool:
     """Is the window wider than 16:9, i.e. does a trial show black bars left and right?"""
     H, W = frame.shape[:2]

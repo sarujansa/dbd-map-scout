@@ -176,3 +176,14 @@ def test_temperature_line_draws_points_and_breaks_at_gaps():
     assert len(lines) == 1 and len(lines[0][1]) == 4              # one segment c–d; "a" stands alone (gap)
     ovals = [c[1] for c in chart.canvas.calls if c[0] == "create_oval"]
     assert ovals[0][1] > ovals[2][1]                              # 70 °C lower on screen than 75 °C
+
+
+def test_info_beside_the_map_for_low_bars():
+    from PIL import Image
+    from dbdmapscout.overlay_win32 import add_info
+    pic = Image.new("RGBA", (120, 160), (200, 200, 255, 255))
+    below = add_info(pic, "1:42", "Frankfurt", 160, ping=24)
+    beside = add_info(pic, "1:42", "Frankfurt", 160, ping=24, beside=True)
+    assert below.height > pic.height and below.width < pic.width + 20      # under the map (normal)
+    assert beside.height == pic.height and beside.width > pic.width + 40   # right of it: no extra height
+    assert beside.getpixel((10, 80))[3] == 255 and beside.getpixel((beside.width - 1, 0))[3] == 0
