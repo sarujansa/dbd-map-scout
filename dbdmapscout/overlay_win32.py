@@ -178,14 +178,16 @@ def _tracked_width(d, text, font, track):
 
 
 def add_info(pic: Image.Image, timer: str, server: str, height: int, backdrop: bool = False,
-             ping: float | None = None, status=(), note: str = "", record: str = "") -> Image.Image:
+             ping: float | None = None, status=(), note: str = "", record: str = "",
+             beside: bool = False) -> Image.Image:
     """Round timer, connected server and its ping below the map, styled like the map title: white heavy
     digits with a soft shadow (no box); below them a green "connected" dot with the region in small
     caps, and the ping coloured by quality. The ping is only shown together with a server.
     ``status``: lines of the waiting card (no map on screen) – first one white, the others dimmer.
     ``note``: a warning in amber right below the timer (doubtful detection).
     ``record``: own results on this map (stats page), dimmer, below the timer/note.
-    ``backdrop``: the map sits on a dark rectangle (transparent edge off) – extend it behind the info."""
+    ``backdrop``: the map sits on a dark rectangle (transparent edge off) – extend it behind the info.
+    ``beside``: the block goes right of the map, centred in height (low wide bar above/below the picture)."""
     if not server:
         ping = None
     if not timer and not server and not status and not note and not record:
@@ -226,10 +228,18 @@ def add_info(pic: Image.Image, timer: str, server: str, height: int, backdrop: b
     off = max(1, height // 220)
     layer_w, layer_h = width, block_h + 2 * pad
     top = max(pad, _content_bottom(pic) + 3 * gap)      # right under the visible map, not its empty margin
+    left = 0
     halo = max(1, height // 200)                         # dark outline in the shadow: readable over bright game
-    canvas = Image.new("RGBA", (width, max(pic.height, top + block_h + pad + 2 * off)),
-                       BACKDROP + (255,) if backdrop else (0, 0, 0, 0))
-    canvas.alpha_composite(pic, (0, 0))
+    if beside:
+        layer_w = max(widths) + 2 * gap
+        left = pic.width + gap
+        canvas_h = max(pic.height, layer_h + 2 * off)
+        top = (canvas_h - layer_h) // 2 + pad
+        canvas = Image.new("RGBA", (left + layer_w + off, canvas_h), BACKDROP + (255,) if backdrop else (0, 0, 0, 0))
+    else:
+        canvas = Image.new("RGBA", (width, max(pic.height, top + block_h + pad + 2 * off)),
+                           BACKDROP + (255,) if backdrop else (0, 0, 0, 0))
+    canvas.alpha_composite(pic, (0, (canvas.height - pic.height) // 2 if beside else 0))
     dark = (0, 0, 0, 230)
 
     def draw(d, shadow):
@@ -259,8 +269,8 @@ def add_info(pic: Image.Image, timer: str, server: str, height: int, backdrop: b
     shadow = shadow.filter(ImageFilter.GaussianBlur(blur))
     text = Image.new("RGBA", (layer_w, layer_h), (0, 0, 0, 0))
     draw(ImageDraw.Draw(text), False)
-    canvas.alpha_composite(shadow, (off, top - pad + 2 * off))
-    canvas.alpha_composite(text, (0, top - pad))
+    canvas.alpha_composite(shadow, (left + off, top - pad + 2 * off))
+    canvas.alpha_composite(text, (left, top - pad))
     return canvas
 
 
@@ -425,6 +435,7 @@ class Win32Overlay:
         self.transparent = True
         self.show_caption = True
         self.show_map = True            # off: only timer, server and ping ("nur Infos")
+        self.info_beside = False        # timer/server right of the map (low bar above/below the picture)
         self.on_moved = None
         self.on_wheel = None
         self.game_hwnd = None
@@ -569,13 +580,15 @@ class Win32Overlay:
             else:                         # info only: an empty picture, the info block is drawn below it
                 self._base = [(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), 0)]
             self._base_key = base_key
-        key = (base_key, self._editing, self._timer, self._server, self._ping, self._note, self._record)
+        key = (base_key, self._editing, self._timer, self._server, self._ping, self._note, self._record,
+               self.info_beside)
         if key != self._key:
             self._prepared = []
             for pic, dur in self._base:
                 if self.has_info():
                     pic = add_info(pic, self._timer, self._server, text_h, backdrop=not self.transparent,
-                                   ping=self._ping, note=self._note, record=self._record)
+                                   ping=self._ping, note=self._note, record=self._record,
+                                   beside=self.info_beside and self.show_map)
                 if self._editing:
                     pic = add_border(pic.copy())
                 self._prepared.append((premultiplied_bgra(pic), pic.width, pic.height, dur))

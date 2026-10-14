@@ -11,6 +11,8 @@ reach into the game picture. Which bar applies:
 from __future__ import annotations
 
 MIN_BAR = 200          # narrower bars (e.g. 16:10 letterbox) are not used for the map
+MIN_VBAR = 100         # black bar above/below the picture (window narrower than 16:9) used for map and values
+VBAR_FRESH = 3.0       # s: a measurement older than this (lobby, menus: no bars) does not count
 
 
 def bar_width(gw: float, gh: float) -> float:
@@ -87,3 +89,22 @@ def hud_x(side: str, gx: float, gw: float, margin: float, w: float) -> float:
 def below_hud(hud_side, anchor: str) -> bool:
     """Map at the top of the same bar as the system values: it moves down below them."""
     return bool(hud_side) and anchor in (("auto", "top-left") if hud_side == "left" else ("top-right",))
+
+
+def vbars(measured, gw: float, gh: float, now: float):
+    """(top, bottom) black bars above/below the picture to put map and system values in, or None.
+    ``measured``: worker.vbars = (top, bottom, time, (w, h)). Only for windows without side bars, only while the
+    measurement is fresh (the bars exist in the trial only) and for this window size."""
+    if not measured or bar_width(gw, gh) >= MIN_BAR:
+        return None
+    top, bottom, t, size = measured
+    if now - t > VBAR_FRESH or tuple(size) != (int(gw), int(gh)) or min(top, bottom) < MIN_VBAR:
+        return None
+    return top, bottom
+
+
+def fit_scale(w: float, h: float, avail_w: float, avail_h: float) -> float:
+    """Factor (≤ 1) that makes a w×h picture fit into avail_w×avail_h."""
+    if w <= 0 or h <= 0:
+        return 1.0
+    return min(1.0, avail_w / w, avail_h / h)
