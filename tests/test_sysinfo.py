@@ -28,7 +28,8 @@ def _hwinfo(readings, poll=1000, sig=0x53695748):
 def test_hwinfo_picks_cpu_package_and_gpu_temperature():
     buf = _hwinfo([(1, "Core Max", "°C", 70.0), (7, "CPU Package", "%", 50.0), (1, "CPU Package", "°C", 63.5),
                    (1, "GPU Temperature", "°C", 71.0)])
-    assert sysinfo.parse_hwinfo(buf, now=1001) == {"cpu_temp": 63.5, "gpu_temp": 71.0}
+    assert sysinfo.parse_hwinfo(buf, now=1001) == {"cpu_temp": 63.5, "gpu_temp": 71.0, "gpu_hot": None,
+                                                   "gpu_mem": None}
 
 
 def test_hwinfo_amd_fahrenheit_stale_and_dead():
@@ -37,8 +38,8 @@ def test_hwinfo_amd_fahrenheit_stale_and_dead():
     assert sysinfo.parse_hwinfo(buf, now=1000 + sysinfo.HWINFO_STALE + 1) is None    # HWiNFO stopped polling
     assert sysinfo.parse_hwinfo(_hwinfo([], sig=struct.unpack("<I", b"DEAD")[0]), now=1000) is None
     assert sysinfo.parse_hwinfo(b"", now=1000) is None
-    assert sysinfo.parse_hwinfo(_hwinfo([(1, "Motherboard", "°C", 40.0)]), now=1000) == {"cpu_temp": None,
-                                                                                          "gpu_temp": None}
+    assert sysinfo.parse_hwinfo(_hwinfo([(1, "Motherboard", "°C", 40.0)]), now=1000) == dict.fromkeys(
+        ("cpu_temp", "gpu_temp", "gpu_hot", "gpu_mem"))
 
 
 def test_cpu_load_from_system_times():
@@ -107,3 +108,71 @@ def test_round_keeps_system_values_and_stats(tmp_path):
     avg = history.sys_average(rounds)
     assert avg["n"] == 2 and avg["gpu_temp"] == 70.0 and avg["cpu_temp"] == 66.0
     assert len(history.sys_by(rounds, "hour")) >= 1
+
+
+def test_hotspot_memory_and_throttling():
+    buf = _hwinfo([(1, "GPU Hot Spot Temperature", "°C", 92.0), (1, "GPU Memory Junction Temperature", "°C", 106.0)])
+    hw = sysinfo.parse_hwinfo(buf, now=1000)
+    assert hw["gpu_hot"] == 92.0 and hw["gpu_mem"] == 106.0
+    assert sysinfo.throttle_kind(0x4) == ""                    # power cap under full load: normal, no warning
+    assert sysinfo.throttle_kind(0x1 | 0x20) == "thermal" and sysinfo.throttle_kind(0x40) == "thermal"
+    assert sysinfo.throttle_kind(0x8) == "hw" and sysinfo.throttle_kind(0x80) == "hw"
+    rows = sysinfo.hud_rows(sysinfo.Snapshot(gpu_temp=80, gpu_hot=92.0, gpu_mem=106.0, throttle="thermal"))
+    texts = ["".join(t for t, _ in r) for r in rows]
+    assert texts == ["GPU 80°C", "HOTSPOT 92°C · MEM 106°C", "GPU DROSSELT (TEMP.)"]
+    assert rows[1][1] == ("92°C", sysinfo.GOOD) and rows[1][-1] == ("106°C", sysinfo.HOT)
+
+
+def test_recorder_counts_throttled_seconds_and_trend():
+    from dbdmapscout import history
+    rec = sysinfo.SysRecorder()
+    for i in range(12):
+        rec.add(sysinfo.Snapshot(t=100 + i, gpu_temp=70, gpu_hot=85 + i, throttle="thermal" if i < 3 else ""))
+    s = rec.summary()
+    assert s["throttle_s"] == 3.0 and s["gpu_hot_max"] == 96.0
+    day = 1_700_000_000
+    rounds = [history.Round(t=day, seconds=600, map_id="a", map="A", sys={"gpu_temp": 70.0, "gpu_temp_max": 75.0}),
+              history.Round(t=day + 3 * 86400, seconds=600, map_id="a", map="A",
+                            sys={"gpu_temp": 74.0, "gpu_temp_max": 80.0, "gpu_hot_max": 93.0, "throttle_s": 5.0}),
+              history.Round(t=day + 3 * 86400 + 60, seconds=600, map_id="b", map="B", sys={"throttle_s": 0.0})]
+    trend = history.sys_trend(rounds, "day")
+    assert len(trend) == 4 and trend[1][1] == [] and trend[-1][1:] == ([74.0], [80.0], [93.0])   # empty days kept
+    avg = history.sys_average(rounds)
+    assert avg["throttle_rounds"] == 1 and avg["throttle_s"] == 5.0
+    peaks = {k: v for k, v, _r in history.sys_peaks(rounds)}
+    assert peaks["throttle_s"] == 5.0 and peaks["gpu_hot_max"] == 93.0
+    by = dict((k, v) for k, _n, v in history.sys_by(rounds, "map"))
+    assert by["A"]["throttle_s"] == 5.0 and by["B"]["throttle_s"] == 0.0     # summed, not averaged
+
+
+def test_temperature_line_draws_points_and_breaks_at_gaps():
+    from dbdmapscout import trendchart
+
+    class Canvas:
+        def __init__(self):
+            self.calls = []
+
+        def __getattr__(self, name):
+            def call(*args, **kw):
+                self.calls.append((name, args, kw))
+                return len(self.calls)
+            return call
+
+        def winfo_width(self):
+            return 600
+
+        def cget(self, key):
+            return "#1e1f22"
+
+    chart = trendchart.TrendChart.__new__(trendchart.TrendChart)
+    chart.dark, chart.panels, chart.canvas, chart._hits, chart._hover = True, ("temp",), Canvas(), [], None
+    chart.data = {"temp": {"title": "T", "kind": "line", "min": 60, "max": 80, "ticks": [(60, "60"), (80, "80")],
+                           "bars": [(70, "a", "x"), (None, "b", ""), (72, "c", "y"), (75, "d", "z")],
+                           "last": "75 °C", "empty": "-"}}
+    chart._redraw()
+    kinds = [c[0] for c in chart.canvas.calls]
+    assert kinds.count("create_oval") == 3 and len(chart._hits) == 3
+    lines = [c for c in chart.canvas.calls if c[0] == "create_line" and c[2].get("width") == 2]
+    assert len(lines) == 1 and len(lines[0][1]) == 4              # one segment c–d; "a" stands alone (gap)
+    ovals = [c[1] for c in chart.canvas.calls if c[0] == "create_oval"]
+    assert ovals[0][1] > ovals[2][1]                              # 70 °C lower on screen than 75 °C

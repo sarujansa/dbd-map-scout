@@ -18,6 +18,8 @@ import threading
 import time
 from dataclasses import dataclass
 
+from .i18n import _
+
 IS_WIN = sys.platform == "win32"
 POLL_EVERY = 1.0             # seconds between two readings
 HWINFO_MAP = "Global\\HWiNFO_SENS_SM2"
@@ -31,9 +33,16 @@ TEMP = 1                     # SENSOR_TYPE_TEMP
 CPU_LABELS = ("cpu package", "cpu (tctl/tdie)", "cpu die (average)", "cpu (tctl)", "cpu tdie", "cpu (tdie)",
               "core max", "cpu")
 GPU_LABELS = ("gpu temperature",)
+HOT_LABELS = ("gpu hot spot temperature", "gpu hotspot temperature", "gpu hot spot")
+MEM_LABELS = ("gpu memory junction temperature", "gpu memory temperature")
 # thresholds (°C): green up to the first, amber up to the second, red above
 CPU_WARM, CPU_HOT = 80, 90
 GPU_WARM, GPU_HOT = 75, 85
+SPOT_WARM, SPOT_HOT = 95, 105    # GPU hot spot and memory junction run 10–20 °C above the core
+# NVML clock event reasons: only these mean "slowed down because of a problem". SW power cap (0x4) is the
+# normal state of a boosting card under full load – showing it would be a permanent warning.
+THROTTLE_THERMAL = 0x20 | 0x40   # SW / HW thermal slowdown
+THROTTLE_HW = 0x08 | 0x80        # HW slowdown / power brake (power supply, external signal)
 
 
 @dataclass
@@ -44,6 +53,9 @@ class Snapshot:
     gpu_load: float | None = None      # %
     gpu_temp: float | None = None      # °C
     gpu_power: float | None = None     # W
+    gpu_hot: float | None = None       # °C hot spot (HWiNFO)
+    gpu_mem: float | None = None       # °C memory junction (HWiNFO)
+    throttle: str = ""                 # "" | "thermal" | "hw" (NVML clock event reasons)
     vram_used: float | None = None     # GB
     vram_total: float | None = None
     ram_used: float | None = None      # GB
@@ -58,8 +70,8 @@ def _cstr(raw: bytes) -> str:
 
 
 def parse_hwinfo(buf: bytes, now: float | None = None) -> dict | None:
-    """CPU/GPU temperature from a copy of HWiNFO's shared memory: {"cpu_temp", "gpu_temp"} or None
-    (not HWiNFO, sharing stopped, stale)."""
+    """Temperatures from a copy of HWiNFO's shared memory: {"cpu_temp", "gpu_temp", "gpu_hot", "gpu_mem"}
+    or None (not HWiNFO, sharing stopped, stale)."""
     if len(buf) < HWINFO_HEADER.size:
         return None
     sig, _ver, _rev, poll, _so, _ss, _sn, r_off, r_size, r_num = HWINFO_HEADER.unpack_from(buf)
@@ -80,7 +92,8 @@ def parse_hwinfo(buf: bytes, now: float | None = None) -> dict | None:
         if "f" in _cstr(unit).lower():
             value = (value - 32) * 5 / 9                  # user switched HWiNFO to Fahrenheit
         temps.setdefault(name, value)                     # first sensor with that label wins
-    return {"cpu_temp": _pick(temps, CPU_LABELS), "gpu_temp": _pick(temps, GPU_LABELS)}
+    return {"cpu_temp": _pick(temps, CPU_LABELS), "gpu_temp": _pick(temps, GPU_LABELS),
+            "gpu_hot": _pick(temps, HOT_LABELS), "gpu_mem": _pick(temps, MEM_LABELS)}
 
 
 def _pick(temps: dict, labels) -> float | None:
@@ -90,18 +103,31 @@ def _pick(temps: dict, labels) -> float | None:
     return None
 
 
+_KERNEL = None
+
+
+def _kernel32():
+    """kernel32 with the file mapping functions declared (once, not every second)."""
+    global _KERNEL
+    if _KERNEL is None:
+        from ctypes import wintypes
+        k = ctypes.WinDLL("kernel32", use_last_error=True)
+        k.OpenFileMappingW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
+        k.OpenFileMappingW.restype = wintypes.HANDLE
+        k.MapViewOfFile.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD,
+                                    ctypes.c_size_t]
+        k.MapViewOfFile.restype = ctypes.c_void_p
+        k.UnmapViewOfFile.argtypes = [ctypes.c_void_p]
+        k.CloseHandle.argtypes = [wintypes.HANDLE]
+        _KERNEL = k
+    return _KERNEL
+
+
 def read_hwinfo() -> bytes | None:
     """Copy of HWiNFO's shared memory, or None when HWiNFO does not share its sensors right now."""
     if not IS_WIN:
         return None
-    from ctypes import wintypes
-    k = ctypes.WinDLL("kernel32", use_last_error=True)
-    k.OpenFileMappingW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
-    k.OpenFileMappingW.restype = wintypes.HANDLE
-    k.MapViewOfFile.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, ctypes.c_size_t]
-    k.MapViewOfFile.restype = ctypes.c_void_p
-    k.UnmapViewOfFile.argtypes = [ctypes.c_void_p]
-    k.CloseHandle.argtypes = [wintypes.HANDLE]
+    k = _kernel32()
     h = k.OpenFileMappingW(0x0004, False, HWINFO_MAP)    # FILE_MAP_READ; fails when HWiNFO does not share
     if not h:
         return None
@@ -128,7 +154,7 @@ class Nvml:
     a DLL from the current folder must never be loaded)."""
 
     def __init__(self):
-        self.lib = self.dev = None
+        self.lib = self.dev = self._reasons = None
         self.name = ""
         self.error = ""
         if not IS_WIN:
@@ -154,6 +180,13 @@ class Nvml:
             if lib.nvmlDeviceGetName(dev, buf, 96) == 0:
                 self.name = buf.value.decode("utf-8", "replace")
             self.lib, self.dev = lib, dev
+            # new name first; older drivers only know …ThrottleReasons
+            for fn in ("nvmlDeviceGetCurrentClocksEventReasons", "nvmlDeviceGetCurrentClocksThrottleReasons"):
+                try:
+                    self._reasons = getattr(lib, fn)
+                    break
+                except AttributeError:
+                    continue
         except (OSError, AttributeError) as e:
             self.error = f"{type(e).__name__}: {e}"
 
@@ -177,6 +210,9 @@ class Nvml:
             snap.vram_used, snap.vram_total = mem.used / 2 ** 30, mem.total / 2 ** 30
         if lib.nvmlDeviceGetPowerUsage(dev, ctypes.byref(u)) == 0:              # milliwatts
             snap.gpu_power = u.value / 1000
+        bits = ctypes.c_ulonglong()
+        if self._reasons is not None and self._reasons(dev, ctypes.byref(bits)) == 0:
+            snap.throttle = throttle_kind(bits.value)
 
     def close(self):
         if self.lib is not None:
@@ -185,6 +221,15 @@ class Nvml:
             except Exception:
                 pass
             self.lib = None
+
+
+def throttle_kind(bits: int) -> str:
+    """NVML clock event reasons -> "thermal" | "hw" | "" (no slowdown worth a warning)."""
+    if bits & THROTTLE_THERMAL:
+        return "thermal"
+    if bits & THROTTLE_HW:
+        return "hw"
+    return ""
 
 
 # ------------------------------------------------------------------ CPU, RAM
@@ -247,6 +292,16 @@ def hud_rows(s: Snapshot) -> list:
             for i, seg in enumerate(segs):
                 row += ([(" · ", DIM)] if i else []) + [seg]
             rows.append(row)
+    spots = [(name, t) for name, t in (("HOTSPOT", s.gpu_hot), ("MEM", s.gpu_mem)) if t is not None]
+    if spots:                                   # hot spot / memory junction: only with HWiNFO
+        row = []
+        for i, (name, t) in enumerate(spots):
+            row += ([(" · ", DIM)] if i else []) + [(name + " ", DIM),
+                                                   (f"{t:.0f}°C", temp_colour(t, SPOT_WARM, SPOT_HOT))]
+        rows.append(row)
+    if s.throttle:
+        rows.append([(_("GPU DROSSELT (TEMP.)") if s.throttle == "thermal" else
+                      _("GPU DROSSELT (HW)"), HOT)])
     for name, used, total in (("VRAM", s.vram_used, s.vram_total), ("RAM", s.ram_used, s.ram_total)):
         if used is not None and total:
             rows.append([(name + " ", DIM), (f"{used:.1f} / {total:.0f} GB", WHITE)])
@@ -254,7 +309,8 @@ def hud_rows(s: Snapshot) -> list:
 
 
 # ------------------------------------------------------------------ per round (tab Statistik)
-SYS_KEYS = ("cpu_temp", "gpu_temp", "cpu_load", "gpu_load", "gpu_power", "vram_used", "ram_used")
+SYS_KEYS = ("cpu_temp", "gpu_temp", "cpu_load", "gpu_load", "gpu_power", "vram_used", "ram_used", "gpu_hot",
+            "gpu_mem")
 MIN_SAMPLES = 10             # fewer readings in a round (HUD switched on late, HWiNFO started late): not stored
 
 
@@ -263,12 +319,16 @@ class SysRecorder:
 
     def __init__(self):
         self.values = {k: [] for k in SYS_KEYS}
+        self.throttled = 0                           # readings (≈ seconds) with a thermal / hardware slowdown
+        self.readings = 0
         self._last_t = None
 
     def add(self, snap: Snapshot) -> None:
         if not snap.t or snap.t == self._last_t:
             return                                   # same reading as last time (the UI ticks faster)
         self._last_t = snap.t
+        self.readings += 1
+        self.throttled += bool(snap.throttle)
         for k in SYS_KEYS:
             v = getattr(snap, k)
             if v is not None:
@@ -281,6 +341,8 @@ class SysRecorder:
             if len(vs) >= MIN_SAMPLES:
                 out[k] = round(sum(vs) / len(vs), 1)
                 out[k + "_max"] = round(max(vs), 1)
+        if out and self.readings >= MIN_SAMPLES:
+            out["throttle_s"] = float(self.throttled * POLL_EVERY)
         return out or None
 
 
@@ -328,6 +390,7 @@ class SysMonitor:
                 if hw:
                     snap.hwinfo = self.hwinfo_seen = True
                     snap.cpu_temp = hw["cpu_temp"]
+                    snap.gpu_hot, snap.gpu_mem = hw["gpu_hot"], hw["gpu_mem"]
                     if snap.gpu_temp is None:
                         snap.gpu_temp = hw["gpu_temp"]           # AMD/Intel: GPU temperature from HWiNFO
             except Exception as e:                               # never kill the thread over one reading
@@ -340,4 +403,5 @@ class SysMonitor:
         s = self.snapshot
         return (f"Systemwerte: aktiv={self.active} GPU={s.gpu_name or '—'} nvml={self.nvml_error or 'ok'} "
                 f"HWiNFO={'ja' if s.hwinfo else ('früher ja' if self.hwinfo_seen else 'nein')} "
-                f"CPU={s.cpu_temp}°C/{s.cpu_load}% GPU={s.gpu_temp}°C/{s.gpu_load}%")
+                f"CPU={s.cpu_temp}°C/{s.cpu_load}% GPU={s.gpu_temp}°C/{s.gpu_load}% "
+                f"Hotspot={s.gpu_hot} Mem={s.gpu_mem} drosselt={s.throttle or 'nein'}")

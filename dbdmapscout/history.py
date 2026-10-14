@@ -378,8 +378,11 @@ def ping_by_region(rounds) -> dict:
 
 
 # ------------------------------------------------------------------ system values (tab Statistik → System)
-SYS_COLUMNS = ("gpu_temp", "gpu_temp_max", "cpu_temp", "cpu_temp_max", "gpu_load", "gpu_power", "vram_used_max")
-SYS_PEAKS = ("gpu_temp_max", "cpu_temp_max", "gpu_power_max", "vram_used_max", "ram_used_max")
+SYS_COLUMNS = ("gpu_temp", "gpu_temp_max", "gpu_hot_max", "cpu_temp", "cpu_temp_max", "gpu_load", "gpu_power",
+               "vram_used_max", "throttle_s")
+SYS_PEAKS = ("gpu_temp_max", "gpu_hot_max", "gpu_mem_max", "cpu_temp_max", "gpu_power_max", "vram_used_max",
+             "ram_used_max", "throttle_s")
+SYS_SUMS = ("throttle_s",)      # added up over a group, not averaged
 
 
 def _sys_key(r, by: str):
@@ -405,7 +408,8 @@ def sys_by(rounds, by: str) -> list:
         for col in SYS_COLUMNS:
             got = [s[col] for s in items if col in s]
             if got:
-                vals[col] = max(got) if col.endswith("_max") else sum(got) / len(got)
+                vals[col] = max(got) if col.endswith("_max") else sum(got) if col in SYS_SUMS else \
+                    sum(got) / len(got)
         rows.append((key, len(items), vals))
     if by in ("map", "killer"):
         return sorted(rows, key=lambda row: (-row[2].get("gpu_temp", -1), -row[2].get("cpu_temp", -1), str(row[0])))
@@ -417,7 +421,7 @@ def sys_peaks(rounds) -> list:
     out = []
     for key in SYS_PEAKS:
         best = max((r for r in rounds if r.sys and key in r.sys), key=lambda r: r.sys[key], default=None)
-        if best is not None:
+        if best is not None and (key not in SYS_SUMS or best.sys[key] > 0):      # "0 s throttled" is no record
             out.append((key, best.sys[key], best))
     return out
 
@@ -430,4 +434,28 @@ def sys_average(rounds) -> dict:
         got = [s[col] for s in items if col in s]
         if got:
             out[col] = sum(got) / len(got)
+    throttled = [s["throttle_s"] for s in items if s.get("throttle_s")]
+    out["throttle_rounds"], out["throttle_s"] = len(throttled), sum(throttled)
     return out
+
+
+def sys_trend(rounds, unit: str) -> list:
+    """GPU temperature over time: [(bucket start, [round averages], [round maxima], [hot spot maxima])] per
+    hour / day / week, empty buckets included (honest time axis), the newest MAX_BUCKETS. A slow rise over
+    weeks points at dust, thermal paste or a fan."""
+    from .official import MAX_BUCKETS, _next_bucket, bucket_start
+    groups = {}
+    for r in rounds:
+        if r.sys and "gpu_temp" in r.sys:
+            g = groups.setdefault(bucket_start(r.t, unit), ([], [], []))
+            g[0].append(r.sys["gpu_temp"])
+            g[1].append(r.sys.get("gpu_temp_max", r.sys["gpu_temp"]))
+            if "gpu_hot_max" in r.sys:
+                g[2].append(r.sys["gpu_hot_max"])
+    if not groups:
+        return []
+    out, b, last = [], min(groups), max(groups)
+    while b <= last:
+        out.append((b, *groups.get(b, ([], [], []))))
+        b = _next_bucket(b, unit)
+    return out[-MAX_BUCKETS:]

@@ -4,14 +4,19 @@ One chart per role, each a single series: killer = Ø kills per bucket (axis 0�
 (0–100 %). Thin columns with a rounded top grow from one baseline, hairline grid, only the newest column
 carries its value; every column shows its value and the number of rounds on hover. Colours validated
 (dataviz palette slots 1/2 against the app's surfaces): blue for killer, orange for survivor.
+Temperature (statistics page "System") is a line instead: degrees have no meaningful zero, so the axis starts
+near the lowest value – columns from a cut-off baseline would lie about proportions. Aqua (slot 3), validated
+against both surfaces (#1e1f22 dark, #f0f0f0 light).
 """
 from __future__ import annotations
 
 import tkinter as tk
 
 COLORS = {True: {"killer": "#3987e5", "survivor": "#d95926", "hover_killer": "#6da7ec", "hover_survivor": "#ec835a",
+                 "temp": "#199e70", "hover_temp": "#4fc49a",
                  "grid": "#3a3c42", "text": "#e3e5e8", "dim": "#9ba1a9"},
           False: {"killer": "#2a78d6", "survivor": "#d95926", "hover_killer": "#5598e7", "hover_survivor": "#e0703f",
+                  "temp": "#168f63", "hover_temp": "#1baf7a",
                   "grid": "#d4d4d4", "text": "#1b1b1b", "dim": "#5f6368"}}
 BAR_MAX = 24                 # px, columns never fill their slot
 RADIUS = 4                   # rounded data end
@@ -29,14 +34,17 @@ def columns(n: int, width: float, left: float = LEFT, right: float = RIGHT):
 
 
 class TrendChart:
-    """Two stacked panels on one canvas. ``draw(data)``: data = {"killer": panel, "survivor": panel},
+    """Stacked panels on one canvas (``panels``: their keys = colour names). ``draw(data)``: data = {key: panel},
     panel = {"title", "empty", "ticks": [(value, label)], "max", "bars": [(value or None, label, tip)],
-    "last": label of the newest value}."""
+    "last": label of the newest value, optional "kind": "line" with "min" (lowest value of the axis)}."""
     PANEL_H = 180
 
-    def __init__(self, parent, dark: bool, bg: str):
+    def __init__(self, parent, dark: bool, bg: str, panels=("killer", "survivor")):
         self.dark = dark
-        self.canvas = tk.Canvas(parent, height=2 * self.PANEL_H + 10, background=bg, highlightthickness=0)
+        self.panels = tuple(panels)
+        n = len(self.panels)
+        self.canvas = tk.Canvas(parent, height=n * self.PANEL_H + (n - 1) * 10, background=bg,
+                                highlightthickness=0)
         self.canvas.pack(fill="both", expand=True)
         self.data = None
         self._hits = []            # (x0, y0, x1, y1, item id, role, tip)
@@ -56,7 +64,7 @@ class TrendChart:
         if not self.data:
             return
         width = max(200, c.winfo_width())
-        for i, role in enumerate(("killer", "survivor")):
+        for i, role in enumerate(self.panels):
             self._panel(role, self.data[role], i * (self.PANEL_H + 10), width)
 
     def _panel(self, role, p, top, width):
@@ -67,14 +75,18 @@ class TrendChart:
         if not any(v is not None for v, _l, _t in p["bars"]):
             c.create_text(LEFT, (y0 + y1) / 2, anchor="w", text=p["empty"], fill=col["dim"])
             return
-        scale = (y1 - y0) / p["max"]
+        lo = p.get("min", 0)
+        scale = (y1 - y0) / max(1e-9, p["max"] - lo)
         for value, label in p["ticks"]:                        # recessive hairline grid + clean ticks
-            y = y1 - value * scale
+            y = y1 - (value - lo) * scale
             c.create_line(LEFT, y, width - RIGHT, y, fill=col["grid"])
             c.create_text(LEFT - 6, y, anchor="e", text=label, fill=col["dim"])
         xs = columns(len(p["bars"]), width)
         every = max(1, -(-len(xs) * 46 // max(1, width - LEFT - RIGHT)))   # x labels must not overlap
         newest = max((i for i, (v, _l, _t) in enumerate(p["bars"]) if v is not None), default=None)
+        if p.get("kind") == "line":
+            self._line(role, p, xs, y0, y1, lo, scale, every, newest)
+            return
         for i, ((value, label, tip), (x0, x1)) in enumerate(zip(p["bars"], xs)):
             if (len(xs) - 1 - i) % every == 0:
                 c.create_text((x0 + x1) / 2, y1 + 6, anchor="n", text=label, fill=col["dim"])
@@ -86,6 +98,30 @@ class TrendChart:
             slot = (xs[1][0] - xs[0][0]) if len(xs) > 1 else (x1 - x0) * 2
             mid = (x0 + x1) / 2
             self._hits.append((mid - slot / 2, y0 - 10, mid + slot / 2, y1, item, role, tip))
+
+    def _line(self, role, p, xs, y0, y1, lo, scale, every, newest):
+        """2 px line through the buckets (broken where a bucket is empty), 8 px markers with a surface ring."""
+        c, col = self.canvas, COLORS[self.dark]
+        pts, seg = [], []
+        for i, ((value, label, tip), (x0, x1)) in enumerate(zip(p["bars"], xs)):
+            if (len(xs) - 1 - i) % every == 0:
+                c.create_text((x0 + x1) / 2, y1 + 6, anchor="n", text=label, fill=col["dim"])
+            if value is None:
+                if len(seg) >= 4:
+                    c.create_line(*seg, fill=col[role], width=2)
+                seg = []
+                continue
+            y = y1 - (value - lo) * scale
+            seg += [(x0 + x1) / 2, y]
+            pts.append((i, (x0 + x1) / 2, y, tip))
+        if len(seg) >= 4:
+            c.create_line(*seg, fill=col[role], width=2)
+        slot = (xs[1][0] - xs[0][0]) if len(xs) > 1 else 40
+        for i, x, y, tip in pts:
+            item = c.create_oval(x - 4, y - 4, x + 4, y + 4, fill=col[role], outline=c.cget("background"), width=2)
+            if i == newest:
+                c.create_text(x, y - 8, anchor="s", text=p["last"], fill=col["text"])
+            self._hits.append((x - slot / 2, y0 - 10, x + slot / 2, y1, item, role, tip))
 
     def _column(self, x0, x1, base, top, color):
         """Column with a rounded data end (radius ≤ 4 px), square at the baseline."""

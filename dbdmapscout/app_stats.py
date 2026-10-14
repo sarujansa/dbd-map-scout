@@ -31,7 +31,8 @@ STATS_SYS_GROUPS = [("map", N_("nach Map")), ("hour", N_("nach Uhrzeit")), ("wee
                     ("killer", N_("nach Killer"))]
 SYS_PEAK_LABELS = {"gpu_temp_max": N_("GPU {v} °C"), "cpu_temp_max": N_("CPU {v} °C"),
                    "gpu_power_max": N_("GPU {v} W"), "vram_used_max": N_("VRAM {v} GB"),
-                   "ram_used_max": N_("RAM {v} GB")}
+                   "ram_used_max": N_("RAM {v} GB"), "gpu_hot_max": N_("Hotspot {v} °C"),
+                   "gpu_mem_max": N_("GPU-Speicher {v} °C"), "throttle_s": N_("gedrosselt {v}")}
 RESULTS = {"escaped": N_("entkommen"), "dead": N_("tot"), "abandoned": N_("aufgegeben"), "gone": N_("verlassen")}
 
 
@@ -138,15 +139,19 @@ class StatsTab:
                           state="readonly", width=16)
         cb.pack(side="right", anchor="n")
         cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
-        self.stats_sys = self._stats_tree(box_s, (("grp", _("Wann/Wo"), 150, "w"), ("n", _("Runden"), 55, "e"),
-                                                  ("gpu", _("GPU Ø °C"), 70, "e"), ("gpumax", _("GPU max"), 65, "e"),
-                                                  ("cpu", _("CPU Ø °C"), 70, "e"), ("cpumax", _("CPU max"), 65, "e"),
-                                                  ("load", _("GPU Ø Last"), 75, "e"), ("pwr", _("Ø Watt"), 60, "e"),
-                                                  ("vram", _("VRAM max"), 75, "e")), 7)
+        self.stats_sys = self._stats_tree(box_s, (("grp", _("Wann/Wo"), 125, "w"), ("n", _("Runden"), 52, "e"),
+                                                  ("gpu", _("GPU Ø °C"), 64, "e"), ("gpumax", _("GPU max"), 60, "e"),
+                                                  ("hot", _("Hotspot max"), 82, "e"),
+                                                  ("cpu", _("CPU Ø °C"), 64, "e"), ("cpumax", _("CPU max"), 60, "e"),
+                                                  ("load", _("GPU Ø Last"), 72, "e"), ("pwr", _("Ø Watt"), 56, "e"),
+                                                  ("thr", _("Gedrosselt"), 74, "e")), 6)
         ttk.Label(box_s, text=_("Werte der Systemwerte-Anzeige (Tab Overlay) während der Runden – nur Runden, in denen "
                                 "sie eingeschaltet war. CPU-Temperatur nur mit HWiNFO. „Wann/Wo“ zeigt, auf welchen "
-                                "Maps oder zu welcher Tageszeit der PC am heißesten läuft."),
-                  style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
+                                "Maps oder zu welcher Tageszeit der PC am heißesten läuft. „Gedrosselt“: Sekunden, in "
+                                "denen die GPU wegen Temperatur oder Hardware langsamer lief (nur NVIDIA)."),
+                  style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 6))
+        self.sys_trend = TrendChart(box_s, bool(self.settings.get("dark_mode", True)),
+                                    ttk.Style().lookup("TFrame", "background") or "#1e1f22", panels=("temp",))
         box_r = self._stats_page(_("Serverregionen"))
         self.stats_regs = self._stats_tree(box_r, (("reg", _("Region"), 190, "w"), ("n", _("Runden"), 65, "e"),
                                                    ("avg", _("Ø Dauer"), 75, "e"), ("share", _("Anteil"), 65, "e"),
@@ -381,7 +386,7 @@ class StatsTab:
             t.selection_set(keep[0])
         self._stats_alias_buttons()
         self._trend_render(pairs, {"day": "hour", "week": "day", "month": "day"}.get(period, "week"))
-        self._stats_sys_render(rounds)
+        self._stats_sys_render(rounds, {"day": "hour", "week": "day", "month": "day"}.get(period, "week"))
         t = self.stats_regs
         t.delete(*t.get_children())
         pings = history.ping_by_region(rounds)
@@ -422,7 +427,7 @@ class StatsTab:
             t.selection_set(keep[0])
         self._stats_role_buttons()
 
-    def _stats_sys_render(self, rounds):
+    def _stats_sys_render(self, rounds, unit):
         """Sub-tab System: averages, highest values (when and where) and the table by map/time/killer."""
         avg = history.sys_average(rounds)
         if not avg["n"]:
@@ -435,8 +440,12 @@ class StatsTab:
                 if key in avg:
                     parts.append(_(fmt, v=f"{avg[key]:.0f}"))
             lines = [" ".join(parts[:1]) + " " + " · ".join(parts[1:])]
-            peaks = [_("{value} am {when} ({map})", value=_(SYS_PEAK_LABELS[key], v=f"{v:.1f}" if "_used" in key
-                                                             else f"{v:.0f}"),
+            if avg["throttle_rounds"]:
+                lines.append(_("⚠ GPU gedrosselt in {n} von {total} Runden, zusammen {time}.",
+                               n=avg["throttle_rounds"], total=avg["n"], time=fmt_duration(avg["throttle_s"])))
+            peaks = [_("{value} am {when} ({map})",
+                       value=_(SYS_PEAK_LABELS[key], v=fmt_duration(v) if key == "throttle_s" else
+                               f"{v:.1f}" if "_used" in key else f"{v:.0f}"),
                        when=time.strftime("%d.%m. %H:%M", time.localtime(r.t)), map=r.map)
                      for key, v, r in history.sys_peaks(rounds)]
             if peaks:
@@ -458,9 +467,43 @@ class StatsTab:
             else:
                 label = key
             t.insert("", "end", values=(label, n, num(vals, "gpu_temp"), num(vals, "gpu_temp_max"),
-                                        num(vals, "cpu_temp"), num(vals, "cpu_temp_max"),
+                                        num(vals, "gpu_hot_max"), num(vals, "cpu_temp"), num(vals, "cpu_temp_max"),
                                         num(vals, "gpu_load", " %"), num(vals, "gpu_power"),
-                                        f"{vals['vram_used_max']:.1f} GB" if "vram_used_max" in vals else "–"))
+                                        fmt_duration(vals["throttle_s"]) if vals.get("throttle_s") else
+                                        ("0" if "throttle_s" in vals else "–")))
+        self._sys_trend_render(rounds, unit)
+
+    def _sys_trend_render(self, rounds, unit):
+        """Line under the System table: Ø GPU temperature per hour / day / week (dust, paste, fan over time)."""
+        def label(b):
+            if unit == "week":
+                return _("KW {n}", n=datetime.date.fromtimestamp(b).isocalendar()[1])
+            return time.strftime("%H:00" if unit == "hour" else "%d.%m.", time.localtime(b))
+
+        per = {"hour": _("pro Stunde"), "day": _("pro Tag"), "week": _("pro Woche")}[unit]
+        data = history.sys_trend(rounds, unit)
+        bars = []
+        for b, avgs, maxs, hots in data:
+            if not avgs:
+                bars.append((None, label(b), ""))
+                continue
+            v = sum(avgs) / len(avgs)
+            tip = _("{when}: Ø {avg} °C · max {max} °C · {n} Runden", when=label(b), avg=f"{v:.0f}",
+                    max=f"{max(maxs):.0f}", n=len(avgs))
+            if hots:
+                tip += " · " + _("Hotspot max {v} °C", v=f"{max(hots):.0f}")
+            bars.append((v, label(b), tip))
+        values = [v for v, _l, _t in bars if v is not None]
+        lo = (int(min(values)) // 10 - 1) * 10 if values else 0      # degrees have no zero: axis around the data
+        hi = (int(max(values)) // 10 + 1) * 10 if values else 100
+        last = values[-1] if values else None
+        self.sys_trend.dark = bool(self.settings.get("dark_mode", True))
+        self.sys_trend.canvas.configure(background=ttk.Style().lookup("TFrame", "background") or "#1e1f22")
+        self.sys_trend.draw({"temp": {
+            "title": _("GPU-Temperatur – Ø {per}", per=per), "bars": bars, "kind": "line", "min": lo, "max": hi,
+            "ticks": [(v, f"{v} °C") for v in range(lo, hi + 1, 10)],
+            "last": f"{last:.0f} °C" if last is not None else "",
+            "empty": _("Noch keine GPU-Temperaturen in dieser Auswahl.")}})
 
     def _stats_role_buttons(self):
         sel = self.stats_last.selection()
