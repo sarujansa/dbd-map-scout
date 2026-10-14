@@ -318,3 +318,19 @@ def test_control_window_follows_its_size(root):
     uiscale.apply_zoom(root, 1.0)
     assert tkfont.nametofont("TkDefaultFont").cget("size") == size  # back to the size it had
     top.destroy()
+
+
+def test_every_design_loads_and_switches(root):
+    from tkinter import ttk
+    from dbdmapscout import theme
+    style = ttk.Style(root)
+    for design, _label in theme.STYLES:
+        for dark in (True, False):
+            theme.apply.failed = ""
+            bg = theme.apply(root, dark, design=design)
+            assert not theme.apply.failed and bg.startswith("#")
+            if design != "classic":
+                assert style.theme_use() == f"dbdms-{'gold' if design == 'fluent_gold' else 'blue'}-" \
+                                            f"{'dark' if dark else 'light'}"
+    theme.apply(root, True, design=theme.DEFAULT_STYLE)        # loaded once: switching back reuses the theme
+    assert not theme.apply.failed

@@ -128,6 +128,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
         self._build_ui()
         self._apply_overlay_settings()
         self._restore_geometry()
+        self.root.after(1500, self._track_geometry)     # after the window settled at the restored size
 
         self.worker = DetectionWorker(root_dir, self.settings, self.catalog, self.events, simulate=simulate)
         self.worker.start()
@@ -1717,10 +1718,15 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
         dark = bool(self.dark_var.get())
         tooltip.Tooltip.colours = (("#2b2d31", "#e3e5e8", "#50535a") if dark else
                                    ("#ffffe1", "#1b1b1b", "#8a8a8a"))
-        theme.apply(self.root, dark, text_widgets=(self.log_text,))
+        design = self.settings.get("ui_style", theme.DEFAULT_STYLE)
+        self._page_bg = page_bg = theme.apply(self.root, dark, text_widgets=(self.log_text,), design=design)
+        if theme.apply.failed and not getattr(self, "_style_failed_told", False):
+            self._style_failed_told = True
+            self._log(_("Design nicht ladbar, nehme das klassische: {error}", error=theme.apply.failed), "Fehler")
         uiscale.apply_zoom(self.root, float(self.settings.get("ui_zoom", 1.0)))      # after the theme's fonts
-        page_bg = theme.DARK["bg"] if dark else (ttk.Style(self.root).lookup("TFrame", "background")
-                                                 or self.root.cget("background"))
+        for chart in (getattr(self, "trend", None), getattr(self, "sys_trend", None)):
+            if chart is not None:
+                chart.canvas.configure(background=page_bg)
         for page in getattr(self, "_pages", []):
             page["canvas"].configure(background=page_bg)
         colors = theme.LOG_COLORS[dark]
@@ -1734,6 +1740,14 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
         self.srv_tree.tag_configure("group", foreground=colors["text"])
         self.log_text.tag_configure("msg_Fehler", foreground=colors["Fehler"])
         self.root.after(50, lambda: theme._titlebar(self.root, dark))   # frame exists only after mapping
+
+    def _style_changed(self):
+        design = next((k for k, lbl in theme.STYLES if _(lbl) == self.style_var.get()), theme.DEFAULT_STYLE)
+        self.settings.set("ui_style", design)
+        self._apply_theme()
+        if getattr(self, "_autowrap", None):
+            self._autowrap.soon()
+        self._save_soon()
 
     def _dark_changed(self):
         self.settings.set("dark_mode", bool(self.dark_var.get()))
@@ -1851,11 +1865,47 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
             self.root.geometry(f"{w}x{h}+{x}+{y}")
         else:
             self.root.geometry(f"{w}x{h}")
+        if IS_WIN and self.settings.get("window_zoomed"):
+            try:
+                self.root.state("zoomed")
+            except tk.TclError:
+                pass
+
+    def _track_geometry(self):
+        """Remember size, position and 'maximised' as soon as they change (before 1.50 only when quitting from
+        a visible normal window – closing from the tray, logging off or a crash lost them)."""
+        self._geo_job = None
+
+        def note(e):
+            if e.widget is self.root and self._geo_job is None:
+                self._geo_job = self.root.after(1000, save)
+
+        def save():
+            self._geo_job = None
+            try:
+                state = self.root.state()
+            except tk.TclError:
+                return
+            if state not in ("normal", "zoomed"):
+                return                       # minimised / in the tray: keep the last visible size
+            zoomed = state == "zoomed"
+            changed = zoomed != bool(self.settings.get("window_zoomed"))
+            if not zoomed and self.root.geometry() != self.settings.get("window_geometry"):
+                self.settings.set("window_geometry", self.root.geometry())
+                changed = True
+            if changed:
+                self.settings.set("window_zoomed", zoomed)
+                self._save_soon()
+
+        self.root.bind("<Configure>", note, add="+")
 
     def quit(self):
         try:
             if self.root.state() == "normal":
                 self.settings.set("window_geometry", self.root.geometry())
+                self.settings.set("window_zoomed", False)
+            elif self.root.state() == "zoomed":
+                self.settings.set("window_zoomed", True)
             self.settings.save()
             self.tray.stop()
             self.conn.stop()
