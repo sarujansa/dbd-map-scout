@@ -306,10 +306,12 @@ def test_control_window_follows_its_size(root):
     narrow = int(float(str(text.cget("wraplength"))))
     assert 600 <= narrow <= 700                                     # the window's width, not the fixed 400
     assert int(float(str(beside.cget("wraplength")))) < narrow - 100   # the choice box beside it keeps its room
-    top.geometry("1200x300")
+    top.geometry("1200x300")                                        # the runner's screen may be narrower
     top.update()
     wrap.update()
-    assert int(float(str(text.cget("wraplength")))) > narrow + 400  # wider window: longer lines
+    wide = int(float(str(text.cget("wraplength"))))
+    assert top.winfo_width() > 760 and wide > narrow + 50           # wider window: longer lines …
+    assert top.winfo_width() - 80 <= wide <= top.winfo_width()      # … as wide as the window really got
     size = tkfont.nametofont("TkDefaultFont").cget("size")
     uiscale.apply_zoom(root, 1.5)
     assert abs(tkfont.nametofont("TkDefaultFont").cget("size")) == max(6, round(abs(size) * 1.5))
