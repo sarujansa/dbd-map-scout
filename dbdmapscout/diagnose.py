@@ -113,6 +113,10 @@ def collect(app) -> str:
         hist = list(getattr(w, "end_history", []))
         lines.append(f"Letzte Prüfungen ({len(hist)}):" if hist else "Letzte Prüfungen: keine")
         lines.extend("  " + h for h in hist[-40:])
+    mon = getattr(app, "sysmon", None)
+    if mon is not None:
+        lines.append(mon.diag_line() + f" (Anzeige={app.settings.get('sysinfo')}, Rechteck="
+                     f"{getattr(getattr(app, 'worker', None), 'hud_rect', None)})")
     conn = getattr(app, "conn", None)
     if conn is not None:
         lines.extend(conn.diag_lines())
