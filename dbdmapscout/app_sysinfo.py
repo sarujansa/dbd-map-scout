@@ -36,7 +36,7 @@ class SysInfo:
         self.sysmon.start()
         self.hud = make_hud()
         if self.hud is not None:
-            self.hud.on_moved = self._hud_dragged
+            self.hud.on_moved = lambda x, y: self.events.put(("call", self._hud_dragged, (x, y)))   # see app.py
         self._hud_reserved = None          # (side, height) taken at the top of a bar, for the map below
         self._hud_pending = ""             # "above"/"beside": rendered, placed once the map's place is known
         self._sysrec = None                # readings of the open round (tab Statistik → System)

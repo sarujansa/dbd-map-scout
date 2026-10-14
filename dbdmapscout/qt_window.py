@@ -14,20 +14,87 @@ import sys
 
 from PIL import Image
 from PySide6.QtCore import QByteArray, QEvent, Qt
-from PySide6.QtGui import QFontDatabase, QIcon, QImage, QPixmap
-from PySide6.QtWidgets import (QApplication, QFrame, QGridLayout, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
-                               QMainWindow, QProgressBar, QPushButton, QScrollArea, QSizePolicy, QStackedWidget,
+from PySide6.QtGui import QColor, QFontDatabase, QIcon, QImage, QPalette, QPixmap
+from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel,
+                               QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QProgressBar, QPushButton,
+                               QScrollArea, QSizePolicy, QSlider, QStackedWidget, QTreeWidget, QTreeWidgetItem,
                                QVBoxLayout, QWidget)
 
 from . import qt_theme
 from .i18n import N_, _
 from .mapimage import FONT as FIRA
 
-# key, label, symbol; "overview" is Qt, the others open the Tk window (stages 2–4 move them)
+# key, label, symbol; QT_PAGES are in Qt, the others open the Tk window (stages 3–4 move them)
 PAGES = (("overview", N_("Übersicht"), "◉"), ("maps", "Maps", "▦"), ("overlay", N_("Overlay"), "◧"),
          ("stats", N_("Statistik"), "▤"), ("server", N_("Server"), "◎"), ("settings", N_("Einstellungen"), "⚙"),
          ("detect", N_("Erkennung"), "✦"), ("log", "Log", "☰"))
+QT_PAGES = ("overview", "maps", "overlay", "settings")
 THUMB_H = 170                     # px (logical) of the map picture on the overview
+
+# Pages that mirror a Tk tab (since 1.52): every key names a Tk widget registered with App._reg; texts, values,
+# enabled/shown come from it (App._qt_refresh → show_states), a click is done on it (post("act", (key, value))).
+# ("card", frame key, rows) – a row is one control or ("row", [controls]); controls: ("check"|"button"|"combo"|
+# "slider"|"label"|"hint", key), ("stretch",), ("link", label, tab) = open the Tk tab (not mirrored there yet).
+SPECS = {
+    "overlay": (
+        ("card", "ov.pos", (
+            ("row", (("label", "ov.anchor.label"), ("combo", "ov.anchor"), ("stretch",), ("button", "ov.reset"))),
+            ("slider", "ov.posx"), ("slider", "ov.posy"),
+            ("row", (("button", "ov.edit"), ("button", "ov.test"), ("stretch",))),
+            ("hint", "ov.pos_hint"), ("check", "ov.keep_bar"))),
+        ("card", "ov.look", (
+            ("slider", "ov.size"),
+            ("row", (("hint", "ov.map_size"), ("stretch",), ("button", "ov.map_size_reset"))),
+            ("slider", "ov.opacity"),
+            ("check", "ov.show_map"), ("check", "ov.focus"), ("check", "ov.caption"), ("check", "ov.timer"),
+            ("check", "ov.server"), ("check", "ov.waiting"), ("check", "ov.floors"), ("check", "ov.record"),
+            ("check", "ov.transparent"))),
+        ("card", "ov.sys", (
+            ("row", (("label", "ov.sysinfo.label"), ("combo", "ov.sysinfo"), ("stretch",))),
+            ("hint", "ov.sys_text"), ("hint", "ov.sys_hint"))),
+    ),
+    "settings": (
+        ("card", "st.look", (
+            ("row", (("label", "st.lang.label"), ("combo", "st.lang"), ("stretch",))), ("hint", "st.lang_note"),
+            ("check", "st.dark"),
+            ("row", (("label", "st.zoom.label"), ("combo", "st.zoom"), ("stretch",))),
+            ("check", "st.qt"),
+            ("row", (("label", "st.style.label"), ("combo", "st.style"), ("stretch",))),
+            ("hint", "st.look_note"))),
+        ("card", "st.notify", (
+            ("check", "st.lobby_notify"), ("check", "st.lobby_remind"), ("check", "st.notify_background_only"),
+            ("hint", "st.notify_text"), ("row", (("button", "st.notify_test"), ("stretch",))))),
+        ("card", "st.start", (("check", "st.tray"), ("check", "st.autostart"), ("hint", "st.autostart_info"))),
+        ("card", "st.hotkeys", tuple(("row", (("label", f"st.hk.{k}.label"), ("stretch",), ("value", f"st.hk.{k}")))
+                                     for k in ("toggle_overlay", "next_variant", "scan_now", "prev_map", "next_map",
+                                               "bigger", "smaller", "edit_position", "rotate_map", "next_floor",
+                                               "reject_map"))
+         + (("row", (("link", N_("Hotkeys ändern …"), "settings"), ("stretch",))),)),
+        ("card", "st.updates", (
+            ("check", "st.update"), ("hint", "st.update_note"),
+            ("row", (("button", "st.upd_btn"), ("button", "st.upd_apply"), ("stretch",))), ("hint", "st.upd_status"))),
+        ("links", (("link", N_("Mehr (Map-Zuordnungen, Match-Daten, Sicherung, Ordner) …"), "settings_more"),)),
+        ("plain", "st.version"),
+    ),
+}
+
+
+def _spec_keys(items):
+    for it in items:
+        kind = it[0]
+        if kind == "card":
+            yield it[1]
+            yield from _spec_keys(it[2])
+        elif kind == "row":
+            yield from _spec_keys(it[1])
+        elif kind in ("check", "button", "combo", "slider", "label", "hint", "value", "plain"):
+            yield it[1]
+
+
+def page_keys(page: str | None = None) -> set:
+    """Tk widget keys a page mirrors (all pages without ``page``) – also the whitelist for clicks from Qt."""
+    pages = [page] if page else list(SPECS)
+    return {k for p in pages for k in _spec_keys(SPECS.get(p, ()))}
 
 
 def application() -> QApplication:
@@ -60,6 +127,12 @@ def _label(text="", cls=None, wrap=False):
     if wrap:
         w.setWordWrap(True)
     return w
+
+
+def _tip(label: str) -> str:
+    """Hover text of a Qt-only button: the same table as the Tk window (tooltip.TIPS, by German label)."""
+    from .tooltip import tip_for_label
+    return tip_for_label(_(label)) or ""
 
 
 def _card():
@@ -114,6 +187,7 @@ class OverviewPage(QWidget):
         self.setObjectName("page")
         self._post = post
         self._thumb_rev = None
+        self._pill_style = None
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         scroll = QScrollArea()
@@ -248,7 +322,10 @@ class OverviewPage(QWidget):
     # ------------------------------------------------------------- update
     def update_page(self, o, thumb=None, tips=None):
         _set(self.pill, "●  " + o.status_text)
-        self.pill.setStyleSheet(qt_theme.pill_style(o.status_kind))
+        pill = qt_theme.pill_style(o.status_kind)
+        if pill != self._pill_style:                  # re-styling repaints: only on a change
+            self._pill_style = pill
+            self.pill.setStyleSheet(pill)
         self.welcome.setVisible(bool(o.welcome))
         _set(self.welcome_text, o.welcome)
         _set(self.map_name, o.map_label or _("Noch keine Map"))
@@ -260,7 +337,8 @@ class OverviewPage(QWidget):
             if thumb is None:
                 self.thumb.clear()
             else:
-                self.thumb.setPixmap(pixmap_from_pil(thumb, THUMB_H, self.devicePixelRatioF()))
+                h = THUMB_H if thumb.height >= thumb.width else round(THUMB_H * thumb.height / thumb.width)
+                self.thumb.setPixmap(pixmap_from_pil(thumb, max(1, h), self.devicePixelRatioF()))   # fits both ways
         for box, f in zip(self.facts, o.facts):
             box.show_fact(f)
         _set(self.note, o.note)
@@ -335,6 +413,224 @@ class OverviewPage(QWidget):
         self.last_empty.setVisible(not rounds)
 
 
+def _scroll_page(title):
+    """(page, body layout): a page that scrolls as a whole, with its title on top."""
+    page = QWidget()
+    page.setObjectName("page")
+    outer = QVBoxLayout(page)
+    outer.setContentsMargins(0, 0, 0, 0)
+    scroll = QScrollArea()
+    scroll.setWidgetResizable(True)
+    scroll.setFrameShape(QFrame.NoFrame)
+    outer.addWidget(scroll)
+    body = QWidget()
+    body.setObjectName("page")
+    scroll.setWidget(body)
+    lay = QVBoxLayout(body)
+    lay.setContentsMargins(22, 18, 22, 18)
+    lay.setSpacing(12)
+    lay.addWidget(_label(title, "h1"))
+    return page, lay
+
+
+class FormPage(QWidget):
+    """A page that mirrors a Tk tab control by control (SPECS): the Tk widgets keep doing the work."""
+
+    def __init__(self, post, title, spec):
+        super().__init__()
+        self._post = post
+        self.controls = {}                 # key -> (kind, widget, extra)
+        page, lay = _scroll_page(title)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(page)
+        for item in spec:
+            kind = item[0]
+            if kind == "card":
+                card = _card()
+                cl = QVBoxLayout(card)
+                cl.setContentsMargins(14, 12, 14, 12)
+                cl.setSpacing(6)
+                head = _label(cls="h2")
+                cl.addWidget(head)
+                self.controls[item[1]] = ("title", head, None)
+                for row in item[2]:
+                    self._add(row, cl)
+                lay.addWidget(card)
+            elif kind == "links":
+                row = QHBoxLayout()
+                for c in item[1]:
+                    self._add(c, row)
+                row.addStretch()
+                lay.addLayout(row)
+            else:
+                self._add(item, lay)
+        lay.addStretch()
+
+    def _add(self, item, lay):
+        kind = item[0]
+        if kind == "row":
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            for c in item[1]:
+                self._add(c, row)
+            lay.addLayout(row)
+            return
+        if kind == "stretch":
+            lay.addStretch()
+            return
+        if kind == "link":
+            b = QPushButton(_(item[1]))
+            b.setToolTip(_tip(item[1]))
+            b.clicked.connect(lambda _c=False, tab=item[2]: self._post("tab", tab))
+            lay.addWidget(b)
+            return
+        key = item[1]
+        extra = None
+        if kind == "check":
+            w = QCheckBox()
+            w.clicked.connect(lambda checked, k=key: self._post("act", (k, checked)))
+        elif kind == "button":
+            w = QPushButton()
+            w.clicked.connect(lambda _c=False, k=key: self._post("act", (k, None)))
+        elif kind == "combo":
+            w = QComboBox()
+            w.setMinimumWidth(160)
+            w.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+            w.activated.connect(lambda i, k=key, c=None: self._post("act", (k, self.controls[k][1].itemText(i))))
+        elif kind == "slider":
+            w = QWidget()
+            r = QHBoxLayout(w)
+            r.setContentsMargins(0, 0, 0, 0)
+            name, value = _label(), _label()
+            name.setMinimumWidth(110)
+            value.setMinimumWidth(56)
+            value.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            s = QSlider(Qt.Horizontal)
+            s.valueChanged.connect(lambda v, k=key: self._post("act", (k, v)))
+            r.addWidget(name)
+            r.addWidget(s, 1)
+            r.addWidget(value)
+            extra = (name, s, value)
+        elif kind in ("hint", "plain"):
+            w = _label(cls="dim", wrap=True)
+        elif kind == "value":
+            w = _label()
+            w.setStyleSheet("font-weight: 600;")
+        else:                              # label
+            w = _label()
+        lay.addWidget(w)
+        self.controls[key] = (kind, w, extra)
+
+    def show_states(self, states):
+        for key, (kind, w, extra) in self.controls.items():
+            st = states.get(key)
+            if st is None:
+                continue
+            if kind != "title":
+                w.setVisible(bool(st.get("visible", True)) and (kind not in ("hint", "plain") or bool(st.get("text"))))
+            if "enabled" in st:
+                w.setEnabled(st["enabled"])
+            if st.get("tip") is not None and w.toolTip() != st["tip"]:
+                w.setToolTip(st["tip"])
+            if kind == "check":
+                _set(w, st.get("text", ""))
+                if w.isChecked() != bool(st.get("value")):
+                    w.setChecked(bool(st.get("value")))         # setChecked does not emit clicked
+            elif kind == "combo":
+                values = st.get("values", [])
+                if [w.itemText(i) for i in range(w.count())] != values:
+                    w.blockSignals(True)
+                    w.clear()
+                    w.addItems(values)
+                    w.blockSignals(False)
+                if w.currentText() != st.get("value"):
+                    w.blockSignals(True)
+                    w.setCurrentIndex(max(0, w.findText(st.get("value", ""))))
+                    w.blockSignals(False)
+            elif kind == "slider":
+                name, s, value = extra
+                _set(name, st.get("label", ""))
+                _set(value, st.get("text", ""))
+                if not s.isSliderDown():                          # the user is dragging: no pull back
+                    s.blockSignals(True)
+                    s.setRange(round(st.get("lo", 0)), round(st.get("hi", 100)))
+                    s.setValue(round(st.get("value", 0)))
+                    s.blockSignals(False)
+            else:                                                 # button, label, hint, value, title
+                text = st.get("text", "")
+                _set(w, text.upper() if kind == "title" else text)
+
+
+class MapsPage(QWidget):
+    """Search + list of maps (grouped by realm); double click / Enter shows a map."""
+
+    def __init__(self, post):
+        super().__init__()
+        self._post = post
+        page, lay = _scroll_page("Maps")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(page)
+        row = QHBoxLayout()
+        row.addWidget(_label(_("Suche")))
+        self.search = QLineEdit()
+        self.search.setClearButtonEnabled(True)
+        self.search.textChanged.connect(lambda t: self._post("search", t))
+        self.search.returnPressed.connect(self._pick_first)
+        row.addWidget(self.search, 1)
+        lay.addLayout(row)
+        self.tree = QTreeWidget()
+        self.tree.setHeaderHidden(True)
+        self.tree.setMinimumHeight(360)
+        self.tree.itemActivated.connect(self._picked)
+        lay.addWidget(self.tree, 1)
+        lay.addWidget(_label(_("Doppelklick zeigt die Map. Die Erkennung übernimmt beim nächsten Match wieder."),
+                             "dim", wrap=True))
+        prow = QHBoxLayout()
+        b = QPushButton(_("Kartenbild hinzufügen …"))
+        b.setToolTip(_tip("Kartenbild hinzufügen …"))
+        b.clicked.connect(lambda: self._post("add_picture"))
+        prow.addWidget(b)
+        prow.addWidget(_label(_("eigenes Bild für eine Map (Hintergrund wird entfernt)"), "dim"))
+        prow.addStretch()
+        lay.addLayout(prow)
+        self._items = None
+
+    def _picked(self, item, _col=0):
+        data = item.data(0, Qt.UserRole)
+        if data:
+            self._post("show_map", tuple(data))
+
+    def _pick_first(self):
+        if self._items:
+            self._post("show_map", (self._items[0][2], self._items[0][3]))
+
+    def show_maps(self, items, current):
+        if items != self._items:
+            self._items = list(items)
+            self.tree.clear()
+            groups = {}
+            for realm, label, mid, v in items:
+                if realm not in groups:
+                    groups[realm] = QTreeWidgetItem([realm])
+                    self.tree.addTopLevelItem(groups[realm])
+                child = QTreeWidgetItem([label])
+                child.setData(0, Qt.UserRole, [mid, v])
+                groups[realm].addChild(child)
+            if self.search.text():
+                self.tree.expandAll()
+        for i in range(self.tree.topLevelItemCount()):
+            g = self.tree.topLevelItem(i)
+            for j in range(g.childCount()):
+                c = g.child(j)
+                on = current is not None and list(current) == c.data(0, Qt.UserRole)
+                font = c.font(0)
+                if font.bold() != on:
+                    font.setBold(on)
+                    c.setFont(0, font)
+
+
 class LaterPage(QWidget):
     """A page that is not in Qt yet: says so and opens the Tk window there."""
 
@@ -348,6 +644,7 @@ class LaterPage(QWidget):
         lay.addWidget(_label(_("Diese Seite ist noch im bisherigen Fenster – sie zieht in den nächsten Versionen um. "
                                "Das Fenster wurde geöffnet."), "dim", wrap=True))
         b = QPushButton(_("Im bisherigen Fenster öffnen"))
+        b.setToolTip(_tip("Im bisherigen Fenster öffnen"))
         b.clicked.connect(lambda: post("tab", key))
         lay.addWidget(b, alignment=Qt.AlignLeft)
         lay.addStretch()
@@ -372,11 +669,14 @@ class MainWindow(QMainWindow):
         self.nav.setFixedWidth(190)
         self.stack = QStackedWidget()
         self.overview = OverviewPage(post)
+        self.maps = MapsPage(post)
+        self.forms = {key: FormPage(post, _(label), SPECS[key]) for key, label, _s in PAGES if key in SPECS}
         for key, label, symbol in PAGES:
             item = QListWidgetItem(f"{symbol}   {_(label)}")
             item.setData(Qt.UserRole, key)
             self.nav.addItem(item)
-            self.stack.addWidget(self.overview if key == "overview" else LaterPage(post, key, _(label)))
+            page = {"overview": self.overview, "maps": self.maps}.get(key) or self.forms.get(key)
+            self.stack.addWidget(page or LaterPage(post, key, _(label)))
         self.nav.setCurrentRow(0)
         self.nav.currentRowChanged.connect(self._page_changed)
         lay.addWidget(self.nav)
@@ -389,10 +689,25 @@ class MainWindow(QMainWindow):
     def _page_changed(self, row):
         self.stack.setCurrentIndex(row)
         key = PAGES[row][0]
-        if key != "overview":
-            self._post("tab", key)
+        self._post("page" if key in QT_PAGES else "tab", key)      # fill it now / open the Tk tab
+
+    def current_key(self) -> str:
+        return PAGES[max(0, self.nav.currentRow())][0]
+
+    def show_states(self, page, states):
+        if page in self.forms:
+            self.forms[page].show_states(states)
+
+    def show_maps(self, items, current):
+        self.maps.show_maps(items, current)
 
     def apply_theme(self, dark: bool, zoom: float):
+        pal = QPalette()
+        for role, colour in qt_theme.palette_roles(dark).items():
+            pal.setColor(getattr(QPalette.ColorRole, role), QColor(colour))
+        pal.setColor(QPalette.Disabled, QPalette.Text, QColor(qt_theme.PALETTE[bool(dark)]["fg_dis"]))
+        pal.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(qt_theme.PALETTE[bool(dark)]["fg_dis"]))
+        QApplication.setPalette(pal)
         self.setStyleSheet(qt_theme.stylesheet(dark, zoom))
         try:
             hints = QApplication.styleHints()
