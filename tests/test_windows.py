@@ -273,3 +273,48 @@ def test_system_values_window_can_be_dragged_in_edit_mode(root):
     assert moved == [(30, 30)]
     hud.set_editing(False)
     hud.destroy()
+
+
+def test_control_window_follows_its_size(root):
+    import tkinter as tk
+    import tkinter.font as tkfont
+    from tkinter import ttk
+    from dbdmapscout import uiscale
+    top = tk.Toplevel(root)
+    top.geometry("700x300+40+40")
+    frame = ttk.Frame(top, padding=8)
+    frame.pack(fill="both", expand=True)
+    text = ttk.Label(frame, text="lang " * 80, wraplength=400)
+    text.pack(anchor="w")
+    row = ttk.Frame(frame)
+    row.pack(fill="x")
+    beside = ttk.Label(row, text="kurz " * 40, wraplength=300)
+    beside.pack(side="left")
+    ttk.Combobox(row, values=["a"], width=20).pack(side="right")
+    tree = ttk.Treeview(frame, columns=("a", "b"), show="headings", height=3)
+    tree.heading("a", text="Map")
+    tree.heading("b", text="Runden")
+    tree.column("a", width=150, stretch=False)
+    tree.column("b", width=60, stretch=False)
+    tree.pack(fill="x")
+    wrap = uiscale.AutoWrap(top)
+    assert len(wrap.labels) == 2
+    tables = uiscale.stretch_tables(top)
+    assert {c for _t, c, _w, _m in tables} == {"a", "b"} and tree.column("a", "stretch")
+    top.update()
+    wrap.update()
+    narrow = int(float(str(text.cget("wraplength"))))
+    assert 600 <= narrow <= 700                                     # the window's width, not the fixed 400
+    assert int(float(str(beside.cget("wraplength")))) < narrow - 100   # the choice box beside it keeps its room
+    top.geometry("1200x300")                                        # the runner's screen may be narrower
+    top.update()
+    wrap.update()
+    wide = int(float(str(text.cget("wraplength"))))
+    assert top.winfo_width() > 760 and wide > narrow + 50           # wider window: longer lines …
+    assert top.winfo_width() - 80 <= wide <= top.winfo_width()      # … as wide as the window really got
+    size = tkfont.nametofont("TkDefaultFont").cget("size")
+    uiscale.apply_zoom(root, 1.5)
+    assert abs(tkfont.nametofont("TkDefaultFont").cget("size")) == max(6, round(abs(size) * 1.5))
+    uiscale.apply_zoom(root, 1.0)
+    assert tkfont.nametofont("TkDefaultFont").cget("size") == size  # back to the size it had
+    top.destroy()
