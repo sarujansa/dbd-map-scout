@@ -335,3 +335,39 @@ def test_every_design_loads_and_switches(root):
                                             f"{'dark' if dark else 'light'}"
     theme.apply(root, True, design=theme.DEFAULT_STYLE)        # loaded once: switching back reuses the theme
     assert not theme.apply.failed
+
+
+def test_qt_window_runs_in_tks_loop(root):
+    """Stage 1 runs Qt inside Tk's mainloop: real Win32 clicks reach Qt while Tcl dispatches the messages, the
+    slot only hands the action over (tkinter from there could kill Python), and Tk's timers keep running."""
+    import ctypes
+    from PySide6.QtCore import QPoint
+    from dbdmapscout import qt_window
+    qt_window.application()
+    posted = []
+    win = qt_window.MainWindow(lambda a, arg=None: posted.append(a))
+    win.apply_theme(True, 1.0)
+    win.show()
+    btn = win.overview.buttons["scan"]
+    btn.setText("Scannen")
+    ticks = []
+    user32 = ctypes.windll.user32
+    user32.PostMessageW.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_size_t, ctypes.c_ssize_t]
+
+    def tick(n=0):
+        ticks.append(n)
+        if n == 10:                                  # a real click, delivered by Tk's message loop
+            p = btn.mapTo(win, QPoint(btn.width() // 2, btn.height() // 2))
+            r = win.devicePixelRatioF()
+            lparam = (round(p.y() * r) << 16) | round(p.x() * r)
+            user32.PostMessageW(win.hwnd(), 0x0201, 1, lparam)       # WM_LBUTTONDOWN, MK_LBUTTON
+            user32.PostMessageW(win.hwnd(), 0x0202, 0, lparam)       # WM_LBUTTONUP
+        if n < 40:
+            root.after(25, tick, n + 1)
+        else:
+            root.quit()
+    root.after(25, tick)
+    root.mainloop()                                  # only Tk's loop – no processEvents
+    assert len(ticks) == 41 and posted == ["scan"]
+    win.allow_close = True
+    win.close()

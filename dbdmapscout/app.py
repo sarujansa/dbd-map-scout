@@ -36,6 +36,7 @@ from .app_lobby import LobbyInfo
 from .app_hotkeys import Hotkeys
 from .app_settings import SettingsTab
 from .app_sysinfo import HUD_SIDES, SysInfo
+from .app_qt import QtShell
 
 LANGS = [("en", "EN"), ("de", "DE"), ("fr", "FR"), ("es", "ES"), ("es-MX", "ES-MX"), ("it", "IT"),
          ("pl", "PL"), ("pt-BR", "PT"), ("tr", "TR")]
@@ -57,7 +58,7 @@ def anchor_label(key: str) -> str:
 log = logging.getLogger("dbdmapscout")
 
 
-class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
+class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell):
     def __init__(self, root_dir: str, simulate: str | None = None, start_in_tray: bool = False):
         self.root_dir = root_dir
         self.simulate = simulate
@@ -68,6 +69,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
         self.events: queue.Queue = queue.Queue()
 
         self.root = tk.Tk()
+        self._qt_early()                 # Qt control window (setting ui_toolkit): Tk window hidden from the start
         self.root.title(f"DbD Map Scout {__version__}")
         ico = os.path.join(root_dir, "dbdmapscout.ico")        # also made by the shortcut setup
         if IS_WIN and not os.path.exists(ico):
@@ -150,7 +152,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
         if IS_WIN and self.settings.get("tray", True):
             self._tray_start()
         self.root.bind("<Unmap>", self._on_unmap)
-        if start_in_tray:                                 # autostart with Windows
+        self._qt_build(start_in_tray)
+        if start_in_tray and self.qt is None:             # autostart with Windows
             if self.tray.active:
                 self.root.withdraw()
             else:
@@ -641,7 +644,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
         self.map_var.set(m.label(shown))
         self.tray.set_title(f"DbD Map Scout – {m.label(shown)}")
         self.realm_var.set(self.catalog.realm_display(m))
-        self.detail_var.set(detail or {"manual": _("manuell gewählt"), "scan": _("per Scan gefunden")}.get(source, ""))
+        self._detail = detail or {"manual": _("manuell gewählt"), "scan": _("per Scan gefunden")}.get(source, "")
+        self.detail_var.set(self._detail)
         self._set_thumb(frames[0][0])
         self._update_toggle_text()
         self._show_map_size()
@@ -656,6 +660,10 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
         bg = Image.new("RGBA", thumb.size, (40, 40, 44, 255))
         bg.alpha_composite(thumb)
         self._thumb = ImageTk.PhotoImage(bg)
+        src = img.copy()                          # for the Qt overview (bigger, no backdrop)
+        src.thumbnail((480, 480))
+        self._thumb_src = src
+        self._thumb_rev = getattr(self, "_thumb_rev", 0) + 1
         self.thumb_label.configure(image=self._thumb)
 
     def toggle_overlay(self):
@@ -969,7 +977,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
                         self.srv_status.set(_("Achtung: Firewall-Regeln von Make Your Choice aktiv (siehe Log).")
                                             + "  " + self.srv_status.get())
                 elif isinstance(ev, tuple) and ev[0] == "tray":
-                    {"open": self._show_window, "toggle": self.toggle_overlay,
+                    {"open": self._show_main, "toggle": self.toggle_overlay,
                      "quit": self.quit}.get(ev[1], lambda: None)()
                 elif isinstance(ev, tuple) and ev[0] == "autostart":
                     self._autostart_state(*ev[1:])
@@ -983,10 +991,13 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
                     self._update_checked(*ev[1:])
                 elif isinstance(ev, tuple) and ev[0] == "srv_job":
                     self._srv_job_done(ev[1], ev[2])
+                elif isinstance(ev, tuple) and ev[0] == "ui":
+                    self._qt_event(ev[1], ev[2])
                 else:
                     self._event(ev)
         except queue.Empty:
             pass
+        self._qt_pump()
         self.root.after(50, self._poll)
 
     def _hotkey(self, name):
@@ -1155,7 +1166,10 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
                 self.show_map(in_realm[0].id, 1, "scan", _("Realm „{realm}“ hat nur diese Map", realm=realms[0].text))
             else:
                 self.search_var.set(self.catalog.realms.get(realm, {}).get("en", realm))
-                self.nb.select(self.tab_maps)
+                if self.qt is not None:
+                    self._open_tab("maps")              # the list lives in the Tk window for now
+                else:
+                    self.nb.select(self.tab_maps)
                 self._log(_("Scan: Realm „{realm}“ gefunden – bitte Map in der Liste wählen.", realm=realms[0].text), "Erkennung")
             return
         self._log(_("Scan ({s} s): kein Map- oder Realm-Name auf dem Bildschirm.", s=f"{d['seconds']:.1f}"), "Erkennung")
@@ -1196,6 +1210,10 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
             self._to_tray_if_minimised()
         except Exception:
             self._report_once("status", traceback.format_exc())
+        try:
+            self._qt_refresh()
+        except Exception:
+            self._report_once("Qt", traceback.format_exc())
         try:
             status = _("Rundenende-Erkennung: {state}", state=self.worker.watch_status)
             if status != self.watch_var.get():
@@ -1373,7 +1391,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
         if (o["only_when_game_focused"] and IS_WIN and not self.overlay.editing and not self.simulate
                 and self.game is not None):
             fg = foreground_root()
-            own = {self.overlay.hwnd(), self._root_hwnd()}
+            own = {self.overlay.hwnd(), self._root_hwnd(), self._qt_hwnd()}
             if fg not in own and not is_game_window(fg):
                 return _("aktives Fenster ist {window}", window=describe_window(fg))
         return None
@@ -1585,7 +1603,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
         self.hidden_after_match = True              # waiting card again; the next banner shows its map
         self.menu_paused = False
         self._update_toggle_text()
-        self.detail_var.set(_("als falsch verworfen"))
+        self._detail = _("als falsch verworfen")
+        self.detail_var.set(self._detail)
         self._log(_("Verworfen: {map} – die Runde wird nicht gezählt.", map=label), "Erkennung")
         self._tick_overlay(reschedule=False)
 
@@ -1740,6 +1759,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
         self.srv_tree.tag_configure("group", foreground=colors["text"])
         self.log_text.tag_configure("msg_Fehler", foreground=colors["Fehler"])
         self.root.after(50, lambda: theme._titlebar(self.root, dark))   # frame exists only after mapping
+        self._qt_theme()
 
     def _style_changed(self):
         design = next((k for k, lbl in theme.STYLES if _(lbl) == self.style_var.get()), theme.DEFAULT_STYLE)
@@ -1768,6 +1788,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
             self._append_log(entry)
         if entry[1] == "Fehler" and self.nb.select() != str(self.tab_log):
             self.nb.tab(self.tab_log, text="Log ⚠")
+            self._log_alert = True
 
     def _append_log(self, entry):
         ts, cat, text = entry
@@ -1809,6 +1830,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
             self._official_check_render()
         if self.nb.select() == str(self.tab_log):
             self.nb.tab(self.tab_log, text="Log")
+            self._log_alert = False
         if self.nb.select() == str(self.tab_server):
             self._srv_refresh()
             if not getattr(self, "_fw_checked", False):
@@ -1865,7 +1887,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
             self.root.geometry(f"{w}x{h}+{x}+{y}")
         else:
             self.root.geometry(f"{w}x{h}")
-        if IS_WIN and self.settings.get("window_zoomed"):
+        if IS_WIN and self.settings.get("window_zoomed") and self._qt_mod is None:
             try:
                 self.root.state("zoomed")
             except tk.TclError:
@@ -1906,6 +1928,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
                 self.settings.set("window_zoomed", False)
             elif self.root.state() == "zoomed":
                 self.settings.set("window_zoomed", True)
+            self._qt_close()
             self.settings.save()
             self.tray.stop()
             self.conn.stop()

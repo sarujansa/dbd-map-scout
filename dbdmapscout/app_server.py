@@ -90,7 +90,7 @@ class ServerTab:
             return
         self._conn_busy = True
         self.conn_tab_var.set(_("Warte auf Windows (Administratorrechte) …"))
-        hwnd = self._root_hwnd()
+        hwnd = self._main_hwnd()
 
         def work():
             try:
@@ -307,7 +307,7 @@ class ServerTab:
         for b in self.srv_btns:
             b.state(["disabled"])
         self.srv_status.set(_("Warte auf Windows (Administratorrechte) …"))
-        hwnd = self._root_hwnd()
+        hwnd = self._main_hwnd()
 
         def work():
             try:
