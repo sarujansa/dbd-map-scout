@@ -12,7 +12,7 @@ from tkinter import ttk
 
 ZOOMS = (0.9, 1.0, 1.1, 1.25, 1.5)
 NAMED_FONTS = ("TkDefaultFont", "TkTextFont", "TkHeadingFont", "TkMenuFont", "TkFixedFont", "TkTooltipFont",
-               "TkCaptionFont", "TkSmallCaptionFont", "TkIconFont")
+               "TkCaptionFont", "TkSmallCaptionFont", "TkIconFont", "SunValleyBodyFont", "SunValleyCaptionFont")
 MIN_WRAP = 300           # px: narrowest wrap length a hint gets (the window's minimum width is measured with it)
 ROW_HEIGHT = 20          # ttk default row height of tables at zoom 1.0
 
@@ -26,13 +26,13 @@ def apply_zoom(root, zoom: float) -> None:
     """Scale the named Tk fonts and the table row height from their sizes at the first call."""
     base = getattr(root, "_dbdms_font_base", None)
     if base is None:
-        base = {}
-        for name in NAMED_FONTS:
+        base = root._dbdms_font_base = {}
+    for name in NAMED_FONTS:              # fonts of a design loaded later join with their size at that time
+        if name not in base:
             try:
                 base[name] = tkfont.nametofont(name, root=root).cget("size")
             except tk.TclError:
                 continue
-        root._dbdms_font_base = base
     for name, size in base.items():
         sign = -1 if size < 0 else 1                     # negative = pixels, positive = points
         tkfont.nametofont(name, root=root).configure(size=sign * max(6, round(abs(size) * zoom)))

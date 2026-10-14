@@ -1040,6 +1040,13 @@ EN = {
         "loads no driver of its own.",
     "Direkt über der Karte (wandert mit)": "Right above the map (moves with it)",
     "Schriftgröße": "Font size",
-    "Spaltenbreiten und kleinste Fenstergröße passen sich beim nächsten Start an.":
-        "Column widths and the smallest window size follow at the next start.",
+    "Spaltenbreiten und kleinste Fenstergröße passen sich beim nächsten Start an. "
+    "Fenstergröße und -position merkt sich das Programm.":
+        "Column widths and the smallest window size adapt at the next start. The program remembers the window's "
+        "size and position.",
+    "Design": "Design",
+    "Windows 11, Gold": "Windows 11, gold",
+    "Windows 11, Blau": "Windows 11, blue",
+    "Klassisch": "Classic",
+    "Design nicht ladbar, nehme das klassische: {error}": "Design could not be loaded, using the classic one: {error}",
 }

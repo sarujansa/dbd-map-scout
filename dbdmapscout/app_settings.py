@@ -9,7 +9,7 @@ import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from . import __version__, i18n, uiscale
+from . import __version__, i18n, theme, uiscale
 from .capture import IS_WIN
 from . import autostart
 from .connwatch import is_admin
@@ -85,6 +85,16 @@ class SettingsTab:
         lcb.bind("<<ComboboxSelected>>", lambda e: self._ui_lang_changed())
         self.ui_lang_note = tk.StringVar(value="")
         ttk.Label(look, textvariable=self.ui_lang_note, style="Dim.TLabel", wraplength=400).pack(anchor="w")
+        sr = ttk.Frame(look)
+        sr.pack(fill="x", pady=(6, 0))
+        ttk.Label(sr, text=_("Design")).pack(side="left")
+        cur_style = dict(theme.STYLES).get(self.settings.get("ui_style", theme.DEFAULT_STYLE),
+                                           dict(theme.STYLES)[theme.DEFAULT_STYLE])
+        self.style_var = tk.StringVar(value=_(cur_style))
+        scb = ttk.Combobox(sr, textvariable=self.style_var, values=[_(lbl) for _k, lbl in theme.STYLES],
+                           state="readonly", width=22)
+        scb.pack(side="left", padx=8)
+        scb.bind("<<ComboboxSelected>>", lambda e: self._style_changed())
         self.dark_var = tk.BooleanVar(value=self.settings.get("dark_mode", True))
         ttk.Checkbutton(look, text=_("Dark Mode"), variable=self.dark_var, command=self._dark_changed).pack(
             anchor="w", pady=(4, 0))
@@ -98,7 +108,8 @@ class SettingsTab:
                            width=8)
         zcb.pack(side="left", padx=8)
         zcb.bind("<<ComboboxSelected>>", lambda e: self._zoom_changed())
-        ttk.Label(look, text=_("Spaltenbreiten und kleinste Fenstergröße passen sich beim nächsten Start an."),
+        ttk.Label(look, text=_("Spaltenbreiten und kleinste Fenstergröße passen sich beim nächsten Start an. "
+                               "Fenstergröße und -position merkt sich das Programm."),
                   style="Dim.TLabel", wraplength=400).pack(anchor="w")
 
         upd = ttk.LabelFrame(f, text=_("Updates"), padding=8)

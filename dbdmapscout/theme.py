@@ -1,10 +1,20 @@
-"""Light/dark look for the control window (ttk styles + Windows title bar)."""
+"""Light/dark look for the control window (ttk styles + Windows title bar).
+
+Three designs (setting ``ui_style``, user's wish 1.50): "classic" = the own clam styles below, "fluent" = Windows 11
+look of the Sun Valley theme (rdbende, MIT, vendored in ``sv_ttk/``), "fluent_gold" = the same with the gold accent of
+the classic design (sprites recoloured at load time, nothing extra on disk).
+"""
 from __future__ import annotations
 
+import base64
 import ctypes
+import io
+import os
 import sys
 import tkinter as tk
 from tkinter import ttk
+
+from .i18n import N_
 
 IS_WIN = sys.platform == "win32"
 
@@ -21,6 +31,113 @@ DARK = {
     "fg": "#e3e5e8", "dim": "#9ba1a9", "accent": "#c9a227", "select": "#7a1f1f",
     "hover": "#383a40", "press": "#43464d",
 }
+
+
+STYLES = (("fluent_gold", N_("Windows 11, Gold")), ("fluent", N_("Windows 11, Blau")), ("classic", N_("Klassisch")))
+DEFAULT_STYLE = "fluent_gold"
+SV_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sv_ttk")
+GOLD_HUE = 31                  # PIL HSV hue (0..255) of the gold accent, ~#d6ab31
+# colours the Sun Valley files hard-code next to their palette; replaced for the gold accent
+SV_GOLD = {
+    "dark": {'-selbg   "#2f60d8"': '-selbg   "#7a5c12"', '-accent  "#57c8ff"': '-accent  "#d6ab31"',
+             '"#25536a"': '"#5a4410"'},
+    "light": {'-selbg   "#2f60d8"': '-selbg   "#8a6a12"', '-accent  "#005fb8"': '-accent  "#8a6a12"',
+              '"#c1d8ee"': '"#f0e2b8"'},
+}
+SV_BG = {"dark": "#1c1c1c", "light": "#fafafa"}
+SV_DIM = {"dark": "#a0a0a0", "light": "#5f5f5f"}
+SV_FIELD = {"dark": "#2b2b2b", "light": "#ffffff"}
+
+
+def gold_sheet(png: bytes, light: bool) -> bytes:
+    """The Sun Valley sprite sheet with its blue accent turned gold (saturated blue pixels only, alpha kept)."""
+    from PIL import Image
+    im = Image.open(io.BytesIO(png)).convert("RGBA")
+    alpha = im.getchannel("A")
+    h, s, v = im.convert("RGB").convert("HSV").split()
+    blue = h.point(lambda x: 255 if 128 <= x <= 179 else 0)
+    sat = s.point(lambda x: 255 if x > 64 else 0)
+    mask = Image.composite(blue, Image.new("L", im.size, 0), sat)
+    h = Image.composite(Image.new("L", im.size, GOLD_HUE), h, mask)
+    v = Image.composite(v.point(lambda x: round(x * (0.8 if light else 0.92))), v, mask)
+    out = Image.merge("HSV", (h, s, v)).convert("RGB")
+    out.putalpha(alpha)
+    buf = io.BytesIO()
+    out.save(buf, "PNG")
+    return buf.getvalue()
+
+
+def sv_source(mode: str, gold: bool) -> tuple[str, str]:
+    """Tcl source of one Sun Valley theme under an own name, loading its sprites from ``$::dbdms_sheet``
+    (the files read them next to ``[info script]``, which does not exist when evaluated from a string)."""
+    name = f"dbdms-{'gold' if gold else 'blue'}-{mode}"
+    ns = name.replace("-", "_")
+    with open(os.path.join(SV_DIR, f"{mode}.tcl"), encoding="utf-8") as f:
+        src = f.read()
+    sprites = os.path.join(SV_DIR, f"sprites_{mode}.tcl").replace("\\", "/")
+    reps = {
+        f"source [file join [file dirname [info script]] sprites_{mode}.tcl]": f"source {{{sprites}}}",
+        f"package provide ttk::theme::sv_{mode} 2.5": "",
+        f"ttk::theme::sv_{mode}": f"ttk::theme::{ns}",
+        f"sun-valley-{mode}": name,
+        "image create photo spritesheet -file $imgfile -format png":
+            f"image create photo {ns}_sheet -data $::dbdms_sheet -format png",
+        "copy spritesheet": f"copy {ns}_sheet",
+        f"load_images [file join [file dirname [info script]] spritesheet_{mode}.png]": "load_images {}",
+    }
+    if gold:
+        reps.update(SV_GOLD[mode])
+    for old, new in reps.items():
+        if old not in src:
+            raise ValueError(f"sun valley {mode}.tcl: {old!r} missing")
+        src = src.replace(old, new)
+    return name, src
+
+
+def _sv_theme(root: tk.Tk, dark: bool, gold: bool) -> str:
+    """Create the Sun Valley theme once per Tk interpreter, return its name."""
+    mode = "dark" if dark else "light"
+    name, src = sv_source(mode, gold)
+    if name in ttk.Style(root).theme_names():
+        return name
+    for font, base in (("SunValleyBodyFont", "TkDefaultFont"), ("SunValleyCaptionFont", "TkHeadingFont")):
+        if font not in root.tk.splitlist(root.tk.call("font", "names")):
+            root.tk.call("font", "create", font, *root.tk.splitlist(root.tk.call("font", "actual", base)))
+    with open(os.path.join(SV_DIR, f"spritesheet_{mode}.png"), "rb") as f:
+        png = f.read()
+    if gold:
+        png = gold_sheet(png, light=not dark)
+    root.tk.call("set", "::dbdms_sheet", base64.b64encode(png).decode("ascii"))
+    root.tk.eval(src)
+    return name
+
+
+def _fluent(root: tk.Tk, dark: bool, gold: bool, text_widgets) -> str:
+    mode = "dark" if dark else "light"
+    style = ttk.Style(root)
+    style.theme_use(_sv_theme(root, dark, gold))
+    bg, fg, dim, field = SV_BG[mode], "#fafafa" if dark else "#1c1c1c", SV_DIM[mode], SV_FIELD[mode]
+    accent = ("#d6ab31" if dark else "#8a6a12") if gold else ("#57c8ff" if dark else "#005fb8")
+    select = ("#7a5c12" if dark else "#8a6a12") if gold else "#2f60d8"
+    root.configure(background=bg)
+    style.configure(".", background=bg, foreground=fg, troughcolor=bg, selectbackground=select,
+                    selectforeground="#ffffff", insertcolor=fg, fieldbackground=bg)
+    style.map(".", foreground=[("disabled", "#595959" if dark else "#a0a0a0")])
+    style.configure("Big.TLabel", foreground="#ffffff" if dark else "#000000", font=("Segoe UI", 13, "bold"))
+    style.configure("Dim.TLabel", foreground=dim)
+    style.configure("TLabelframe.Label", foreground=accent)
+    style.configure("TNotebook.Tab", foreground=dim)
+    style.map("TNotebook.Tab", foreground=[("selected", fg), ("active", fg)])
+    for key, col in DOT.items():
+        style.configure(f"Dot{key.title()}.TLabel", foreground=col)
+    root.option_add("*TCombobox*Listbox.background", field)
+    root.option_add("*TCombobox*Listbox.foreground", fg)
+    root.option_add("*TCombobox*Listbox.selectBackground", select)
+    root.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")
+    for t in text_widgets:
+        t.configure(background=field, foreground=fg, insertbackground=fg)
+    _titlebar(root, dark)
+    return bg
 
 
 def _titlebar(root: tk.Tk, dark: bool):
@@ -44,7 +161,14 @@ def _titlebar(root: tk.Tk, dark: bool):
         pass
 
 
-def apply(root: tk.Tk, dark: bool, text_widgets=()):
+def apply(root: tk.Tk, dark: bool, text_widgets=(), design: str = "classic") -> str:
+    """Apply the look; returns the page background (scrolled tab canvases, charts). A design that cannot be
+    loaded (Tcl error, files missing) falls back to the classic one."""
+    if design in ("fluent", "fluent_gold"):
+        try:
+            return _fluent(root, dark, design == "fluent_gold", text_widgets)
+        except (tk.TclError, OSError, ValueError) as e:
+            apply.failed = f"{design}: {e}"
     style = ttk.Style(root)
     if not dark:
         style.theme_use("vista" if "vista" in style.theme_names() else "default")
@@ -57,7 +181,7 @@ def apply(root: tk.Tk, dark: bool, text_widgets=()):
         for t in text_widgets:
             t.configure(background="white", foreground="black", insertbackground="black")
         _titlebar(root, False)
-        return
+        return bg
 
     c = DARK
     style.theme_use("clam")
@@ -114,3 +238,7 @@ def apply(root: tk.Tk, dark: bool, text_widgets=()):
     for t in text_widgets:
         t.configure(background=c["field"], foreground=c["fg"], insertbackground=c["fg"])
     _titlebar(root, True)
+    return c["bg"]
+
+
+apply.failed = ""
