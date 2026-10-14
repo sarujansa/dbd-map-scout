@@ -21,7 +21,7 @@ Map overlay for Dead by Daylight. When a match starts, the map name is detected 
 
 In DBD, use the display mode **"Windowed Fullscreen"** under **Settings → Graphics**. In exclusive fullscreen Windows cannot show a window on top of the game.
 
-**Window mode** works too: the map then appears next to the DBD window if at least 200 px of the monitor are free there, and the background window capture leaves out the title bar. Below 1920×1080 detection is less reliable (above all the lobby button and killer name). Windows narrower than 16:9 (e.g. 1718×1360) are untested. The log mentions both once.
+**Window mode** works too: the map then appears next to the DBD window if at least 200 px of the monitor are free there, and the background window capture leaves out the title bar. Below 1920×1080 detection is less reliable (above all the lobby button and killer name). Windows narrower than 16:9 (e.g. 1718×1360): DBD shows the match there with black bars above and below, the game picture is only about 850 px high. Since 1.44.1 the map name is read there too (the thin line below the name is very faint in such a small picture); round end and lobby are less tested in this format. The log mentions both once.
 
 ## Usage
 

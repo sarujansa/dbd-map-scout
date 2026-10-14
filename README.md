@@ -21,7 +21,7 @@ Map-Overlay für Dead by Daylight. Beim Match-Start wird der Map-Name automatisc
 
 In DBD unter **Einstellungen → Grafik** den Anzeigemodus **„Fenster-Vollbild“** verwenden. Im exklusiven Vollbild kann Windows kein Fenster über dem Spiel anzeigen.
 
-**Fenstermodus** geht auch: Die Karte erscheint dann neben dem DBD-Fenster, wenn auf dem Monitor daneben mindestens 200 px frei sind, und die Fensteraufnahme im Hintergrund rechnet die Titelleiste heraus. Kleiner als 1920×1080 ist die Erkennung unsicherer (vor allem Lobby-Knopf und Killername). Fenster schmaler als 16:9 (z. B. 1718×1360) sind ungetestet. Beides meldet das Log einmal.
+**Fenstermodus** geht auch: Die Karte erscheint dann neben dem DBD-Fenster, wenn auf dem Monitor daneben mindestens 200 px frei sind, und die Fensteraufnahme im Hintergrund rechnet die Titelleiste heraus. Kleiner als 1920×1080 ist die Erkennung unsicherer (vor allem Lobby-Knopf und Killername). Fenster schmaler als 16:9 (z. B. 1718×1360): DBD zeigt das Match dort mit schwarzen Balken oben und unten, das Spielbild ist nur gut 850 px hoch. Der Map-Name wird seit 1.44.1 auch dann gelesen (die feine Linie unter dem Namen ist bei so kleinem Bild sehr blass); Rundenende und Lobby sind in diesem Format weniger erprobt. Beides meldet das Log einmal.
 
 ## Benutzung
 

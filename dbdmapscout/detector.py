@@ -32,6 +32,12 @@ from .ocr import LexiconScorer, Recognizer, best_path_logp
 
 # Part of the game frame that is captured for detection (fractions of w/h).
 ROI = (0.0, 0.52, 0.64, 0.99)
+# Separator line: (brighter than the rows around it by, at least this bright). The second pass only runs when
+# the first finds nothing: a small game picture (window narrower than 16:9 shows the trial letterboxed, user
+# screenshot 1718×1360 → picture ~858 px high) draws the hairline below one pixel, it comes out at grey ~55
+# on a dark map instead of > 105. Unknown text still never maps to a wrong map (lexicon scoring).
+SEPARATOR_PASSES = ((12, 105), (25, 40))
+SMALL_PICTURE_H = 1200       # the second pass only for pictures below this height (1440p reads fine with the first)
 
 
 # --------------------------------------------------------------------------
@@ -67,7 +73,16 @@ def find_separator(img: np.ndarray, frame_w: int, frame_h: int) -> Separator | N
     dn = np.zeros_like(g)
     dn[:-k] = g[k:]
     ridge = g - np.maximum(up, dn)
-    mask = ((ridge > 12) & (g > 105)).astype(np.uint8)
+    small_picture = min(frame_h, frame_w * 9 / 16) < SMALL_PICTURE_H
+    for ridge_min, bright_min in SEPARATOR_PASSES[:None if small_picture else 1]:
+        sep = _separator_in(((ridge > ridge_min) & (g > bright_min)).astype(np.uint8), frame_w, frame_h, s)
+        if sep is not None:
+            return sep
+    return None
+
+
+def _separator_in(mask: np.ndarray, frame_w: int, frame_h: int, s: float) -> Separator | None:
+    """The banner line in one threshold mask of the (scaled) ROI."""
     # bridge small gaps (texture, compression) along the line
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (9, 1))) > 0
     h_img, w_img = mask.shape
