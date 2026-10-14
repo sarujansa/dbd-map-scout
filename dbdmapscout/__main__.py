@@ -99,11 +99,12 @@ def main():
     ap.add_argument("--lang", default="en,de", help="Sprachen für --test, z.B. en,de")
     ap.add_argument("--tray", action="store_true", help="im Infobereich starten (Autostart mit Windows)")
     ap.add_argument("--restart", action="store_true", help=argparse.SUPPRESS)   # helper of the update button
+    ap.add_argument("--no-update", action="store_true", help=argparse.SUPPRESS)  # with --restart: plain restart
     args = ap.parse_args()
 
     if args.restart:
         from .restart import wait_and_start
-        wait_and_start(ROOT)
+        wait_and_start(ROOT, update=not args.no_update)
         return
 
     if args.test:

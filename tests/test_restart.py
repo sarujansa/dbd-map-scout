@@ -36,3 +36,12 @@ def test_never_starts_a_second_copy(monkeypatch):
     started = []
     assert not restart.wait_and_start(ROOT, timeout=30, running=lambda: True, run=lambda c, e: started.append(c))
     assert started == []
+
+
+def test_plain_restart_does_not_force_the_update(monkeypatch):
+    """Switching Tk ↔ Qt restarts without pulling updates the user switched off."""
+    monkeypatch.setenv("DBDMS_FORCE_UPDATE", "1")
+    started = []
+    assert restart.helper_args("p.exe", update=False)[-1] == "--no-update"
+    assert restart.wait_and_start(ROOT, running=lambda: False, run=lambda cmd, env: started.append(env), update=False)
+    assert "DBDMS_FORCE_UPDATE" not in started[0]

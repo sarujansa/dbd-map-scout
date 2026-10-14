@@ -72,8 +72,24 @@ QProgressBar::chunk {{ background: {c['accent']}; border-radius: 3px; }}
 QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }}
 QScrollBar::handle:vertical {{ background: {c['hover']}; border-radius: 4px; min-height: 30px; }}
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+QTreeWidget {{ border: 1px solid {c['border']}; border-radius: 8px; padding: 4px; }}
+QTreeWidget::item {{ padding: 3px 2px; }}
+QTreeWidget::item:selected {{ background: {c['select']}; color: #ffffff; }}
+QLineEdit {{ border: 1px solid {c['border']}; border-radius: 6px; padding: 5px 8px; }}
+QLineEdit:focus {{ border-color: {c['accent']}; }}
 QToolTip {{ background: {c['panel']}; color: {c['fg']}; border: 1px solid {c['border']}; padding: 4px; }}
 """
+
+
+def palette_roles(dark: bool) -> dict:
+    """QPalette roles (name -> colour) for what Qt's Fusion style draws itself: check boxes, sliders, choice
+    boxes, text fields and lists – the style sheet only covers cards, buttons and labels."""
+    c = PALETTE[bool(dark)]
+    return {"Window": c["bg"], "WindowText": c["fg"], "Base": c["field"], "AlternateBase": c["panel"],
+            "Text": c["fg"], "Button": c["btn"], "ButtonText": c["fg"], "Highlight": c["accent"],
+            "HighlightedText": c["on_accent"], "ToolTipBase": c["panel"], "ToolTipText": c["fg"],
+            "PlaceholderText": c["dim"], "Light": c["hover"], "Midlight": c["border"], "Mid": c["border"],
+            "Dark": c["bg"], "Shadow": "#000000", "BrightText": "#ffffff", "Link": c["accent"]}
 
 
 def bar_style(colour) -> str:

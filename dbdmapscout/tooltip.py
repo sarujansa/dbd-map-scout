@@ -71,6 +71,9 @@ TIPS = {
         "Neues Steuerfenster mit Seite „Übersicht“ (Map, Timer, Server, Heute, Systemwerte, letzte Runden). Die "
         "übrigen Seiten öffnen vorerst noch dieses Fenster. Gilt ab dem nächsten Start; ausschalten hier.",
     "Im bisherigen Fenster öffnen": "Öffnet diese Seite im bisherigen Fenster (sie zieht später ins neue um).",
+    "Hotkeys ändern …": "Hotkeys werden noch im bisherigen Fenster geändert (Tastendruck aufnehmen) – öffnet es.",
+    "Mehr (Map-Zuordnungen, Match-Daten, Sicherung, Ordner) …":
+        "Öffnet den selten gebrauchten Teil der Einstellungen im bisherigen Fenster.",
     # maps tab
     "Kartenbild hinzufügen …": "Eigenes Bild für eine Map wählen: vorhandenes Bild ersetzen oder neue Map "
                                "anlegen. Rand und Hintergrund werden automatisch entfernt.",

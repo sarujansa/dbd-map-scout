@@ -23,16 +23,16 @@ def start_command(root: str) -> str:
     return f'"{comspec}" /c start "" /min cmd /c ""{bat}""'
 
 
-def helper_args(python: str | None = None) -> list:
-    return [python or sys.executable, "-m", "dbdmapscout", "--restart"]
+def helper_args(python: str | None = None, update: bool = True) -> list:
+    return [python or sys.executable, "-m", "dbdmapscout", "--restart"] + ([] if update else ["--no-update"])
 
 
-def spawn_helper(root: str) -> bool:
+def spawn_helper(root: str, update: bool = True) -> bool:
     """Called by the program right before it quits."""
     if not IS_WIN:
         return False
     flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-    subprocess.Popen(helper_args(), cwd=root, creationflags=flags, close_fds=True)
+    subprocess.Popen(helper_args(update=update), cwd=root, creationflags=flags, close_fds=True)
     return True
 
 
@@ -48,15 +48,18 @@ def _program_running(name: str = MUTEX_NAME) -> bool:
     return True
 
 
-def wait_and_start(root: str, timeout: float = 30.0, running=None, run=None) -> bool:
-    """Helper process: wait for the program to end, then run start.bat. ``running``/``run`` for tests."""
+def wait_and_start(root: str, timeout: float = 30.0, running=None, run=None, update: bool = True) -> bool:
+    """Helper process: wait for the program to end, then run start.bat. ``running``/``run`` for tests.
+    ``update`` False: a plain restart (e.g. Tk ↔ Qt window) – start.bat's update follows the user's setting."""
     running = running or _program_running
     deadline = time.time() + timeout
     while running():
         if time.time() > deadline:
             return False                                       # still running: do not start a second copy
         time.sleep(0.3)
-    env = dict(os.environ, DBDMS_FORCE_UPDATE="1")
+    env = dict(os.environ, DBDMS_FORCE_UPDATE="1") if update else dict(os.environ)
+    if not update:
+        env.pop("DBDMS_FORCE_UPDATE", None)
     env.pop("DBDMS_UPDATED", None)       # left by start.bat after an earlier update: would skip this one
     run = run or (lambda cmd, env: subprocess.Popen(cmd, cwd=root, env=env,
                                                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)))
