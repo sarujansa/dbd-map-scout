@@ -97,6 +97,8 @@ class StatsTab:
         # one table at a time: sub-tabs instead of five tables below each other
         self.stats_nb = ttk.Notebook(f)
         self.stats_nb.pack(fill="both", expand=True)
+        self.stats_nb.bind("<<NotebookTabChanged>>",
+                           lambda e: getattr(self, "_autowrap", None) and self._autowrap.soon(), add="+")
         box = self._stats_page(_("Maps"))
         self.stats_maps = self._stats_tree(box, (("map", _("Map"), 130, "w"), ("n", _("Runden"), 62, "e"),
                                                  ("k", _("Killer"), 58, "e"), ("kills", _("Ø Kills"), 62, "e"),
