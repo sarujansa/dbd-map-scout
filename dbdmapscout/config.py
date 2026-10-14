@@ -55,7 +55,9 @@ DEFAULTS = {
     "ui_language": "auto",            # auto (Windows language) | de | en
     "dark_mode": True,
     "ui_zoom": 1.0,                     # control window: font size factor (uiscale.ZOOMS)
+    "ui_style": "fluent_gold",          # control window design (theme.STYLES)
     "window_geometry": "",
+    "window_zoomed": False,             # control window maximised (window_geometry = size before that)
     "log_categories": ["Erkennung", "Overlay", "System", "Fehler"],
     "ocr_threads": 2,
     "save_debug_images": False,
@@ -96,7 +98,7 @@ def export_settings(data: dict, path: str) -> None:
 
 
 # per-PC values that must not come along from a backup (other folder / other machine)
-LOCAL_KEYS = ("setup_version", "setup_root", "window_geometry", "official_dir")
+LOCAL_KEYS = ("setup_version", "setup_root", "window_geometry", "window_zoomed", "official_dir")
 
 
 def read_backup(path: str, current: dict) -> dict:

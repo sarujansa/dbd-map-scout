@@ -126,7 +126,7 @@ class StatsTab:
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         box_v = self._stats_page(_("Verlauf"))
         self.trend = TrendChart(box_v, bool(self.settings.get("dark_mode", True)),
-                                ttk.Style().lookup("TFrame", "background") or "#1e1f22")
+                                self._chart_bg())
         ttk.Label(box_v, text=_("Nur Runden, die einem Match auf der Stats-Seite zugeordnet sind. Die Maus über einer "
                                 "Säule zeigt Wert und Anzahl der Runden."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
@@ -153,7 +153,7 @@ class StatsTab:
                                 "denen die GPU wegen Temperatur oder Hardware langsamer lief (nur NVIDIA)."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 6))
         self.sys_trend = TrendChart(box_s, bool(self.settings.get("dark_mode", True)),
-                                    ttk.Style().lookup("TFrame", "background") or "#1e1f22", panels=("temp",))
+                                    self._chart_bg(), panels=("temp",))
         box_r = self._stats_page(_("Serverregionen"))
         self.stats_regs = self._stats_tree(box_r, (("reg", _("Region"), 190, "w"), ("n", _("Runden"), 65, "e"),
                                                    ("avg", _("Ø Dauer"), 75, "e"), ("share", _("Anteil"), 65, "e"),
@@ -429,6 +429,10 @@ class StatsTab:
             t.selection_set(keep[0])
         self._stats_role_buttons()
 
+    def _chart_bg(self):
+        """Background of the charts = page background of the current design."""
+        return getattr(self, "_page_bg", None) or ttk.Style().lookup("TFrame", "background") or "#1e1f22"
+
     def _stats_sys_render(self, rounds, unit):
         """Sub-tab System: averages, highest values (when and where) and the table by map/time/killer."""
         avg = history.sys_average(rounds)
@@ -500,7 +504,7 @@ class StatsTab:
         hi = (int(max(values)) // 10 + 1) * 10 if values else 100
         last = values[-1] if values else None
         self.sys_trend.dark = bool(self.settings.get("dark_mode", True))
-        self.sys_trend.canvas.configure(background=ttk.Style().lookup("TFrame", "background") or "#1e1f22")
+        self.sys_trend.canvas.configure(background=self._chart_bg())
         self.sys_trend.draw({"temp": {
             "title": _("GPU-Temperatur – Ø {per}", per=per), "bars": bars, "kind": "line", "min": lo, "max": hi,
             "ticks": [(v, f"{v} °C") for v in range(lo, hi + 1, 10)],
@@ -755,7 +759,7 @@ class StatsTab:
         last_k = next((v for v, _l, _t in reversed(kb) if v is not None), None)
         last_s = next((v for v, _l, _t in reversed(sb) if v is not None), None)
         self.trend.dark = bool(self.settings.get("dark_mode", True))
-        self.trend.canvas.configure(background=ttk.Style().lookup("TFrame", "background") or "#1e1f22")
+        self.trend.canvas.configure(background=self._chart_bg())
         self.trend.draw({
             "killer": {"title": _("Killer – Ø Kills {per}", per=per), "bars": kb, "max": 4,
                        "ticks": [(v, str(v)) for v in range(5)], "last": f"{last_k:.1f}" if last_k is not None else "",
