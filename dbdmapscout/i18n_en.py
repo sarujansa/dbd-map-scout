@@ -986,10 +986,6 @@ EN = {
     "CPU-Temperatur: nur mit HWiNFO („Shared Memory Support“ an)":
         "CPU temperature: only with HWiNFO (\"Shared Memory Support\" on)",
     "Systemwerte (CPU/GPU-Temperatur, Auslastung, VRAM, RAM)": "System values (CPU/GPU temperature, load, VRAM, RAM)",
-    "Oben im schwarzen Rand, solange eine Karte im Match zu sehen ist. GPU-Werte von NVIDIA-Karten (Treiber), "
-    "CPU-Temperatur nur mit HWiNFO („Shared Memory Support“ an) – das Programm lädt keinen eigenen Treiber.":
-        "At the top of the black bar while a map is shown in a match. GPU values from NVIDIA cards (driver), CPU "
-        "temperature only with HWiNFO (\"Shared Memory Support\" on) – the program loads no driver of its own.",
     # statistics: system values (app_stats)
     "System": "System",
     "nach Map": "by map",
@@ -1031,4 +1027,15 @@ EN = {
         "Values of the system values display (Overlay tab) during the rounds – only rounds in which it was on. CPU "
         "temperature only with HWiNFO. \"When/Where\" shows on which maps or at what time of day the PC runs hottest. "
         "\"Throttled\": seconds in which the GPU ran slower because of temperature or hardware (NVIDIA only).",
+    # system values: own position
+    "Eigene Position (mit der Maus verschieben)": "Own position (drag with the mouse)",
+    "SYSTEMWERTE": "SYSTEM VALUES",
+    "Oben im schwarzen Rand, solange eine Karte im Match zu sehen ist. „Eigene Position“: mit „Mit der Maus "
+    "verschieben“ (Tab Overlay) zusammen mit der Karte ziehen; im schmalen Fenster bleibt die Anzeige im Balken "
+    "oben. GPU-Werte von NVIDIA-Karten (Treiber), CPU-Temperatur nur mit HWiNFO („Shared Memory Support“ an) – das "
+    "Programm lädt keinen eigenen Treiber.":
+        "At the top of the black bar while a map is shown in a match. \"Own position\": drag it together with the "
+        "map via \"Move with the mouse\" (Overlay tab); in a narrow window it stays in the bar at the top. GPU values "
+        "from NVIDIA cards (driver), CPU temperature only with HWiNFO (\"Shared Memory Support\" on) – the program "
+        "loads no driver of its own.",
 }

@@ -456,12 +456,14 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
         labels = dict(HUD_SIDES)
         self.sysinfo_var = tk.StringVar(value=_(labels.get(self.settings.get("sysinfo", "off"), labels["off"])))
         cb = ttk.Combobox(r, textvariable=self.sysinfo_var, values=[_(t) for _k, t in HUD_SIDES], state="readonly",
-                          width=26)
+                          width=38)
         cb.pack(side="left", padx=6)
         cb.bind("<<ComboboxSelected>>", lambda e: self._sysinfo_changed())
-        ttk.Label(sysf, text=_("Oben im schwarzen Rand, solange eine Karte im Match zu sehen ist. GPU-Werte von "
-                               "NVIDIA-Karten (Treiber), CPU-Temperatur nur mit HWiNFO („Shared Memory Support“ an) "
-                               "– das Programm lädt keinen eigenen Treiber."),
+        ttk.Label(sysf, text=_("Oben im schwarzen Rand, solange eine Karte im Match zu sehen ist. „Eigene Position“: "
+                               "mit „Mit der Maus verschieben“ (Tab Overlay) zusammen mit der Karte ziehen; im "
+                               "schmalen Fenster bleibt die Anzeige im Balken oben. GPU-Werte von NVIDIA-Karten "
+                               "(Treiber), CPU-Temperatur nur mit HWiNFO („Shared Memory Support“ an) – das "
+                               "Programm lädt keinen eigenen Treiber."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         self.sysinfo_hint_var = tk.StringVar(value="")
         ttk.Label(sysf, textvariable=self.sysinfo_hint_var, style="Dim.TLabel", wraplength=520).pack(anchor="w")
@@ -823,6 +825,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
         log.info(text)
 
     def toggle_edit(self):
+        """Edit mode: the map (and system values with an own position) can be dragged."""
         on = not self.overlay.editing
         if on and not self.overlay.has_map():
             self._log(_("Erst eine Map wählen, dann lässt sich das Overlay verschieben."), "Overlay")
