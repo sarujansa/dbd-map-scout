@@ -95,6 +95,9 @@ class SettingsTab:
                            state="readonly", width=22)
         scb.pack(side="left", padx=8)
         scb.bind("<<ComboboxSelected>>", lambda e: self._style_changed())
+        self.qt_var = tk.BooleanVar(value=self.settings.get("ui_toolkit", "tk") == "qt")
+        ttk.Checkbutton(look, text=_("Neues Fenster (Qt, Vorschau): Übersicht mit Navigation links"),
+                        variable=self.qt_var, command=self._toolkit_changed).pack(anchor="w", pady=(4, 0))
         self.dark_var = tk.BooleanVar(value=self.settings.get("dark_mode", True))
         ttk.Checkbutton(look, text=_("Dark Mode"), variable=self.dark_var, command=self._dark_changed).pack(
             anchor="w", pady=(4, 0))
@@ -228,6 +231,23 @@ class SettingsTab:
         else:
             messagebox.showinfo(_("Einstellungen importieren"), _("Bitte das Programm jetzt neu starten."),
                                 parent=self.root)
+
+    def _toolkit_changed(self):
+        """Tk or Qt control window: takes effect at the next start – offered right away."""
+        self.settings.set("ui_toolkit", "qt" if self.qt_var.get() else "tk")
+        self.settings.save()
+        if not messagebox.askyesno(_("Neues Fenster"), _("Gilt ab dem nächsten Start. Jetzt neu starten?"),
+                                   parent=self.root):
+            return
+        from . import restart
+        try:
+            ok = restart.spawn_helper(self.root_dir)
+        except OSError:
+            ok = False
+        if ok:
+            self.quit()
+        else:
+            messagebox.showinfo(_("Neues Fenster"), _("Bitte das Programm jetzt neu starten."), parent=self.root)
 
     def _zoom_changed(self):
         zoom = next((z for z, lbl in self._zooms if lbl == self.zoom_var.get()), 1.0)

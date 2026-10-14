@@ -10,6 +10,8 @@ import sys
 import pytest
 
 os.environ.setdefault("DBDMS_LANG", "de")
+if sys.platform != "win32":
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")      # Qt window tests without a display
 
 WIN = sys.platform == "win32"
 only_linux_hosts = pytest.mark.skipif(WIN, reason="would write the real hosts file on Windows")

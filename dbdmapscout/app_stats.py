@@ -713,6 +713,21 @@ class StatsTab:
             self._off_downloads = official.downloads_dir()
         return self.settings.get("official_dir") or self._off_downloads
 
+    def _joined(self):
+        """_official_join() cached until rounds.jsonl / official.jsonl, the killer assignments or the catalog
+        change (the Qt overview asks 4×/s; a full join of 5000 + 5000 lines takes ~100 ms)."""
+        key = [id(self.catalog), repr(sorted((self.settings.get("killer_aliases") or {}).items()))]
+        for p in (self._hist_path(), self._official_path()):
+            try:
+                st = os.stat(p)
+                key.append((st.st_mtime_ns, st.st_size))
+            except OSError:
+                key.append(None)
+        cached = getattr(self, "_joined_cache", None)
+        if cached is None or cached[0] != key:
+            cached = self._joined_cache = (key, self._official_join())
+        return cached[1]
+
     def _official_map_id(self, name):
         idx = getattr(self, "_off_index", None)
         if idx is None or idx[0] is not self.catalog:         # the catalog is rebuilt after own assignments

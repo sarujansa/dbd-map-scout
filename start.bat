@@ -4,7 +4,7 @@ cd /d "%~dp0"
 set "VENV=%~dp0.venv"
 if exist "%VENV%\installed.ok" goto update
 
-echo === DbD Map Scout: Ersteinrichtung (einmalig, ca. 1-2 Minuten) ===
+echo === DbD Map Scout: Ersteinrichtung (einmalig, ca. 2-4 Minuten) ===
 set "PY="
 where py >nul 2>nul && set "PY=py -3"
 if not defined PY where python >nul 2>nul && set "PY=python"
