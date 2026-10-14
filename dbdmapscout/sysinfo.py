@@ -253,6 +253,37 @@ def hud_rows(s: Snapshot) -> list:
     return rows
 
 
+# ------------------------------------------------------------------ per round (tab Statistik)
+SYS_KEYS = ("cpu_temp", "gpu_temp", "cpu_load", "gpu_load", "gpu_power", "vram_used", "ram_used")
+MIN_SAMPLES = 10             # fewer readings in a round (HUD switched on late, HWiNFO started late): not stored
+
+
+class SysRecorder:
+    """Collects the readings of one round (one per snapshot) -> average and maximum per value."""
+
+    def __init__(self):
+        self.values = {k: [] for k in SYS_KEYS}
+        self._last_t = None
+
+    def add(self, snap: Snapshot) -> None:
+        if not snap.t or snap.t == self._last_t:
+            return                                   # same reading as last time (the UI ticks faster)
+        self._last_t = snap.t
+        for k in SYS_KEYS:
+            v = getattr(snap, k)
+            if v is not None:
+                self.values[k].append(float(v))
+
+    def summary(self) -> dict | None:
+        """{"gpu_temp": average, "gpu_temp_max": maximum, …} for values with enough readings, else None."""
+        out = {}
+        for k, vs in self.values.items():
+            if len(vs) >= MIN_SAMPLES:
+                out[k] = round(sum(vs) / len(vs), 1)
+                out[k + "_max"] = round(max(vs), 1)
+        return out or None
+
+
 # ------------------------------------------------------------------ monitor thread
 class SysMonitor:
     """Reads the values once a second in its own thread while ``active`` (set by the app: HUD on and DBD
