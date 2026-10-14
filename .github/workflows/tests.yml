@@ -48,4 +48,6 @@ jobs:
           python -m pip install -r requirements.txt pytest
           python -m pip install --no-deps -r requirements-extra.txt
       - name: pytest
-        run: python -m pytest -q tests
+        env:
+          PYTHONUNBUFFERED: "1"            # a crash at the very end must not swallow the summary
+        run: python -X faulthandler -m pytest -q tests
