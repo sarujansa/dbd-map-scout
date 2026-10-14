@@ -1307,6 +1307,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
         self.overlay.show_at(int(x), int(y))
         self._last_place = (int(x), int(y), w, h)
         self.worker.overlay_rect = self._last_place if self.overlay.shown else None
+        self._hud_follow_map(self._last_place, gx, gy, gw, gh, margin)       # system values "above the map"
         if a != "custom":                      # sliders follow the preset position
             self._set_pos_sliders((x - gx) / max(1, gw - w), (y - gy) / max(1, gh - h))
 
