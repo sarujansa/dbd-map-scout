@@ -1084,4 +1084,5 @@ EN = {
         "Hotkeys are still changed in the previous window (records the key press) – opens it.",
     "Öffnet den selten gebrauchten Teil der Einstellungen im bisherigen Fenster.":
         "Opens the rarely needed part of the settings in the previous window.",
+    "OK": "OK",
 }

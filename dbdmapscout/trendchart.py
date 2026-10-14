@@ -46,6 +46,7 @@ class TrendChart:
         self.canvas = tk.Canvas(parent, height=n * self.PANEL_H + (n - 1) * 10, background=bg,
                                 highlightthickness=0)
         self.canvas.pack(fill="both", expand=True)
+        self.canvas._dbdms_chart = self            # the Qt window draws the same data itself (qt_window.Chart)
         self.data = None
         self._hits = []            # (x0, y0, x1, y1, item id, role, tip)
         self._hover = None

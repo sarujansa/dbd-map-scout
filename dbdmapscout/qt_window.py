@@ -10,6 +10,7 @@ No modal Qt dialogs (they would stop Tk's timers).
 from __future__ import annotations
 
 import base64
+import html
 import sys
 
 from PIL import Image
@@ -17,8 +18,8 @@ from PySide6.QtCore import QByteArray, QEvent, Qt
 from PySide6.QtGui import QColor, QFontDatabase, QIcon, QImage, QPalette, QPixmap
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel,
                                QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QProgressBar, QPushButton,
-                               QScrollArea, QSizePolicy, QSlider, QStackedWidget, QTreeWidget, QTreeWidgetItem,
-                               QVBoxLayout, QWidget)
+                               QScrollArea, QSizePolicy, QSlider, QStackedWidget, QTabWidget, QTreeWidget,
+                               QTreeWidgetItem, QVBoxLayout, QWidget)
 
 from . import qt_theme
 from .i18n import N_, _
@@ -28,7 +29,8 @@ from .mapimage import FONT as FIRA
 PAGES = (("overview", N_("Übersicht"), "◉"), ("maps", "Maps", "▦"), ("overlay", N_("Overlay"), "◧"),
          ("stats", N_("Statistik"), "▤"), ("server", N_("Server"), "◎"), ("settings", N_("Einstellungen"), "⚙"),
          ("detect", N_("Erkennung"), "✦"), ("log", "Log", "☰"))
-QT_PAGES = ("overview", "maps", "overlay", "settings")
+QT_PAGES = ("overview", "maps", "overlay", "settings", "stats", "server")
+AUTO_PAGES = ("stats", "server")          # built from the Tk tab's structure (app_qt.tk_layout), since 1.53
 THUMB_H = 170                     # px (logical) of the map picture on the overview
 
 # Pages that mirror a Tk tab (since 1.52): every key names a Tk widget registered with App._reg; texts, values,
@@ -433,6 +435,94 @@ def _scroll_page(title):
     return page, lay
 
 
+def make_control(kind, key, post):
+    """(widget, extra) of one mirrored Tk control; clicks go out as post("act", (key, value))."""
+    extra = None
+    if kind == "check":
+        w = QCheckBox()
+        w.clicked.connect(lambda checked: post("act", (key, checked)))
+    elif kind == "button":
+        w = QPushButton()
+        w.clicked.connect(lambda _c=False: post("act", (key, None)))
+    elif kind == "combo":
+        w = QComboBox()
+        w.setMinimumWidth(140)
+        w.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+        w.activated.connect(lambda i: post("act", (key, w.itemText(i))))
+    elif kind == "slider":
+        w = QWidget()
+        r = QHBoxLayout(w)
+        r.setContentsMargins(0, 0, 0, 0)
+        name, value = _label(), _label()
+        name.setMinimumWidth(110)
+        value.setMinimumWidth(56)
+        value.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        s = QSlider(Qt.Horizontal)
+        s.valueChanged.connect(lambda v: post("act", (key, v)))
+        r.addWidget(name)
+        r.addWidget(s, 1)
+        r.addWidget(value)
+        extra = (name, s, value)
+    elif kind == "table":
+        w = Table(key, post)
+    elif kind == "chart":
+        w = Chart()
+    elif kind in ("hint", "plain"):
+        w = _label(cls="dim", wrap=True)
+    elif kind == "big":
+        w = _label(cls="big", wrap=True)
+    elif kind == "value":
+        w = _label()
+        w.setStyleSheet("font-weight: 600;")
+    else:                                                     # label, entry (shown, not edited)
+        w = _label(wrap=True)
+    return w, extra
+
+
+def show_control(kind, w, extra, st):
+    """Put a Tk widget's state (app_qt.tk_state) into its Qt control – never sends anything back."""
+    if kind not in ("title",):
+        shown = bool(st.get("visible", True))
+        if kind in ("hint", "plain", "big", "label"):
+            shown = shown and bool(st.get("text"))            # empty lines take no room (like the Tk window)
+        w.setVisible(shown)
+    if "enabled" in st:
+        w.setEnabled(st["enabled"])
+    if st.get("tip") is not None and w.toolTip() != st["tip"]:
+        w.setToolTip(st["tip"])
+    if kind == "check":
+        _set(w, st.get("text", ""))
+        if w.isChecked() != bool(st.get("value")):
+            w.setChecked(bool(st.get("value")))                 # setChecked does not emit clicked
+    elif kind == "combo":
+        values = st.get("values", [])
+        if [w.itemText(i) for i in range(w.count())] != values:
+            w.blockSignals(True)
+            w.clear()
+            w.addItems(values)
+            w.blockSignals(False)
+        if w.currentText() != st.get("value"):
+            w.blockSignals(True)
+            w.setCurrentIndex(max(0, w.findText(st.get("value", ""))))
+            w.blockSignals(False)
+    elif kind == "slider":
+        name, s, value = extra
+        _set(name, st.get("label", ""))
+        _set(value, st.get("text", ""))
+        if not s.isSliderDown():                                  # the user is dragging: no pull back
+            s.blockSignals(True)
+            s.setRange(round(st.get("lo", 0)), round(st.get("hi", 100)))
+            s.setValue(round(st.get("value", 0)))
+            s.blockSignals(False)
+    elif kind in ("table", "chart"):
+        w.show_state(st)
+    elif kind in ("box", "card"):
+        pass
+    else:                                                         # button, label, hint, value, title, big
+        text = st.get("text", "")
+        _set(w, text.upper() if kind == "title" else text)
+
+
 class FormPage(QWidget):
     """A page that mirrors a Tk tab control by control (SPECS): the Tk widgets keep doing the work."""
 
@@ -485,81 +575,298 @@ class FormPage(QWidget):
             b.clicked.connect(lambda _c=False, tab=item[2]: self._post("tab", tab))
             lay.addWidget(b)
             return
-        key = item[1]
-        extra = None
-        if kind == "check":
-            w = QCheckBox()
-            w.clicked.connect(lambda checked, k=key: self._post("act", (k, checked)))
-        elif kind == "button":
-            w = QPushButton()
-            w.clicked.connect(lambda _c=False, k=key: self._post("act", (k, None)))
-        elif kind == "combo":
-            w = QComboBox()
-            w.setMinimumWidth(160)
-            w.setSizeAdjustPolicy(QComboBox.AdjustToContents)
-            w.activated.connect(lambda i, k=key, c=None: self._post("act", (k, self.controls[k][1].itemText(i))))
-        elif kind == "slider":
-            w = QWidget()
-            r = QHBoxLayout(w)
-            r.setContentsMargins(0, 0, 0, 0)
-            name, value = _label(), _label()
-            name.setMinimumWidth(110)
-            value.setMinimumWidth(56)
-            value.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            s = QSlider(Qt.Horizontal)
-            s.valueChanged.connect(lambda v, k=key: self._post("act", (k, v)))
-            r.addWidget(name)
-            r.addWidget(s, 1)
-            r.addWidget(value)
-            extra = (name, s, value)
-        elif kind in ("hint", "plain"):
-            w = _label(cls="dim", wrap=True)
-        elif kind == "value":
-            w = _label()
-            w.setStyleSheet("font-weight: 600;")
-        else:                              # label
-            w = _label()
+        w, extra = make_control(kind, item[1], self._post)
         lay.addWidget(w)
-        self.controls[key] = (kind, w, extra)
+        self.controls[item[1]] = (kind, w, extra)
 
     def show_states(self, states):
         for key, (kind, w, extra) in self.controls.items():
             st = states.get(key)
-            if st is None:
+            if st is not None:
+                show_control(kind, w, extra, st)
+
+
+class Table(QTreeWidget):
+    """Mirror of a ttk.Treeview: columns, rows (with groups), colours by tag, selection. A click on a row or a
+    heading goes to the Tk table (sorting, selecting, the server tab's tick boxes)."""
+
+    def __init__(self, key, post):
+        super().__init__()
+        self._key, self._post = key, post
+        self._shape = None
+        self.setMinimumHeight(200)
+        self.header().setStretchLastSection(False)
+        self.header().setMinimumSectionSize(48)
+        self.setAlternatingRowColors(False)
+        self.setUniformRowHeights(True)
+        self.header().setSectionsClickable(True)
+        self.header().sectionClicked.connect(self._sort)
+        self.itemClicked.connect(lambda item, _c: self._post("act", (self._key, ("click", item.data(0, Qt.UserRole)))))
+        self._cols = []
+
+    def _sort(self, index):
+        if 0 <= index < len(self._cols):
+            self._post("act", (self._key, ("sort", self._cols[index])))
+
+    def show_state(self, st):
+        cols = st.get("columns", [])
+        rows = st.get("rows", [])
+        shape = (tuple(tuple(c) for c in cols), tuple((r[0], r[1], r[2], tuple(r[3]), tuple(r[4])) for r in rows),
+                 tuple(sorted(st.get("colours", {}).items())))
+        if shape != self._shape:
+            self._shape = shape
+            self._cols = [c[0] for c in cols]
+            tree = bool(cols) and cols[0][0] == "#0"
+            self.setRootIsDecorated(tree and any(r[1] > 0 for r in rows))
+            self.setHeaderLabels([c[1] for c in cols])
+            self.clear()
+            parents = {}
+            colours = st.get("colours", {})
+            for iid, depth, text, values, tags, opened in rows:
+                cells = ([text] if tree else []) + list(values)
+                item = QTreeWidgetItem(cells[:len(cols)] + [""] * max(0, len(cols) - len(cells)))
+                item.setData(0, Qt.UserRole, iid)
+                for i, (_cid, _t, anchor) in enumerate(cols):
+                    if anchor == "e":
+                        item.setTextAlignment(i, Qt.AlignRight | Qt.AlignVCenter)
+                fg = next((colours[t] for t in tags if t in colours), None)
+                if fg:
+                    for i in range(len(cols)):
+                        item.setForeground(i, QColor(fg))
+                parent = parents.get(depth - 1)
+                if parent is not None:
+                    parent.addChild(item)
+                else:
+                    self.addTopLevelItem(item)
+                parents[depth] = item
+                item.setExpanded(True)
+            fm = self.header().fontMetrics()
+            for i, c in enumerate(cols):
+                self.resizeColumnToContents(i)
+                self.setColumnWidth(i, max(self.columnWidth(i), fm.horizontalAdvance(c[1]) + 24))
+            if cols:
+                self.header().setSectionResizeMode(0, self.header().ResizeMode.Stretch)
+        sel = set(st.get("selection", []))
+        self.setSelectionMode(QTreeWidget.SingleSelection if st.get("selectable") else QTreeWidget.NoSelection)
+        it = self.invisibleRootItem()
+        stack = [it.child(i) for i in range(it.childCount())]
+        self.blockSignals(True)
+        while stack:
+            item = stack.pop()
+            on = item.data(0, Qt.UserRole) in sel
+            if item.isSelected() != on:
+                item.setSelected(on)
+            stack += [item.child(i) for i in range(item.childCount())]
+        self.blockSignals(False)
+
+
+class Chart(QWidget):
+    """The statistics charts (trendchart.TrendChart's data) drawn with Qt: columns, or a line for temperatures;
+    hovering a column/point shows its tooltip text."""
+
+    PANEL_H = 180
+
+    def __init__(self):
+        super().__init__()
+        self._st = None
+        self._hits = []
+        self.setMouseTracking(True)
+        self.setMinimumHeight(self.PANEL_H)
+
+    def show_state(self, st):
+        key = (id(st.get("data")), st.get("dark"), tuple(st.get("panels", ())))
+        if self._st is None or key != self._key:
+            self._key = key
+            self._st = st
+            self.setMinimumHeight(len(st.get("panels", ())) * (self.PANEL_H + 10))
+            self.update()
+
+    def paintEvent(self, _e):
+        from PySide6.QtGui import QPainter, QPen
+        from .trendchart import BOTTOM, COLORS, LEFT, RIGHT, TOP, columns
+        st = self._st
+        self._hits = []
+        if not st or not st.get("data"):
+            return
+        col = COLORS[bool(st.get("dark", True))]
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        width = max(200, self.width())
+        for n, role in enumerate(st.get("panels", ())):
+            d = st["data"].get(role)
+            if not d:
                 continue
-            if kind != "title":
-                w.setVisible(bool(st.get("visible", True)) and (kind not in ("hint", "plain") or bool(st.get("text"))))
-            if "enabled" in st:
-                w.setEnabled(st["enabled"])
-            if st.get("tip") is not None and w.toolTip() != st["tip"]:
-                w.setToolTip(st["tip"])
-            if kind == "check":
-                _set(w, st.get("text", ""))
-                if w.isChecked() != bool(st.get("value")):
-                    w.setChecked(bool(st.get("value")))         # setChecked does not emit clicked
-            elif kind == "combo":
-                values = st.get("values", [])
-                if [w.itemText(i) for i in range(w.count())] != values:
-                    w.blockSignals(True)
-                    w.clear()
-                    w.addItems(values)
-                    w.blockSignals(False)
-                if w.currentText() != st.get("value"):
-                    w.blockSignals(True)
-                    w.setCurrentIndex(max(0, w.findText(st.get("value", ""))))
-                    w.blockSignals(False)
-            elif kind == "slider":
-                name, s, value = extra
-                _set(name, st.get("label", ""))
-                _set(value, st.get("text", ""))
-                if not s.isSliderDown():                          # the user is dragging: no pull back
-                    s.blockSignals(True)
-                    s.setRange(round(st.get("lo", 0)), round(st.get("hi", 100)))
-                    s.setValue(round(st.get("value", 0)))
-                    s.blockSignals(False)
-            else:                                                 # button, label, hint, value, title
-                text = st.get("text", "")
-                _set(w, text.upper() if kind == "title" else text)
+            top = n * (self.PANEL_H + 10)
+            p.setPen(QColor(col["text"]))
+            f = p.font()
+            f.setBold(True)
+            p.setFont(f)
+            p.drawText(8, top + 14, d["title"])
+            f.setBold(False)
+            p.setFont(f)
+            y0, y1 = top + TOP, top + self.PANEL_H - BOTTOM
+            bars = d["bars"]
+            if not any(v is not None for v, _l, _t in bars):
+                p.setPen(QColor(col["dim"]))
+                p.drawText(LEFT, round((y0 + y1) / 2), d["empty"])
+                continue
+            lo = d.get("min", 0)
+            scale = (y1 - y0) / max(1e-9, d["max"] - lo)
+            for value, label in d["ticks"]:
+                y = y1 - (value - lo) * scale
+                p.setPen(QPen(QColor(col["grid"]), 1))
+                p.drawLine(LEFT, round(y), width - RIGHT, round(y))
+                p.setPen(QColor(col["dim"]))
+                p.drawText(0, round(y) - 8, LEFT - 6, 16, Qt.AlignRight | Qt.AlignVCenter, label)
+            xs = columns(len(bars), width)
+            every = max(1, -(-len(xs) * 46 // max(1, width - LEFT - RIGHT)))
+            newest = max((i for i, (v, _l, _t) in enumerate(bars) if v is not None), default=None)
+            slot = (xs[1][0] - xs[0][0]) if len(xs) > 1 else 40
+            line = []
+            for i, ((value, label, tip), (x0, x1)) in enumerate(zip(bars, xs)):
+                mid = (x0 + x1) / 2
+                if (len(xs) - 1 - i) % every == 0:
+                    p.setPen(QColor(col["dim"]))
+                    p.drawText(round(mid) - 30, round(y1) + 4, 60, 16, Qt.AlignHCenter | Qt.AlignTop, label)
+                if value is None:
+                    line.append(None)
+                    continue
+                if d.get("kind") == "line":
+                    y = y1 - (value - lo) * scale
+                    line.append((mid, y))
+                else:
+                    y = y1 - max(2.0, value * scale)
+                    p.setPen(Qt.NoPen)
+                    p.setBrush(QColor(col[role]))
+                    p.drawRoundedRect(round(x0), round(y), round(x1 - x0), round(y1 - y) + 4, 4, 4)
+                    p.fillRect(round(x0), round(y1) - 2, round(x1 - x0), 2, QColor(col[role]))
+                if i == newest:
+                    p.setPen(QColor(col["text"]))
+                    ly = (y1 - (value - lo) * scale) - 6
+                    p.drawText(round(mid) - 40, round(ly) - 16, 80, 16, Qt.AlignHCenter | Qt.AlignBottom, d["last"])
+                self._hits.append((mid - slot / 2, y0 - 10, mid + slot / 2, y1, tip))
+            if d.get("kind") == "line":
+                p.setPen(QPen(QColor(col[role]), 2))
+                prev = None
+                for pt in line:
+                    if pt is not None and prev is not None:
+                        p.drawLine(round(prev[0]), round(prev[1]), round(pt[0]), round(pt[1]))
+                    prev = pt
+                p.setBrush(QColor(col[role]))
+                for pt in line:
+                    if pt is not None:
+                        p.drawEllipse(round(pt[0]) - 4, round(pt[1]) - 4, 8, 8)
+        p.end()
+
+    def mouseMoveEvent(self, e):
+        from PySide6.QtWidgets import QToolTip
+        x, y = e.position().x(), e.position().y()
+        hit = next((h for h in self._hits if h[0] <= x <= h[2] and h[1] <= y <= h[3]), None)
+        if hit:
+            QToolTip.showText(e.globalPosition().toPoint(), hit[4], self)
+        else:
+            QToolTip.hideText()
+
+
+class AutoPage(QWidget):
+    """A page built from the structure of a Tk tab (app_qt.tk_layout): frames → cards/rows, notebooks → tabs,
+    tables, charts and controls mirrored like FormPage (Statistik, Server)."""
+
+    def __init__(self, post, title, node):
+        super().__init__()
+        self._post = post
+        self.controls = {}                 # key -> (kind, widget, extra)
+        self._tabs = []                    # (QTabWidget, [keys of each page])
+        self._all = []
+        page, lay = _scroll_page(title)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(page)
+        if node:
+            self._build(node, lay, self._all, top=True)
+        lay.addStretch()
+
+    def _build(self, n, lay, keys, top=False):
+        kind, key = n["kind"], n["key"]
+        keys.append(key)
+        if kind in ("box", "card"):
+            holder = _card() if kind == "card" else QWidget()
+            v = QVBoxLayout(holder)
+            v.setContentsMargins(*((14, 12, 14, 12) if kind == "card" else (0, 0, 0, 0)))
+            v.setSpacing(6)
+            if kind == "card":
+                head = _label(cls="h2")
+                v.addWidget(head)
+                self.controls[key + "#title"] = ("title", head, None)
+            inner = QHBoxLayout() if n.get("row") else v
+            if inner is not v:
+                inner.setSpacing(8)
+                v.addLayout(inner)
+            kids = n.get("children", [])
+            first = [c for c in kids if c.get("side") != "right"]
+            last = list(reversed([c for c in kids if c.get("side") == "right"]))
+            for c in first:
+                self._build(c, inner, keys)
+            if n.get("row"):
+                inner.addStretch()
+            for c in last:
+                self._build(c, inner, keys)
+            lay.addWidget(holder, 1 if top else 0)
+            self.controls[key] = (kind, holder, None)
+            return
+        if kind == "tabs":
+            tw = QTabWidget()
+            pages = []
+            for c in n.get("children", []):
+                pw = QWidget()
+                pl = QVBoxLayout(pw)
+                pl.setContentsMargins(8, 8, 8, 8)
+                ks = []
+                self._build(c, pl, ks)
+                pl.addStretch()
+                tw.addTab(pw, "")
+                pages.append(ks)
+                keys.extend(ks)
+            tw.currentChanged.connect(lambda i, k=key: self._post("act", (k, i)))
+            lay.addWidget(tw)
+            self._tabs.append((key, tw, pages))
+            self.controls[key] = ("tabs", tw, None)
+            return
+        w, extra = make_control(kind, key, self._post)
+        lay.addWidget(w, 1 if kind in ("table", "chart") else 0)
+        self.controls[key] = (kind, w, extra)
+
+    def visible_keys(self) -> set:
+        """Keys to read now: everything except the pages of tabs that are not on display."""
+        hidden = set()
+        for _key, tw, pages in self._tabs:
+            for i, ks in enumerate(pages):
+                if i != tw.currentIndex():
+                    hidden.update(ks)
+        return set(self._all) - hidden
+
+    def show_states(self, states):
+        for key, (kind, w, extra) in self.controls.items():
+            if kind == "tabs":
+                st = states.get(key)
+                if st:
+                    tw = w
+                    for i, text in enumerate(st.get("tabs", [])[:tw.count()]):
+                        if tw.tabText(i) != text:
+                            tw.setTabText(i, text)
+                    if tw.currentIndex() != st.get("index", 0):
+                        tw.blockSignals(True)
+                        tw.setCurrentIndex(st.get("index", 0))
+                        tw.blockSignals(False)
+                continue
+            if key.endswith("#title"):
+                st = states.get(key[:-6])
+                if st is not None:
+                    show_control("title", w, extra, st)
+                continue
+            st = states.get(key)
+            if st is not None:
+                show_control(kind, w, extra, st)
 
 
 class MapsPage(QWidget):
@@ -651,7 +958,7 @@ class LaterPage(QWidget):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, post, icon_path: str | None = None):
+    def __init__(self, post, icon_path: str | None = None, layouts: dict | None = None):
         super().__init__()
         self._post = post
         self.allow_close = False          # closing = quitting the program, through the App
@@ -671,6 +978,9 @@ class MainWindow(QMainWindow):
         self.overview = OverviewPage(post)
         self.maps = MapsPage(post)
         self.forms = {key: FormPage(post, _(label), SPECS[key]) for key, label, _s in PAGES if key in SPECS}
+        for key, label, _s in PAGES:
+            if key in AUTO_PAGES and (layouts or {}).get(key):
+                self.forms[key] = AutoPage(post, _(label), layouts[key])
         for key, label, symbol in PAGES:
             item = QListWidgetItem(f"{symbol}   {_(label)}")
             item.setData(Qt.UserRole, key)
@@ -680,7 +990,28 @@ class MainWindow(QMainWindow):
         self.nav.setCurrentRow(0)
         self.nav.currentRowChanged.connect(self._page_changed)
         lay.addWidget(self.nav)
-        lay.addWidget(self.stack, 1)
+        right = QVBoxLayout()
+        right.setContentsMargins(0, 0, 0, 0)
+        right.setSpacing(0)
+        # OK/Cancel or a note for something the Tk side asks (App._ask/_inform) – a bar, not a modal dialog
+        self.question = QFrame()
+        self.question.setObjectName("question")
+        ql = QHBoxLayout(self.question)
+        ql.setContentsMargins(16, 10, 16, 10)
+        self.question_text = _label(wrap=True)
+        ql.addWidget(self.question_text, 1)
+        self.question_ok = QPushButton(_("OK"))
+        self.question_ok.setObjectName("primary")
+        self.question_ok.clicked.connect(lambda: post("answer", True))
+        self.question_cancel = QPushButton(_("Abbrechen"))
+        self.question_cancel.clicked.connect(lambda: post("answer", False))
+        ql.addWidget(self.question_ok, alignment=Qt.AlignVCenter)
+        ql.addWidget(self.question_cancel, alignment=Qt.AlignVCenter)
+        self.question.hide()
+        self._question = None
+        right.addWidget(self.question)
+        right.addWidget(self.stack, 1)
+        lay.addLayout(right, 1)
         self.setCentralWidget(central)
         self.resize(1100, 760)
         self.setMinimumSize(760, 520)
@@ -697,6 +1028,20 @@ class MainWindow(QMainWindow):
     def show_states(self, page, states):
         if page in self.forms:
             self.forms[page].show_states(states)
+
+    def visible_keys(self, page) -> set:
+        f = self.forms.get(page)
+        return f.visible_keys() if isinstance(f, AutoPage) else set()
+
+    def show_question(self, q):
+        """q = (title, text, ask) or None; ask False = only a note with OK."""
+        if q == self._question:
+            return
+        self._question = q
+        self.question.setVisible(q is not None)
+        if q is not None:
+            self.question_text.setText(f"<b>{html.escape(q[0])}</b><br>" + html.escape(q[1]).replace("\n", "<br>"))
+            self.question_cancel.setVisible(bool(q[2]))
 
     def show_maps(self, items, current):
         self.maps.show_maps(items, current)

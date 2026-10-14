@@ -115,11 +115,25 @@ def qapp():
     return qt_window.application()
 
 
-def test_window_shows_the_model_and_posts_clicks(qapp):
+@pytest.fixture
+def keep(qapp):
+    """Qt widgets of a test, deleted right after it: none may live on until the interpreter shuts down (the
+    Windows job ended with a crash after all tests had passed when they did)."""
+    import shiboken6
+    widgets = []
+    yield lambda w: widgets.append(w) or w
+    for w in widgets:
+        if shiboken6.isValid(w):
+            w.hide()
+            shiboken6.delete(w)
+    qapp.processEvents()
+
+
+def test_window_shows_the_model_and_posts_clicks(qapp, keep):
     from PIL import Image
     from dbdmapscout import qt_window
     posted = queue.Queue()
-    win = qt_window.MainWindow(lambda a, arg=None: posted.put((a, arg)))
+    win = keep(qt_window.MainWindow(lambda a, arg=None: posted.put((a, arg))))
     win.apply_theme(True, 1.0)
     now = time.time()
     app = fake_app(current=("coal", 1), source="auto", _thumb_rev=1)
@@ -131,9 +145,9 @@ def test_window_shows_the_model_and_posts_clicks(qapp):
     assert page.thumb.pixmap() is not None and not page.thumb.pixmap().isNull()
     assert page.buttons["layout"].isHidden() and page.buttons["scan"].toolTip() == "tip scan"
     page.buttons["rotate"].click()
-    win.nav.setCurrentRow(3)                                         # a page still in Tk: opens it there
+    win.nav.setCurrentRow(6)                                         # a page still in Tk: opens it there
     win.close()                                                      # closing = quitting, through the App
-    assert [posted.get_nowait() for _i in range(3)] == [("rotate", None), ("tab", "stats"), ("quit", None)]
+    assert [posted.get_nowait() for _i in range(3)] == [("rotate", None), ("tab", "detect"), ("quit", None)]
     text = win.geometry_b64()
     assert text and win.restore_b64(text) and not win.restore_b64("kein base64")
     o.log_alert = True
@@ -187,10 +201,10 @@ def test_every_mirrored_control_exists_in_the_tk_window():
     assert qt_window.page_keys("overview") == set()
 
 
-def test_form_page_shows_tk_states_and_posts_clicks(qapp):
+def test_form_page_shows_tk_states_and_posts_clicks(qapp, keep):
     from dbdmapscout import qt_window
     posted = queue.Queue()
-    page = qt_window.FormPage(lambda a, arg=None: posted.put((a, arg)), "Overlay", qt_window.SPECS["overlay"])
+    page = keep(qt_window.FormPage(lambda a, arg=None: posted.put((a, arg)), "Overlay", qt_window.SPECS["overlay"]))
     states = {"ov.pos": {"text": "Position"}, "ov.caption": {"text": "Map-Namen", "value": False, "enabled": True,
                                                              "visible": True, "tip": "Tipp"},
               "ov.anchor": {"value": "oben links", "values": ["automatisch", "oben links"], "enabled": True,
@@ -215,10 +229,10 @@ def test_form_page_shows_tk_states_and_posts_clicks(qapp):
                                                         ("act", ("ov.size", 50))]
 
 
-def test_maps_page_lists_by_realm_and_posts_the_pick(qapp):
+def test_maps_page_lists_by_realm_and_posts_the_pick(qapp, keep):
     from dbdmapscout import qt_window
     posted = queue.Queue()
-    page = qt_window.MapsPage(lambda a, arg=None: posted.put((a, arg)))
+    page = keep(qt_window.MapsPage(lambda a, arg=None: posted.put((a, arg))))
     items = [("MacMillan", "Coal Tower", "coal", 1), ("MacMillan", "Suffocation Pit", "pit", 1),
              ("Autohaven", "Azarov's Resting Place", "azarov", 1)]
     page.show_maps(items, ("pit", 1))
@@ -229,3 +243,104 @@ def test_maps_page_lists_by_realm_and_posts_the_pick(qapp):
     page._pick_first()
     assert [posted.get_nowait() for _i in range(3)] == [("search", "coal"), ("show_map", ("coal", 1)),
                                                         ("show_map", ("coal", 1))]
+
+
+# ------------------------------------------------------------------ stage 3: pages built from Tk tabs
+NODE = {"kind": "box", "key": ".t", "side": "top", "row": False, "children": [
+    {"kind": "big", "key": ".t.sum", "side": "top"},
+    {"kind": "box", "key": ".t.row", "side": "top", "row": True, "children": [
+        {"kind": "button", "key": ".t.row.clear", "side": "left"},
+        {"kind": "combo", "key": ".t.row.by", "side": "right"}]},
+    {"kind": "tabs", "key": ".t.nb", "side": "top", "children": [
+        {"kind": "box", "key": ".t.nb.a", "side": "top", "row": False, "children": [
+            {"kind": "table", "key": ".t.nb.a.tree", "side": "top"}]},
+        {"kind": "box", "key": ".t.nb.b", "side": "top", "row": False, "children": [
+            {"kind": "chart", "key": ".t.nb.b.chart", "side": "top"}]}]}]}
+
+
+def test_auto_page_mirrors_a_tk_tab(qapp, keep):
+    from dbdmapscout import qt_window
+    posted = queue.Queue()
+    page = keep(qt_window.AutoPage(lambda a, arg=None: posted.put((a, arg)), "Statistik", NODE))
+    assert page.visible_keys() >= {".t.sum", ".t.row.clear", ".t.nb.a.tree"}
+    assert ".t.nb.b.chart" not in page.visible_keys()            # the other tab is not read
+    states = {".t.sum": {"text": "4 Runden", "visible": True},
+              ".t.row.clear": {"text": "Verlauf löschen", "enabled": True, "visible": True, "tip": ""},
+              ".t.nb": {"tabs": ["Maps", "Verlauf"], "index": 0, "visible": True},
+              ".t.nb.a.tree": {"visible": True, "selectable": True, "selection": ["I002"],
+                               "columns": [("#0", "Region", "w"), ("ping", "Ping", "e")],
+                               "colours": {"p_bad": "#e06c6c"},
+                               "rows": [("g:eu", 0, "☑ Europa", [], [], True),
+                                        ("I002", 1, "Frankfurt", ["31 ms"], ["p_bad"], False)]}}
+    page.show_states(states)
+    tw = page.controls[".t.nb"][1]
+    assert [tw.tabText(i) for i in range(tw.count())] == ["Maps", "Verlauf"]
+    table = page.controls[".t.nb.a.tree"][1]
+    eu = table.topLevelItem(0)
+    assert eu.text(0) == "☑ Europa" and eu.child(0).text(1) == "31 ms" and eu.child(0).isSelected()
+    assert posted.empty()
+    table.itemClicked.emit(eu.child(0), 0)
+    table._sort(1)
+    tw.setCurrentIndex(1)
+    assert [posted.get_nowait() for _i in range(3)] == [("act", (".t.nb.a.tree", ("click", "I002"))),
+                                                        ("act", (".t.nb.a.tree", ("sort", "ping"))),
+                                                        ("act", (".t.nb", 1))]
+    assert ".t.nb.b.chart" in page.visible_keys()
+
+
+def test_chart_draws_columns_and_a_line(qapp, keep):
+    from dbdmapscout import qt_window
+    chart = keep(qt_window.Chart())
+    chart.resize(600, 400)
+    bars = [(2.5, "KW 40", "2,5 Kills · 4 Runden"), (None, "KW 41", ""), (3.0, "KW 42", "3,0 Kills · 2 Runden")]
+    temps = [(71.0, "Mo", "71 °C"), (74.0, "Di", "74 °C")]
+    chart.show_state({"dark": True, "panels": ("killer", "temp"), "data": {
+        "killer": {"title": "Killer", "empty": "", "ticks": [(0, "0"), (4, "4")], "max": 4, "bars": bars,
+                   "last": "3,0"},
+        "temp": {"title": "GPU", "empty": "", "ticks": [(70, "70")], "max": 76, "min": 70, "bars": temps,
+                 "last": "74 °C", "kind": "line"}}})
+    img = chart.grab().toImage()
+    assert not img.isNull() and len(chart._hits) == 4               # 2 columns + 2 points, hover areas
+    assert chart.minimumHeight() == 2 * (chart.PANEL_H + 10)
+
+
+def test_question_bar_asks_instead_of_a_dialog(qapp, keep):
+    from dbdmapscout import qt_window
+    posted = queue.Queue()
+    win = keep(qt_window.MainWindow(lambda a, arg=None: posted.put((a, arg))))
+    win.show_question(("Verlauf löschen", "Alle <Runden> löschen?", True))
+    assert not win.question.isHidden() and "&lt;Runden&gt;" in win.question_text.text()
+    assert not win.question_cancel.isHidden()
+    win.question_ok.click()
+    win.show_question(("Hinweis", "Nur zur Info", False))
+    assert win.question_cancel.isHidden()
+    win.show_question(None)
+    assert win.question.isHidden() and posted.get_nowait() == ("answer", True)
+    win.allow_close = True
+    win.close()
+
+
+def test_ask_runs_the_action_again_after_ok():
+    from dbdmapscout.app_qt import QtShell
+    calls = []
+
+    class Shell(QtShell):
+        qt = SimpleNamespace(bring_to_front=lambda: None)
+        root = SimpleNamespace(state=lambda: "withdrawn")
+        _qt_question = None
+
+        def _qt_refresh(self, force=False):
+            pass
+
+        def clear(self):
+            if self._ask("Verlauf löschen", "Sicher?", self.clear):
+                calls.append("cleared")
+
+    s = Shell()
+    s.clear()
+    assert calls == [] and s._qt_question[0] == "Verlauf löschen"
+    s._qt_answer(False)
+    assert calls == [] and s._qt_question is None
+    s.clear()
+    s._qt_answer(True)
+    assert calls == ["cleared"] and s._qt_question is None

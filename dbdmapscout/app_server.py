@@ -6,7 +6,7 @@ from __future__ import annotations
 import threading
 import time
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import ttk
 
 from . import connwatch, regions
 from .capture import IS_WIN
@@ -47,6 +47,7 @@ class ServerTab:
         t.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
         self.srv_tree = t
+        t._dbdms_click = self._srv_toggle         # a click toggles the region (also from the Qt window)
         saved = self.settings.get("regions_selected")
         self.srv_sel = set(saved) if saved else {c for c, _, _ in regions.REGIONS}
         for g in regions.GROUPS:
@@ -270,7 +271,7 @@ class ServerTab:
             return
         sel = [c for c, _, _ in regions.REGIONS if c in self.srv_sel]
         if not sel:
-            messagebox.showinfo(_("Serverregionen"), _("Bitte mindestens eine Region anhaken."))
+            self._inform(_("Serverregionen"), _("Bitte mindestens eine Region anhaken."))
             return
         if len(sel) == len(regions.REGIONS):
             self.srv_release()
@@ -283,7 +284,7 @@ class ServerTab:
             msg += "\n\n" + _("{n} vorhandene Einträge anderer Programme (z. B. Make Your Choice) für DBD-Server "
                                  "werden dabei entfernt.", n=foreign)
         msg += "\n\n" + _("Danach DBD neu starten, damit es wirkt.")
-        if not messagebox.askokcancel(_("Serverregionen anwenden"), msg, parent=self.root):
+        if not self._ask(_("Serverregionen anwenden"), msg, self.srv_apply):
             return
         self._srv_run({"block": regions.block_list(sel), "allowed": sel, "remove_foreign": True},
                       _("Nur noch {names} erlaubt", names=names))
@@ -298,7 +299,7 @@ class ServerTab:
         msg = (_("Alle Sperren für DBD-Serverregionen aus der hosts-Datei entfernen (auch die von Make Your Choice)?")
                if st.get("myc") else _("Alle Sperren für DBD-Serverregionen aus der hosts-Datei entfernen?"))
         msg += "\n\n" + _("Windows fragt gleich nach Administratorrechten. Danach DBD neu starten.")
-        if not messagebox.askokcancel(_("Serverregionen freigeben"), msg, parent=self.root):
+        if not self._ask(_("Serverregionen freigeben"), msg, self.srv_release):
             return
         self._srv_run({"block": [], "remove_foreign": True}, _("Alle Regionen freigegeben"))
 
