@@ -371,6 +371,8 @@ def test_qt_window_runs_in_tks_loop(root):
     assert len(ticks) == 41 and posted == ["scan"]
     win.allow_close = True
     win.close()
+    import shiboken6
+    shiboken6.delete(win)                            # no Qt window may live on until the interpreter shuts down
 
 
 def test_tk_tab_structure_for_the_qt_window(root):
