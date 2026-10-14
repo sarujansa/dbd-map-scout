@@ -1,4 +1,5 @@
-# Getestet mit: numpy 2.5.3, opencv-python-headless 5.0.0, onnxruntime 1.30.0, Pillow 12.3.0, mss 10.2.0
+# Getestet mit: numpy 2.5.3, opencv-python-headless 5.0.0, onnxruntime 1.30.0, Pillow 12.3.0, mss 10.2.0,
+#   PySide6-Essentials 6.11.2
 numpy>=1.26
 opencv-python-headless>=4.8
 onnxruntime>=1.17
@@ -6,3 +7,4 @@ Pillow>=10.0
 mss>=9.0
 pystray==0.19.5          # Symbol im Infobereich (LGPL-3.0, unverändert genutzt)
 six>=1.16                # von pystray benötigt
+PySide6-Essentials==6.11.2   # neues Steuerfenster (Qt, LGPL-3.0, unverändert genutzt; ~80 MB)

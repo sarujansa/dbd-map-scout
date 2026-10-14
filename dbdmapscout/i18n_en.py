@@ -1049,4 +1049,33 @@ EN = {
     "Windows 11, Blau": "Windows 11, blue",
     "Klassisch": "Classic",
     "Design nicht ladbar, nehme das klassische: {error}": "Design could not be loaded, using the classic one: {error}",
+    "Übersicht": "Overview",
+    "Aktuelle Map": "Current map",
+    "Rundenzeit": "Round time",
+    "Ping": "Ping",
+    "läuft": "running",
+    "letzte Runde": "last round",
+    "startet": "starting",
+    "4K: {n} von {total}": "4K: {n} of {total}",
+    "noch keine Stats-Daten": "no stats page data yet",
+    "{n} Survivor-Runden": "{n} survivor rounds",
+    "Spielzeit heute: {time}": "Played today: {time}",
+    "Systemwerte sind aus (Tab Overlay → Systemwerte).": "System values are off (Overlay tab → System values).",
+    "Systemwerte gibt es nur unter Windows.": "System values are only available on Windows.",
+    "Erscheinen, sobald DBD läuft.": "Appear as soon as DBD is running.",
+    "Diese Seite ist noch im bisherigen Fenster – sie zieht in den nächsten Versionen um. Das Fenster wurde "
+    "geöffnet.": "This page is still in the previous window – it moves over in the next versions. That window has "
+                 "been opened.",
+    "Im bisherigen Fenster öffnen": "Open in the previous window",
+    "Öffnet diese Seite im bisherigen Fenster (sie zieht später ins neue um).":
+        "Opens this page in the previous window (it moves to the new one later).",
+    "Neue Oberfläche (Qt) nicht verfügbar, das bisherige Fenster bleibt: {error}":
+        "New window (Qt) not available, keeping the previous one: {error}",
+    "Neues Fenster": "New window",
+    "Neues Fenster (Qt, Vorschau): Übersicht mit Navigation links": "New window (Qt, preview): overview with navigation on the left",
+    "Neues Steuerfenster mit Seite „Übersicht“ (Map, Timer, Server, Heute, Systemwerte, letzte Runden). Die "
+    "übrigen Seiten öffnen vorerst noch dieses Fenster. Gilt ab dem nächsten Start; ausschalten hier.":
+        "New control window with the page \"Overview\" (map, timer, server, today, system values, last rounds). The "
+        "other pages still open this window for now. Takes effect at the next start; switch it off here.",
+    "Gilt ab dem nächsten Start. Jetzt neu starten?": "Takes effect at the next start. Restart now?",
 }

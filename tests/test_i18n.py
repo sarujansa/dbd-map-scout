@@ -86,6 +86,26 @@ def test_labels_in_the_code_are_translated():
     assert not bad, "\n".join(bad)
 
 
+QT_TEXT_CALLS = {"QLabel", "QPushButton", "QCheckBox", "QRadioButton", "QGroupBox", "QListWidgetItem", "QAction",
+                 "setText", "setToolTip", "setWindowTitle", "setPlaceholderText", "addItem", "_label"}
+
+
+def test_qt_texts_in_the_code_are_translated():
+    """Qt takes its texts positionally (QLabel("…"), b.setText("…")): those literals must go through _() too."""
+    bad = []
+    for name, tree in _trees():
+        for n in ast.walk(tree):
+            if not isinstance(n, ast.Call) or not n.args:
+                continue
+            f = n.func
+            fname = f.id if isinstance(f, ast.Name) else f.attr if isinstance(f, ast.Attribute) else ""
+            a = n.args[0]
+            if fname in QT_TEXT_CALLS and isinstance(a, ast.Constant) and isinstance(a.value, str) \
+                    and sum(c.isalpha() for c in a.value) >= 2 and a.value not in UNTRANSLATED_OK:
+                bad.append(f"{name}:{n.lineno} {a.value!r}")
+    assert not bad, "\n".join(bad)
+
+
 def test_underscore_is_never_shadowed():
     """A local variable named _ would break every _() call in that function."""
     bad = []

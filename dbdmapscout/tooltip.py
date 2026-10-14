@@ -67,6 +67,10 @@ TIPS = {
     "Falsch erkannt": "Die erkannte Map stimmt nicht: Karte ausblenden, Timer zurücksetzen, die Runde wird nicht "
                       "gezählt. Geht auch im Spiel mit dem Hotkey (Standard Strg+Alt+X).",
     "Stimmt": "Die Map stimmt – Hinweis „unsicher“ ausblenden.",
+    "Neues Fenster (Qt, Vorschau): Übersicht mit Navigation links":
+        "Neues Steuerfenster mit Seite „Übersicht“ (Map, Timer, Server, Heute, Systemwerte, letzte Runden). Die "
+        "übrigen Seiten öffnen vorerst noch dieses Fenster. Gilt ab dem nächsten Start; ausschalten hier.",
+    "Im bisherigen Fenster öffnen": "Öffnet diese Seite im bisherigen Fenster (sie zieht später ins neue um).",
     # maps tab
     "Kartenbild hinzufügen …": "Eigenes Bild für eine Map wählen: vorhandenes Bild ersetzen oder neue Map "
                                "anlegen. Rand und Hintergrund werden automatisch entfernt.",
