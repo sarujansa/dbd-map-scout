@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ctypes
 import sys
+import time
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
@@ -359,6 +360,7 @@ class HudWindow:
         self._pos = None
         self._shown = False
         self.size = (0, 0)
+        self._raised = 0.0
         self.opacity = 0.85
         self.last_error = ""
 
@@ -389,7 +391,11 @@ class HudWindow:
         if not self._shown:
             _u.ShowWindow(self._hwnd, SW_SHOWNOACTIVATE)
             self._shown = True
-        _u.SetWindowPos(self._hwnd, HWND_TOPMOST, 0, 0, 0, 0, flags)
+            self._raised = 0.0
+        now = time.monotonic()
+        if now - self._raised >= 1.0:                 # stay above DBD; once a second is enough (the UI ticks 4×/s)
+            self._raised = now
+            _u.SetWindowPos(self._hwnd, HWND_TOPMOST, 0, 0, 0, 0, flags)
 
     def hide(self):
         if self._shown:

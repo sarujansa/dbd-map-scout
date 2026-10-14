@@ -1000,7 +1000,6 @@ EN = {
     "CPU max": "CPU max",
     "GPU Ø Last": "GPU avg load",
     "Ø Watt": "Avg watts",
-    "VRAM max": "VRAM max",
     "GPU {v} °C": "GPU {v} °C",
     "CPU {v} °C": "CPU {v} °C",
     "GPU {v} W": "GPU {v} W",
@@ -1012,9 +1011,24 @@ EN = {
     "Ø über {n} Runden:": "Average over {n} rounds:",
     "Noch keine Systemwerte in dieser Auswahl (Tab Overlay → Systemwerte einschalten).":
         "No system values in this selection yet (Overlay tab → switch on system values).",
+    # system values: throttling, hot spot, temperature trend
+    "GPU DROSSELT (TEMP.)": "GPU THROTTLED (TEMP.)",
+    "GPU DROSSELT (HW)": "GPU THROTTLED (HW)",
+    "GPU-Speicher {v} °C": "GPU memory {v} °C",
+    "Hotspot {v} °C": "Hot spot {v} °C",
+    "Hotspot max {v} °C": "hot spot max {v} °C",
+    "Hotspot max": "Hot spot max",
+    "Gedrosselt": "Throttled",
+    "gedrosselt {v}": "throttled {v}",
+    "⚠ GPU gedrosselt in {n} von {total} Runden, zusammen {time}.":
+        "⚠ GPU throttled in {n} of {total} rounds, {time} in total.",
+    "GPU-Temperatur – Ø {per}": "GPU temperature – average {per}",
+    "Noch keine GPU-Temperaturen in dieser Auswahl.": "No GPU temperatures in this selection yet.",
+    "{when}: Ø {avg} °C · max {max} °C · {n} Runden": "{when}: avg {avg} °C · max {max} °C · {n} rounds",
     "Werte der Systemwerte-Anzeige (Tab Overlay) während der Runden – nur Runden, in denen sie eingeschaltet war. "
     "CPU-Temperatur nur mit HWiNFO. „Wann/Wo“ zeigt, auf welchen Maps oder zu welcher Tageszeit der PC am heißesten "
-    "läuft.":
+    "läuft. „Gedrosselt“: Sekunden, in denen die GPU wegen Temperatur oder Hardware langsamer lief (nur NVIDIA).":
         "Values of the system values display (Overlay tab) during the rounds – only rounds in which it was on. CPU "
-        "temperature only with HWiNFO. \"When/Where\" shows on which maps or at what time of day the PC runs hottest.",
+        "temperature only with HWiNFO. \"When/Where\" shows on which maps or at what time of day the PC runs hottest. "
+        "\"Throttled\": seconds in which the GPU ran slower because of temperature or hardware (NVIDIA only).",
 }
