@@ -328,7 +328,8 @@ def test_every_design_loads_and_switches(root):
         for dark in (True, False):
             theme.apply.failed = ""
             bg = theme.apply(root, dark, design=design)
-            assert not theme.apply.failed and bg.startswith("#")
+            assert not theme.apply.failed
+            root.winfo_rgb(bg)          # a colour Tk knows (light classic on Windows: "SystemButtonFace")
             if design != "classic":
                 assert style.theme_use() == f"dbdms-{'gold' if design == 'fluent_gold' else 'blue'}-" \
                                             f"{'dark' if dark else 'light'}"
