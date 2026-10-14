@@ -35,6 +35,7 @@ from .app_stats import StatsTab
 from .app_lobby import LobbyInfo
 from .app_hotkeys import Hotkeys
 from .app_settings import SettingsTab
+from .app_sysinfo import HUD_SIDES, SysInfo
 
 LANGS = [("en", "EN"), ("de", "DE"), ("fr", "FR"), ("es", "ES"), ("es-MX", "ES-MX"), ("it", "IT"),
          ("pl", "PL"), ("pt-BR", "PT"), ("tr", "TR")]
@@ -56,7 +57,7 @@ def anchor_label(key: str) -> str:
 log = logging.getLogger("dbdmapscout")
 
 
-class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
+class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
     def __init__(self, root_dir: str, simulate: str | None = None, start_in_tray: bool = False):
         self.root_dir = root_dir
         self.simulate = simulate
@@ -122,6 +123,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         self.overlay.game_hwnd = lambda: self.game.hwnd if self.game else None
         self.overlay.on_moved = self._overlay_dragged
         self.overlay.on_wheel = lambda d: self._resize(0.02 * d)
+        self._hud_init()                 # system values at the top of a black bar (CPU/GPU temperature …)
 
         self._build_ui()
         self._apply_overlay_settings()
@@ -446,6 +448,23 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
                           (N_("Eigene Bilanz auf der Map unter dem Timer (Stats-Seite)"), self.record_var),
                           (N_("Transparenter Rand um die Karte"), self.transp_var)):
             ttk.Checkbutton(look, text=_(text), variable=var, command=self._overlay_flags_changed).pack(anchor="w", pady=1)
+        sysf = ttk.LabelFrame(f, text=_("Systemwerte (CPU/GPU-Temperatur, Auslastung, VRAM, RAM)"), padding=8)
+        sysf.pack(fill="x", pady=(8, 0))
+        r = ttk.Frame(sysf)
+        r.pack(fill="x")
+        ttk.Label(r, text=_("Anzeige"), width=12).pack(side="left")
+        labels = dict(HUD_SIDES)
+        self.sysinfo_var = tk.StringVar(value=_(labels.get(self.settings.get("sysinfo", "off"), labels["off"])))
+        cb = ttk.Combobox(r, textvariable=self.sysinfo_var, values=[_(t) for _k, t in HUD_SIDES], state="readonly",
+                          width=26)
+        cb.pack(side="left", padx=6)
+        cb.bind("<<ComboboxSelected>>", lambda e: self._sysinfo_changed())
+        ttk.Label(sysf, text=_("Oben im schwarzen Rand, solange eine Karte im Match zu sehen ist. GPU-Werte von "
+                               "NVIDIA-Karten (Treiber), CPU-Temperatur nur mit HWiNFO („Shared Memory Support“ an) "
+                               "– das Programm lädt keinen eigenen Treiber."),
+                  style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
+        self.sysinfo_hint_var = tk.StringVar(value="")
+        ttk.Label(sysf, textvariable=self.sysinfo_hint_var, style="Dim.TLabel", wraplength=520).pack(anchor="w")
         return outer
 
     # ------------------------------------------------------- tab: detection
@@ -1227,6 +1246,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
             self._vis_state = "wartet"                      # the waiting card is not logged
         elif not forced:
             self._log_visibility(reason, (gx, gy, gw, gh))
+        hud = self._hud_place(gx, gy, gw, gh, show=not reason and not wait)
+        self._sysinfo_status()
         if reason:
             self.overlay.hide()
             self.worker.overlay_rect = None
@@ -1238,6 +1259,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
         # floors one below the other (Midwich): each as big as one map, as far as the screen allows
         height = int(gh * min(MAX_HEIGHT, self._map_height() * self.overlay.stacked()))
         a = o["anchor"]
+        drop = hud[1] + margin if hud and layout.below_hud(hud[0], a) else 0     # map below the system values
+        height = min(height, gh - drop - 2 * margin)
         bar = layout.bar_width(gw, gh)          # black bar left/right of a 16:9 picture (ultrawide)
         slot = None
         if a == "auto" and bar < layout.MIN_BAR:
@@ -1249,11 +1272,11 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
             if slot is not None:
                 return layout.slot_x(slot, w, margin), gy + margin
             if a == "auto":
-                return gx + max(margin, (bar - w) / 2), gy + margin
+                return gx + max(margin, (bar - w) / 2), gy + margin + drop
             if a == "custom":
                 return gx + o.get("pos_x", 0.0) * max(0, gw - w), gy + o.get("pos_y", 0.0) * max(0, gh - h)
             return (gx + margin if a.endswith("left") else gx + gw - w - margin,
-                    gy + margin if a.startswith("top") else gy + gh - h - margin)
+                    gy + margin + drop if a.startswith("top") else gy + gh - h - margin)
 
         # Fit before rendering: only the final size may reach the screen (render() shows it at once).
         iw, ih = self.overlay.map_size()
@@ -1793,11 +1816,14 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab):
             self.settings.save()
             self.tray.stop()
             self.conn.stop()
+            self.sysmon.stop()
             self.worker.stop()
             self.hotkeys.stop()
             self.worker.join(timeout=4)      # let a running OCR call finish cleanly
             if hasattr(self.overlay, "destroy"):
                 self.overlay.destroy()
+            if self.hud is not None:
+                self.hud.destroy()
         finally:
             self.root.destroy()
 
