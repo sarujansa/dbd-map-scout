@@ -69,6 +69,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         self.events: queue.Queue = queue.Queue()
 
         self.root = tk.Tk()
+        self._quitting = False
         self._qt_early()                 # Qt control window (setting ui_toolkit): Tk window hidden from the start
         self.root.title(f"DbD Map Scout {__version__}")
         ico = os.path.join(root_dir, "dbdmapscout.ico")        # also made by the shortcut setup
@@ -123,8 +124,9 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
 
         self.overlay = make_overlay(self.root, prefer_native=self.settings["overlay"].get("native_window", True))
         self.overlay.game_hwnd = lambda: self.game.hwnd if self.game else None
-        self.overlay.on_moved = self._overlay_dragged
-        self.overlay.on_wheel = lambda d: self._resize(0.02 * d)
+        # window procedures (dispatched by Tcl's message loop) must not call tkinter: hand over to _poll
+        self.overlay.on_moved = lambda x, y: self.events.put(("call", self._overlay_dragged, (x, y)))
+        self.overlay.on_wheel = lambda d: self.events.put(("call", self._resize, (0.02 * d,)))
         self._hud_init()                 # system values at the top of a black bar (CPU/GPU temperature …)
 
         self._build_ui()
@@ -385,7 +387,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         return outer
 
     # --------------------------------------------------------- tab: overlay
-    def _slider(self, parent, label, var, lo, hi, cmd, fmt="{:.0f} %"):
+    def _slider(self, parent, label, var, lo, hi, cmd, fmt="{:.0f} %", key=None):
         row = ttk.Frame(parent)
         row.pack(fill="x", pady=3)
         ttk.Label(row, text=label, width=12).pack(side="left")
@@ -397,49 +399,53 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
             cmd()
         scale = ttk.Scale(row, from_=lo, to=hi, variable=var, command=changed)
         scale.pack(side="left", fill="x", expand=True, padx=6)
+        scale._dbdms_label, scale._dbdms_fmt = label, fmt          # for the Qt window (_tk_state)
+        if key:
+            self._reg(key, scale)
         return val
 
     def _tab_overlay(self):
         outer, f = self._scroll_tab()
         o = self.settings["overlay"]
-        pos = ttk.LabelFrame(f, text=_("Position"), padding=8)
+        pos = self._reg("ov.pos", ttk.LabelFrame(f, text=_("Position"), padding=8))
         pos.pack(fill="x")
         r = ttk.Frame(pos)
         r.pack(fill="x", pady=(0, 4))
-        ttk.Label(r, text=_("Vorgabe"), width=12).pack(side="left")
+        self._reg("ov.anchor.label", ttk.Label(r, text=_("Vorgabe"), width=12)).pack(side="left")
         self.anchor_var = tk.StringVar(value=anchor_label(o["anchor"]))
-        cb = ttk.Combobox(r, textvariable=self.anchor_var, values=[_(a[1]) for a in ANCHORS], state="readonly", width=16)
+        cb = self._reg("ov.anchor", ttk.Combobox(r, textvariable=self.anchor_var, values=[_(a[1]) for a in ANCHORS],
+                                                 state="readonly", width=16))
         cb.pack(side="left", padx=6)
         cb.bind("<<ComboboxSelected>>", lambda e: self._anchor_changed())
-        ttk.Button(r, text=_("Zurücksetzen"), command=self._reset_position).pack(side="right")
+        self._reg("ov.reset", ttk.Button(r, text=_("Zurücksetzen"), command=self._reset_position)).pack(side="right")
         self.posx_var = tk.DoubleVar(value=o.get("pos_x", 0.0) * 100)
         self.posy_var = tk.DoubleVar(value=o.get("pos_y", 0.0) * 100)
-        self.posx_label = self._slider(pos, _("Horizontal"), self.posx_var, 0, 100, self._pos_changed)
-        self.posy_label = self._slider(pos, _("Vertikal"), self.posy_var, 0, 100, self._pos_changed)
+        self.posx_label = self._slider(pos, _("Horizontal"), self.posx_var, 0, 100, self._pos_changed, key="ov.posx")
+        self.posy_label = self._slider(pos, _("Vertikal"), self.posy_var, 0, 100, self._pos_changed, key="ov.posy")
         r2 = ttk.Frame(pos)
         r2.pack(fill="x", pady=(4, 0))
-        self.edit_btn = ttk.Button(r2, text=_("Mit der Maus verschieben"), command=self.toggle_edit)
+        self.edit_btn = self._reg("ov.edit", ttk.Button(r2, text=_("Mit der Maus verschieben"), command=self.toggle_edit))
         self.edit_btn.pack(side="left")
-        self.test_btn = ttk.Button(r2, text=_("Overlay testen"), command=self.test_overlay)
+        self.test_btn = self._reg("ov.test", ttk.Button(r2, text=_("Overlay testen"), command=self.test_overlay))
         self.test_btn.pack(side="left", padx=(6, 0))
         self.pos_hint_var = tk.StringVar(value="")
-        ttk.Label(pos, textvariable=self.pos_hint_var, style="Dim.TLabel", wraplength=520).pack(anchor="w",
-                                                                                              pady=(4, 0))
+        self._reg("ov.pos_hint", ttk.Label(pos, textvariable=self.pos_hint_var, style="Dim.TLabel",
+                                           wraplength=520)).pack(anchor="w", pady=(4, 0))
         self._pos_hint()
 
-        look = ttk.LabelFrame(f, text=_("Darstellung"), padding=8)
+        look = self._reg("ov.look", ttk.LabelFrame(f, text=_("Darstellung"), padding=8))
         look.pack(fill="x", pady=(8, 0))
         self.size_var = tk.DoubleVar(value=o["height"] * 100)
-        self.size_label = self._slider(look, _("Grösse"), self.size_var, 15, 90, self._size_changed)
+        self.size_label = self._slider(look, _("Grösse"), self.size_var, 15, 90, self._size_changed, key="ov.size")
         self.map_size_row = ttk.Frame(look)
         self.map_size_var = tk.StringVar(value="")
-        ttk.Label(self.map_size_row, textvariable=self.map_size_var, style="Dim.TLabel", wraplength=330).pack(
-            side="left")
-        ttk.Button(self.map_size_row, text=_("Für diese Map zurücksetzen"), command=self._reset_map_size).pack(
-            side="right")
+        self._reg("ov.map_size", ttk.Label(self.map_size_row, textvariable=self.map_size_var, style="Dim.TLabel",
+                                           wraplength=330)).pack(side="left")
+        self._reg("ov.map_size_reset", ttk.Button(self.map_size_row, text=_("Für diese Map zurücksetzen"),
+                                                  command=self._reset_map_size)).pack(side="right")
         self._size_row_after = self.size_label.master
         self.opacity_var = tk.DoubleVar(value=o["opacity"] * 100)
-        self._slider(look, _("Deckkraft"), self.opacity_var, 25, 100, self._opacity_changed)
+        self._slider(look, _("Deckkraft"), self.opacity_var, 25, 100, self._opacity_changed, key="ov.opacity")
         self.focus_var = tk.BooleanVar(value=o["only_when_game_focused"])
         self.caption_var = tk.BooleanVar(value=o["show_caption"])
         self.transp_var = tk.BooleanVar(value=o.get("transparent", True))
@@ -450,37 +456,43 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         self.waiting_var = tk.BooleanVar(value=o.get("show_waiting", True))
         self.floor_auto_var = tk.BooleanVar(value=o.get("floor_auto", True))
         self.record_var = tk.BooleanVar(value=o.get("show_record", True))
-        ttk.Checkbutton(pos, text=_("Karte im schwarzen Rand halten (Ultrawide: nie ins Spielbild ragen)"),
-                        variable=self.keep_bar_var, command=self._overlay_flags_changed).pack(anchor="w", pady=(4, 0))
-        for text, var in ((N_("Karte anzeigen (aus: nur Timer, Ort und Ping)"), self.show_map_var),
-                          (N_("Nur zeigen, wenn DBD das aktive Fenster ist"), self.focus_var),
-                          (N_("Map-Namen über der Karte anzeigen"), self.caption_var),
-                          (N_("Rundentimer unter der Karte anzeigen"), self.timer_show_var),
-                          (N_("Verbundenen Server unter der Karte anzeigen (Tab Server)"), self.server_show_var),
-                          (N_("Ohne Karte: „Warte auf Map“ und Lobby-Status anzeigen"), self.waiting_var),
-                          (N_("Etagen (Midwich) untereinander zeigen (aus: nur die untere)"), self.floor_auto_var),
-                          (N_("Eigene Bilanz auf der Map unter dem Timer (Stats-Seite)"), self.record_var),
-                          (N_("Transparenter Rand um die Karte"), self.transp_var)):
-            ttk.Checkbutton(look, text=_(text), variable=var, command=self._overlay_flags_changed).pack(anchor="w", pady=1)
-        sysf = ttk.LabelFrame(f, text=_("Systemwerte (CPU/GPU-Temperatur, Auslastung, VRAM, RAM)"), padding=8)
+        self._reg("ov.keep_bar", ttk.Checkbutton(
+            pos, text=_("Karte im schwarzen Rand halten (Ultrawide: nie ins Spielbild ragen)"),
+            variable=self.keep_bar_var, command=self._overlay_flags_changed)).pack(anchor="w", pady=(4, 0))
+        for key, text, var in (("show_map", N_("Karte anzeigen (aus: nur Timer, Ort und Ping)"), self.show_map_var),
+                               ("focus", N_("Nur zeigen, wenn DBD das aktive Fenster ist"), self.focus_var),
+                               ("caption", N_("Map-Namen über der Karte anzeigen"), self.caption_var),
+                               ("timer", N_("Rundentimer unter der Karte anzeigen"), self.timer_show_var),
+                               ("server", N_("Verbundenen Server unter der Karte anzeigen (Tab Server)"),
+                                self.server_show_var),
+                               ("waiting", N_("Ohne Karte: „Warte auf Map“ und Lobby-Status anzeigen"), self.waiting_var),
+                               ("floors", N_("Etagen (Midwich) untereinander zeigen (aus: nur die untere)"),
+                                self.floor_auto_var),
+                               ("record", N_("Eigene Bilanz auf der Map unter dem Timer (Stats-Seite)"), self.record_var),
+                               ("transparent", N_("Transparenter Rand um die Karte"), self.transp_var)):
+            self._reg(f"ov.{key}", ttk.Checkbutton(look, text=_(text), variable=var,
+                                                   command=self._overlay_flags_changed)).pack(anchor="w", pady=1)
+        sysf = self._reg("ov.sys", ttk.LabelFrame(f, text=_("Systemwerte (CPU/GPU-Temperatur, Auslastung, VRAM, RAM)"),
+                                                  padding=8))
         sysf.pack(fill="x", pady=(8, 0))
         r = ttk.Frame(sysf)
         r.pack(fill="x")
-        ttk.Label(r, text=_("Anzeige"), width=12).pack(side="left")
+        self._reg("ov.sysinfo.label", ttk.Label(r, text=_("Anzeige"), width=12)).pack(side="left")
         labels = dict(HUD_SIDES)
         self.sysinfo_var = tk.StringVar(value=_(labels.get(self.settings.get("sysinfo", "off"), labels["off"])))
-        cb = ttk.Combobox(r, textvariable=self.sysinfo_var, values=[_(t) for _k, t in HUD_SIDES], state="readonly",
-                          width=38)
+        cb = self._reg("ov.sysinfo", ttk.Combobox(r, textvariable=self.sysinfo_var, values=[_(t) for _k, t in HUD_SIDES],
+                                                  state="readonly", width=38))
         cb.pack(side="left", padx=6)
         cb.bind("<<ComboboxSelected>>", lambda e: self._sysinfo_changed())
-        ttk.Label(sysf, text=_("Oben im schwarzen Rand, solange eine Karte im Match zu sehen ist. „Eigene Position“: "
+        self._reg("ov.sys_text", ttk.Label(sysf, text=_("Oben im schwarzen Rand, solange eine Karte im Match zu sehen ist. „Eigene Position“: "
                                "mit „Mit der Maus verschieben“ (Tab Overlay) zusammen mit der Karte ziehen; im "
                                "schmalen Fenster bleibt die Anzeige im Balken oben. GPU-Werte von NVIDIA-Karten "
                                "(Treiber), CPU-Temperatur nur mit HWiNFO („Shared Memory Support“ an) – das "
                                "Programm lädt keinen eigenen Treiber."),
-                  style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
+                  style="Dim.TLabel", wraplength=520)).pack(anchor="w", pady=(4, 0))
         self.sysinfo_hint_var = tk.StringVar(value="")
-        ttk.Label(sysf, textvariable=self.sysinfo_hint_var, style="Dim.TLabel", wraplength=520).pack(anchor="w")
+        self._reg("ov.sys_hint", ttk.Label(sysf, textvariable=self.sysinfo_hint_var, style="Dim.TLabel",
+                                           wraplength=520)).pack(anchor="w")
         return outer
 
     # ------------------------------------------------------- tab: detection
@@ -962,6 +974,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
     def _poll(self):
         try:
             while True:
+                if self._quitting:
+                    return
                 ev = self.events.get_nowait()
                 if isinstance(ev, tuple) and ev[0] == "hotkey":
                     self._hotkey(ev[1])
@@ -993,10 +1007,14 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
                     self._srv_job_done(ev[1], ev[2])
                 elif isinstance(ev, tuple) and ev[0] == "ui":
                     self._qt_event(ev[1], ev[2])
+                elif isinstance(ev, tuple) and ev[0] == "call":       # from a window procedure (overlay, HUD)
+                    ev[1](*ev[2])
                 else:
                     self._event(ev)
         except queue.Empty:
             pass
+        if self._quitting:
+            return
         self._qt_pump()
         self.root.after(50, self._poll)
 
@@ -1789,6 +1807,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         if entry[1] == "Fehler" and self.nb.select() != str(self.tab_log):
             self.nb.tab(self.tab_log, text="Log ⚠")
             self._log_alert = True
+        elif entry[1] == "Fehler" and getattr(self, "qt", None) is not None and self.root.state() == "withdrawn":
+            self._log_alert = True                # the hidden Tk window still shows Log: say it in the Qt window
 
     def _append_log(self, entry):
         ts, cat, text = entry
@@ -1922,6 +1942,9 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         self.root.bind("<Configure>", note, add="+")
 
     def quit(self):
+        if self._quitting:                       # e.g. tray "Beenden" and the window's X in the same poll
+            return
+        self._quitting = True
         try:
             if self.root.state() == "normal":
                 self.settings.set("window_geometry", self.root.geometry())

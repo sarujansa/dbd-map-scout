@@ -71,7 +71,8 @@ def test_overview_with_a_map_in_a_round():
     app = fake_app(current=("coal", 2), source="auto", _detail="automatisch erkannt (97%)",
                    _layouts=lambda: [1, 2], _queue={"state": "lobby", "role": "killer", "killer": "The Oni"},
                    conn=SimpleNamespace(running=True, server={"region": "eu-central-1", "ip": "1.2.3.4"}, ping_ms=31.0),
-                   rounds=[history.Round(now - 600, 540, "coal", "Coal Tower", role="killer", killer="The Oni")])
+                   rounds=[history.Round(max(now - 600, history.period_start("day", now)), 540, "coal", "Coal Tower",
+                                         role="killer", killer="The Oni")])
     app.round.detected(now - 65)
     o = overview.overview_model(app, now, is_win=True)
     assert o.map_label == "Coal Tower II" and o.map_line == "MacMillan · automatisch erkannt (97%)"
@@ -147,3 +148,84 @@ def test_pixmap_from_pil_keeps_the_shape(qapp):
     from dbdmapscout import qt_window
     pm = qt_window.pixmap_from_pil(Image.new("RGBA", (100, 200)), 50, ratio=2.0)
     assert (pm.width(), pm.height()) == (50, 100) and pm.devicePixelRatio() == 2.0
+
+
+# ------------------------------------------------------------------ stage 2: pages that mirror Tk tabs
+def _registered_keys():
+    """Keys passed to self._reg("…") / _slider(key=…) in the App's source (f-strings with one loop over known names expanded)."""
+    import ast
+    import glob
+    import os
+    from dbdmapscout.app_hotkeys import HOTKEY_LABELS
+    pkg = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dbdmapscout")
+    keys = set()
+    for path in glob.glob(os.path.join(pkg, "app*.py")):
+        with open(path, encoding="utf-8") as fh:
+            tree = ast.parse(fh.read())
+        for n in ast.walk(tree):
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "_slider":
+                keys.update(k.value.value for k in n.keywords if k.arg == "key" and isinstance(k.value, ast.Constant))
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "_reg" and n.args:
+                a = n.args[0]
+                if isinstance(a, ast.Constant):
+                    keys.add(a.value)
+                elif isinstance(a, ast.JoinedStr):
+                    pattern = "".join(v.value if isinstance(v, ast.Constant) else "{}" for v in a.values)
+                    names = [k for k, _l in HOTKEY_LABELS] + ["lobby_notify", "lobby_remind", "notify_background_only",
+                                                              "show_map", "focus", "caption", "timer", "server",
+                                                              "waiting", "floors", "record", "transparent"]
+                    keys.update(pattern.format(k) for k in names)
+    return keys
+
+
+def test_every_mirrored_control_exists_in_the_tk_window():
+    pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
+    from dbdmapscout import qt_window
+    missing = qt_window.page_keys() - _registered_keys()
+    assert not missing, sorted(missing)
+    assert {"ov.caption", "st.dark", "st.hk.reject_map"} <= qt_window.page_keys()
+    assert qt_window.page_keys("overview") == set()
+
+
+def test_form_page_shows_tk_states_and_posts_clicks(qapp):
+    from dbdmapscout import qt_window
+    posted = queue.Queue()
+    page = qt_window.FormPage(lambda a, arg=None: posted.put((a, arg)), "Overlay", qt_window.SPECS["overlay"])
+    states = {"ov.pos": {"text": "Position"}, "ov.caption": {"text": "Map-Namen", "value": False, "enabled": True,
+                                                             "visible": True, "tip": "Tipp"},
+              "ov.anchor": {"value": "oben links", "values": ["automatisch", "oben links"], "enabled": True,
+                            "visible": True},
+              "ov.size": {"value": 36.0, "lo": 15.0, "hi": 90.0, "label": "Grösse", "text": "36 %", "visible": True},
+              "ov.map_size_reset": {"text": "Zurücksetzen", "visible": False, "enabled": True},
+              "ov.pos_hint": {"text": "", "visible": True}}
+    page.show_states(states)
+    kind, check, _x = page.controls["ov.caption"]
+    assert check.text() == "Map-Namen" and not check.isChecked() and check.toolTip() == "Tipp"
+    combo = page.controls["ov.anchor"][1]
+    assert combo.currentText() == "oben links" and combo.count() == 2
+    name, slider, value = page.controls["ov.size"][2]
+    assert (slider.minimum(), slider.maximum(), slider.value(), value.text()) == (15, 90, 36, "36 %")
+    assert page.controls["ov.map_size_reset"][1].isHidden() and page.controls["ov.pos_hint"][1].isHidden()
+    assert page.controls["ov.pos"][1].text() == "POSITION"
+    assert posted.empty()                                   # showing a state never sends anything back
+    check.click()
+    combo.activated.emit(0)
+    slider.setValue(50)
+    assert [posted.get_nowait() for _i in range(3)] == [("act", ("ov.caption", True)), ("act", ("ov.anchor", "automatisch")),
+                                                        ("act", ("ov.size", 50))]
+
+
+def test_maps_page_lists_by_realm_and_posts_the_pick(qapp):
+    from dbdmapscout import qt_window
+    posted = queue.Queue()
+    page = qt_window.MapsPage(lambda a, arg=None: posted.put((a, arg)))
+    items = [("MacMillan", "Coal Tower", "coal", 1), ("MacMillan", "Suffocation Pit", "pit", 1),
+             ("Autohaven", "Azarov's Resting Place", "azarov", 1)]
+    page.show_maps(items, ("pit", 1))
+    assert page.tree.topLevelItemCount() == 2 and page.tree.topLevelItem(0).childCount() == 2
+    assert page.tree.topLevelItem(0).child(1).font(0).bold()
+    page.search.setText("coal")
+    page._picked(page.tree.topLevelItem(0).child(0))
+    page._pick_first()
+    assert [posted.get_nowait() for _i in range(3)] == [("search", "coal"), ("show_map", ("coal", 1)),
+                                                        ("show_map", ("coal", 1))]

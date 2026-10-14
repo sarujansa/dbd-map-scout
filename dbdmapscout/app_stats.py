@@ -716,7 +716,7 @@ class StatsTab:
     def _joined(self):
         """_official_join() cached until rounds.jsonl / official.jsonl, the killer assignments or the catalog
         change (the Qt overview asks 4×/s; a full join of 5000 + 5000 lines takes ~100 ms)."""
-        key = [id(self.catalog), repr(sorted((self.settings.get("killer_aliases") or {}).items()))]
+        key = [repr(sorted((self.settings.get("killer_aliases") or {}).items()))]
         for p in (self._hist_path(), self._official_path()):
             try:
                 st = os.stat(p)
@@ -724,9 +724,9 @@ class StatsTab:
             except OSError:
                 key.append(None)
         cached = getattr(self, "_joined_cache", None)
-        if cached is None or cached[0] != key:
-            cached = self._joined_cache = (key, self._official_join())
-        return cached[1]
+        if cached is None or cached[0] != key or cached[1] is not self.catalog:    # rebuilt catalog: may reuse the id
+            cached = self._joined_cache = (key, self.catalog, self._official_join())
+        return cached[2]
 
     def _official_map_id(self, name):
         idx = getattr(self, "_off_index", None)
