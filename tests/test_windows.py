@@ -252,3 +252,24 @@ def test_single_key_hotkeys_only_while_dbd_is_in_front():
     t.stop()
     t.join(timeout=3)
     assert not t.is_alive()
+
+
+def test_system_values_window_can_be_dragged_in_edit_mode(root):
+    from dbdmapscout import overlay_win32 as ow
+    hud = ow.HudWindow()
+    rows = [[("CPU ", (210, 214, 224, 255)), ("62°C", (134, 239, 172, 255))]]
+    w, h = hud.render(rows, 1440)
+    hud.show_at(30, 30)
+    root.update()
+    ex = ow._GetLong(hud.hwnd(), ow.GWL_EXSTYLE)
+    assert ex & ow.WS_EX_TRANSPARENT                          # click-through while playing
+    hud.set_editing(True)
+    w2, h2 = hud.render(rows, 1440)
+    ex = ow._GetLong(hud.hwnd(), ow.GWL_EXSTYLE)
+    assert not ex & ow.WS_EX_TRANSPARENT and (w2, h2) == (w, h)   # draggable, same size (border drawn inside)
+    moved = []
+    hud.on_moved = lambda x, y: moved.append((x, y))
+    hud._wndproc(hud.hwnd(), ow.WM_EXITSIZEMOVE, 0, 0)
+    assert moved == [(30, 30)]
+    hud.set_editing(False)
+    hud.destroy()

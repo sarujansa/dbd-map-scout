@@ -356,7 +356,8 @@ def render_hud(rows, height: int) -> Image.Image:
 
 
 class HudWindow:
-    """Small click-through layered window for the system values at the top of a black bar."""
+    """Small click-through layered window for the system values at the top of a black bar. In edit mode (the
+    overlay's "Mit der Maus verschieben") it can be dragged like the map: ``on_moved(x, y)`` after the drop."""
 
     def __init__(self):
         ex = WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
@@ -373,16 +374,49 @@ class HudWindow:
         self._raised = 0.0
         self.opacity = 0.85
         self.last_error = ""
+        self.editing = False
+        self.on_moved = None
+        self._proc = WNDPROC(self._wndproc)                    # keep a reference!
+        self._old_proc = _SetLong(self._hwnd, GWLP_WNDPROC, ctypes.cast(self._proc, ctypes.c_void_p).value)
+
+    def _wndproc(self, hwnd, msg, wp, lp):
+        try:
+            if self.editing:
+                if msg == WM_NCHITTEST:
+                    return HTCAPTION                  # drag anywhere on it
+                if msg == WM_EXITSIZEMOVE:
+                    rc = wintypes.RECT()
+                    _u.GetWindowRect(self._hwnd, ctypes.byref(rc))
+                    self._pos = (rc.left, rc.top, round(self.opacity, 3))
+                    if self.on_moved:
+                        self.on_moved(rc.left, rc.top)
+        except Exception as e:  # never let an exception escape into Windows
+            self.last_error = repr(e)
+        return _u.CallWindowProcW(self._old_proc, hwnd, msg, wp, lp)
+
+    def set_editing(self, on: bool):
+        """Edit mode: clickable and draggable, with the yellow edit border."""
+        if bool(on) == self.editing:
+            return
+        self.editing = bool(on)
+        ex = _GetLong(self._hwnd, GWL_EXSTYLE)
+        ex = ex & ~(WS_EX_TRANSPARENT | WS_EX_NOACTIVATE) if on else ex | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE
+        _SetLong(self._hwnd, GWL_EXSTYLE, ex)
+        _u.SetWindowPos(self._hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED)
+        self._key = None                                  # re-render with/without border
 
     def render(self, rows, height: int):
         """Prepare the picture; returns its size (0, 0 without rows)."""
-        key = (tuple(tuple(r) for r in rows), int(height))
+        key = (tuple(tuple(r) for r in rows), int(height), self.editing)
         if key != self._key:
             self._key = key
             if not rows:
                 self._data, self.size = None, (0, 0)
             else:
                 pic = render_hud(rows, height)
+                if self.editing:
+                    pic = add_border(pic)
                 self._data, self.size = premultiplied_bgra(pic), pic.size
                 self._pos = None                      # push again
         return self.size

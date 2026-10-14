@@ -12,7 +12,9 @@ from .i18n import N_, _
 
 log = logging.getLogger("dbdmapscout")
 
-HUD_SIDES = [("off", N_("Aus")), ("left", N_("Links oben (über der Karte)")), ("right", N_("Rechts oben"))]
+HUD_SIDES = [("off", N_("Aus")), ("left", N_("Links oben (über der Karte)")), ("right", N_("Rechts oben")),
+             ("custom", N_("Eigene Position (mit der Maus verschieben)"))]
+HUD_SHOWN = ("left", "right", "custom")
 
 
 def make_hud():
@@ -32,21 +34,30 @@ class SysInfo:
         self.sysmon = sysinfo.SysMonitor()
         self.sysmon.start()
         self.hud = make_hud()
+        if self.hud is not None:
+            self.hud.on_moved = self._hud_dragged
         self._hud_reserved = None          # (side, height) taken at the top of a bar, for the map below
         self._sysrec = None                # readings of the open round (tab Statistik → System)
 
     def _hud_place(self, gx, gy, gw, gh, show: bool):
         """Show/hide the system values; returns (side, height) when they take the top of a bar."""
         side = self.settings.get("sysinfo", "off")
-        on = side in ("left", "right") and self.hud is not None
+        on = side in HUD_SHOWN and self.hud is not None
         self.sysmon.active = on and self.game is not None
         bar = layout.bar_width(gw, gh)
         snap = self.sysmon.snapshot
         if self._hist is not None and self._sysrec is not None and on and time.time() - snap.t < 3:
             self._sysrec.add(snap)
         rows = sysinfo.hud_rows(snap) if on else []
+        editing = on and side == "custom" and self.overlay.editing
+        if self.hud is not None:
+            self.hud.set_editing(editing)
+        if editing and not rows:
+            rows = [[(_("SYSTEMWERTE"), sysinfo.DIM)]]          # something to drag before the first reading
         vb = layout.vbars(self.worker.vbars, gw, gh, time.time())      # narrow window: bar above the picture
-        if not (on and show and rows and (bar >= layout.MIN_BAR or vb) and self.game is not None):
+        own = side == "custom" and not vb                   # own place: needs no black bar (over the game)
+        if not (on and (show or editing) and rows and (bar >= layout.MIN_BAR or vb or own)
+                and (self.game is not None or editing)):
             if self.hud is not None:
                 self.hud.hide()
             self.worker.hud_rect = None
@@ -59,10 +70,22 @@ class SysInfo:
         f = layout.fit_scale(w, h, avail_w, avail_h)
         if f < 1:                                           # narrow bar / low bar: smaller text
             w, h = self.hud.render(rows, max(200, int(gh * f)))
-        x, y = layout.hud_x(side, gx, gw, margin, w), gy + margin
+        if own:
+            fx, fy = self.settings.get("sysinfo_pos") or (1.0, 0.0)
+            x, y = gx + fx * max(0, gw - w), gy + fy * max(0, gh - h)
+        else:                                               # own place in the narrow window: the bar above
+            x, y = layout.hud_x("left" if side == "left" else "right", gx, gw, margin, w), gy + margin
         self.hud.show_at(int(x), int(y))
         self.worker.hud_rect = (int(x), int(y), w, h)
-        return None if vb else (side, h)        # in the bar above the picture nothing has to move below it
+        return None if vb or own else (side, h)   # only at the top of a side bar does the map move below it
+
+    def _hud_dragged(self, x, y):
+        """System values dropped somewhere: remember the place relative to the DBD window (like the map)."""
+        gx, gy, gw, gh = self._game_rect()
+        w, h = self.hud.size
+        self.settings.set("sysinfo_pos", [round(min(1.0, max(0.0, (x - gx) / max(1, gw - w))), 4),
+                                          round(min(1.0, max(0.0, (y - gy) / max(1, gh - h))), 4)])
+        self._save_soon()
 
     def _sysinfo_changed(self):
         key = dict((_(label), k) for k, label in HUD_SIDES).get(self.sysinfo_var.get(), "off")
