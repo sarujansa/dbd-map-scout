@@ -56,11 +56,13 @@ class Separator:
         return self.x1 - self.x0
 
 
-def find_separator(img: np.ndarray, frame_w: int, frame_h: int) -> Separator | None:
+def find_separator(img: np.ndarray, frame_w: int, frame_h: int, letterboxed: bool = False) -> Separator | None:
     """Find the banner's separator line inside ``img`` (the captured ROI).
 
     ``frame_w``/``frame_h`` are the size of the whole game frame, needed to
     judge the line length independent of the capture region.
+    ``letterboxed``: the picture has black bars above and below right now (a trial in a window narrower than
+    16:9) – only then the second, tolerant pass may run (in lobby/menus it found lines in the UI, 1.44.1).
     """
     if img is None or img.size == 0:
         return None
@@ -73,8 +75,8 @@ def find_separator(img: np.ndarray, frame_w: int, frame_h: int) -> Separator | N
     dn = np.zeros_like(g)
     dn[:-k] = g[k:]
     ridge = g - np.maximum(up, dn)
-    small_picture = min(frame_h, frame_w * 9 / 16) < SMALL_PICTURE_H
-    for ridge_min, bright_min in SEPARATOR_PASSES[:None if small_picture else 1]:
+    tolerant = letterboxed and min(frame_h, frame_w * 9 / 16) < SMALL_PICTURE_H
+    for ridge_min, bright_min in SEPARATOR_PASSES[:None if tolerant else 1]:
         sep = _separator_in(((ridge > ridge_min) & (g > bright_min)).astype(np.uint8), frame_w, frame_h, s)
         if sep is not None:
             return sep
@@ -361,9 +363,9 @@ class BannerReader:
         res.ms = (time.perf_counter() - t0) * 1000
         return res
 
-    def read(self, img: np.ndarray, frame_w: int, frame_h: int):
+    def read(self, img: np.ndarray, frame_w: int, frame_h: int, letterboxed: bool = False):
         """Full pipeline on one captured ROI. Returns (Separator|None, FrameResult|None)."""
-        sep = find_separator(img, frame_w, frame_h)
+        sep = find_separator(img, frame_w, frame_h, letterboxed)
         if sep is None:
             return None, None
         lines = locate_text(img, sep)
@@ -395,6 +397,10 @@ def _softmax(d: dict) -> dict:
     p = np.exp(v)
     p /= p.sum()
     return dict(zip(keys, p))
+
+
+MIN_NAME_CHARS = 3   # a frame whose name reads as (almost) nothing is no evidence: an empty read fitted "The Game"
+                     # at -8.1 (> fit_ok) on a line in the lobby (user diagnosis 1.45.0)
 
 
 @dataclass
@@ -460,8 +466,8 @@ class Accumulator:
             return None
         self.frames += 1
         self.last_texts = (fr.name_text, fr.realm_text)
-        if fr.name_fit < self.fit_ok:
-            return None                   # unreadable / unknown text: no evidence
+        if fr.name_fit < self.fit_ok or sum(c.isalnum() for c in fr.name_text) < MIN_NAME_CHARS:
+            return None                   # unreadable / unknown text: no evidence (nothing read fits short names)
         self.good_frames += 1
         if fr.best is not None:
             self.fits[fr.best[0]] = max(self.fits.get(fr.best[0], -1e9), fr.name_fit)

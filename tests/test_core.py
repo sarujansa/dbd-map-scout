@@ -85,10 +85,10 @@ def test_both_spellings_of_treatment_theatre():
 
 def test_accumulator_prefers_consistent_evidence():
     acc = Accumulator()
-    good = FrameResult(scores={("a", 1): -1.0, ("a", 2): -4.0, ("b", 1): -60.0}, best=("a", 1), name_fit=-0.5)
+    good = FrameResult(scores={("a", 1): -1.0, ("a", 2): -4.0, ("b", 1): -60.0}, best=("a", 1), name_text="MAP NAME", name_fit=-0.5)
     d = acc.add(good)
     assert d is not None and (d.map_id, d.variant) == ("a", 1)
-    bad = FrameResult(scores={("b", 1): -1.0}, best=("b", 1), name_fit=-30.0)   # unreadable -> ignored
+    bad = FrameResult(scores={("b", 1): -1.0}, best=("b", 1), name_text="MAP NAME", name_fit=-30.0)   # unreadable -> ignored
     assert acc.add(bad) is None
 
 
@@ -171,12 +171,12 @@ def test_settings_backup_round_trip(tmp_path):
 
 def test_doubtful_read_is_marked_and_cleared_by_a_clean_frame():
     acc = Accumulator()
-    meh = FrameResult(scores={("a", 1): -5.0, ("b", 1): -60.0}, best=("a", 1), name_fit=-5.0)
+    meh = FrameResult(scores={("a", 1): -5.0, ("b", 1): -60.0}, best=("a", 1), name_text="MAP NAME", name_fit=-5.0)
     assert acc.add(meh) is None                                   # one mediocre frame: not decided yet
     d = acc.add(meh)
     assert d is not None and d.map_id == "a" and d.unsure and d.name_fit == -5.0
     assert acc.add(meh) is None                                   # still doubtful: nothing new
-    clean = FrameResult(scores={("a", 1): -0.5, ("b", 1): -60.0}, best=("a", 1), name_fit=-0.2)
+    clean = FrameResult(scores={("a", 1): -0.5, ("b", 1): -60.0}, best=("a", 1), name_text="MAP NAME", name_fit=-0.2)
     d = acc.add(clean)
     assert d is not None and not d.unsure and d.name_fit == -0.2  # the banner read cleanly later on
     assert acc.add(clean) is None
@@ -187,11 +187,11 @@ def test_doubtful_read_is_marked_and_cleared_by_a_clean_frame():
 
 def test_mid_match_needs_a_clean_read_over_several_frames():
     # well into a round DBD shows no banner: neon strips or signs that look like one must not switch the map
-    meh = FrameResult(scores={("b", 1): -5.0, ("a", 1): -60.0}, best=("b", 1), name_fit=-5.0)
+    meh = FrameResult(scores={("b", 1): -5.0, ("a", 1): -60.0}, best=("b", 1), name_text="MAP NAME", name_fit=-5.0)
     acc = Accumulator()
     assert all(acc.add(meh, strict=True) is None for _ in range(10))   # doubtful: never, however often
     assert acc.decided is None and acc.best()[0] == "b"
-    clean = FrameResult(scores={("b", 1): -0.5, ("a", 1): -60.0}, best=("b", 1), name_fit=-0.2)
+    clean = FrameResult(scores={("b", 1): -0.5, ("a", 1): -60.0}, best=("b", 1), name_text="MAP NAME", name_fit=-0.2)
     acc = Accumulator()
     assert acc.add(clean, strict=True) is None                         # no single-frame decision
     assert acc.add(clean, strict=True) is None and acc.add(clean, strict=True) is None
