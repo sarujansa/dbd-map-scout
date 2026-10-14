@@ -45,22 +45,24 @@ class SysInfo:
         if self._hist is not None and self._sysrec is not None and on and time.time() - snap.t < 3:
             self._sysrec.add(snap)
         rows = sysinfo.hud_rows(snap) if on else []
-        if not (on and show and rows and bar >= layout.MIN_BAR and self.game is not None):
+        vb = layout.vbars(self.worker.vbars, gw, gh, time.time())      # narrow window: bar above the picture
+        if not (on and show and rows and (bar >= layout.MIN_BAR or vb) and self.game is not None):
             if self.hud is not None:
                 self.hud.hide()
             self.worker.hud_rect = None
             return None
         o = self.settings["overlay"]
         margin = int(gh * o["margin"])
-        avail = layout.max_width(bar, margin)
+        avail_w, avail_h = (gw / 2 - 2 * margin, vb[0] - 2 * margin) if vb else (layout.max_width(bar, margin), gh)
         self.hud.opacity = o["opacity"]
         w, h = self.hud.render(rows, gh)
-        if w > avail:                                       # narrow bar: smaller text
-            w, h = self.hud.render(rows, max(200, int(gh * avail / w)))
+        f = layout.fit_scale(w, h, avail_w, avail_h)
+        if f < 1:                                           # narrow bar / low bar: smaller text
+            w, h = self.hud.render(rows, max(200, int(gh * f)))
         x, y = layout.hud_x(side, gx, gw, margin, w), gy + margin
         self.hud.show_at(int(x), int(y))
         self.worker.hud_rect = (int(x), int(y), w, h)
-        return side, h
+        return None if vb else (side, h)        # in the bar above the picture nothing has to move below it
 
     def _sysinfo_changed(self):
         key = dict((_(label), k) for k, label in HUD_SIDES).get(self.sysinfo_var.get(), "off")
