@@ -12,7 +12,7 @@ import webbrowser
 from tkinter import messagebox, ttk
 from types import SimpleNamespace
 
-from . import history, official, regions
+from . import history, official, regions, sysinfo
 from .capture import foreground_root, is_game_window
 from .i18n import N_, _
 from .lobby import KILLERS, killer_label
@@ -27,6 +27,11 @@ STATS_ROLES = [("all", N_("Alle Rollen")), ("killer", N_("Killer")), ("survivor"
 STATS_WAIT_GROUPS = [("weekday", N_("nach Wochentag")), ("hour", N_("nach Uhrzeit")), ("region", N_("nach Region"))]
 WEEKDAYS = [N_("Montag"), N_("Dienstag"), N_("Mittwoch"), N_("Donnerstag"), N_("Freitag"), N_("Samstag"),
             N_("Sonntag")]
+STATS_SYS_GROUPS = [("map", N_("nach Map")), ("hour", N_("nach Uhrzeit")), ("weekday", N_("nach Wochentag")),
+                    ("killer", N_("nach Killer"))]
+SYS_PEAK_LABELS = {"gpu_temp_max": N_("GPU {v} °C"), "cpu_temp_max": N_("CPU {v} °C"),
+                   "gpu_power_max": N_("GPU {v} W"), "vram_used_max": N_("VRAM {v} GB"),
+                   "ram_used_max": N_("RAM {v} GB")}
 RESULTS = {"escaped": N_("entkommen"), "dead": N_("tot"), "abandoned": N_("aufgegeben"), "gone": N_("verlassen")}
 
 
@@ -121,6 +126,26 @@ class StatsTab:
                                 ttk.Style().lookup("TFrame", "background") or "#1e1f22")
         ttk.Label(box_v, text=_("Nur Runden, die einem Match auf der Stats-Seite zugeordnet sind. Die Maus über einer "
                                 "Säule zeigt Wert und Anzahl der Runden."),
+                  style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
+        box_s = self._stats_page(_("System"))
+        sr = ttk.Frame(box_s)
+        sr.pack(fill="x", pady=(0, 4))
+        self.stats_sys_var = tk.StringVar(value="")
+        ttk.Label(sr, textvariable=self.stats_sys_var, wraplength=400).pack(side="left", anchor="w")
+        self._stats_sys_groups = [(k, _(label)) for k, label in STATS_SYS_GROUPS]
+        self.stats_sys_by_var = tk.StringVar(value=self._stats_sys_groups[0][1])
+        cb = ttk.Combobox(sr, textvariable=self.stats_sys_by_var, values=[lbl for _k, lbl in self._stats_sys_groups],
+                          state="readonly", width=16)
+        cb.pack(side="right", anchor="n")
+        cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
+        self.stats_sys = self._stats_tree(box_s, (("grp", _("Wann/Wo"), 150, "w"), ("n", _("Runden"), 55, "e"),
+                                                  ("gpu", _("GPU Ø °C"), 70, "e"), ("gpumax", _("GPU max"), 65, "e"),
+                                                  ("cpu", _("CPU Ø °C"), 70, "e"), ("cpumax", _("CPU max"), 65, "e"),
+                                                  ("load", _("GPU Ø Last"), 75, "e"), ("pwr", _("Ø Watt"), 60, "e"),
+                                                  ("vram", _("VRAM max"), 75, "e")), 7)
+        ttk.Label(box_s, text=_("Werte der Systemwerte-Anzeige (Tab Overlay) während der Runden – nur Runden, in denen "
+                                "sie eingeschaltet war. CPU-Temperatur nur mit HWiNFO. „Wann/Wo“ zeigt, auf welchen "
+                                "Maps oder zu welcher Tageszeit der PC am heißesten läuft."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         box_r = self._stats_page(_("Serverregionen"))
         self.stats_regs = self._stats_tree(box_r, (("reg", _("Region"), 190, "w"), ("n", _("Runden"), 65, "e"),
@@ -356,6 +381,7 @@ class StatsTab:
             t.selection_set(keep[0])
         self._stats_alias_buttons()
         self._trend_render(pairs, {"day": "hour", "week": "day", "month": "day"}.get(period, "week"))
+        self._stats_sys_render(rounds)
         t = self.stats_regs
         t.delete(*t.get_children())
         pings = history.ping_by_region(rounds)
@@ -395,6 +421,46 @@ class StatsTab:
         if keep and t.exists(keep[0]):
             t.selection_set(keep[0])
         self._stats_role_buttons()
+
+    def _stats_sys_render(self, rounds):
+        """Sub-tab System: averages, highest values (when and where) and the table by map/time/killer."""
+        avg = history.sys_average(rounds)
+        if not avg["n"]:
+            self.stats_sys_var.set(_("Noch keine Systemwerte in dieser Auswahl (Tab Overlay → Systemwerte "
+                                     "einschalten)."))
+        else:
+            parts = [_("Ø über {n} Runden:", n=avg["n"])]
+            for key, fmt in (("gpu_temp", N_("GPU {v} °C")), ("cpu_temp", N_("CPU {v} °C")),
+                             ("gpu_load", N_("GPU-Last {v} %")), ("gpu_power", N_("GPU {v} W"))):
+                if key in avg:
+                    parts.append(_(fmt, v=f"{avg[key]:.0f}"))
+            lines = [" ".join(parts[:1]) + " " + " · ".join(parts[1:])]
+            peaks = [_("{value} am {when} ({map})", value=_(SYS_PEAK_LABELS[key], v=f"{v:.1f}" if "_used" in key
+                                                             else f"{v:.0f}"),
+                       when=time.strftime("%d.%m. %H:%M", time.localtime(r.t)), map=r.map)
+                     for key, v, r in history.sys_peaks(rounds)]
+            if peaks:
+                lines.append(_("Höchstwerte:") + "\n  " + "\n  ".join(peaks))
+            self.stats_sys_var.set("\n".join(lines))
+        by = next((k for k, lbl in self._stats_sys_groups if lbl == self.stats_sys_by_var.get()), "map")
+        t = self.stats_sys
+        t.delete(*t.get_children())
+
+        def num(vals, key, unit=""):
+            return f"{vals[key]:.0f}{unit}" if key in vals else "–"
+        for key, n, vals in history.sys_by(rounds, by):
+            if by == "weekday":
+                label = _(WEEKDAYS[key])
+            elif by == "hour":
+                label = f"{key:02d}–{key + history.HOUR_BLOCK:02d} " + _("Uhr")
+            elif by == "killer":
+                label = killer_label(key)
+            else:
+                label = key
+            t.insert("", "end", values=(label, n, num(vals, "gpu_temp"), num(vals, "gpu_temp_max"),
+                                        num(vals, "cpu_temp"), num(vals, "cpu_temp_max"),
+                                        num(vals, "gpu_load", " %"), num(vals, "gpu_power"),
+                                        f"{vals['vram_used_max']:.1f} GB" if "vram_used_max" in vals else "–"))
 
     def _stats_role_buttons(self):
         sel = self.stats_last.selection()
@@ -511,6 +577,7 @@ class StatsTab:
             try:                                     # its end was never detected: note it, do not count it
                 history.append_lost(self._hist_path(), old["t"], old["map"], "banner",
                                     ping=history.median(old.get("pings", [])),
+                                    sys=self._sysrec.summary() if self._sysrec else None,
                                     **{k: v for k, v in old.items() if k in history.LOST_KEYS})
                 self._log(_("Runde auf {map} nicht gezählt: ihr Ende wurde nicht erkannt.", map=old["map"]),
                           "Erkennung")
@@ -518,6 +585,7 @@ class StatsTab:
                 pass
         self._hist = {"t": now, "map_id": map_id, "map": m.label(variant) if m else map_id,
                       "region": "", "source": source}
+        self._sysrec = sysinfo.SysRecorder()          # system values during this round
         f = self._queue.get("found")                  # the lobby this match came from (once, max. 15 min old)
         if f is not None and 0 <= now - f.t <= 900:
             self._hist.update(wait=f.wait, role=f.role or "", custom=f.custom, killer=f.killer)
@@ -525,8 +593,11 @@ class StatsTab:
 
     def _hist_close(self, t, role=None):
         rec, self._hist = self._hist, None
+        sysrec, self._sysrec = self._sysrec, None
         if rec is None:
             return
+        if sysrec is not None and sysrec.summary():
+            rec["sys"] = sysrec.summary()
         if role in history.ROLES:
             rec["role"] = role                        # the result screen is the surest source
         ping = history.median(rec.pop("pings", []))

@@ -990,4 +990,31 @@ EN = {
     "CPU-Temperatur nur mit HWiNFO („Shared Memory Support“ an) – das Programm lädt keinen eigenen Treiber.":
         "At the top of the black bar while a map is shown in a match. GPU values from NVIDIA cards (driver), CPU "
         "temperature only with HWiNFO (\"Shared Memory Support\" on) – the program loads no driver of its own.",
+    # statistics: system values (app_stats)
+    "System": "System",
+    "nach Map": "by map",
+    "nach Killer": "by killer",
+    "GPU Ø °C": "GPU avg °C",
+    "GPU max": "GPU max",
+    "CPU Ø °C": "CPU avg °C",
+    "CPU max": "CPU max",
+    "GPU Ø Last": "GPU avg load",
+    "Ø Watt": "Avg watts",
+    "VRAM max": "VRAM max",
+    "GPU {v} °C": "GPU {v} °C",
+    "CPU {v} °C": "CPU {v} °C",
+    "GPU {v} W": "GPU {v} W",
+    "VRAM {v} GB": "VRAM {v} GB",
+    "RAM {v} GB": "RAM {v} GB",
+    "GPU-Last {v} %": "GPU load {v} %",
+    "Höchstwerte:": "Highest values:",
+    "{value} am {when} ({map})": "{value} on {when} ({map})",
+    "Ø über {n} Runden:": "Average over {n} rounds:",
+    "Noch keine Systemwerte in dieser Auswahl (Tab Overlay → Systemwerte einschalten).":
+        "No system values in this selection yet (Overlay tab → switch on system values).",
+    "Werte der Systemwerte-Anzeige (Tab Overlay) während der Runden – nur Runden, in denen sie eingeschaltet war. "
+    "CPU-Temperatur nur mit HWiNFO. „Wann/Wo“ zeigt, auf welchen Maps oder zu welcher Tageszeit der PC am heißesten "
+    "läuft.":
+        "Values of the system values display (Overlay tab) during the rounds – only rounds in which it was on. CPU "
+        "temperature only with HWiNFO. \"When/Where\" shows on which maps or at what time of day the PC runs hottest.",
 }

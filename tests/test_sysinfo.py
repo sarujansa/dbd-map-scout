@@ -70,3 +70,40 @@ def test_hud_fits_the_bar_and_map_moves_below():
     assert layout.below_hud("left", "auto") and layout.below_hud("left", "top-left")
     assert not layout.below_hud("right", "auto") and layout.below_hud("right", "top-right")
     assert not layout.below_hud(None, "auto") and not layout.below_hud("left", "bottom-left")
+
+
+def test_recorder_averages_and_maxima_per_round():
+    from dbdmapscout.sysinfo import MIN_SAMPLES, Snapshot, SysRecorder
+    rec = SysRecorder()
+    for i in range(MIN_SAMPLES):
+        snap = Snapshot(t=100 + i, gpu_temp=70 + i, gpu_load=90, cpu_temp=None if i else 60)
+        rec.add(snap)
+        rec.add(snap)                                       # the UI ticks faster than the readings: counted once
+    s = rec.summary()
+    assert s["gpu_temp"] == round(70 + (MIN_SAMPLES - 1) / 2, 1) and s["gpu_temp_max"] == 70 + MIN_SAMPLES - 1
+    assert s["gpu_load"] == 90 and "cpu_temp" not in s       # one CPU reading is not enough
+    assert SysRecorder().summary() is None
+
+
+def test_round_keeps_system_values_and_stats(tmp_path):
+    from dbdmapscout import history
+    path = str(tmp_path / "rounds.jsonl")
+    hot = {"gpu_temp": 78.0, "gpu_temp_max": 84.0, "cpu_temp": 66.0, "cpu_temp_max": 91.0, "gpu_power_max": 240.0}
+    cool = {"gpu_temp": 62.0, "gpu_temp_max": 70.0, "gpu_load": 80.0}
+    history.append(path, history.Round(t=1_700_000_000, seconds=600, map_id="a", map="Coal Tower", sys=hot,
+                                       role="killer", killer="The Nurse"))
+    history.append(path, history.Round(t=1_700_003_600, seconds=600, map_id="b", map="Badham", sys=cool))
+    history.append(path, history.Round(t=1_700_007_200, seconds=600, map_id="b", map="Badham"))
+    history.append_lost(path, 1_700_010_000, "Badham", "banner", sys={"gpu_temp": 1.0, "bad": "x"})
+    rounds = history.load(path)
+    assert rounds[0].sys == hot and rounds[2].sys is None
+    assert history.load_lost_rounds(path)[0].sys == {"gpu_temp": 1.0}
+    by_map = history.sys_by(rounds, "map")
+    assert [(k, n) for k, n, _v in by_map] == [("Coal Tower", 1), ("Badham", 1)]       # hottest first
+    assert history.sys_by(rounds, "killer") == [("The Nurse", 1, {k: v for k, v in hot.items()
+                                                                  if k in history.SYS_COLUMNS})]
+    peaks = {k: (v, r.map) for k, v, r in history.sys_peaks(rounds)}
+    assert peaks["gpu_temp_max"] == (84.0, "Coal Tower") and peaks["cpu_temp_max"] == (91.0, "Coal Tower")
+    avg = history.sys_average(rounds)
+    assert avg["n"] == 2 and avg["gpu_temp"] == 70.0 and avg["cpu_temp"] == 66.0
+    assert len(history.sys_by(rounds, "hour")) >= 1
