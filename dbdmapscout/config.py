@@ -54,6 +54,7 @@ DEFAULTS = {
     },
     "ui_language": "auto",            # auto (Windows language) | de | en
     "dark_mode": True,
+    "ui_zoom": 1.0,                     # control window: font size factor (uiscale.ZOOMS)
     "window_geometry": "",
     "log_categories": ["Erkennung", "Overlay", "System", "Fehler"],
     "ocr_threads": 2,

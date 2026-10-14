@@ -15,7 +15,7 @@ from tkinter import messagebox, ttk
 
 from PIL import Image, ImageTk
 
-from . import __version__, i18n, layout, mapimage, regions, theme, tooltip
+from . import __version__, i18n, layout, mapimage, regions, theme, tooltip, uiscale
 from .capture import IS_WIN, describe_window, find_game_window, foreground_root, is_game_window
 from .catalog import Catalog
 from .config import Settings
@@ -261,11 +261,21 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
         tooltip.attach_all(self.root, self._tip_lookup)
         for seq in ("<MouseWheel>", "<Button-4>", "<Button-5>"):     # Windows / Linux
             self.root.bind_all(seq, self._on_wheel, add="+")
-        # pages scroll vertically only: never narrower than the widest page (and the tab row)
+        # the window follows its size (1.48): hints wrap at the width there is, table columns stretch
+        self._autowrap = uiscale.AutoWrap(self.root)
+        tables = uiscale.stretch_tables(self.root)
+        # pages scroll vertically only: never narrower than the widest page (and the tab row) – measured
+        # with the hints at their narrowest wrap and the columns at their narrowest width
+        self._autowrap.narrow()
+        for tree, col, _width, minimum in tables:
+            tree.column(col, width=minimum)
         self.root.update_idletasks()
         widest = max([p["inner"].winfo_reqwidth() for p in self._pages] + [self.nb.winfo_reqwidth() - 20]
                      + [p.winfo_reqwidth() for p in getattr(self, "_fixed_pages", [])])
         self.root.minsize(max(470, widest + 40), 420)
+        for tree, col, width, _minimum in tables:
+            tree.column(col, width=width)
+        self._autowrap.soon()
 
     def _info_relayout(self):
         for _var, lbl in self._info_lines:
@@ -1708,6 +1718,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
         tooltip.Tooltip.colours = (("#2b2d31", "#e3e5e8", "#50535a") if dark else
                                    ("#ffffe1", "#1b1b1b", "#8a8a8a"))
         theme.apply(self.root, dark, text_widgets=(self.log_text,))
+        uiscale.apply_zoom(self.root, float(self.settings.get("ui_zoom", 1.0)))      # after the theme's fonts
         page_bg = theme.DARK["bg"] if dark else (ttk.Style(self.root).lookup("TFrame", "background")
                                                  or self.root.cget("background"))
         for page in getattr(self, "_pages", []):
@@ -1776,6 +1787,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo):
         self._render_log()
 
     def _tab_changed(self):
+        if getattr(self, "_autowrap", None):
+            self._autowrap.soon()                # labels of a tab shown for the first time
         if self.nb.select() == str(self.tab_stats):
             self._stats_render()
         if self.nb.select() == str(self.tab_detect):

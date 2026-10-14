@@ -1039,4 +1039,7 @@ EN = {
         "from NVIDIA cards (driver), CPU temperature only with HWiNFO (\"Shared Memory Support\" on) – the program "
         "loads no driver of its own.",
     "Direkt über der Karte (wandert mit)": "Right above the map (moves with it)",
+    "Schriftgröße": "Font size",
+    "Spaltenbreiten und kleinste Fenstergröße passen sich beim nächsten Start an.":
+        "Column widths and the smallest window size follow at the next start.",
 }
