@@ -105,6 +105,11 @@ class SettingsTab:
                                                  values=[lbl for _k, lbl in self._themes]))
         tcb.pack(side="left", padx=8)
         tcb.bind("<<ComboboxSelected>>", lambda e: self._theme_changed())
+        self.swatches = self._reg("st.swatches", ui.Swatches(look, command=self._swatch_picked,
+                                                             values=[(c, c) for c in qt_theme.SWATCHES]))
+        self.swatches.pack(anchor="w", pady=(4, 0))
+        self.swatches.dark = bool(self.settings.get("dark_mode", True))
+        self._swatch_mark()
         self.oled_var = ui.BooleanVar(value=bool(self.settings.get("oled_black", False)))
         self._reg("st.oled", ui.Checkbutton(look, text=_("OLED-Schwarz (echtes Schwarz statt Grau im Dark Mode)"),
                                             variable=self.oled_var, command=self._theme_changed)
@@ -257,7 +262,22 @@ class SettingsTab:
         self.settings.set("color_theme", key)
         self.settings.set("oled_black", bool(self.oled_var.get()))
         self._save_soon()
+        self._swatch_mark()
         self._apply_theme()
+
+    def _swatch_picked(self, colour):
+        """A square of the palette or "Eigene Farbe …": this colour as own accent (theme "custom", 1.63)."""
+        colour = qt_theme.norm_hex(colour)
+        if colour is None:
+            return
+        self.settings.set("accent_custom", colour)
+        self.theme_var.set(dict(self._themes)["custom"])
+        self._theme_changed()
+
+    def _swatch_mark(self):
+        """The ring on the palette: the own colour while the theme is "custom", else none."""
+        on = self.settings.get("color_theme", "gold") == "custom"
+        self.swatches.current = qt_theme.norm_hex(self.settings.get("accent_custom")) if on else None
 
     def _card_order_reset(self):
         """The cards of all pages back in their built-in order."""

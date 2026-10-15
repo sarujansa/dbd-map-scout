@@ -1527,6 +1527,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         from .theme import LOG_COLORS
         dark = bool(self.dark_var.get()) if hasattr(self, "dark_var") else bool(self.settings.get("dark_mode", True))
         colors = LOG_COLORS[dark]
+        if hasattr(self, "swatches"):
+            self.swatches.dark = dark
         for tag, key in (("p_good", "Erkennung"), ("p_bad", "Fehler"), ("p_na", "ts")):
             self.srv_tree.tag_configure(tag, foreground=colors[key])
         self.srv_tree.tag_configure("p_mid", foreground="#d29922" if dark else "#9a6700")
