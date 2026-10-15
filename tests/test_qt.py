@@ -328,6 +328,42 @@ def test_filling_tabs_take_the_page_and_tick_boxes_show(qapp, keep):
     assert regions.columnWidth(1) >= 78                       # the model's width: room for "31 ms"
 
 
+def test_cards_can_be_put_in_own_order(qapp, keep):
+    """Drag a card at its grip: the others make room, the new order is posted and comes back after a restart;
+    an order that does not fit (other version) shows the built-in one."""
+    from PySide6.QtCore import Qt
+    from dbdmapscout import qt_window
+    posted = queue.Queue()
+    spec = (("card", "a", (("hint", "a.t"),)), ("card", "b", (("hint", "b.t"),)), ("card", "c", (("hint", "c.t"),)),
+            ("row", (("button", "more"), ("stretch",))), ("card", "d", (("hint", "d.t"),)))
+    page = keep(qt_window.FormPage(lambda a, arg=None: posted.put((a, arg)), "Einstellungen", spec, "settings"))
+    page.resize(700, 900)
+    page.show()
+    qapp.processEvents()
+    first, second = page.columns                              # the "more" button splits the cards
+    assert first.ids() == ["a", "b", "c"] and second.ids() == ["d"]
+    card_c = dict(first.cards)["c"]
+    grip = card_c.findChild(qt_window.Grip)
+    assert grip is not None
+    from PySide6.QtCore import QPoint
+    from PySide6.QtTest import QTest
+    top = dict(first.cards)["a"]
+    QTest.mousePress(grip, Qt.LeftButton, Qt.NoModifier, QPoint(8, 9))     # the mouse at the grip
+    assert card_c.property("dragging") is True
+    target = grip.mapFromGlobal(first.mapToGlobal(top.geometry().topLeft()))
+    QTest.mouseMove(grip, target)                                          # up to the top
+    QTest.mouseRelease(grip, Qt.LeftButton, Qt.NoModifier, target)
+    assert first.ids() == ["c", "a", "b"] and card_c.property("dragging") is False
+    assert posted.get_nowait() == ("card_order", ("settings", 0, ["c", "a", "b"]))
+    first.begin(card_c)
+    first.end()                                                # picked up and put down: nothing to save
+    assert posted.empty()
+    page.apply_order({"0": ["b", "c", "a"]})
+    assert first.ids() == ["b", "c", "a"]
+    page.apply_order({"0": ["b", "x", "a"]})                   # unknown card: built-in order
+    assert first.ids() == ["a", "b", "c"]
+
+
 def test_chart_draws_columns_and_a_line(qapp, keep):
     from dbdmapscout import qt_window
     chart = keep(qt_window.Chart())

@@ -1061,4 +1061,11 @@ EN = {
     'Blendet die gewählte Map jetzt als Overlay ein – die Erkennung übernimmt beim nächsten Match wieder.':
         'Shows the selected map in the overlay now – detection takes over again at the next match.',
     'Links eine Map wählen – hier erscheint ihre Karte.': 'Pick a map on the left – its picture appears here.',
+    # 1.59: own order of the cards
+    'Ziehen, um den Kasten zu verschieben': 'Drag to move this box',
+    'Anordnung zurücksetzen': 'Reset arrangement',
+    'Die Kästen der Seiten lassen sich am Griff rechts im Titel verschieben.':
+        'The boxes of the pages can be moved by the handle at the right of their title.',
+    'Stellt die Kästen auf allen Seiten wieder in die ursprüngliche Reihenfolge.':
+        'Puts the boxes of all pages back in their original order.',
 }

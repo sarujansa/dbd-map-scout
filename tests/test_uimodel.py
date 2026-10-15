@@ -271,8 +271,14 @@ def test_the_program_starts_shows_every_page_and_quits(app_root):
             app._qt_post("assign")                            # dialog "Map zuordnen"
             app._qt_post("add_picture")                       # dialog "Kartenbild hinzufügen"
             app._qt_post("act", ("ov.caption", False))        # a click on the overlay page
+            settings = app.qt.forms["settings"].columns[0]
+            app._qt_post("card_order", ("settings", 0, list(reversed(settings.ids()))))   # a card dragged
         elif i == len(keys) + 1:
             assert len(app.qt.dialogs) == 2
+            order = app.settings["card_order"]["settings"]["0"]
+            assert order[0] == "st.updates"
+            app._card_order_reset()                            # "Anordnung zurücksetzen"
+            assert app.settings["card_order"] == {} and app.qt.forms["settings"].columns[0].ids()[0] == "st.look"
             for key in list(app.qt.dialogs):
                 app._qt_post("dlg_close", key)
             assert app.settings["overlay"]["show_caption"] is False
