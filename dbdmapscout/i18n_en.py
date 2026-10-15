@@ -409,7 +409,6 @@ EN = {
     "Entfernt alle eigenen Killer-Zuordnungen; die Namen erscheinen wieder so, wie sie gelesen wurden.":
         "Removes all own killer assignments; the names show up again as they were read.",
     "Zuordnen": "Assign",
-    "Verstanden": "Got it",
     "Warte auf Map": "Waiting for map",
     "Solange DBD läuft und keine Karte eingeblendet ist, zeigt das Overlay eine kleine Karte: „Warte auf Map“, "
     "darunter Suche/Lobby (z. B. „Suche läuft: 02:13 · Nurse“) oder die letzte Runde. Gilt nicht, wenn du die "
@@ -417,11 +416,6 @@ EN = {
         "While DBD runs and no map is shown, the overlay shows a small card: \"Waiting for map\", below it the "
         "search/lobby (e.g. \"Searching: 02:13 · Nurse\") or the last round. Not when you hid the map yourself.",
     "Ohne Karte: „Warte auf Map“ und Lobby-Status anzeigen": "Without a map: show \"Waiting for map\" and the lobby state",
-    "Hinweis schliessen – er erscheint nicht wieder.": "Close the hint – it will not come back.",
-    "So geht's: DBD starten und spielen – die Karte erscheint beim Match-Start von selbst und verschwindet nach der "
-    "Runde. Hotkeys: {toggle} ein/aus, {rotate} drehen, {edit} verschieben (ändern unter Einstellungen).":
-        "How it works: start DBD and play – the map appears by itself when the match starts and disappears after "
-        "the round. Hotkeys: {toggle} on/off, {rotate} rotate, {edit} move (change them under Settings).",
     "Killer der markierten Runde:": "Killer of the selected round:",
     "Killer setzen": "Set killer",
     "Killer konnte nicht gespeichert werden: {error}": "Could not save the killer: {error}",
@@ -981,28 +975,14 @@ EN = {
     "CPU max": "CPU max",
     "GPU Ø Last": "GPU avg. load",
     "Ø Watt": "Avg. watts",
-    "GPU {v} °C": "GPU {v} °C",
-    "CPU {v} °C": "CPU {v} °C",
-    "GPU {v} W": "GPU {v} W",
-    "VRAM {v} GB": "VRAM {v} GB",
-    "RAM {v} GB": "RAM {v} GB",
-    "GPU-Last {v} %": "GPU load {v} %",
-    "Höchstwerte:": "Highest values:",
-    "{value} am {when} ({map})": "{value} on {when} ({map})",
-    "Ø über {n} Runden:": "Average over {n} rounds:",
     "Noch keine Systemwerte in dieser Auswahl (Tab Overlay → Systemwerte einschalten).":
         "No system values in this selection yet (Overlay tab → switch on system values).",
     # system values: throttling, hot spot, temperature trend
     "GPU DROSSELT (TEMP.)": "GPU THROTTLED (TEMP.)",
     "GPU DROSSELT (HW)": "GPU THROTTLED (HW)",
-    "GPU-Speicher {v} °C": "GPU memory {v} °C",
-    "Hotspot {v} °C": "Hot spot {v} °C",
     "Hotspot max {v} °C": "hot spot max {v} °C",
     "Hotspot max": "Hot spot max",
     "Gedrosselt": "Throttled",
-    "gedrosselt {v}": "throttled {v}",
-    "⚠ GPU gedrosselt in {n} von {total} Runden, zusammen {time}.":
-        "⚠ GPU throttled in {n} of {total} rounds, {time} in total.",
     "GPU-Temperatur – Ø {per}": "GPU temperature – average {per}",
     "Noch keine GPU-Temperaturen in dieser Auswahl.": "No GPU temperatures in this selection yet.",
     "{when}: Ø {avg} °C · max {max} °C · {n} Runden": "{when}: avg. {avg} °C · max {max} °C · {n} rounds",
@@ -1068,4 +1048,46 @@ EN = {
         'The boxes of the pages can be moved by the handle at the right of their title.',
     'Stellt die Kästen auf allen Seiten wieder in die ursprüngliche Reihenfolge.':
         'Puts the boxes of all pages back in their original order.',
+    # 1.60: setup assistant, search over the settings
+    'Das Programm liest beim Match-Start den Map-Namen aus dem Bild. Hake die Sprache an, in der du Dead by Daylight spielst (mehrere gehen).':
+        'The program reads the map name from the picture when a match starts. Tick the language you play Dead by Daylight in (several are fine).',
+    'Die Karte erscheint beim Match-Start von selbst und verschwindet nach der Runde. „automatisch“ legt sie in den schwarzen Rand neben dem Spielbild (Ultrawide) bzw. neben das DBD-Fenster.':
+        'The map appears by itself when a match starts and goes away after the round. "automatic" puts it into the black border next to the game picture (ultrawide) or next to the DBD window.',
+    'Die wichtigsten Tasten – zum Ändern draufklicken und die neue Kombination drücken. Alle Tasten findest du später unter Einstellungen.':
+        'The most important keys – click one to change it, then press the new combination. All keys are under Settings later.',
+    '„Overlay testen“ zeigt die Karte sofort, „Mit der Maus verschieben“ lässt sie dich hinziehen.':
+        '"Test overlay" shows the map right away, "Move with the mouse" lets you drag it into place.',
+    'Einrichtung starten': 'Start setup',
+    'Öffnet noch einmal die Einrichtung vom ersten Start: Spielsprache, Overlay-Position und die wichtigsten Tasten.':
+        'Opens the setup of the first start again: game language, overlay position and the most important keys.',
+    'Einstellung suchen (Strg+F)': 'Search settings (Ctrl+F)',
+    'Einstellung suchen …': 'Search settings …',
+    'Schritt {n} von {total}': 'Step {n} of {total}',
+    'Sprache': 'Language',
+    'Sprache dieses Programms:': 'Language of this program:',
+    'Tasten und Start': 'Keys and start',
+    'Weiter': 'Next',
+    'Zurück': 'Back',
+    'Überspringen': 'Skip',
+    # 1.60: setup title, System sub-tab
+    'Einrichtung: {step}': 'Setup: {step}',
+    'Aufgeteilt': 'Broken down',
+    'CPU-Temperatur': 'CPU temperature',
+    'GPU gedrosselt': 'GPU throttled',
+    'GPU-Leistung': 'GPU power',
+    'GPU-Speicher': 'GPU memory',
+    'GPU-Temperatur': 'GPU temperature',
+    'Hotspot': 'Hot spot',
+    'Höchstwert': 'Highest',
+    'Höchstwerte': 'Highest values',
+    'RAM': 'RAM',
+    'Runden, zusammen {time}': 'rounds, {time} in all',
+    'VRAM': 'VRAM',
+    'Wert': 'Value',
+    '{n} von {total}': '{n} of {total}',
+    'Ø CPU-Temperatur': 'Avg. CPU temperature',
+    'Ø GPU-Last': 'Avg. GPU load',
+    'Ø GPU-Leistung': 'Avg. GPU power',
+    'Ø GPU-Temperatur': 'Avg. GPU temperature',
+    'über {n} Runden': 'over {n} rounds',
 }

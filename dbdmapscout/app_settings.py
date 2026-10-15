@@ -73,6 +73,9 @@ class SettingsTab:
         self.autostart_info = ui.StringVar(value="")
         self._reg("st.autostart_info", ui.Label(st, textvariable=self.autostart_info, style="Dim.TLabel",
                                                  wraplength=400)).pack(anchor="w", padx=(22, 0))
+        self._reg("st.setup_again", ui.Button(st, text=_("Einrichtung starten"),
+                                               command=lambda: self.qt is not None and self.qt.show_setup(True))
+                  ).pack(anchor="w", pady=(6, 0))
 
         look = self._reg("st.look", ui.LabelFrame(f, text=_("Sprache und Darstellung"), padding=8))
         look.pack(fill="x", pady=(8, 0))

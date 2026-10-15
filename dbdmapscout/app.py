@@ -320,7 +320,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         for i, (code, label) in enumerate(LANGS):
             v = ui.BooleanVar(value=code in self.settings["languages"])
             self.lang_vars[code] = v
-            ui.Checkbutton(grid, text=label, variable=v, command=self._langs_changed).grid(
+            self._reg(f"det.lang.{code}", ui.Checkbutton(grid, text=label, variable=v, command=self._langs_changed)).grid(
                 row=i // 5, column=i % 5, sticky="w", padx=(0, 12), pady=1)
 
         chk = ui.LabelFrame(f, text=_("Abgleich mit der Stats-Seite"), padding=8)
@@ -1281,11 +1281,6 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         self._save_soon()
 
     # ---------------------------------------------------------- own map assignments
-    def _hide_welcome(self):
-        self._qt_welcome = False
-        self.settings.set("welcome_seen", True)
-        self._save_soon()
-
     # ---------------------------------------------------------- doubtful detection
     def _tick_unsure(self):
         """Show the doubt only if the banner did not read cleanly a moment later (fade-in frames fit worse)."""
