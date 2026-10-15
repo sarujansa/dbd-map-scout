@@ -273,3 +273,23 @@ def test_events_reach_the_app_in_order():
     Shell()._qt_post("scan")
     Shell()._qt_post("act", ("ov.caption", True))
     assert [q.get_nowait(), q.get_nowait()] == [("ui", "scan", None), ("ui", "act", ("ov.caption", True))]
+
+
+def test_quitting_ends_the_loop_although_the_window_refuses_to_close():
+    """QApplication.quit() would ask the windows first – the control window says no (its X = quit through the App)."""
+    pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
+    from dbdmapscout import qt_window
+    from dbdmapscout.mainloop import MainLoop
+    loop = MainLoop(qt_window.application())
+    win = qt_window.MainWindow(lambda a, arg=None: None)
+    win.show()
+    ended = []
+    loop.after(50, loop.quit)
+    loop.after(5000, lambda: (ended.append("watchdog"), loop.qapp.exit(1)))
+    t0 = time.monotonic()
+    loop.mainloop()
+    assert not ended and time.monotonic() - t0 < 4
+    win.allow_close = True
+    win.close()
+    import shiboken6
+    shiboken6.delete(win)
