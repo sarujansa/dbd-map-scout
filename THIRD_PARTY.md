@@ -11,7 +11,6 @@
 | Idee der Regionswahl per hosts-Datei (Tab „Server“) | [crweul/make-your-choice](https://github.com/crweul/make-your-choice) (GPL-3.0) – nur die Idee, **kein Code übernommen**, eigene Umsetzung | – |
 | Arbeitsschritte und Hintergrundfarben für eigene Kartenbilder (`mapimage.py`) | Skript `convert-images.sh` aus dem Projekt dbd-callouts (Snoggles), vom Nutzer bereitgestellt – nur Farbwerte und Ablauf übernommen, eigene Umsetzung mit Pillow, kein Code übernommen | – |
 | Schrift `dbdmapscout/fonts/FiraSans-ExtraBold.ttf` (Map-Namen über Karten ohne Namen: Trickster's Delusion, Fallen Refuge, Freddy Fazbear's Pizza und eigene Bilder) | Fira Sans, Mozilla Foundation / Telefonica, über Google Fonts; Lizenztext in `dbdmapscout/fonts/OFL.txt` | SIL Open Font License 1.1 |
-| Design „Windows 11“ des Steuerfensters: `dbdmapscout/sv_ttk/` (Tcl-Dateien und Sprite-Bilder, unverändert; die Gold-Variante färbt `theme.py` beim Laden um) | [rdbende/Sun-Valley-ttk-theme](https://github.com/rdbende/Sun-Valley-ttk-theme) 2.6.0 (PyPI `sv-ttk`); Lizenztext in `dbdmapscout/sv_ttk/LICENSE` | MIT |
 | PySide6-Essentials 6.11.2 und shiboken6 (Qt for Python, neues Steuerfenster) | PyPI, von `start.bat` installiert | LGPL-3.0 (unverändert als Bibliothek genutzt, austauschbar) |
 | UDP-Ping-Beacons (Port 7770) | [AWS GameLift Dokumentation](https://docs.aws.amazon.com/gameliftservers/latest/developerguide/reference-udp-ping-beacons.html) | – |
 

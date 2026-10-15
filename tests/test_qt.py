@@ -1,21 +1,12 @@
-"""Qt control window (stage 1): colours, the overview model (pure) and the window itself (offscreen on Linux)."""
-import importlib.util
+"""Control window (Qt): colours, the overview model (pure) and the window itself (offscreen on Linux)."""
 import queue
-import sys
 import time
 from types import SimpleNamespace
-from unittest import mock
 
-if "tkinter" not in sys.modules and importlib.util.find_spec("tkinter") is None:   # headless CI: Tk only imported
-    sys.modules["tkinter"] = mock.MagicMock()
-if isinstance(sys.modules.get("tkinter"), mock.MagicMock):
-    sys.modules.setdefault("tkinter.font", mock.MagicMock())
-    sys.modules.setdefault("tkinter.ttk", mock.MagicMock())
+import pytest
 
-import pytest  # noqa: E402
-
-from dbdmapscout import history, overview, qt_theme, theme  # noqa: E402
-from dbdmapscout.roundtimer import RoundTimer  # noqa: E402
+from dbdmapscout import history, overview, qt_theme, theme
+from dbdmapscout.roundtimer import RoundTimer
 
 
 # ------------------------------------------------------------------ colours
@@ -48,7 +39,7 @@ def fake_app(**kw):
         game=None, simulate=False, user_visible=True, hidden_after_match=False, menu_paused=False,
         overlay=SimpleNamespace(has_map=lambda: app.current is not None, floors=lambda: []),
         round=RoundTimer(), conn=SimpleNamespace(running=False, server=None, ping_ms=None), _hist=None,
-        _queue={"state": "idle"}, _unsure=None, _unknown=None, _floor=None, _layouts=lambda: [1],
+        _queue={"state": "idle"}, _unsure=None, _unknown=None, _floor=None, _layouts=lambda: [1], _layout_unsure=False,
         _queue_text=lambda now: "", _killer_of=lambda n: n, _role_name=lambda r: {"killer": "Killer"}.get(r, r),
         _official_result=lambda m: "–", _joined=lambda: j, sysmon=SimpleNamespace(active=False, snapshot=None))
     for k, v in kw.items():
@@ -164,7 +155,7 @@ def test_pixmap_from_pil_keeps_the_shape(qapp):
     assert (pm.width(), pm.height()) == (50, 100) and pm.devicePixelRatio() == 2.0
 
 
-# ------------------------------------------------------------------ stage 2: pages that mirror Tk tabs
+# ------------------------------------------------------------------ hand-made pages (SPECS)
 def _registered_keys():
     """Keys passed to self._reg("…") / _slider(key=…) in the App's source (f-strings with one loop over known names expanded)."""
     import ast
@@ -192,7 +183,7 @@ def _registered_keys():
     return keys
 
 
-def test_every_mirrored_control_exists_in_the_tk_window():
+def test_every_control_of_the_hand_made_pages_exists():
     pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
     from dbdmapscout import qt_window
     missing = qt_window.page_keys() - _registered_keys()
@@ -201,7 +192,7 @@ def test_every_mirrored_control_exists_in_the_tk_window():
     assert qt_window.page_keys("overview") == set()
 
 
-def test_form_page_shows_tk_states_and_posts_clicks(qapp, keep):
+def test_form_page_shows_states_and_posts_clicks(qapp, keep):
     from dbdmapscout import qt_window
     posted = queue.Queue()
     page = keep(qt_window.FormPage(lambda a, arg=None: posted.put((a, arg)), "Overlay", qt_window.SPECS["overlay"]))
@@ -245,7 +236,7 @@ def test_maps_page_lists_by_realm_and_posts_the_pick(qapp, keep):
                                                         ("show_map", ("coal", 1))]
 
 
-# ------------------------------------------------------------------ stage 3: pages built from Tk tabs
+# ------------------------------------------------------------------ pages built from a tab of the UI model
 NODE = {"kind": "box", "key": ".t", "side": "top", "row": False, "children": [
     {"kind": "big", "key": ".t.sum", "side": "top"},
     {"kind": "box", "key": ".t.row", "side": "top", "row": True, "children": [
@@ -258,7 +249,7 @@ NODE = {"kind": "box", "key": ".t", "side": "top", "row": False, "children": [
             {"kind": "chart", "key": ".t.nb.b.chart", "side": "top"}]}]}]}
 
 
-def test_auto_page_mirrors_a_tk_tab(qapp, keep):
+def test_auto_page_shows_a_tab(qapp, keep):
     from dbdmapscout import qt_window
     posted = queue.Queue()
     page = keep(qt_window.AutoPage(lambda a, arg=None: posted.put((a, arg)), "Statistik", NODE))
@@ -326,7 +317,6 @@ def test_ask_runs_the_action_again_after_ok():
 
     class Shell(QtShell):
         qt = SimpleNamespace(bring_to_front=lambda: None)
-        root = SimpleNamespace(state=lambda: "withdrawn")
         _qt_question = None
 
         def _qt_refresh(self, force=False):
@@ -346,7 +336,7 @@ def test_ask_runs_the_action_again_after_ok():
     assert calls == ["cleared"] and s._qt_question is None
 
 
-# ------------------------------------------------------------------ stage 4a: detection, log, hotkeys, files
+# ------------------------------------------------------------------ detection, log, hotkeys, files
 def test_log_view_colours_and_escapes(qapp, keep):
     from dbdmapscout import qt_window
     log = keep(qt_window.LogView())
@@ -399,7 +389,7 @@ def test_file_choice_is_not_modal(qapp, keep):
     assert posted.get_nowait() == ("file", None)
 
 
-def test_hotkey_from_qt_is_checked_like_a_tk_key():
+def test_hotkey_from_the_window_is_checked():
     from dbdmapscout.app_hotkeys import Hotkeys
     seen = []
 
@@ -415,7 +405,7 @@ def test_hotkey_from_qt_is_checked_like_a_tk_key():
     assert seen == [({"ctrl", "alt"}, "k", None)]
 
 
-# ------------------------------------------------------------------ stage 4b: Tk dialogs shown by the Qt window
+# ------------------------------------------------------------------ dialogs
 def test_dialog_window_mirrors_and_closes_both_ways(qapp, keep):
     from PIL import Image
     from dbdmapscout import qt_window
@@ -445,5 +435,5 @@ def test_dialog_window_mirrors_and_closes_both_ways(qapp, keep):
     win.close_dialog(".d")                                    # closed by the App (saved): no echo back
     assert posted.empty() and ".d" not in win.dialogs
     win.open_dialog(".d", "x", node)
-    win.dialogs[".d"].reject()                                # Esc / X in Qt: the Tk dialog goes too
+    win.dialogs[".d"].reject()                                # Esc / X: the model's dialog goes too
     assert posted.get_nowait() == ("dlg_close", ".d")

@@ -153,11 +153,11 @@ def test_settings_backup_round_trip(tmp_path):
     raw = json.load(open(backup, encoding="utf-8"))
     del raw["overlay"]["show_map"]                                   # older backup without a newer key
     json.dump(raw, open(backup, "w", encoding="utf-8"))
-    got = config.read_backup(backup, {"setup_root": "D:/new/place", "window_geometry": "800x600"})
+    got = config.read_backup(backup, {"setup_root": "D:/new/place", "qt_geometry": "AbC="})
     assert got["hotkeys"]["rotate_map"] == "ctrl+alt+x" and got["overlay"]["map_rotations"] == {"coal-tower": 90}
     assert got["user_aliases"] == {"coal-tower": ["KOHLETURM"]}
     assert got["overlay"]["show_map"] is True                        # default filled in
-    assert got["setup_root"] == "D:/new/place" and got["window_geometry"] == "800x600"   # this PC's values
+    assert got["setup_root"] == "D:/new/place" and got["qt_geometry"] == "AbC="   # this PC's values
     bad = tmp_path / "bad.json"
     bad.write_text('{"foo": 1}', encoding="utf-8")
     import pytest

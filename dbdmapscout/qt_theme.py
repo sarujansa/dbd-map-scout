@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from .theme import DARK, DOT
 
+ZOOMS = (0.9, 1.0, 1.1, 1.25, 1.5)        # setting ui_zoom: text size of the window
+
 PALETTE = {
     True: dict(DARK, card=DARK["panel"], nav=DARK["panel"], nav_sel=DARK["bg"], btn=DARK["hover"],
                btn_hover=DARK["press"], btn_dis="#2b2d31", fg_dis="#6a6e75", on_accent="#1a1406", bar=DARK["field"],

@@ -2,34 +2,70 @@
 
 Windows notifications from the tray icon are swallowed by "Do not disturb", which Windows 11 switches
 on by itself while a game or a full-screen app runs. This window does not depend on that: always on
-top, never takes the focus (WS_EX_NOACTIVATE), gone after a few seconds or on a click.
+top, never takes the focus (WS_EX_NOACTIVATE), gone after a few seconds or on a click. Qt since 1.57.
 """
 from __future__ import annotations
 
-import tkinter as tk
+import sys
 
-from .overlay import GWL_EXSTYLE, IS_WIN, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
 
+IS_WIN = sys.platform == "win32"
 BG, FG, DIM, ACCENT = "#1e1f22", "#f2f2f2", "#b5bac1", "#c8102e"
+WIDTH = 340                       # px (logical)
 
 
-def work_area(root):
-    """(left, top, right, bottom) of the primary screen without the taskbar."""
-    if IS_WIN:
-        try:
-            import ctypes
-            from ctypes import wintypes
-            r = wintypes.RECT()
-            if ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(r), 0):   # SPI_GETWORKAREA
-                return r.left, r.top, r.right, r.bottom
-        except Exception:
-            pass
-    return 0, 0, root.winfo_screenwidth(), root.winfo_screenheight()
+class _Window(QWidget):
+    def __init__(self, title: str, text: str, on_click):
+        super().__init__(None, Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+                         | Qt.WindowDoesNotAcceptFocus)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.setAttribute(Qt.WA_DeleteOnClose)
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self._on_click = on_click
+        self.setStyleSheet(f"QWidget#toast {{ background: {ACCENT}; }} QFrame#body {{ background: {BG}; }}"
+                           f"QLabel {{ background: transparent; font-family: 'Segoe UI'; }}")
+        self.setObjectName("toast")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(4, 1, 1, 1)               # red frame: 4 px on the left, 1 px around
+        body = QFrame()
+        body.setObjectName("body")
+        outer.addWidget(body)
+        lay = QVBoxLayout(body)
+        lay.setContentsMargins(14, 10, 14, 10)
+        lay.setSpacing(2)
+        head = QLabel(title)
+        head.setStyleSheet(f"color: {FG}; font-size: 16px; font-weight: 700;")
+        lay.addWidget(head)
+        line = QLabel(text)
+        line.setWordWrap(True)
+        line.setStyleSheet(f"color: {DIM}; font-size: 13px;")
+        lay.addWidget(line)
+        self.setFixedWidth(WIDTH)
+
+    def mousePressEvent(self, _e):
+        self._on_click()
+
+
+def _no_activate(win):
+    """Windows: never the active window, always on top (Qt's flags alone still let a click activate it)."""
+    if not IS_WIN:
+        return
+    try:
+        from .overlay import (GWL_EXSTYLE, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, WS_EX_NOACTIVATE,
+                              WS_EX_TOOLWINDOW, WS_EX_TOPMOST, _GetLong, _SetLong, _user32)
+        h = int(win.winId())
+        _SetLong(h, GWL_EXSTYLE, _GetLong(h, GWL_EXSTYLE) | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST)
+        _user32.SetWindowPos(h, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
+    except Exception:
+        pass
 
 
 class Toast:
-    def __init__(self, root):
-        self.root = root
+    def __init__(self, loop):
+        self.loop = loop                  # mainloop.MainLoop (timers)
         self.win = None
         self._job = None
 
@@ -39,50 +75,24 @@ class Toast:
 
     def show(self, title: str, text: str, seconds: float = 8.0):
         self.close()
-        w = self.win = tk.Toplevel(self.root)
-        w.withdraw()
-        w.overrideredirect(True)
-        w.attributes("-topmost", True)
-        w.configure(bg=ACCENT)                               # 3 px red frame on the left and around
-        body = tk.Frame(w, bg=BG, padx=14, pady=10)
-        body.pack(fill="both", expand=True, padx=(4, 1), pady=1)
-        tk.Label(body, text=title, bg=BG, fg=FG, font=("Segoe UI", 12, "bold"), anchor="w").pack(fill="x")
-        tk.Label(body, text=text, bg=BG, fg=DIM, font=("Segoe UI", 10), anchor="w", justify="left",
-                 wraplength=320).pack(fill="x", pady=(2, 0))
-        for widget in (w, body, *body.winfo_children()):
-            widget.bind("<Button-1>", lambda e: self.close())
-        w.update_idletasks()
-        left, top, right, bottom = work_area(self.root)
-        width, height = max(300, w.winfo_reqwidth()), w.winfo_reqheight()
-        w.geometry(f"{width}x{height}+{right - width - 16}+{bottom - height - 16}")
-        self._no_activate(w)
-        w.deiconify()
-        self._no_activate(w)
-        self._job = self.root.after(int(seconds * 1000), self.close)
-
-    def _no_activate(self, w):
-        if not IS_WIN:
-            return
-        try:
-            from .overlay import (HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, _GetLong, _SetLong,
-                                  _user32)
-            w.update_idletasks()
-            h = int(_user32.GetParent(w.winfo_id()) or 0) or w.winfo_id()
-            _SetLong(h, GWL_EXSTYLE, _GetLong(h, GWL_EXSTYLE) | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST)
-            _user32.SetWindowPos(h, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
-        except Exception:
-            pass
+        w = self.win = _Window(title, text, self.close)
+        w.adjustSize()
+        screen = QGuiApplication.primaryScreen()
+        if screen is not None:
+            area = screen.availableGeometry()             # without the taskbar
+            w.move(area.right() - w.width() - 16, area.bottom() - w.height() - 16)
+        _no_activate(w)
+        w.show()
+        _no_activate(w)
+        self._job = self.loop.after(int(seconds * 1000), self.close)
 
     def close(self):
         if self._job is not None:
-            try:
-                self.root.after_cancel(self._job)
-            except tk.TclError:
-                pass
+            self.loop.after_cancel(self._job)
             self._job = None
         if self.win is not None:
             try:
-                self.win.destroy()
-            except tk.TclError:
+                self.win.close()
+            except RuntimeError:              # already deleted by Qt
                 pass
             self.win = None

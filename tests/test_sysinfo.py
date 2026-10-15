@@ -147,37 +147,12 @@ def test_recorder_counts_throttled_seconds_and_trend():
     assert by["A"]["throttle_s"] == 5.0 and by["B"]["throttle_s"] == 0.0     # summed, not averaged
 
 
-def test_temperature_line_draws_points_and_breaks_at_gaps():
+def test_temperature_line_breaks_at_gaps():
     from dbdmapscout import trendchart
+    pts = [(0, 70), None, (2, 72), (3, 75)]
+    assert trendchart.segments(pts) == [((2, 72), (3, 75))]       # one segment c–d; "a" stands alone (gap)
+    assert trendchart.segments([]) == [] and trendchart.segments([None, None]) == []
 
-    class Canvas:
-        def __init__(self):
-            self.calls = []
-
-        def __getattr__(self, name):
-            def call(*args, **kw):
-                self.calls.append((name, args, kw))
-                return len(self.calls)
-            return call
-
-        def winfo_width(self):
-            return 600
-
-        def cget(self, key):
-            return "#1e1f22"
-
-    chart = trendchart.TrendChart.__new__(trendchart.TrendChart)
-    chart.dark, chart.panels, chart.canvas, chart._hits, chart._hover = True, ("temp",), Canvas(), [], None
-    chart.data = {"temp": {"title": "T", "kind": "line", "min": 60, "max": 80, "ticks": [(60, "60"), (80, "80")],
-                           "bars": [(70, "a", "x"), (None, "b", ""), (72, "c", "y"), (75, "d", "z")],
-                           "last": "75 °C", "empty": "-"}}
-    chart._redraw()
-    kinds = [c[0] for c in chart.canvas.calls]
-    assert kinds.count("create_oval") == 3 and len(chart._hits) == 3
-    lines = [c for c in chart.canvas.calls if c[0] == "create_line" and c[2].get("width") == 2]
-    assert len(lines) == 1 and len(lines[0][1]) == 4              # one segment c–d; "a" stands alone (gap)
-    ovals = [c[1] for c in chart.canvas.calls if c[0] == "create_oval"]
-    assert ovals[0][1] > ovals[2][1]                              # 70 °C lower on screen than 75 °C
 
 
 def test_info_beside_the_map_for_low_bars():

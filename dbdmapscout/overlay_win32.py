@@ -1,8 +1,8 @@
 """Native Windows overlay: a layered, click-through, always-on-top popup window.
 
 The picture is pushed with UpdateLayeredWindow (per-pixel alpha), so the
-transparent parts of a map really are transparent, and nothing depends on
-Tk's window handling. The window never takes the keyboard focus
+transparent parts of a map really are transparent; Qt's window handling is not involved.
+The window never takes the keyboard focus
 (WS_EX_NOACTIVATE, shown with SW_SHOWNOACTIVATE) and lets every click through
 to the game (WS_EX_TRANSPARENT) – except in edit mode, where it can be dragged.
 """
@@ -465,8 +465,11 @@ class HudWindow:
             pass
 
 
-class Win32Overlay:
-    """Same interface as overlay.Overlay, implemented with plain Win32 calls."""
+class PictureOverlay:
+    """The overlay's content and logic: map picture (+ caption), timer/server/ping/notes below it, the waiting
+    card, floors, animation, edit mode. The window that shows it is a subclass's (Win32Overlay, QtOverlay):
+    ``_push(pos)``, ``_show_window()``, ``_hide_window()``, ``_apply_editing()``, ``_raise()``,
+    ``_destroy_window()``, ``hwnd()``, ``is_visible()``. ``root`` = mainloop.MainLoop (timers)."""
 
     def __init__(self, root):
         self.root = root
@@ -480,7 +483,6 @@ class Win32Overlay:
         self.game_hwnd = None
         self.raised_over_game = 0
         self.last_error = ""
-        self._drag = None               # kept for interface compatibility (native drag blocks Tk anyway)
         self._frames = []               # [(PIL RGBA, duration)]
         self._caption = ""
         self._timer = ""                # round timer text below the map ("" = none)
@@ -501,35 +503,10 @@ class Win32Overlay:
         self._editing = False
         self._pos = None
         self._size = (0, 0)
-        ex = WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
-        self._hwnd = _u.CreateWindowExW(ex, "Static", "DbD Map Scout Overlay", WS_POPUP, 0, 0, 16, 16,
-                                        None, None, _k.GetModuleHandleW(None), None)
-        if not self._hwnd:
-            raise OSError(f"CreateWindowExW fehlgeschlagen (Fehler {ctypes.get_last_error()})")
-        self._hwnd = int(self._hwnd)
-        self._proc = WNDPROC(self._wndproc)                    # keep a reference!
-        self._old_proc = _SetLong(self._hwnd, GWLP_WNDPROC, ctypes.cast(self._proc, ctypes.c_void_p).value)
-        self._keep_on_top()
 
-    # ------------------------------------------------------------- window proc
-    def _wndproc(self, hwnd, msg, wp, lp):
-        try:
-            if self._editing:
-                if msg == WM_NCHITTEST:
-                    return HTCAPTION                  # drag anywhere on the picture
-                if msg == WM_EXITSIZEMOVE:
-                    rc = wintypes.RECT()
-                    _u.GetWindowRect(self._hwnd, ctypes.byref(rc))
-                    self._pos = (rc.left, rc.top)
-                    if self.on_moved:
-                        self.on_moved(rc.left, rc.top)
-                if msg == WM_MOUSEWHEEL and self.on_wheel:
-                    delta = ctypes.c_short((wp >> 16) & 0xFFFF).value
-                    self.on_wheel(1 if delta > 0 else -1)
-                    return 0
-        except Exception as e:  # never let an exception escape into Windows
-            self.last_error = repr(e)
-        return _u.CallWindowProcW(self._old_proc, hwnd, msg, wp, lp)
+    def _start(self):
+        """End of a subclass's __init__ (window made): stay on top from now on."""
+        self._keep_on_top()
 
     # ------------------------------------------------------------ content
     def set_map(self, path, caption: str = "", rotation: int = 0):
@@ -657,15 +634,6 @@ class Win32Overlay:
                 self._push()
         return self._size
 
-    def _push(self, pos=None):
-        """Hand the current frame to Windows (UpdateLayeredWindow)."""
-        if not self._prepared:
-            return
-        data, w, h, _ = self._prepared[self._frame_i]
-        err = push_layered(self._hwnd, data, w, h, pos or self._pos or (0, 0), self.opacity)
-        if err:
-            self.last_error = err
-
     # ----------------------------------------------------------- animation
     def _restart_anim(self):
         self._stop_anim()
@@ -700,35 +668,22 @@ class Win32Overlay:
             self._push(pos)
             self._pushed_opacity = opacity_key
         if not self._shown:
-            _u.ShowWindow(self._hwnd, SW_SHOWNOACTIVATE)
-            _u.SetWindowPos(self._hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
+            self._show_window()
             self._shown = True
 
     def hide(self):
         if self._shown:
-            _u.ShowWindow(self._hwnd, SW_HIDE)
+            self._hide_window()
             self._shown = False
 
     @property
     def shown(self):
         return self._shown
 
-    def hwnd(self) -> int:
-        return self._hwnd
-
-    def is_visible(self) -> bool:
-        return bool(_u.IsWindowVisible(self._hwnd))
-
     def _keep_on_top(self):
         try:
             if self._shown:
-                flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
-                _u.SetWindowPos(self._hwnd, HWND_TOPMOST, 0, 0, 0, 0, flags)
-                game = self.game_hwnd() if self.game_hwnd else None
-                if game and is_above(game, self._hwnd):
-                    _u.SetWindowPos(self._hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, flags)
-                    _u.SetWindowPos(self._hwnd, HWND_TOPMOST, 0, 0, 0, 0, flags)
-                    self.raised_over_game += 1
+                self._raise()
         except Exception as e:
             self.last_error = repr(e)
         self.root.after(1000, self._keep_on_top)
@@ -736,37 +691,114 @@ class Win32Overlay:
     # ----------------------------------------------------------- edit mode
     def set_editing(self, on: bool):
         self._editing = bool(on)
-        ex = _GetLong(self._hwnd, GWL_EXSTYLE)
-        if on:
-            ex &= ~(WS_EX_TRANSPARENT | WS_EX_NOACTIVATE)
-        else:
-            ex |= WS_EX_TRANSPARENT | WS_EX_NOACTIVATE
-        _SetLong(self._hwnd, GWL_EXSTYLE, ex)
-        _u.SetWindowPos(self._hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED)
+        self._apply_editing()
         self._key = None                                  # re-render with/without border
 
     @property
     def editing(self):
         return self._editing
 
+    @property
+    def dragging(self) -> bool:
+        """The user is moving it right now (the native window: Windows' own move loop, nothing to wait for)."""
+        return False
+
     def destroy(self):
         self._stop_anim()
         try:
-            _u.DestroyWindow(self._hwnd)
+            self._destroy_window()
         except Exception:
             pass
 
 
+class Win32Overlay(PictureOverlay):
+    """The overlay as a layered Win32 popup: per-pixel alpha (UpdateLayeredWindow), click-through, never active."""
+
+    def __init__(self, root):
+        super().__init__(root)
+        ex = WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
+        self._hwnd = _u.CreateWindowExW(ex, "Static", "DbD Map Scout Overlay", WS_POPUP, 0, 0, 16, 16,
+                                        None, None, _k.GetModuleHandleW(None), None)
+        if not self._hwnd:
+            raise OSError(f"CreateWindowExW fehlgeschlagen (Fehler {ctypes.get_last_error()})")
+        self._hwnd = int(self._hwnd)
+        self._proc = WNDPROC(self._wndproc)                    # keep a reference!
+        self._old_proc = _SetLong(self._hwnd, GWLP_WNDPROC, ctypes.cast(self._proc, ctypes.c_void_p).value)
+        self._start()
+
+    def _wndproc(self, hwnd, msg, wp, lp):
+        try:
+            if self._editing:
+                if msg == WM_NCHITTEST:
+                    return HTCAPTION                  # drag anywhere on the picture
+                if msg == WM_EXITSIZEMOVE:
+                    rc = wintypes.RECT()
+                    _u.GetWindowRect(self._hwnd, ctypes.byref(rc))
+                    self._pos = (rc.left, rc.top)
+                    if self.on_moved:
+                        self.on_moved(rc.left, rc.top)
+                if msg == WM_MOUSEWHEEL and self.on_wheel:
+                    delta = ctypes.c_short((wp >> 16) & 0xFFFF).value
+                    self.on_wheel(1 if delta > 0 else -1)
+                    return 0
+        except Exception as e:  # never let an exception escape into Windows
+            self.last_error = repr(e)
+        return _u.CallWindowProcW(self._old_proc, hwnd, msg, wp, lp)
+
+    def _push(self, pos=None):
+        """Hand the current frame to Windows (UpdateLayeredWindow)."""
+        if not self._prepared:
+            return
+        data, w, h, _ = self._prepared[self._frame_i]
+        err = push_layered(self._hwnd, data, w, h, pos or self._pos or (0, 0), self.opacity)
+        if err:
+            self.last_error = err
+
+    def _show_window(self):
+        _u.ShowWindow(self._hwnd, SW_SHOWNOACTIVATE)
+        _u.SetWindowPos(self._hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
+
+    def _hide_window(self):
+        _u.ShowWindow(self._hwnd, SW_HIDE)
+
+    def _raise(self):
+        flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
+        _u.SetWindowPos(self._hwnd, HWND_TOPMOST, 0, 0, 0, 0, flags)
+        game = self.game_hwnd() if self.game_hwnd else None
+        if game and is_above(game, self._hwnd):
+            _u.SetWindowPos(self._hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, flags)
+            _u.SetWindowPos(self._hwnd, HWND_TOPMOST, 0, 0, 0, 0, flags)
+            self.raised_over_game += 1
+
+    def _apply_editing(self):
+        ex = _GetLong(self._hwnd, GWL_EXSTYLE)
+        if self._editing:
+            ex &= ~(WS_EX_TRANSPARENT | WS_EX_NOACTIVATE)
+        else:
+            ex |= WS_EX_TRANSPARENT | WS_EX_NOACTIVATE
+        _SetLong(self._hwnd, GWL_EXSTYLE, ex)
+        _u.SetWindowPos(self._hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED)
+
+    def _destroy_window(self):
+        _u.DestroyWindow(self._hwnd)
+
+    def hwnd(self) -> int:
+        return self._hwnd
+
+    def is_visible(self) -> bool:
+        return bool(_u.IsWindowVisible(self._hwnd))
+
+
 def make_overlay(root, prefer_native: bool = True):
-    """Native overlay on Windows (fallback: Tk overlay)."""
-    from .overlay import Overlay
+    """Native overlay on Windows (fallback, and elsewhere: a Qt window)."""
+    from .overlay_qt import QtOverlay
     if IS_WIN and prefer_native:
         try:
             return Win32Overlay(root)
         except Exception as e:
-            ov = Overlay(root)
+            ov = QtOverlay(root)
             ov.last_error = f"natives Overlay nicht verfügbar: {e}"
             return ov
-    return Overlay(root)
+    return QtOverlay(root)
 

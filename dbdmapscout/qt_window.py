@@ -1,11 +1,9 @@
-"""Qt control window (stage 1 of the move from Tk to Qt, setting ``ui_toolkit`` = "qt"): navigation on the left,
-page "Übersicht" in Qt; the other pages still open the Tk window on the matching tab.
+"""The control window (Qt): navigation on the left, one page per area.
 
-Threading/event-loop rule: Tk's mainloop stays the main loop and also delivers Qt's window messages on Windows.
-A Qt slot can therefore run while Tcl is inside its own event loop – calling tkinter from there can kill Python
-(_tkinter loses its thread state). So nothing in here touches Tk or the App: every button only calls ``post``
-(→ App.events, handled in App._poll), and the App pushes its state with ``show(model)`` from its own ticks.
-No modal Qt dialogs (they would stop Tk's timers).
+The window only shows and reports: every button calls ``post`` (→ App.events, handled in App._poll, in order
+with the detection's events), and the App pushes its state from its own ticks (``show_model``, ``show_states``).
+The pages draw the App's UI model (uimodel.py; app_qt.ui_state). No modal dialogs: ``exec()`` would run a second
+event loop inside a click.
 """
 from __future__ import annotations
 
@@ -26,18 +24,17 @@ from . import qt_theme
 from .i18n import N_, _
 from .mapimage import FONT as FIRA
 
-# key, label, symbol; QT_PAGES are in Qt, the others open the Tk window (stages 3–4 move them)
+# key, label, symbol
 PAGES = (("overview", N_("Übersicht"), "◉"), ("maps", "Maps", "▦"), ("overlay", N_("Overlay"), "◧"),
          ("stats", N_("Statistik"), "▤"), ("server", N_("Server"), "◎"), ("settings", N_("Einstellungen"), "⚙"),
          ("detect", N_("Erkennung"), "✦"), ("log", "Log", "☰"))
-QT_PAGES = ("overview", "maps", "overlay", "settings", "stats", "server", "detect", "log")
-AUTO_PAGES = ("stats", "server", "detect", "log")   # built from the Tk tab's structure (app_qt.tk_layout), 1.53/1.54
+AUTO_PAGES = ("stats", "server", "detect", "log")   # built from the tab's structure (app_qt.ui_layout)
 THUMB_H = 170                     # px (logical) of the map picture on the overview
 
-# Pages that mirror a Tk tab (since 1.52): every key names a Tk widget registered with App._reg; texts, values,
+# Hand-made pages: every key names a widget of the UI model registered with App._reg; texts, values,
 # enabled/shown come from it (App._qt_refresh → show_states), a click is done on it (post("act", (key, value))).
 # ("card", frame key, rows) – a row is one control or ("row", [controls]); controls: ("check"|"button"|"combo"|
-# "slider"|"label"|"hint", key), ("stretch",), ("link", label, tab) = open the Tk tab (not mirrored there yet).
+# "slider"|"label"|"hint", key), ("stretch",).
 SPECS = {
     "overlay": (
         ("card", "ov.pos", (
@@ -60,10 +57,7 @@ SPECS = {
         ("card", "st.look", (
             ("row", (("label", "st.lang.label"), ("combo", "st.lang"), ("stretch",))), ("hint", "st.lang_note"),
             ("check", "st.dark"),
-            ("row", (("label", "st.zoom.label"), ("combo", "st.zoom"), ("stretch",))),
-            ("check", "st.qt"),
-            ("row", (("label", "st.style.label"), ("combo", "st.style"), ("stretch",))),
-            ("hint", "st.look_note"))),
+            ("row", (("label", "st.zoom.label"), ("combo", "st.zoom"), ("stretch",))))),
         ("card", "st.notify", (
             ("check", "st.lobby_notify"), ("check", "st.lobby_remind"), ("check", "st.notify_background_only"),
             ("hint", "st.notify_text"), ("row", (("button", "st.notify_test"), ("stretch",))))),
@@ -100,7 +94,7 @@ def _spec_keys(items):
 
 
 def page_keys(page: str | None = None) -> set:
-    """Tk widget keys a page mirrors (all pages without ``page``) – also the whitelist for clicks from Qt."""
+    """Widget keys a hand-made page shows (all pages without ``page``) – also the whitelist for its clicks."""
     pages = [page] if page else list(SPECS)
     return {k for p in pages for k in _spec_keys(SPECS.get(p, ()))}
 
@@ -138,7 +132,7 @@ def _label(text="", cls=None, wrap=False):
 
 
 def _tip(label: str) -> str:
-    """Hover text of a Qt-only button: the same table as the Tk window (tooltip.TIPS, by German label)."""
+    """Hover text of a button of the window itself (tooltip.TIPS, by German label)."""
     from .tooltip import tip_for_label
     return tip_for_label(_(label)) or ""
 
@@ -262,8 +256,10 @@ class OverviewPage(QWidget):
         ul.setContentsMargins(0, 0, 0, 0)
         self.unknown_text = _label(cls="note", wrap=True)
         ul.addWidget(self.unknown_text, 1)
-        for text, action in ((N_("Zuordnen …"), "assign"), (N_("Bild hinzufügen …"), "picture")):
+        for text, action in ((N_("Zuordnen …"), "assign"), (N_("Bild hinzufügen …"), "picture"),
+                             ("✕", "dismiss_unknown")):
             ub = QPushButton(_(text))
+            ub.setToolTip(_tip(text))
             ub.clicked.connect(lambda _c=False, a=action: self._post(a))
             ul.addWidget(ub)
         info.addWidget(self.unknown)
@@ -442,7 +438,7 @@ def _scroll_page(title):
 
 
 def make_control(kind, key, post):
-    """(widget, extra) of one mirrored Tk control; clicks go out as post("act", (key, value))."""
+    """(widget, extra) of one control of the UI model; clicks go out as post("act", (key, value))."""
     extra = None
     if kind == "check":
         w = QCheckBox()
@@ -478,7 +474,7 @@ def make_control(kind, key, post):
         w = LogView()
     elif kind == "radio":
         w = QRadioButton()
-        w.setAutoExclusive(False)                 # the Tk side decides which one is on
+        w.setAutoExclusive(False)                 # the model decides which one is on
         w.clicked.connect(lambda _c=False: post("act", (key, None)))
     elif kind == "entry":
         w = QLineEdit()
@@ -503,11 +499,11 @@ def make_control(kind, key, post):
 
 
 def show_control(kind, w, extra, st):
-    """Put a Tk widget's state (app_qt.tk_state) into its Qt control – never sends anything back."""
+    """Put a model widget's state (app_qt.ui_state) into its Qt control – never sends anything back."""
     if kind not in ("title",):
         shown = bool(st.get("visible", True))
         if kind in ("hint", "plain", "big", "label"):
-            shown = shown and bool(st.get("text"))            # empty lines take no room (like the Tk window)
+            shown = shown and bool(st.get("text"))            # empty lines take no room
         w.setVisible(shown)
     if "enabled" in st:
         w.setEnabled(st["enabled"])
@@ -569,7 +565,7 @@ def show_control(kind, w, extra, st):
 
 
 class FormPage(QWidget):
-    """A page that mirrors a Tk tab control by control (SPECS): the Tk widgets keep doing the work."""
+    """A hand-made page (SPECS): one control per widget of the UI model, which does the work."""
 
     def __init__(self, post, title, spec):
         super().__init__()
@@ -614,12 +610,6 @@ class FormPage(QWidget):
         if kind == "stretch":
             lay.addStretch()
             return
-        if kind == "link":
-            b = QPushButton(_(item[1]))
-            b.setToolTip(_tip(item[1]))
-            b.clicked.connect(lambda _c=False, tab=item[2]: self._post("tab", tab))
-            lay.addWidget(b)
-            return
         w, extra = make_control(kind, item[1], self._post)
         lay.addWidget(w, 1 if kind == "hint" and isinstance(lay, QHBoxLayout) else 0)   # text beside: takes the room
         self.controls[item[1]] = (kind, w, extra)
@@ -632,8 +622,8 @@ class FormPage(QWidget):
 
 
 class Table(QTreeWidget):
-    """Mirror of a ttk.Treeview: columns, rows (with groups), colours by tag, selection. A click on a row or a
-    heading goes to the Tk table (sorting, selecting, the server tab's tick boxes)."""
+    """A table of the UI model (uimodel.Treeview): columns, rows (with groups), colours by tag, selection. A click
+    on a row or a heading goes to the model (sorting, selecting, the server tab's tick boxes)."""
 
     def __init__(self, key, post):
         super().__init__()
@@ -706,7 +696,7 @@ class Table(QTreeWidget):
 
 
 class LogView(QPlainTextEdit):
-    """The log (App._log_entries, filtered like the Tk tab) – coloured by category, follows new lines."""
+    """The log (App._log_entries, filtered by the categories ticked) – coloured by category, follows new lines."""
 
     def __init__(self):
         super().__init__()
@@ -737,7 +727,7 @@ class LogView(QPlainTextEdit):
 
 class HotkeyButton(QPushButton):
     """A hotkey in the settings: click, then press the new combination (Esc cancels, Del switches it off).
-    The key presses go to the App, which checks them like the Tk window (hotkeys.combo_from_keys)."""
+    The key presses go to the App, which checks them (hotkeys.combo_from_keys)."""
 
     def __init__(self, key, post):
         super().__init__()
@@ -810,7 +800,7 @@ class Chart(QWidget):
 
     def paintEvent(self, _e):
         from PySide6.QtGui import QPainter, QPen
-        from .trendchart import BOTTOM, COLORS, LEFT, RIGHT, TOP, columns
+        from .trendchart import BOTTOM, COLORS, LEFT, RIGHT, TOP, columns, segments
         st = self._st
         self._hits = []
         if not st or not st.get("data"):
@@ -874,11 +864,8 @@ class Chart(QWidget):
                 self._hits.append((mid - slot / 2, y0 - 10, mid + slot / 2, y1, tip))
             if d.get("kind") == "line":
                 p.setPen(QPen(QColor(col[role]), 2))
-                prev = None
-                for pt in line:
-                    if pt is not None and prev is not None:
-                        p.drawLine(round(prev[0]), round(prev[1]), round(pt[0]), round(pt[1]))
-                    prev = pt
+                for a, b in segments(line):
+                    p.drawLine(round(a[0]), round(a[1]), round(b[0]), round(b[1]))
                 p.setBrush(QColor(col[role]))
                 for pt in line:
                     if pt is not None:
@@ -901,8 +888,8 @@ def _grows(node) -> bool:
 
 
 class AutoPage(QWidget):
-    """A page built from the structure of a Tk tab (app_qt.tk_layout): frames → cards/rows, notebooks → tabs,
-    tables, charts and controls mirrored like FormPage (Statistik, Server)."""
+    """A page built from the structure of a tab of the UI model (app_qt.ui_layout): frames → cards/rows,
+    notebooks → tabs, tables, charts and controls like FormPage (Statistik, Server, Erkennung, Log, dialogs)."""
 
     def __init__(self, post, title, node):
         super().__init__()
@@ -1087,8 +1074,8 @@ class MapsPage(QWidget):
 
 
 class DialogWindow(QDialog):
-    """A Tk dialog (Zuordnen, Kartenbild hinzufügen) shown by the Qt window: built like AutoPage, not modal
-    (Tk's timers keep running); closing it closes the Tk dialog too."""
+    """A dialog of the UI model (Zuordnen, Kartenbild hinzufügen): built like AutoPage, not modal; closing it
+    (X, Esc) destroys the model's dialog too."""
 
     def __init__(self, parent, post, key, title, node):
         super().__init__(parent)
@@ -1102,29 +1089,10 @@ class DialogWindow(QDialog):
         lay.addWidget(self.page)
         self.resize(640, 560)
 
-    def done(self, r):                            # Esc / X: the Tk dialog goes too
+    def done(self, r):                            # Esc / X: the model's dialog goes too
         if not self.closing_from_app:
             self._post("dlg_close", self._key)
         super().done(r)
-
-
-class LaterPage(QWidget):
-    """A page that is not in Qt yet: says so and opens the Tk window there."""
-
-    def __init__(self, post, key, label):
-        super().__init__()
-        self.setObjectName("page")
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(22, 18, 22, 18)
-        lay.setSpacing(12)
-        lay.addWidget(_label(label, "h1"))
-        lay.addWidget(_label(_("Diese Seite ist noch im bisherigen Fenster – sie zieht in den nächsten Versionen um. "
-                               "Das Fenster wurde geöffnet."), "dim", wrap=True))
-        b = QPushButton(_("Im bisherigen Fenster öffnen"))
-        b.setToolTip(_tip("Im bisherigen Fenster öffnen"))
-        b.clicked.connect(lambda: post("tab", key))
-        lay.addWidget(b, alignment=Qt.AlignLeft)
-        lay.addStretch()
 
 
 class MainWindow(QMainWindow):
@@ -1155,15 +1123,15 @@ class MainWindow(QMainWindow):
             item = QListWidgetItem(f"{symbol}   {_(label)}")
             item.setData(Qt.UserRole, key)
             self.nav.addItem(item)
-            page = {"overview": self.overview, "maps": self.maps}.get(key) or self.forms.get(key)
-            self.stack.addWidget(page or LaterPage(post, key, _(label)))
+            page = {"overview": self.overview, "maps": self.maps}.get(key) or self.forms.get(key) or QWidget()
+            self.stack.addWidget(page)
         self.nav.setCurrentRow(0)
         self.nav.currentRowChanged.connect(self._page_changed)
         lay.addWidget(self.nav)
         right = QVBoxLayout()
         right.setContentsMargins(0, 0, 0, 0)
         right.setSpacing(0)
-        # OK/Cancel or a note for something the Tk side asks (App._ask/_inform) – a bar, not a modal dialog
+        # OK/Cancel or a note (App._ask/_inform) – a bar, not a modal dialog
         self.question = QFrame()
         self.question.setObjectName("question")
         ql = QHBoxLayout(self.question)
@@ -1186,12 +1154,11 @@ class MainWindow(QMainWindow):
         self.resize(1100, 760)
         self.setMinimumSize(760, 520)
         self._log_alert = False
-        self.dialogs = {}                 # Tk dialog path -> DialogWindow
+        self.dialogs = {}                 # dialog path (UI model) -> DialogWindow
 
     def _page_changed(self, row):
         self.stack.setCurrentIndex(row)
-        key = PAGES[row][0]
-        self._post("page" if key in QT_PAGES else "tab", key)      # fill it now / open the Tk tab
+        self._post("page", PAGES[row][0])                          # the App fills it now
 
     def current_key(self) -> str:
         return PAGES[max(0, self.nav.currentRow())][0]
@@ -1252,6 +1219,16 @@ class MainWindow(QMainWindow):
     def show_maps(self, items, current):
         self.maps.show_maps(items, current)
 
+    def show_page(self, key, search=None):
+        """Go to a page (e.g. the maps with a search: a scan found only the realm)."""
+        if search is not None:
+            self.maps.search.blockSignals(True)
+            self.maps.search.setText(search)
+            self.maps.search.blockSignals(False)
+        keys = [k for k, _l, _s in PAGES]
+        if key in keys:
+            self.nav.setCurrentRow(keys.index(key))
+
     def apply_theme(self, dark: bool, zoom: float):
         pal = QPalette()
         for role, colour in qt_theme.palette_roles(dark).items():
@@ -1268,9 +1245,13 @@ class MainWindow(QMainWindow):
 
     def show_model(self, o, thumb=None, tips=None):
         self.overview.update_page(o, thumb, tips)
-        if o.log_alert != self._log_alert:
-            self._log_alert = o.log_alert
-            self.nav.item(len(PAGES) - 1).setText(f"{PAGES[-1][2]}   Log" + (" ⚠" if o.log_alert else ""))
+        self.show_log_alert(o.log_alert)
+
+    def show_log_alert(self, on: bool):
+        """"Log ⚠" in the navigation while there is an error the user has not looked at."""
+        if on != self._log_alert:
+            self._log_alert = on
+            self.nav.item(len(PAGES) - 1).setText(f"{PAGES[-1][2]}   Log" + (" ⚠" if on else ""))
 
     def geometry_b64(self) -> str:
         return base64.b64encode(bytes(self.saveGeometry())).decode("ascii")

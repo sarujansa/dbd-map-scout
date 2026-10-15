@@ -50,7 +50,7 @@ def _program_running(name: str = MUTEX_NAME) -> bool:
 
 def wait_and_start(root: str, timeout: float = 30.0, running=None, run=None, update: bool = True) -> bool:
     """Helper process: wait for the program to end, then run start.bat. ``running``/``run`` for tests.
-    ``update`` False: a plain restart (e.g. Tk ↔ Qt window) – start.bat's update follows the user's setting."""
+    ``update`` False: a plain restart – start.bat's update follows the user's setting."""
     running = running or _program_running
     deadline = time.time() + timeout
     while running():
