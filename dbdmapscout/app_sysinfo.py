@@ -6,9 +6,10 @@ from __future__ import annotations
 import logging
 import time
 
-from . import layout, sysinfo
+from . import history, layout, official, sysinfo
 from .capture import IS_WIN
 from .i18n import N_, _
+from .textnorm import fmt_duration
 
 log = logging.getLogger("dbdmapscout")
 
@@ -16,6 +17,24 @@ HUD_SIDES = [("off", N_("Aus")), ("above", N_("Direkt über der Karte (wandert m
              ("left", N_("Links oben (über der Karte)")), ("right", N_("Rechts oben")),
              ("custom", N_("Eigene Position (mit der Maus verschieben)"))]
 HUD_SHOWN = ("above", "left", "right", "custom")
+
+
+def today_rows(j, now: float) -> list:
+    """HUD rows of today (pure apart from the clock): [[(text, colour), ...], ...]."""
+    d = history.today(j.rounds, now)
+    day = history.period_start("day", now)
+    s = official.summary([j.off[id(r)] for r in j.rounds if r.t >= day and id(r) in j.off and not r.custom])
+    rows = [[(_("HEUTE "), sysinfo.DIM),
+             (_("{n} RUNDEN · {time}", n=d["count"], time=fmt_duration(d["total"])), sysinfo.WHITE)]]
+    res = []
+    if s["killer"]:
+        res += [(_("Ø KILLS "), sysinfo.DIM), (f"{s['kills']:.1f}", sysinfo.WHITE)]
+    if s["survivor"]:
+        res += ([(" · ", sysinfo.DIM)] if res else []) + [(_("ENTKOMMEN "), sysinfo.DIM),
+                                                         (f"{s['escaped']:.0%}", sysinfo.WHITE)]
+    if res:
+        rows.append(res)
+    return rows
 
 
 def make_hud():
@@ -44,13 +63,19 @@ class SysInfo:
     def _hud_place(self, gx, gy, gw, gh, show: bool):
         """Show/hide the system values; returns (side, height) when they take the top of a bar."""
         side = self.settings.get("sysinfo", "off")
-        on = side in HUD_SHOWN and self.hud is not None
-        self.sysmon.active = on and self.game is not None
+        sys_on = side in HUD_SHOWN
+        today = bool(self.settings["overlay"].get("show_today", True))
+        if not sys_on and today:
+            side = "right"                                  # only "today": at the top of the right bar
+        on = (sys_on or today) and self.hud is not None
+        self.sysmon.active = sys_on and self.hud is not None and self.game is not None
         bar = layout.bar_width(gw, gh)
         snap = self.sysmon.snapshot
-        if self._hist is not None and self._sysrec is not None and on and time.time() - snap.t < 3:
+        if self._hist is not None and self._sysrec is not None and sys_on and time.time() - snap.t < 3:
             self._sysrec.add(snap)
-        rows = sysinfo.hud_rows(snap) if on else []
+        rows = sysinfo.hud_rows(snap) if sys_on and self.hud is not None else []
+        if on and today:
+            rows = rows + ([[(" ", sysinfo.DIM)]] if rows else []) + self._today_rows(time.time())
         editing = on and side == "custom" and self.overlay.editing
         if self.hud is not None:
             self.hud.set_editing(editing)
@@ -87,6 +112,15 @@ class SysInfo:
         self.hud.show_at(int(x), int(y))
         self.worker.hud_rect = (int(x), int(y), w, h)
         return None if vb or own else (side, h)   # only at the top of a side bar does the map move below it
+
+    def _today_rows(self, now: float) -> list:
+        """Block "today" below the system values (1.62, user: the black bars are big): rounds and play time,
+        average kills / escaped from the stats page, the clock. Recomputed once a minute."""
+        cache = getattr(self, "_today_cache", None)
+        j = self._joined()
+        if cache is None or cache[0] is not j or cache[1] != int(now // 60):
+            self._today_cache = cache = (j, int(now // 60), today_rows(j, now))
+        return cache[2] + [[(_("UHR "), sysinfo.DIM), (time.strftime("%H:%M", time.localtime(now)), sysinfo.WHITE)]]
 
     def _hud_follow_map(self, rect, gx, gy, gw, gh, margin):
         """"Direkt über der Karte": centred right above the map on display (below it when there is no room);

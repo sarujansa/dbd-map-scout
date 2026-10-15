@@ -388,6 +388,7 @@ class QtShell:
 
     def _qt_theme(self):
         if self.qt is not None:
+            self._qt_mod.qt_theme.set_theme(str(self.settings.get("color_theme", "gold")))
             self.qt.apply_theme(bool(self.settings.get("dark_mode", True)), float(self.settings.get("ui_zoom", 1.0)))
 
     def _qt_tip(self, key, label):

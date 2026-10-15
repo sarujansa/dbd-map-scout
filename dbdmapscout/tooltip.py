@@ -45,6 +45,9 @@ TIPS = {
         "Anteil Escapes – aus den Runden mit Daten der Stats-Seite, ab 3 Runden.",
     "Einrichtung starten": "Öffnet noch einmal die Einrichtung vom ersten Start: Spielsprache, Overlay-Position "
                            "und die wichtigsten Tasten.",
+    "Darunter „Heute“: Runden, Spielzeit, Ø Kills/Entkommen, Uhrzeit (auch wenn die Systemwerte aus sind: rechts oben)":
+        "Zeigt im schwarzen Balken, solange eine Karte im Match zu sehen ist, wie viele Runden du heute gespielt "
+        "hast, wie lange, Ø Kills bzw. Entkommen laut Stats-Seite und die Uhrzeit.",
     "Anordnung zurücksetzen": "Stellt die Kästen auf allen Seiten wieder in die ursprüngliche Reihenfolge.",
     "Anzeigen": "Blendet die gewählte Map jetzt als Overlay ein – die Erkennung übernimmt beim nächsten Match "
                 "wieder.",

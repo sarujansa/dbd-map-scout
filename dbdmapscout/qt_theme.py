@@ -5,6 +5,7 @@ The palette is the original one of the program (theme.DARK, user's wish 1.51: "F
 """
 from __future__ import annotations
 
+from .i18n import N_
 from .theme import DARK, DOT
 
 ZOOMS = (0.9, 1.0, 1.1, 1.25, 1.5)        # setting ui_zoom: text size of the window
@@ -19,6 +20,42 @@ PALETTE = {
             "btn_dis": "#f3f3f4", "fg_dis": "#a2a5aa", "on_accent": "#ffffff", "bar": "#e4e5e8", "head": "#000000",
             "accent_hover": "#9c7a1a"},
 }
+
+
+# Colour themes (since 1.62, user's wish): the accent (and for OLED the dark greys) over the palette above. Every
+# accent is checked for contrast (tests/test_qt.py): text on cards >= 4.5:1, text on accent buttons >= 4.5:1.
+THEMES = {
+    "gold": (N_("Gold (Standard)"), {True: {}, False: {}}),
+    "red": (N_("Blutrot"), {
+        True: {"accent": "#f07a74", "accent_hover": "#f4938e", "on_accent": "#14070a", "select": "#7a1f1f"},
+        False: {"accent": "#a8261f", "accent_hover": "#bf3a33", "on_accent": "#ffffff", "select": "#7a1f1f"}}),
+    "blue": (N_("Eisblau"), {
+        True: {"accent": "#5aaee8", "accent_hover": "#7cc0ee", "on_accent": "#06121c", "select": "#1d4f80"},
+        False: {"accent": "#1d5fa6", "accent_hover": "#2a70bd", "on_accent": "#ffffff", "select": "#1d4f80"}}),
+    "green": (N_("Giftgrün"), {
+        True: {"accent": "#52c48a", "accent_hover": "#72d4a2", "on_accent": "#04140b", "select": "#1b5e3c"},
+        False: {"accent": "#1c7a48", "accent_hover": "#258c55", "on_accent": "#ffffff", "select": "#1b5e3c"}}),
+    "violet": (N_("Lila"), {
+        True: {"accent": "#b48cf0", "accent_hover": "#c3a2f4", "on_accent": "#12081f", "select": "#4e2f86"},
+        False: {"accent": "#6b3fb3", "accent_hover": "#7c50c4", "on_accent": "#ffffff", "select": "#4e2f86"}}),
+    "oled": (N_("OLED-Schwarz"), {
+        True: {"bg": "#000000", "panel": "#0d0d0f", "field": "#0a0a0b", "card": "#0d0d0f", "nav": "#0d0d0f",
+               "nav_sel": "#000000", "btn": "#1a1b1e", "btn_hover": "#26282c", "hover": "#1a1b1e",
+               "press": "#26282c", "border": "#26282a", "bar": "#141416", "btn_dis": "#0d0d0f"},
+        False: {}}),
+}
+_theme = "gold"
+
+
+def set_theme(key: str):
+    """The colour theme the window uses from now on (setting colour_theme; unknown = gold)."""
+    global _theme
+    _theme = key if key in THEMES else "gold"
+
+
+def colours(dark: bool) -> dict:
+    """The palette of the current theme: PALETTE with the theme's colours over it."""
+    return dict(PALETTE[bool(dark)], **THEMES[_theme][1][bool(dark)])
 
 
 def hex_colour(c) -> str:
@@ -41,7 +78,7 @@ def dot_colour(style: str) -> str:
 
 def stylesheet(dark: bool, zoom: float = 1.0) -> str:
     """The whole window's QSS. Font sizes in px scale with the setting ui_zoom (Qt adds the screen scaling)."""
-    c = PALETTE[bool(dark)]
+    c = colours(dark)
 
     def px(size):
         return f"{max(8, round(size * zoom))}px"
@@ -99,7 +136,7 @@ QToolTip {{ background: {c['panel']}; color: {c['fg']}; border: 1px solid {c['bo
 def palette_roles(dark: bool) -> dict:
     """QPalette roles (name -> colour) for what Qt's Fusion style draws itself: check boxes, sliders, choice
     boxes, text fields and lists – the style sheet only covers cards, buttons and labels."""
-    c = PALETTE[bool(dark)]
+    c = colours(dark)
     return {"Window": c["bg"], "WindowText": c["fg"], "Base": c["field"], "AlternateBase": c["panel"],
             "Text": c["fg"], "Button": c["btn"], "ButtonText": c["fg"], "Highlight": c["accent"],
             "HighlightedText": c["on_accent"], "ToolTipBase": c["panel"], "ToolTipText": c["fg"],

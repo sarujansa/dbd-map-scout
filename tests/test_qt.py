@@ -741,3 +741,42 @@ def test_preview_draws_the_screen_and_posts_a_click(qapp, keep):
     QTest.mouseClick(view, Qt.LeftButton, Qt.NoModifier, QPoint(round(ox + 3000 * s), round(oy + 900 * s)))
     action, (key, (what, x, y)) = posted.get_nowait()
     assert action == "act" and key == "ov.preview" and what == "move" and abs(x - 3000) < 8 and abs(y - 900) < 8
+
+
+def _contrast(a, b):
+    def lum(h):
+        h = h.lstrip("#")
+        rgb = [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+        f = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in rgb]
+        return 0.2126 * f[0] + 0.7152 * f[1] + 0.0722 * f[2]
+    hi, lo = sorted((lum(a), lum(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+@pytest.mark.parametrize("key", list(qt_theme.THEMES))
+def test_colour_themes_stay_readable(key):
+    """1.62: every theme in dark and light – accent text on cards and text on accent buttons >= 4.5:1, text on
+    the background >= 7:1; unknown themes fall back to gold."""
+    qt_theme.set_theme(key)
+    try:
+        for dark in (True, False):
+            c = qt_theme.colours(dark)
+            assert _contrast(c["accent"], c["card"]) >= 4.5, (key, dark)
+            assert _contrast(c["on_accent"], c["accent"]) >= 4.5, (key, dark)
+            assert _contrast(c["fg"], c["bg"]) >= 7, (key, dark)
+            assert c["accent"] in qt_theme.stylesheet(dark)
+    finally:
+        qt_theme.set_theme("gold")
+    qt_theme.set_theme("nope")
+    assert qt_theme.colours(True)["accent"] == theme.DARK["accent"]
+
+
+def test_today_rows_for_the_black_bar():
+    """1.62: block "today" below the system values – rounds and play time; kills/escaped only with stats data."""
+    from dbdmapscout.app_sysinfo import today_rows
+    now = time.time()
+    rounds = [history.Round(history.period_start("day", now) + 60, 600, "coal", "Coal Tower", role="killer"),
+              history.Round(history.period_start("day", now) - 3600, 600, "coal", "Coal Tower", role="killer")]
+    rows = today_rows(SimpleNamespace(rounds=rounds, off={}), now)
+    text = ["".join(t for t, _c in row) for row in rows]
+    assert text == ["HEUTE 1 RUNDEN · 10:00"]                 # yesterday's round does not count
