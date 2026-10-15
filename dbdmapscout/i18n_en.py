@@ -466,7 +466,6 @@ EN = {
         "✓ {n} × map read wrongly in the middle of a match (the stats page already had a match running) – not "
         "counted. Last: {map}, {when}.",
     "Noch keine Runden gespeichert.": "No rounds saved yet.",
-    "{n} Runden · Ø {avg} · gesamt {total}": "{n} rounds · avg. {avg} · total {total}",
     "Alle gespeicherten Runden löschen?": "Delete all saved rounds?",
     "Rundenverlauf gelöscht.": "Round history deleted.",
     "Löscht alle gespeicherten Runden (Datei rounds.jsonl).": "Deletes all saved rounds (file rounds.jsonl).",
@@ -925,10 +924,7 @@ EN = {
     "stats.deadbydaylight.com, sobald eine Runde dort zugeordnet ist.":
         "Rounds from the map banner to the end of the round (from 1 min), stored only locally. Kills, escapes and "
         "bloodpoints from stats.deadbydaylight.com as soon as a round is tied to a match there.",
-    "Killer: Ø {kills} Kills, {four}× 4K ({n} Runden)": "Killer: avg. {kills} kills, {four}× 4K ({n} rounds)",
     "{n}× Abandon": "{n}× abandon",
-    "Survivor: {share} entkommen ({n} Runden)": "Survivor: {share} escaped ({n} rounds)",
-    "Bloodpoints: {total} (Ø {avg})": "Bloodpoints: {total} (avg. {avg})",
     "Ein Skin oder neuer Killer steht unter seinem eigenen Namen? Zeile markieren, Killer wählen, „Zuordnen“ – gilt "
     "auch rückwirkend.":
         "An outfit or new killer shows under its own name? Select the row, pick the killer, \"Assign\" – also applies "
@@ -1052,4 +1048,16 @@ EN = {
     "Systemwerte gibt es nur unter Windows.": "System values are only available on Windows.",
     "Erscheinen, sobald DBD läuft.": "Appear as soon as DBD is running.",
     "OK": "OK",
+    '4 Kills · leer = weniger als {n} Runden': '4 kills · empty = fewer than {n} rounds',
+    'Killer × Map – Ø Kills laut Stats-Seite': 'Killer × map – avg kills from the stats page',
+    'Maps – am häufigsten gespielt': 'Maps – most played',
+    'Median {time}': 'median {time}',
+    'Noch keine Killer-Runden mit Ergebnis von der Stats-Seite (Einstellungen → Mehr → Offizielle Match-Daten).': 'No killer rounds with a result from the stats page yet (Settings → More → Official match data).',
+    'keine Killer-Runden mit Stats-Daten': 'no killer rounds with stats data',
+    'keine Survivor-Runden mit Stats-Daten': 'no survivor rounds with stats data',
+    '{map} · {killer}: Ø {kills} Kills ({n} Runden)': '{map} · {killer}: avg {kills} kills ({n} rounds)',
+    '{n} Matches': '{n} matches',
+    '{time} gespielt': '{time} played',
+    'Ø Bloodpoints': 'Avg bloodpoints',
+    'Ø Rundendauer': 'Avg round length',
 }

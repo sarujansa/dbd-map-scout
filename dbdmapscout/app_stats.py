@@ -10,13 +10,14 @@ import time
 import webbrowser
 from types import SimpleNamespace
 
-from . import history, official, regions, sysinfo
+from . import dashboard, history, official, regions, sysinfo
 from . import uimodel as ui
 from .capture import foreground_root, is_game_window
 from .i18n import N_, _
 from .lobby import KILLERS, killer_label
 from .textnorm import fold
 from .textnorm import fmt_duration
+from .dashboard import _bp
 from .trendchart import TrendChart
 
 log = logging.getLogger("dbdmapscout")
@@ -35,11 +36,6 @@ SYS_PEAK_LABELS = {"gpu_temp_max": N_("GPU {v} °C"), "cpu_temp_max": N_("CPU {v
 RESULTS = {"escaped": N_("entkommen"), "dead": N_("tot"), "abandoned": N_("aufgegeben"), "gone": N_("verlassen")}
 
 
-def _bp(n) -> str:
-    """Bloodpoints short: 215k, 3.45 Mio."""
-    if n >= 1e6:
-        return _("{n} Mio.", n=f"{n / 1e6:.2f}")
-    return f"{n / 1000:.0f}k" if n >= 1000 else f"{n:.0f}"
 
 
 RECORD_MIN = 3        # rounds with official results on a map before the overlay shows the own record there
@@ -79,11 +75,9 @@ class StatsTab:
                                             values=[lbl for _k, lbl in self._stats_killers])
         self.stats_killer_cb.pack(side="left", padx=(8, 0))
         self.stats_killer_cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
-        self.stats_var = ui.StringVar(value="")
-        self.stats_sum_label = ui.Label(f, textvariable=self.stats_var, style="Big.TLabel", wraplength=540)
-        self.stats_sum_label.pack(anchor="w")
-        self.stats_res_var = ui.StringVar(value="")       # kills / escapes / bloodpoints (official data)
-        self.stats_res_label = ui.Label(f, textvariable=self.stats_res_var, wraplength=540)     # only when needed
+        # dashboard (1.58): key figures, maps, killer × map for what the filters selected
+        self.stats_dash = ui.Dashboard(f)
+        self.stats_dash.pack(fill="x")
         self.stats_lost_var = ui.StringVar(value="")
         self.stats_lost_label = ui.Label(f, textvariable=self.stats_lost_var, wraplength=540)   # only when needed
         ui.Label(f, text=_("Runden vom Map-Banner bis zum Rundenende (ab 1 min), nur lokal gespeichert. Kills, Escapes "
@@ -318,7 +312,6 @@ class StatsTab:
         self.stats_today_var.set(self._today_text(history.today(all_rounds, time.time()), official.summary(today)))
         since = history.period_start(period, time.time())
         rounds = history.select(all_rounds, since=since, region=wanted, role=role, killer=killer)
-        s = history.summary(rounds)
         ids = {id(r) for r in rounds}
         saved = {r.t for r in rescued}
         lost = [x for x in history.load_lost(self._hist_path()) if (since is None or x[0] >= since)
@@ -336,22 +329,16 @@ class StatsTab:
                            "nicht gezählt. Zuletzt: {map}, {when}.", n=len(ghosts), map=ghosts[-1].map,
                            when=time.strftime("%d.%m.%y %H:%M", time.localtime(ghosts[-1].t))))
         pairs = [(r, off[id(r)]) for r in rounds if id(r) in off and (role == "custom" or not r.custom)]
-        self.stats_res_var.set(self._results_text(official.summary([m for _r, m in pairs])))
         self.stats_lost_var.set("\n".join(notes))
-        below = self.stats_sum_label
-        for label, var in ((self.stats_res_label, self.stats_res_var), (self.stats_lost_label, self.stats_lost_var)):
-            if var.get():
-                label.pack(anchor="w", after=below)
-                below = label
-            else:
-                label.pack_forget()
-        if not all_rounds:
-            self.stats_var.set(_("Noch keine Runden gespeichert."))
-        elif not s["count"]:
-            self.stats_var.set(_("Keine Runden in dieser Auswahl."))
+        if self.stats_lost_var.get():
+            self.stats_lost_label.pack(anchor="w", after=self.stats_dash, pady=(6, 0))
         else:
-            self.stats_var.set(_("{n} Runden · Ø {avg} · gesamt {total}", n=s["count"], avg=fmt_duration(s["avg"]),
-                                 total=fmt_duration(s["total"])))
+            self.stats_lost_label.pack_forget()
+        dash = dashboard.build(rounds, pairs, lambda k: killer_label(k))
+        if not all_rounds:
+            dash.empty = _("Noch keine Runden gespeichert.")
+        self.stats_dash.data = dash
+        self.stats_dash.dark = bool(self.settings.get("dark_mode", True))
         roles = history.roles_per_map(rounds)               # rounds = killer + survivor + custom/unknown
         res = official.results(pairs, lambda r: r.map)
         rows = []
@@ -769,21 +756,6 @@ class StatsTab:
                          "ticks": [(v, f"{v} %") for v in (0, 50, 100)],
                          "last": f"{last_s:.0f} %" if last_s is not None else "",
                          "empty": _("Keine Survivor-Runden mit offiziellen Daten in dieser Auswahl.")}})
-
-    def _results_text(self, s):
-        """Line below the number of rounds: kills, escapes, bloodpoints of the rounds with official data."""
-        parts = []
-        if s["killer"]:
-            text = _("Killer: Ø {kills} Kills, {four}× 4K ({n} Runden)", kills=f"{s['kills']:.2f}", four=s["four"],
-                     n=s["killer"])
-            if s["abandons"]:
-                text += " · " + _("{n}× Abandon", n=s["abandons"])
-            parts.append(text)
-        if s["survivor"]:
-            parts.append(_("Survivor: {share} entkommen ({n} Runden)", share=f"{s['escaped']:.0%}", n=s["survivor"]))
-        if s["bp_matches"]:
-            parts.append(_("Bloodpoints: {total} (Ø {avg})", total=_bp(s["bp"]), avg=_bp(s["bp"] / s["bp_matches"])))
-        return "\n".join(parts)
 
     def _official_check_render(self):
         """Tab Erkennung, "Abgleich mit der Stats-Seite": how well the program's rounds fit the page (all data)."""
