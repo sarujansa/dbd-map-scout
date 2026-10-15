@@ -230,7 +230,7 @@ def test_the_program_starts_shows_every_page_and_quits(app_root):
     app._report_once = lambda key, text: errors.append((key, text))
     assert not (qt_window.page_keys() - set(app._qt_reg)), "a hand-made page names a widget the App never made"
     assert tooltip.missing(app.ui_root) == []                 # every button/checkbox has its info text
-    keys = [k for k, _l, _s in qt_window.PAGES]
+    keys = [k for k, _l in qt_window.PAGES]
     steps = []
 
     def step(i=0):
