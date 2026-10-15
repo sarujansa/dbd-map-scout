@@ -361,3 +361,24 @@ def test_slow_callbacks_are_noted_for_the_diagnosis():
     text = "\n".join(diagnose.lag_lines(loop.slow))
     assert "Fenster-Hänger" in text and "slow" in text and " ms" in text
     assert diagnose.lag_lines([]) == ["Fenster-Hänger (≥ 30 ms): keine"]
+
+
+def test_moving_without_a_map_shows_a_test_map(app_root):
+    """1.64.3 (user: "die Map wird beim Verschieben nicht angezeigt"): "Mit der Maus verschieben" without a map
+    shows a test map to grab – in the game too; "Fertig" hides it again, a map chosen meanwhile stays."""
+    from dbdmapscout.app import App
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        assert not app.overlay.has_map()
+        app.toggle_edit()
+        assert app.overlay.editing and app.overlay.has_map() and app._test_map
+        assert app.edit_btn.cget("text") == "Fertig"
+        app.toggle_edit()
+        assert not app.overlay.editing and not app.user_visible and not app._test_map
+        app.toggle_edit()                                     # again: the loaded test map is reused
+        mid = list(app.catalog.maps)[3]
+        app.show_map(mid, 1, "manual")                        # a real choice while moving …
+        app.toggle_edit()
+        assert app.current[0] == mid and app.user_visible     # … stays after "Fertig"
+    finally:
+        app.quit()
