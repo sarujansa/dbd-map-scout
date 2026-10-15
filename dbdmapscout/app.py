@@ -299,10 +299,16 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
                                                            "Uhrzeit (auch wenn die Systemwerte aus sind: rechts oben)"),
                                              variable=self.today_var, command=self._today_flag_changed)
                   ).pack(anchor="w", pady=(6, 0))
+        self.media_var = ui.BooleanVar(value=o.get("show_media", True))
+        self._reg("ov.media", ui.Checkbutton(sysf, text=_("Darunter „Läuft gerade“: Titel und Interpret der Musik "
+                                                           "(Spotify, Browser … – nur während sie spielt)"),
+                                             variable=self.media_var, command=self._today_flag_changed)
+                  ).pack(anchor="w", pady=(2, 0))
         return outer
 
     def _today_flag_changed(self):
         self.settings["overlay"]["show_today"] = bool(self.today_var.get())
+        self.settings["overlay"]["show_media"] = bool(self.media_var.get())
         self._save_soon()
         self._tick_overlay(reschedule=False)
 
@@ -1607,6 +1613,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
             self.tray.stop()
             self.conn.stop()
             self.sysmon.stop()
+            self.media.stop()
             self.worker.stop()
             self.hotkeys.stop()
             self.worker.join(timeout=4)      # let a running OCR call finish cleanly

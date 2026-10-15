@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 import time
 
-from . import history, layout, official, sysinfo
+from . import history, layout, media, official, sysinfo
 from .capture import IS_WIN
 from .i18n import N_, _
 from .textnorm import fmt_duration
@@ -53,6 +53,8 @@ class SysInfo:
     def _hud_init(self):
         self.sysmon = sysinfo.SysMonitor()
         self.sysmon.start()
+        self.media = media.MediaWatcher()
+        self.media.start()
         self.hud = make_hud()
         if self.hud is not None:
             self.hud.on_moved = lambda x, y: self.events.put(("call", self._hud_dragged, (x, y)))   # see app.py
@@ -65,10 +67,12 @@ class SysInfo:
         side = self.settings.get("sysinfo", "off")
         sys_on = side in HUD_SHOWN
         today = bool(self.settings["overlay"].get("show_today", True))
-        if not sys_on and today:
-            side = "right"                                  # only "today": at the top of the right bar
-        on = (sys_on or today) and self.hud is not None
+        music = bool(self.settings["overlay"].get("show_media", True))
+        if not sys_on and (today or music):
+            side = "right"                                  # only "today"/music: at the top of the right bar
+        on = (sys_on or today or music) and self.hud is not None
         self.sysmon.active = sys_on and self.hud is not None and self.game is not None
+        self.media.active = music and self.hud is not None and self.game is not None
         bar = layout.bar_width(gw, gh)
         snap = self.sysmon.snapshot
         if self._hist is not None and self._sysrec is not None and sys_on and time.time() - snap.t < 3:
@@ -76,6 +80,10 @@ class SysInfo:
         rows = sysinfo.hud_rows(snap) if sys_on and self.hud is not None else []
         if on and today:
             rows = rows + ([[(" ", sysinfo.DIM)]] if rows else []) + self._today_rows(time.time())
+        playing = media.rows(self.media.now, time.time(), _("MUSIK "), sysinfo.DIM, sysinfo.WHITE) \
+            if on and music else []
+        if playing:
+            rows = rows + ([[(" ", sysinfo.DIM)]] if rows else []) + playing
         editing = on and side == "custom" and self.overlay.editing
         if self.hud is not None:
             self.hud.set_editing(editing)

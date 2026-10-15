@@ -58,7 +58,8 @@ SPECS = {
             ("check", "ov.transparent"))),
         ("card", "ov.sys", (
             ("row", (("label", "ov.sysinfo.label"), ("combo", "ov.sysinfo"), ("stretch",))),
-            ("hint", "ov.sys_text"), ("hint", "ov.sys_hint"), ("check", "ov.today"))),
+            ("hint", "ov.sys_text"), ("hint", "ov.sys_hint"), ("check", "ov.today"),
+            ("check", "ov.media"))),
     ),
     "settings": (
         ("card", "st.look", (
