@@ -149,12 +149,28 @@ def compose(img: Image.Image, height: int, caption: str, transparent: bool, bord
     return pic
 
 
-def add_border(pic: Image.Image) -> Image.Image:
-    ImageDraw.Draw(pic).rectangle([0, 0, pic.width - 1, pic.height - 1], outline=BORDER, width=3)
+def add_border(pic: Image.Image, label: str = "") -> Image.Image:
+    """The yellow frame of the edit mode; ``label`` (1.64.7, user: "keinen Plan, was ich verschiebe") names the
+    element on a tag inside the frame's top left – size and place stay exactly the same (no jump after "Fertig")."""
+    d = ImageDraw.Draw(pic)
+    d.rectangle([0, 0, pic.width - 1, pic.height - 1], outline=BORDER, width=3)
+    if label:
+        size = 15
+        try:
+            font = ImageFont.truetype(FIRA, size)
+        except OSError:
+            font = _font(size)
+        tw = min(pic.width, int(d.textlength(label, font=font)) + 12)
+        asc, desc = font.getmetrics()
+        th = min(pic.height, asc + desc + 6)
+        d.rectangle([0, 0, tw - 1, th - 1], fill=BORDER)
+        d.text((6, 3), label, font=font, fill=(20, 16, 4, 255))
     return pic
 
 
 INFO_TIMER = (255, 255, 255, 255)
+DIM_LABEL = (150, 156, 170, 255)   # = sysinfo.DIM: a row starting with it is "label: values" (column, 1.64.7)
+TITLE_SCALE = 1.15                 # the music card's title, a bit larger than the artist below it
 INFO_SERVER = (178, 184, 248, 255)     # light tone of the map colour
 INFO_DOT = (74, 222, 128, 255)         # "connected"
 INFO_WARN = (251, 191, 36, 255)        # doubtful detection
@@ -333,8 +349,12 @@ def render_hud(rows, height: int) -> Image.Image:
     pad = 3 * blur
     halo = max(1, height // 400)
     d0 = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
-    texts = ["".join(t for t, _ in row) for row in rows]
-    widths = [int(_tracked_width(d0, t, font, track)) for t in texts]
+    # 1.64.7 (user: "alles schön untereinander"): rows of label + values start their values in one column
+    labelled = [len(row) >= 2 and row[0][1] == DIM_LABEL and row[0][0].strip() for row in rows]
+    col = max((int(_tracked_width(d0, row[0][0], font, track)) for row, lab in zip(rows, labelled) if lab),
+              default=0)
+    texts = ["".join(t for t, _ in (row[1:] if lab else row)) for row, lab in zip(rows, labelled)]
+    widths = [int(_tracked_width(d0, t, font, track)) + (col if lab else 0) for t, lab in zip(texts, labelled)]
     asc, desc = font.getmetrics()
     line_h = asc + desc
     w = max(widths, default=0) + 2 * pad
@@ -343,9 +363,11 @@ def render_hud(rows, height: int) -> Image.Image:
 
     def draw(d, shadow):
         y = pad
-        for row in rows:
+        for row, lab in zip(rows, labelled):
             x = pad
-            for text, colour in row:
+            for i, (text, colour) in enumerate(row):
+                if lab and i == 1:
+                    x = pad + col                      # the values' column
                 for ch in text:
                     d.text((x, y), ch, font=font, fill=dark if shadow else colour,
                            stroke_width=halo if shadow else 0, stroke_fill=dark)
@@ -360,9 +382,57 @@ def render_hud(rows, height: int) -> Image.Image:
     return pic
 
 
-def render_music(rows, cover, height: int) -> Image.Image:
-    """"Läuft gerade" (1.64): the cover (if any) left of the title/artist rows, the rows like the system values;
-    the cover as tall as the two text lines, slightly rounded, with the same soft shadow."""
+def progress_strip(width: int, elapsed: float, total: float, height: int) -> Image.Image:
+    """The song's progress (1.64.7, user's screenshot of Spotify): "1:10 ──────── 2:56" – times grey, the bar
+    white on a faint track, with the soft dark edge of the other text. ``height``: game height."""
+    from .media import clock
+    size = max(11, height // 75)
+    try:
+        font = ImageFont.truetype(FIRA, size)
+    except OSError:
+        font = _font(size)
+    blur = max(2, height // 300)
+    pad = 3 * blur
+    halo = max(1, height // 400)
+    left, right = clock(elapsed), clock(total)
+    d0 = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    lw, rw = d0.textlength(left, font=font), d0.textlength(right, font=font)
+    asc, desc = font.getmetrics()
+    h = asc + desc + 2 * pad
+    w = max(int(lw + rw) + 6 * size, width)
+    gap = max(6, size // 2)
+    x0, x1 = pad + lw + gap, w - pad - rw - gap
+    bar = max(3, height // 360)
+    cy = h // 2
+    frac = 0.0 if total <= 0 else min(1.0, max(0.0, elapsed / total))
+    dark = (0, 0, 0, 230)
+    pic = Image.new("RGBA", (int(w), int(h)), (0, 0, 0, 0))
+    shadow = Image.new("RGBA", pic.size, (0, 0, 0, 0))
+    ds = ImageDraw.Draw(shadow)
+    for x, t in ((pad, left), (w - pad - rw, right)):
+        ds.text((x, pad), t, font=font, fill=dark, stroke_width=halo, stroke_fill=dark)
+    ds.rounded_rectangle((x0 - halo, cy - bar / 2 - halo, x1 + halo, cy + bar / 2 + halo), radius=bar, fill=dark)
+    pic.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(blur)))
+    d = ImageDraw.Draw(pic)
+    d.text((pad, pad), left, font=font, fill=DIM_LABEL)
+    d.text((w - pad - rw, pad), right, font=font, fill=DIM_LABEL)
+    d.rounded_rectangle((x0, cy - bar / 2, x1, cy + bar / 2), radius=bar, fill=(255, 255, 255, 70))
+    if frac > 0:
+        d.rounded_rectangle((x0, cy - bar / 2, x0 + (x1 - x0) * frac, cy + bar / 2), radius=bar,
+                            fill=(255, 255, 255, 235))
+    return pic
+
+
+def _below(pic: Image.Image, strip: Image.Image, centred: bool) -> Image.Image:
+    """``strip`` under ``pic`` (overlapping by the shadow pad, like the text rows)."""
+    out = Image.new("RGBA", (max(pic.width, strip.width), pic.height + strip.height), (0, 0, 0, 0))
+    out.alpha_composite(pic, ((out.width - pic.width) // 2 if centred else 0, 0))
+    out.alpha_composite(strip, ((out.width - strip.width) // 2 if centred else 0, pic.height))
+    return out
+
+
+def render_music_compact(rows, cover, height: int) -> Image.Image:
+    """Music card "Kompakt" (1.64): the cover left of the title/artist rows, as tall as the two lines."""
     text = render_hud(rows, height)
     if cover is None:
         return text
@@ -381,6 +451,45 @@ def render_music(rows, cover, height: int) -> Image.Image:
     pic.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(blur)))
     pic.alpha_composite(art, (pad, pad))
     pic.alpha_composite(text, (pad + side + gap - pad, 0))
+    return pic
+
+
+def render_music(rows, cover, height: int, style: str = "big", progress=None) -> Image.Image:
+    """"Läuft gerade": style "big" (1.64.7, user's choice "A") = the cover big on top, below it the title (a bit
+    larger) and the artist, centred; "compact" = the card of 1.64 (cover left). Text like the system values, the
+    cover slightly rounded with the same soft shadow."""
+    if style == "compact":
+        pic = render_music_compact(rows, cover, height)
+        if progress:
+            pad = 3 * max(2, height // 300)
+            pic = _below(pic, progress_strip(pic.width - 2 * pad, *progress, height), False)
+        return pic
+    blur = max(2, height // 300)
+    pad = 3 * blur
+    lines = [render_hud([row], int(height * (TITLE_SCALE if i == 0 else 1.0))) for i, row in enumerate(rows)]
+    side = max(32, height // 6) if cover is not None else 0
+    gap = max(4, height // 120) if cover is not None else 0
+    text_w = max((im.width for im in lines), default=0)
+    text_h = sum(im.height - pad for im in lines) + (pad if lines else 0)
+    w = max(side + 2 * pad, text_w)
+    h = (pad + side + gap - pad if cover is not None else 0) + text_h
+    pic = Image.new("RGBA", (max(1, w), max(1, h)), (0, 0, 0, 0))
+    if cover is not None:
+        art = cover.convert("RGBA").resize((side, side), Image.LANCZOS)
+        mask = Image.new("L", (side, side), 0)
+        ImageDraw.Draw(mask).rounded_rectangle((0, 0, side - 1, side - 1), radius=max(2, side // 14), fill=255)
+        art.putalpha(mask)
+        ax = (w - side) // 2
+        shadow = Image.new("RGBA", pic.size, (0, 0, 0, 0))
+        shadow.paste((0, 0, 0, 200), (ax, pad), mask)
+        pic.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(blur)))
+        pic.alpha_composite(art, (ax, pad))
+    y = pad + side + gap - pad if cover is not None else 0
+    for im in lines:
+        pic.alpha_composite(im, ((w - im.width) // 2, y))
+        y += im.height - pad
+    if progress:
+        pic = _below(pic, progress_strip(max(side, text_w - 2 * pad), *progress, height), True)
     return pic
 
 
@@ -420,6 +529,7 @@ class HudWindow:
         self.opacity = 0.85
         self.last_error = ""
         self.editing = False
+        self.edit_label = ""                   # name on the edit frame ("SYSTEMWERTE", "MUSIK")
         self.on_moved = None
         self._proc = WNDPROC(self._wndproc)                    # keep a reference!
         self._old_proc = _SetLong(self._hwnd, GWLP_WNDPROC, ctypes.cast(self._proc, ctypes.c_void_p).value)
@@ -459,17 +569,20 @@ class HudWindow:
             self._pos = None
         return self.size
 
-    def render(self, rows, height: int, cover=None):
-        """Prepare the picture; returns its size (0, 0 without rows). ``cover``: the music card's picture."""
-        key = (tuple(tuple(r) for r in rows), int(height), self.editing, id(cover))
+    def render(self, rows, height: int, cover=None, style=None, progress=None):
+        """Prepare the picture; returns its size (0, 0 without rows). ``cover``/``style``/``progress``: the music
+        card (progress = (elapsed, total) seconds; redrawn once a second while a song plays)."""
+        progress = (int(progress[0]), int(progress[1])) if progress else None
+        key = (tuple(tuple(r) for r in rows), int(height), self.editing, id(cover), style, progress)
         if key != self._key:
             self._key = key
             if not rows:
                 self._data, self.size = None, (0, 0)
             else:
-                pic = render_hud(rows, height) if cover is None else render_music(rows, cover, height)
+                pic = render_hud(rows, height) if style is None else render_music(rows, cover, height, style,
+                                                                                  progress)
                 if self.editing:
-                    pic = add_border(pic)
+                    pic = add_border(pic, self.edit_label)
                 self._data, self.size = premultiplied_bgra(pic), pic.size
                 self._pos = None                      # push again
         return self.size
@@ -525,6 +638,7 @@ class PictureOverlay:
         self.transparent = True
         self.show_caption = True
         self.show_map = True            # off: only timer, server and ping ("nur Infos")
+        self.edit_label = ""            # name on the edit frame (1.64.7: "KARTE · Mausrad = Grösse")
         self.info_beside = False        # timer/server right of the map (low bar above/below the picture)
         self.on_moved = None
         self.on_wheel = None
@@ -654,7 +768,7 @@ class PictureOverlay:
                                    ping=self._ping, note=self._note, record=self._record,
                                    beside=self.info_beside and self.show_map)
                 if self._editing:
-                    pic = add_border(pic.copy())
+                    pic = add_border(pic.copy(), self.edit_label)
                 self._prepared.append((premultiplied_bgra(pic), pic.width, pic.height, dur))
             self._key = key
             self._size = (self._prepared[0][1], self._prepared[0][2])
@@ -674,7 +788,7 @@ class PictureOverlay:
             pic = add_info(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), "", self._server, height,
                            backdrop=not self.transparent, ping=self._ping, status=self._waiting)
             if self._editing:
-                pic = add_border(pic.copy())
+                pic = add_border(pic.copy(), self.edit_label)
             self._prepared = [(premultiplied_bgra(pic), pic.width, pic.height, 0)]
             self._key, self._base_key, self._frame_i = key, None, 0     # the map is rebuilt afterwards
             self._size = (pic.width, pic.height)

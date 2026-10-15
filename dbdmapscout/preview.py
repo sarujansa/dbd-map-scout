@@ -65,9 +65,11 @@ def fitted(render, height: int, avail_w: float, key=None):
 def music_rows(now: media.NowPlaying, wall: float):
     """Rows and cover of the music card: what plays, else a sample (so the preview always shows the card)."""
     if media.playing(now, wall):
-        return media.rows(now, wall, "", sysinfo.DIM, sysinfo.WHITE), now.cover
+        p = media.progress(now, wall)
+        return media.rows(now, wall, "", sysinfo.DIM, sysinfo.WHITE), now.cover, \
+            (int(p[0]), int(p[1])) if p else None
     sample = media.NowPlaying("Blinding Lights", "The Weeknd", True, wall)
-    return media.rows(sample, wall, "", sysinfo.DIM, sysinfo.WHITE), sample_cover()
+    return media.rows(sample, wall, "", sysinfo.DIM, sysinfo.WHITE), sample_cover(), (70, 176)
 
 
 def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, map_pic, caption: str,
@@ -113,12 +115,14 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
         out.append(("hud", hud, hx, hy))
         hud_rect = (hx, hy, hud.width, hud.height)
     if music:
-        rows_m, cover = music
+        rows_m, cover, prog = music
+        prog = prog if o.get("media_progress", True) else None
         scale = max(60, min(200, o.get("media_scale", 1.0) * 100)) / 100
         spot = o.get("media_pos", "below")
         show_cover = cover if o.get("media_cover", True) else None
-        card = fitted(lambda h: render_music(rows_m, show_cover, h), int(gh * scale),
-                      avail if spot != "custom" else gw / 3, ("music", repr(rows_m), id(show_cover)))
+        style = o.get("media_style", "big")
+        card = fitted(lambda h: render_music(rows_m, show_cover, h, style, prog), int(gh * scale),
+                      avail if spot != "custom" else gw / 3, ("music", repr(rows_m), id(show_cover), style, prog))
         cx, cy = layout.media_xy(spot, (0, 0, gw, gh), card.size, margin, hud_rect, o.get("media_xy"))
         out.append(("music", card, int(cx), int(cy)))
     return out, map_rect
