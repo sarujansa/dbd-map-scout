@@ -54,9 +54,13 @@ def _single_instance() -> bool:
     """Only one running copy (a second one could not register the hotkeys)."""
     if sys.platform != "win32":
         return True
-    from .restart import MUTEX_NAME
+    from .restart import MUTEX_NAME, ask_running_copy_to_show
     if not _claim_mutex(MUTEX_NAME):
-        _message(_("DbD Map Scout läuft bereits."))
+        if ask_running_copy_to_show():            # 1.65.1: the running copy brings its window to the front
+            return False
+        _message(_("DbD Map Scout läuft bereits, reagiert aber nicht (oder ist gerade beim Beenden).\n\n"
+                   "Kurz warten und nochmal starten. Hilft das nicht: im Task-Manager unter „Details“ "
+                   "„pythonw.exe“ (DbD Map Scout) beenden."))
         return False
     return True
 
@@ -125,12 +129,20 @@ def main():
     enable_dpi_awareness()
     try:
         from .app import App
-        App(ROOT, simulate=args.simulate, start_in_tray=args.tray).run()
+        app = App(ROOT, simulate=args.simulate, start_in_tray=args.tray)
+        app.exit_watchdog = True                  # a quit that hangs ends the process anyway
+        app.run()
     except Exception:
         text = traceback.format_exc()
         logging.getLogger("dbdmapscout").error(text)
         _message(_("Start fehlgeschlagen:") + "\n\n" + text[-1500:], error=True)
         sys.exit(1)
+    # 1.65.1 (user: after an update the program did not come back, a click said "läuft bereits"): end the
+    # process now. Settings are saved in App.quit; a thread that does not stop (tray icon, window capture)
+    # or a hang while Python shuts down would keep the process – and its single-instance mutex – alive.
+    logging.getLogger("dbdmapscout").info("Beendet.")
+    logging.shutdown()
+    os._exit(0)
 
 
 if __name__ == "__main__":

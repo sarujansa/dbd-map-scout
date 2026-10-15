@@ -34,8 +34,10 @@ def test_never_starts_a_second_copy(monkeypatch):
     clock = iter(range(0, 1000, 5))
     monkeypatch.setattr(restart.time, "time", lambda: next(clock))
     started = []
-    assert not restart.wait_and_start(ROOT, timeout=30, running=lambda: True, run=lambda c, e: started.append(c))
-    assert started == []
+    told = []
+    assert not restart.wait_and_start(ROOT, timeout=30, running=lambda: True, run=lambda c, e: started.append(c),
+                                      stuck=lambda: told.append(1))
+    assert started == [] and told == [1]          # 1.65.1: says so instead of silently giving up
 
 
 def test_plain_restart_does_not_force_the_update(monkeypatch):

@@ -7,6 +7,7 @@ import importlib
 import os
 import pkgutil
 import sys
+import time
 
 import pytest
 
@@ -344,3 +345,29 @@ def test_media_controls_are_read_without_error():
     assert w.error == "" and w.now.t > 0, w.error
     assert "Fehler" not in w.diag_line()
 
+
+
+def test_a_second_start_asks_the_running_copy_for_its_window():
+    """1.65.1 (user: "es läuft bereits", but no window): the running copy answers a second start's request;
+    one that does not answer (hung) is reported as such."""
+    from dbdmapscout import restart
+    name = f"Local\\DbDMapScout.Test.{os.getpid()}.show"
+    assert not restart.ask_running_copy_to_show(name, wait=0.2)          # no running copy at all
+    h = restart.show_event_create(name)
+    assert h and not restart.show_requested(h)
+    import threading
+    answered = []
+
+    def running_copy():                                                     # its 250-ms timer
+        for _i in range(40):
+            if restart.show_requested(h):
+                answered.append(1)
+                return
+            time.sleep(0.05)
+    t = threading.Thread(target=running_copy)
+    t.start()
+    assert restart.ask_running_copy_to_show(name, wait=3.0)
+    t.join()
+    assert answered == [1]
+    assert not restart.ask_running_copy_to_show(name, wait=0.3)          # nobody takes it: "does not answer"
+    assert not restart.show_requested(h)                                  # and it was taken back
