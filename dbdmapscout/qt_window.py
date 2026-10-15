@@ -56,6 +56,7 @@ SPECS = {
         ("card", "ov.look", (
             ("row", (("hint", "ov.map_size"), ("stretch",), ("button", "ov.map_size_reset"))),
             ("slider", "ov.opacity"),
+            ("row", (("label", "ov.map_style.label"), ("combo", "ov.map_style"), ("stretch",))),
             ("check", "ov.show_map"), ("check", "ov.focus"), ("check", "ov.caption"), ("check", "ov.timer"),
             ("check", "ov.server"), ("check", "ov.waiting"), ("check", "ov.floors"), ("check", "ov.record"),
             ("check", "ov.transparent"))),

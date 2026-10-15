@@ -454,7 +454,7 @@ class QtShell:
         if cached is not None and cached[0] == (mid, v, id(self.catalog)):
             return cached[1]
         m = self.catalog.maps[mid]
-        path, shown = self.catalog.image_path(mid, v)
+        path, shown = self._map_file(mid, v)
         pic = None
         if path:
             try:
