@@ -83,7 +83,7 @@ def aws_global(ip: str) -> bool:
 
 def region_name(code: str) -> str:
     if code == UNKNOWN:
-        return _("Region unbekannt")
+        return _("Global")                # 1.64.6 (user): AWS lists the range as EC2 "GLOBAL"
     return _(regions.NAMES.get(code, code))
 
 

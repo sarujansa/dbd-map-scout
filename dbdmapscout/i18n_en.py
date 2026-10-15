@@ -382,7 +382,7 @@ EN = {
     "Abgebrochen (keine Administratorrechte erteilt).": "Cancelled (no administrator rights granted).",
     # connection watch
     "Warte auf Match …": "Waiting for a match …",
-    "Region unbekannt": "region unknown",
+    "Global": "Global",
     "keine Daten vom Mitschnitt": "no data from the capture",
     "Nur unter Windows verfügbar.": "Only available on Windows.",
     "Mitschnitt beendet (Code {code}).": "Capture ended (code {code}).",
