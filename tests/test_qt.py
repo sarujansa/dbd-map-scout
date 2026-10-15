@@ -769,7 +769,7 @@ def test_preview_draws_the_screen_and_posts_a_click(qapp, keep):
     pic, hud = Image.new("RGBA", (300, 400), "blue"), Image.new("RGBA", (200, 100), "white")
     data = {"screen": (3440, 1440), "bar": 440, "rect": (26, 17, 388, 603, 603),
             "layers": [("map", 26, 17, 300, 400), ("hud", 3200, 17, 200, 100)], "pics": {"map": pic, "hud": hud},
-            "opacity": 0.85}
+            "opacity": 0.85, "editing": True}
     view.show_state({"data": data, "visible": True})
     assert view.heightForWidth(1000) == view.MAX_H             # 3440:1440 would be 419 – capped
     shot = view.grab().toImage()                              # paints every layer (1.64: real pictures)
@@ -780,6 +780,41 @@ def test_preview_draws_the_screen_and_posts_a_click(qapp, keep):
     QTest.mouseClick(view, Qt.LeftButton, Qt.NoModifier, QPoint(round(ox + 3000 * s), round(oy + 900 * s)))
     action, (key, (what, x, y)) = posted.get_nowait()
     assert action == "act" and key == "ov.preview" and what == "move" and abs(x - 3000) < 8 and abs(y - 900) < 8
+
+
+def test_preview_drags_the_element_under_the_mouse(qapp, keep):
+    """1.64.1 (user: "nur die Map moven, nicht das andere"): the element under the mouse is grabbed and its corner
+    follows the mouse; an empty spot still moves the map's centre there."""
+    from PIL import Image
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtTest import QTest
+    from dbdmapscout import qt_window
+    posted = queue.Queue()
+    view = keep(qt_window.PreviewView("ov.preview", lambda a, arg=None: posted.put((a, arg))))
+    view.resize(1000, 419)
+    pics = {n: Image.new("RGBA", (200, 100), "white") for n in ("map", "hud", "music")}
+    data = {"screen": (3440, 1440), "bar": 440, "rect": (20, 20, 300, 400, 400), "opacity": 1.0, "pics": pics,
+            "layers": [("map", 20, 20, 300, 400), ("hud", 3100, 20, 300, 200), ("music", 3100, 300, 300, 100)]}
+    view.show_state({"data": data, "visible": True})
+    view.show()
+    ox, oy, s = view._frame()
+    QTest.mouseClick(view, Qt.LeftButton, Qt.NoModifier, QPoint(round(ox + 3150 * s), round(oy + 320 * s)))
+    assert posted.empty()                                     # not before "Mit der Maus verschieben" (1.64.1)
+    view.show_state({"data": dict(data, editing=True), "visible": True})
+    view.grab()                                               # frame + note "Verschieben aktiv"
+    ox, oy, s = view._frame()
+
+    def at(x, y):
+        return QPoint(round(ox + x * s), round(oy + y * s))
+    assert view.layer_at(3150, 320)[0] == "music" and view.layer_at(1700, 700) is None
+    QTest.mousePress(view, Qt.LeftButton, Qt.NoModifier, at(3150, 320))      # grab the music card …
+    assert posted.empty()                                                    # … no jump on the press
+    QTest.mouseMove(view, at(3150, 1020))
+    QTest.mouseRelease(view, Qt.LeftButton, Qt.NoModifier, at(3150, 1020))
+    action, (key, (what, name, x, y)) = posted.get_nowait()
+    assert (what, name) == ("place", "music") and abs(x - 3100) < 8 and abs(y - 1000) < 8
+    QTest.mouseClick(view, Qt.LeftButton, Qt.NoModifier, at(1700, 700))     # empty spot: the map goes there
+    assert posted.get_nowait()[1][1][0] == "move"
 
 
 def _contrast(a, b):

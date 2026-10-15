@@ -83,6 +83,7 @@ DEFAULTS = {
     "official_dir": "",                 # where the userscript's files land ("" = the Windows download folder)
     "official_notify": True,
     "sysinfo": "right",                 # system values at the top of a black bar: off | left | right | custom
+    "today_side": "right",              # "today" alone (system values off): right, or custom = at sysinfo_pos
     "sysinfo_pos": [1.0, 0.0],          # sysinfo = custom: 0..1 of the free space in the DBD window (x, y)            # small notification when a file was read and deleted (not while DBD is in front)
 }
 

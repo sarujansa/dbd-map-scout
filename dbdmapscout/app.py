@@ -648,13 +648,11 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
     def toggle_edit(self):
         """Edit mode: the map (and system values with an own position) can be dragged."""
         on = not self.overlay.editing
-        if on and not self.overlay.has_map():
-            self._log(_("Erst eine Map wählen, dann lässt sich das Overlay verschieben."), "Overlay")
-            return
         self.overlay.set_editing(on)
         self.edit_btn.configure(text=_("Fertig") if on else _("Mit der Maus verschieben"))
-        if on:
-            self._log(_("Overlay mit der Maus ziehen, Mausrad = Grösse. Danach „Fertig“ oder Hotkey."), "Overlay")
+        if on:                     # 1.64.1: also without a map – the preview (tab Overlay) shows everything
+            self._log(_("Karte, Systemwerte und Musik mit der Maus ziehen (im Spiel oder in der Vorschau), "
+                        "Mausrad = Grösse. Danach „Fertig“ oder Hotkey."), "Overlay")
         self._tick_overlay(reschedule=False)
 
     def _overlay_dragged(self, x, y):
@@ -1295,7 +1293,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
             rows = sysinfo.hud_rows(snap if now - snap.t < 3 else preview.sample_snapshot())
         if today:
             rows = rows + ([[(" ", sysinfo.DIM)]] if rows else []) + self._today_rows(now)
-        hud_side = side if sys_on else ("right" if today else "")
+        hud_side = side if sys_on else (("custom" if self.settings.get("today_side") == "custom" else "right")
+                                        if today else "")
         music = preview.music_rows(self.media.now, now) if o.get("show_media", True) else None
         key = (gw, gh, repr(sorted((k, v) for k, v in o.items() if not isinstance(v, dict))), hud_side,
                repr(rows), repr(self.settings.get("sysinfo_pos")), id(pic), caption, repr(info),
@@ -1312,7 +1311,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         return {"screen": (gw, gh), "bar": layout.bar_width(gw, gh), "rect": (x, y, w, h, h),
                 "layers": [(name, round(lx / f), round(ly / f), round(img.width / f), round(img.height / f))
                            for name, img, lx, ly in layers],
-                "pics": {name: img for name, img, _lx, _ly in layers}, "opacity": o["opacity"]}
+                "pics": {name: img for name, img, _lx, _ly in layers}, "opacity": o["opacity"],
+                "editing": bool(self.overlay.editing)}
 
     def _preview_sample(self):
         """A map picture for the preview while none is on display (the first one of the catalog), loaded once."""
@@ -1333,13 +1333,39 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         return getattr(self, "_preview_pic", None)
 
     def _preview_pick(self, value):
-        """A click or drag on the preview: the map's centre goes there – an own position (like the sliders)."""
+        if not self.overlay.editing:              # only after "Mit der Maus verschieben" (user, 1.64.1)
+            return
+        self._preview_pick_now(value)
+
+    def _preview_pick_now(self, value):
+        """A click or drag on the preview: an element dragged by the mouse goes where it was dropped ("place",
+        1.64.1 – map, system values/"today" or music card, each to its own place); a click on an empty spot puts
+        the map's centre there ("move"). Always an own position, like dragging in the game."""
+        data = self._preview_data()
+        _gx, _gy, gw, gh = self._game_rect()
+        if value[0] == "place":
+            _what, name, x, y = value
+            size = {n: (w, h) for n, _x, _y, w, h in data["layers"]}.get(name)
+            if size is None:
+                return
+            fx = round(min(1.0, max(0.0, x / max(1, gw - size[0]))), 4)
+            fy = round(min(1.0, max(0.0, y / max(1, gh - size[1]))), 4)
+            if name == "hud":
+                self._hud_own_place(fx, fy)
+            elif name == "music":
+                self._music_own_place(fx, fy)
+            elif name == "map":
+                self._map_own_place(fx, fy)
+            return
         what, cx, cy = value
         if what != "move":
             return
-        _x, _y, w, h, _mh = self._preview_data()["rect"]
-        _gx, _gy, gw, gh = self._game_rect()
+        _x, _y, w, h, _mh = data["rect"]
         fx, fy = layout.pos_from_point(gw, gh, w, h, cx, cy)
+        self._map_own_place(fx, fy)
+
+    def _map_own_place(self, fx, fy):
+        """The map's own position (0..1 of the free room), through the sliders like before."""
         self._syncing = True
         try:
             self.posx_var.set(round(fx * 100, 1))

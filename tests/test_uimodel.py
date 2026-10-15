@@ -273,7 +273,11 @@ def test_the_program_starts_shows_every_page_and_quits(app_root):
             app._qt_post("add_picture")                       # dialog "Kartenbild hinzufügen"
             app._qt_post("act", ("ov.caption", False))        # a click on the overlay page
             app._qt_post("search_open")                       # the search fills every page
+            app._qt_post("act", ("ov.edit", None))                   # "Mit der Maus verschieben" (also without a map)
             app._qt_post("act", ("ov.preview", ("move", 300, 300)))   # a click on the overlay preview
+            app._qt_post("act", ("ov.preview", ("place", "music", 0, 0)))     # the music card dragged there
+            app._qt_post("act", ("ov.preview", ("place", "hud", 0, 0)))       # the system values too
+            app._qt_post("act", ("ov.edit", None))                   # "Fertig"
             app._qt_post("setup_done")
             app._qt_post("act", ("st.swatches", "#E0508F"))   # a square of the colour palette
             settings = app.qt.forms["settings"].columns[0]
@@ -282,6 +286,8 @@ def test_the_program_starts_shows_every_page_and_quits(app_root):
             assert len(app.qt.dialogs) == 2
             assert app.settings["welcome_seen"] and any("Overlay" in e for e in app.qt._found)
             assert app.settings["overlay"]["anchor"] == "custom"
+            assert (app.settings["overlay"]["media_pos"], app.settings["overlay"]["media_xy"]) == ("custom", [0.0, 0.0])
+            assert (app.settings["sysinfo"], app.settings["sysinfo_pos"]) == ("custom", [0.0, 0.0])
             assert (app.settings["color_theme"], app.settings["accent_custom"]) == ("custom", "#e0508f")
             assert app.swatches.current == "#e0508f" and app.theme_var.get() == "Eigene Farbe"
             order = app.settings["card_order"]["settings"]["0"]
