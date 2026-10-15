@@ -203,7 +203,7 @@ def test_form_page_shows_states_and_posts_clicks(qapp, keep):
                                                              "visible": True, "tip": "Tipp"},
               "ov.anchor": {"value": "oben links", "values": ["automatisch", "oben links"], "enabled": True,
                             "visible": True},
-              "ov.size": {"value": 36.0, "lo": 15.0, "hi": 90.0, "label": "Grösse", "text": "36 %", "visible": True},
+              "ov.sel_size": {"value": 36.0, "lo": 15.0, "hi": 90.0, "label": "Grösse", "text": "36 %", "visible": True},
               "ov.map_size_reset": {"text": "Zurücksetzen", "visible": False, "enabled": True},
               "ov.pos_hint": {"text": "", "visible": True}}
     page.show_states(states)
@@ -211,7 +211,7 @@ def test_form_page_shows_states_and_posts_clicks(qapp, keep):
     assert check.text() == "Map-Namen" and not check.isChecked() and check.toolTip() == "Tipp"
     combo = page.controls["ov.anchor"][1]
     assert combo.currentText() == "oben links" and combo.count() == 2
-    name, slider, value = page.controls["ov.size"][2]
+    name, slider, value = page.controls["ov.sel_size"][2]
     assert (slider.minimum(), slider.maximum(), slider.value(), value.text()) == (15, 90, 36, "36 %")
     assert page.controls["ov.map_size_reset"][1].isHidden() and page.controls["ov.pos_hint"][1].isHidden()
     assert page.controls["ov.pos"][1].text() == "POSITION"
@@ -220,7 +220,7 @@ def test_form_page_shows_states_and_posts_clicks(qapp, keep):
     combo.activated.emit(0)
     slider.setValue(50)
     assert [posted.get_nowait() for _i in range(3)] == [("act", ("ov.caption", True)), ("act", ("ov.anchor", "automatisch")),
-                                                        ("act", ("ov.size", 50))]
+                                                        ("act", ("ov.sel_size", 50))]
 
 
 def test_maps_page_lists_by_realm_and_posts_the_pick(qapp, keep):
@@ -799,7 +799,8 @@ def test_preview_drags_the_element_under_the_mouse(qapp, keep):
     view.show()
     ox, oy, s = view._frame()
     QTest.mouseClick(view, Qt.LeftButton, Qt.NoModifier, QPoint(round(ox + 3150 * s), round(oy + 320 * s)))
-    assert posted.empty()                                     # not before "Mit der Maus verschieben" (1.64.1)
+    assert posted.get_nowait() == ("act", ("ov.preview", ("select", "music")))    # picks it (1.64.9) …
+    assert posted.empty()                                     # … moves nothing before "Mit der Maus verschieben"
     view.show_state({"data": dict(data, editing=True), "visible": True})
     view.grab()                                               # frame + note "Verschieben aktiv"
     ox, oy, s = view._frame()
@@ -808,6 +809,7 @@ def test_preview_drags_the_element_under_the_mouse(qapp, keep):
         return QPoint(round(ox + x * s), round(oy + y * s))
     assert view.layer_at(3150, 320)[0] == "music" and view.layer_at(1700, 700) is None
     QTest.mousePress(view, Qt.LeftButton, Qt.NoModifier, at(3150, 320))      # grab the music card …
+    assert posted.get_nowait()[1][1] == ("select", "music")
     assert posted.empty()                                                    # … no jump on the press
     QTest.mouseMove(view, at(3150, 1020))
     QTest.mouseRelease(view, Qt.LeftButton, Qt.NoModifier, at(3150, 1020))
@@ -815,6 +817,46 @@ def test_preview_drags_the_element_under_the_mouse(qapp, keep):
     assert (what, name) == ("place", "music") and abs(x - 3100) < 8 and abs(y - 1000) < 8
     QTest.mouseClick(view, Qt.LeftButton, Qt.NoModifier, at(1700, 700))     # empty spot: the map goes there
     assert posted.get_nowait()[1][1][0] == "move"
+
+
+def test_preview_sizes_the_picked_element_by_its_corner_and_the_wheel(qapp, keep):
+    """1.64.9 (user: pick something and size it right there instead of three sliders)."""
+    from PIL import Image
+    from PySide6.QtCore import QPoint, QPointF, Qt
+    from PySide6.QtGui import QWheelEvent
+    from PySide6.QtTest import QTest
+    from dbdmapscout import qt_window
+    posted = queue.Queue()
+    view = keep(qt_window.PreviewView("ov.preview", lambda a, arg=None: posted.put((a, arg))))
+    view.resize(1000, 419)
+    pics = {n: Image.new("RGBA", (200, 100), "white") for n in ("map", "music")}
+    data = {"screen": (3440, 1440), "bar": 440, "rect": (20, 20, 300, 400, 400), "opacity": 1.0, "pics": pics,
+            "layers": [("map", 20, 20, 300, 400), ("music", 3100, 300, 300, 100)], "editing": True,
+            "selected": "music"}
+    view.show_state({"data": data, "visible": True})
+    view.show()
+    view.grab()                                               # draws the corner
+    ox, oy, s = view._frame()
+
+    def at(x, y):
+        return QPoint(round(ox + x * s), round(oy + y * s))
+    QTest.mousePress(view, Qt.LeftButton, Qt.NoModifier, at(3400, 400))     # the music card's corner
+    QTest.mouseMove(view, at(3400, 500))                                       # twice as tall
+    QTest.mouseRelease(view, Qt.LeftButton, Qt.NoModifier, at(3400, 500))
+    action, (key, (what, name, h)) = posted.get_nowait()
+    assert (what, name) == ("resize", "music") and abs(h - 200) < 10
+    assert posted.empty()                                     # the corner neither picks nor moves anything else
+
+    def wheel(pt, dy):
+        e = QWheelEvent(QPointF(pt), QPointF(view.mapToGlobal(pt)), QPoint(0, 0), QPoint(0, dy), Qt.NoButton,
+                        Qt.NoModifier, Qt.NoScrollPhase, False)
+        qapp.sendEvent(view, e)
+        return e.isAccepted()
+    assert wheel(at(100, 100), 120)                           # over the map: bigger
+    assert posted.get_nowait()[1][1][:2] == ("resize", "map")
+    assert not wheel(at(1700, 700), 120) and posted.empty()   # empty spot: the page scrolls
+    view.show_state({"data": dict(data, editing=False), "visible": True})
+    assert not wheel(at(100, 100), 120) and posted.empty()    # not moving: the wheel never sizes anything
 
 
 def _contrast(a, b):

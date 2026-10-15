@@ -45,6 +45,7 @@ DEFAULTS = {
         "media_style": "big",           # music card: big = cover on top (1.64.7) / compact = cover left (1.64)
         "media_scale": 1.0,             # size of the music card (slider 60–200 %)
         "media_cover": True,            # album cover left of title and artist
+        "hud_scale": 1.0,               # size of the system values / "today" (60–200 %, 1.64.9)
         "show_today": True,             # block "today" with the system values at the top of a black bar (1.62)
     },
     "hotkeys": {
@@ -86,7 +87,7 @@ DEFAULTS = {
     "official_notify": True,
     "sysinfo": "right",                 # system values at the top of a black bar: off | left | right | custom
     "today_side": "right",              # "today" alone (system values off): right, or custom = at sysinfo_pos
-    "sysinfo_pos": [1.0, 0.0],          # sysinfo = custom: 0..1 of the free space in the DBD window (x, y)            # small notification when a file was read and deleted (not while DBD is in front)
+    "sysinfo_pos": [1.0, 0.0],          # sysinfo = custom: 0..1 of the free space in the DBD window (x, y)
 }
 
 

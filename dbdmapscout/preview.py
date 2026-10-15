@@ -83,7 +83,8 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
     out = []
     hud = None
     if hud_side and hud_rows:
-        hud = fitted(lambda h: render_hud(hud_rows, h), gh, avail, ("hud", repr(hud_rows)))
+        hh = int(gh * min(2.0, max(0.6, float(o.get("hud_scale", 1.0)))))      # its own size (1.64.9)
+        hud = fitted(lambda h: render_hud(hud_rows, h), hh, avail, ("hud", repr(hud_rows)))
     drop = hud.height + margin if hud is not None and hud_side != "custom" \
         and layout.below_hud(hud_side, o["anchor"]) else 0
     aspect = map_pic.width / map_pic.height if map_pic is not None else 0.8
