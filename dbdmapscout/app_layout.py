@@ -73,6 +73,10 @@ class LayoutMemory:
         if not hasattr(self, "anchor_var"):
             return
         self._size_cap_tick()
+        scope = self._size_scope_text()
+        if scope != self.size_scope_var.get():
+            self.size_scope_var.set(scope)
+            self._sel_sync()                      # another map on display: its own size on the slider
         text = self._layout_size_text()
         if text != self.per_size_text.get():
             self.per_size_text.set(text)
