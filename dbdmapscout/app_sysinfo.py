@@ -349,6 +349,20 @@ class SysInfo:
         names = {_(label): k for k, label in SELECTABLE}
         self._select(names.get(self.sel_var.get(), "map"))
 
+    def _own_size_map(self):
+        """The map whose own size the size controls change (1.65.5, user: "sobald ich eine Map in der Runde
+        bearbeite, zählt es nur für die Map"): the map on display – not the test map; None = all maps."""
+        if self.current and not getattr(self, "_test_map", False) and self.overlay.has_map():
+            return self.current[0]
+        return None
+
+    def _size_scope_text(self) -> str:
+        if getattr(self, "_sel", "map") != "map":
+            return ""
+        mid = self._own_size_map()
+        m = self.catalog.maps.get(mid) if mid else None
+        return _("Gilt nur für {map}", map=m.name) if m else _("Gilt für alle Maps (keine Map eingeblendet)")
+
     def _sel_sync(self):
         """Slider range, label and value for the element picked (also when its size changed elsewhere)."""
         scale = getattr(self, "sel_scale", None)
@@ -378,9 +392,9 @@ class SysInfo:
             self.media_size_var.set(round(percent))
         else:
             value = round(percent / 100, 3)
-            own = o.get("map_heights") or {}
-            if self.current and own.get(self.current[0]):
-                own[self.current[0]] = value
+            mid = self._own_size_map()
+            if mid:                                  # 1.65.5 (user): a map on display = a size for this map only
+                o.setdefault("map_heights", {})[mid] = value
                 self._show_map_size()
             else:
                 o["height"] = value
