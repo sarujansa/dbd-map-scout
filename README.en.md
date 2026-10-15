@@ -189,6 +189,7 @@ The synthetic tests do not replace a real test. If a map is not detected in real
 - **Seeing error messages:** `start_debug.bat` starts with a console. There is also the log file `dbdmapscout.log`.
 - **"Capture is black":** set DBD to "Windowed Fullscreen". Windows HDR can also cause capture problems.
 - **A hotkey does not work:** the log reports when another program uses the combination. Choose another one under Settings → Hotkeys.
+- **The window stutters / reacts late:** right afterwards press "Copy diagnostics". At the end it lists the "window hangs": every tick or click that took or was late 30 ms or more, with time and name – that shows the cause.
 
 ## Rules / fair play
 

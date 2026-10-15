@@ -346,6 +346,40 @@ def test_log_view_colours_and_escapes(qapp, keep):
     log.show_state({"dark": True, "lines": [("12:00:01", "Fehler", "<kaputt>"), ("12:00:02", "System", "Bereit.")]})
 
 
+
+def test_log_view_appends_new_lines_and_rebuilds_only_when_needed(qapp, keep):
+    from dbdmapscout import qt_window
+    log = keep(qt_window.LogView())
+    a, b, c = ("12:00:01", "System", "eins"), ("12:00:02", "System", "zwei"), ("12:00:03", "Fehler", "drei")
+    log.show_state({"dark": True, "rev": 0, "lines": [a, b]})
+    doc = log.document()
+    first = doc.firstBlock()
+    log.show_state({"dark": True, "rev": 0, "lines": [a, b, c]})
+    assert doc.blockCount() == 3 and doc.firstBlock() == first          # appended, the old lines untouched
+    assert log.toPlainText().splitlines()[-1].endswith("drei")
+    log.show_state({"dark": True, "rev": 1, "lines": [c]})               # filter changed: shown anew
+    assert log.toPlainText().strip().endswith("drei") and "eins" not in log.toPlainText()
+    many = [(f"12:{i // 60:02d}:{i % 60:02d}", "System", f"Zeile {i}") for i in range(500)]
+    log.show_state({"dark": True, "rev": 2, "lines": many})
+    assert doc.blockCount() <= qt_window.LogView.MAX_LINES               # never more than the last 400
+
+
+def test_table_updates_values_in_place(qapp, keep):
+    from dbdmapscout import qt_window
+    t = keep(qt_window.Table(".t", lambda a, arg=None: None))
+    cols = [("#0", "Region", "w"), ("ping", "Ping", "e")]
+    rows = [("g:eu", 0, "Europa", [], [], True), ("r:fra", 1, "Frankfurt", ["31 ms"], ["p_good"], False)]
+    colours = {"p_good": "#7cc47f", "p_bad": "#e06c6c"}
+    t.show_state({"columns": cols, "rows": rows, "colours": colours, "selection": [], "selectable": True})
+    fra = t.topLevelItem(0).child(0)
+    rows2 = [rows[0], ("r:fra", 1, "Frankfurt", ["95 ms"], ["p_bad"], False)]
+    t.show_state({"columns": cols, "rows": rows2, "colours": colours, "selection": ["r:fra"], "selectable": True})
+    assert t.topLevelItem(0).child(0) is fra                             # same item: no rebuild
+    assert fra.text(1) == "95 ms" and fra.foreground(1).color().name() == "#e06c6c" and fra.isSelected()
+    rows3 = rows2 + [("r:lon", 1, "London", ["40 ms"], [], False)]
+    t.show_state({"columns": cols, "rows": rows3, "colours": colours, "selection": [], "selectable": True})
+    assert t.topLevelItem(0).childCount() == 2                           # another row: built anew
+
 def test_hotkey_button_sends_the_keys_while_recording(qapp, keep):
     from PySide6.QtCore import Qt
     from PySide6.QtTest import QTest
