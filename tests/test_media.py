@@ -66,11 +66,13 @@ def test_cover_is_decoded_small_and_broken_data_is_none():
 def test_music_card_places():
     from dbdmapscout import layout
     game, size, m = (0, 0, 3440, 1440), (270, 90), 17
-    assert layout.media_xy("below", game, size, m, hud=(3130, 17, 290, 300)) == (3130, 17 + 300 + 8)
-    assert layout.media_xy("below", game, size, m) == (3440 - 17 - 270, 17)          # no system values shown
+    # 1.65.2 (user: "untereinander und mittig"): centred under the system values / in the middle of the bar
+    assert layout.media_xy("below", game, size, m, hud=(3130, 17, 290, 300)) == (3140, 17 + 300 + 8)
+    assert layout.media_xy("below", game, size, m) == (3220 - 135, 17)               # no system values shown
     assert layout.media_xy("below", game, size, m, hud=(3300, 17, 120, 50))[0] == 3440 - 17 - 270   # stays inside
-    assert layout.media_xy("bottom_right", game, size, m) == (3153, 1440 - 17 - 90)
-    assert layout.media_xy("bottom_left", game, size, m) == (17, 1333)
+    assert layout.media_xy("bottom_right", game, size, m) == (3220 - 135, 1440 - 17 - 90)
+    assert layout.media_xy("bottom_left", game, size, m) == (220 - 135, 1333)
+    assert layout.hud_x("right", 0, 3440, m, 300, 440) == 3220 - 150                 # system values: centred too
     assert layout.media_xy("custom", game, size, m, own=(0.5, 0.0)) == (1585.0, 0.0)
     assert layout.media_xy("custom", game, size, m) == (3170.0, 1350.0)             # never dragged: bottom right
 
@@ -128,7 +130,7 @@ def test_old_settings_move_the_music_card_out_of_the_system_values(tmp_path):
 
 
 def test_the_whole_title_wraps_instead_of_being_cut():
-    """1.65 (user: "der ganze Titel soll angezeigt werden")."""
+    """1.65 (user: "der ganze Titel soll angezeigt werden"); since 1.65.2 one row – the card sets it smaller."""
     title = "Somebody That I Used To Know (feat. Kimbra)"
     lines = media.wrap(title)
     assert " ".join(lines) == title and all(len(line) <= media.MAX_CHARS for line in lines)
@@ -137,4 +139,17 @@ def test_the_whole_title_wraps_instead_of_being_cut():
     assert len(long) == media.TITLE_LINES and long[-1].endswith("…")       # only far too long ends with "…"
     now = media.NowPlaying(title, "Gotye", True, 100.0)
     rows = media.rows(now, 101.0, "", "dim", "white")
-    assert [r[0][0] for r in rows] == lines + ["Gotye"] and rows[-1][0][1] == "dim"
+    assert [r[0][0] for r in rows] == [title, "Gotye"] and rows[-1][0][1] == "dim"
+
+
+def test_a_long_title_gets_smaller_text_before_it_wraps():
+    """1.65.2 (user: "lieber die Schrift kleiner statt Zeilenumbruch")."""
+    from dbdmapscout.overlay_win32 import fit_lines, render_hud
+    white = (255, 255, 255, 255)
+    short, longer = [[("Blinding Lights", white)]], [[("Somebody That I Used To Know", white)]]
+    full = render_hud(longer, 1440)
+    one = fit_lines(longer, 1440)
+    assert len(one) == 1 and one[0].height < full.height                 # one line, a bit smaller
+    assert fit_lines(short, 1440)[0].size == render_hud(short, 1440).size  # short: untouched
+    very = fit_lines([[("Somebody That I Used To Know And Then Some More Words Here", white)]], 1440)
+    assert len(very) > 1                                                 # far too long: wraps, at the small size

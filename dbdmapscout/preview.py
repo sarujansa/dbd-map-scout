@@ -104,13 +104,21 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
                                    over.width, over.height, drop)
     in_bar = (o["anchor"] == "auto" or o.get("keep_in_bar", True)) and \
         layout.bar_side(o["anchor"], x0, over.width, 0, gw, bar)
-    if in_bar and over.width > avail:                   # info block wider than the map: smaller, like the game
+    if in_bar and over.width > avail:                   # lines wider than the bar: smaller text, like the game
         f = avail / over.width
         over = fitted(lambda h: overlay_picture(map_pic, h, caption, o.get("transparent", True),
                                                 info.get("timer", ""), info.get("server", ""), info.get("ping"),
                                                 info.get("record", ""), max(40, int(text_h * f))),
-                      max(80, int(mh * f)), 0,
+                      mh, 0,
                       ("map", id(map_pic), caption, o.get("transparent", True), repr(info), int(text_h * f)))
+        if over.width > avail:                          # still too wide: the map too
+            g = avail / over.width
+            over = fitted(lambda h: overlay_picture(map_pic, h, caption, o.get("transparent", True),
+                                                    info.get("timer", ""), info.get("server", ""), info.get("ping"),
+                                                    info.get("record", ""), max(40, int(text_h * f * g))),
+                          max(80, int(mh * g)), 0,
+                          ("map", id(map_pic), caption, o.get("transparent", True), repr(info),
+                           int(text_h * f * g)))
     mx, my = layout.preview_place(gw, gh, o["anchor"], o.get("pos_x", 0.0), o.get("pos_y", 0.0), margin,
                                   o.get("keep_in_bar", True), over.width, over.height, drop)
     map_rect = (mx, my, over.width, over.height)

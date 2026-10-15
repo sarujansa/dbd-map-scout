@@ -1017,6 +1017,7 @@ def test_preview_snaps_while_dragging_and_moves_by_arrow_keys(qapp, keep):
     QTest.mouseMove(view, at(1625, 800))                                       # its centre near the middle line
     _a, (_k, (what, name, x, y)) = posted.queue[-1]
     assert (what, name) == ("place", "music") and abs(x + 150 - 1720) < 1     # centre exactly on 1720
+    assert abs(view._layer("music")[1] - x) < 1               # 1.65.2: drawn there at once, not after the App
     view.grab()                                                                # draws the guide line
     QTest.mouseRelease(view, Qt.LeftButton, Qt.NoModifier, at(1625, 800))
     while not posted.empty():

@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import html
 import sys
+import time
 
 from PIL import Image
 from PySide6.QtCore import QByteArray, QEvent, QObject, QSize, Qt, QTimer
@@ -47,6 +48,7 @@ SPECS = {
         ("card", "ov.pos", (
             ("preview", "ov.preview"),
             ("row", (("label", "ov.sel.label"), ("combo", "ov.sel"), ("stretch",))), ("slider", "ov.sel_size"),
+            ("hint", "ov.size_cap"),
             ("row", (("label", "ov.anchor.label"), ("combo", "ov.anchor"), ("stretch",), ("button", "ov.reset"))),
             ("slider", "ov.posx"), ("slider", "ov.posy"),
             ("row", (("button", "ov.edit"), ("button", "ov.test"), ("button", "ov.undo"), ("stretch",))),
@@ -1481,6 +1483,7 @@ class PreviewView(QWidget):
         self._hover = None                     # layer under the mouse while moving (1.64.7)
         self._sizing = None                    # (layer name, x, y, w, h) while its corner is dragged (1.64.9)
         self._snapped = (None, None)           # lines the dragged element snapped to (1.65), drawn as guides
+        self._held = None                      # (name, x, y, since) drawn at once (1.65.2, user: it jumped)
         self.setFocusPolicy(Qt.ClickFocus)     # arrow keys after a click (1.65)
         self.setMouseTracking(True)            # open hand over an element
         sp = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
@@ -1511,6 +1514,8 @@ class PreviewView(QWidget):
             return
         shape = data.get("screen") != self._data.get("screen")
         self._data = data
+        if self._held and not self._grab:      # dropped: the App's own place counts again
+            self._held = None
         if shape:
             self.updateGeometry()
         self.update()
@@ -1552,7 +1557,7 @@ class PreviewView(QWidget):
         cache = self._pix if isinstance(self._pix, dict) else {}
         fresh = {}
         p.setOpacity(float(d.get("opacity", 1.0)))
-        for name, lx, ly, lw, lh in d.get("layers") or ():
+        for name, lx, ly, lw, lh in self._layers():
             img = pics.get(name)
             if img is None:
                 continue
@@ -1586,7 +1591,7 @@ class PreviewView(QWidget):
             tf.setBold(True)
             tf.setPixelSize(11)
             p.setFont(tf)
-            for name, lx, ly, lw, lh in d.get("layers") or ():
+            for name, lx, ly, lw, lh in self._layers():
                 r = QRectF(ox + lx * s, oy + ly * s, lw * s, lh * s)
                 on = name == held or name == d.get("selected")
                 p.setPen(QPen(accent if on else QColor(255, 255, 255, 140), 2 if on else 1,
@@ -1634,8 +1639,17 @@ class PreviewView(QWidget):
         pos = e.position()
         return ((pos.x() - ox) / s, (pos.y() - oy) / s) if s > 0 else None
 
+    def _layers(self):
+        """The layers as drawn: the one held by the mouse where the mouse has it, not where the App last put it
+        (that comes only 4×/s – the element jumped behind the mouse)."""
+        held = self._held
+        if held and time.monotonic() - held[3] > 1.5 and not self._grab:
+            held = self._held = None
+        return [(n, held[1], held[2], w, h) if held and n == held[0] else (n, x, y, w, h)
+                for n, x, y, w, h in self._data.get("layers") or ()]
+
     def _layer(self, name):
-        return next((lay for lay in self._data.get("layers") or () if lay[0] == name), None)
+        return next((lay for lay in self._layers() if lay[0] == name), None)
 
     HANDLE = 12                                # px (widget): the corner that sizes the picked element
 
@@ -1668,7 +1682,7 @@ class PreviewView(QWidget):
 
     def layer_at(self, x, y):
         """(name, dx, dy) of the topmost element under screen point (x, y), or None (1.64.1)."""
-        for name, lx, ly, lw, lh in reversed(self._data.get("layers") or ()):
+        for name, lx, ly, lw, lh in reversed(self._layers()):
             if lx <= x <= lx + lw and ly <= y <= ly + lh:
                 return name, x - lx, y - ly
         return None
@@ -1688,6 +1702,8 @@ class PreviewView(QWidget):
                                     name)
                 x, y, lx, ly = snap_rect(x, y, lay[3], lay[4], xs, ys, SNAP_PX / max(1e-6, self._frame()[2]))
                 self._snapped = (lx, ly)
+            self._held = (name, x, y, time.monotonic())
+            self.update()
             self._post("act", (self._key, ("place", name, x, y)))
         else:                              # empty place: the map's centre goes there
             self._post("act", (self._key, ("move", pt[0], pt[1])))
@@ -1739,6 +1755,8 @@ class PreviewView(QWidget):
     def mouseReleaseEvent(self, _e):
         self._dragging = False
         self._grab = self._sizing = None
+        if self._held:
+            self._held = self._held[:3] + (time.monotonic(),)
         if self._snapped != (None, None):
             self._snapped = (None, None)
             self.update()

@@ -53,7 +53,7 @@ def test_hud_rows_only_known_values_and_colours():
                          ram_used=12.3, ram_total=31.9)
     rows = sysinfo.hud_rows(s)
     texts = ["".join(t for t, _ in r) for r in rows]
-    assert texts == ["CPU 45 %", "GPU 88°C · 97 % · 221 W", "VRAM 6.1 / 8 GB", "RAM 12.3 / 32 GB"]
+    assert texts == ["CPU 45 %", "GPU 88°C · 97 %", "VRAM 6.1 / 8 GB", "RAM 12.3 / 32 GB"]
     assert rows[1][1] == ("88°C", sysinfo.HOT)
     assert sysinfo.hud_rows(sysinfo.Snapshot()) == []
     assert sysinfo.temp_colour(60, sysinfo.CPU_WARM, sysinfo.CPU_HOT) == sysinfo.GOOD
