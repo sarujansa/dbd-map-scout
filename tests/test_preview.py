@@ -108,3 +108,33 @@ def test_the_map_grows_but_its_text_keeps_its_size():
     small = overlay_picture(pic, 400, "", True, "3:27", "", None, "", text_h=500)
     big = overlay_picture(pic, 800, "", True, "3:27", "", None, "", text_h=500)
     assert big.height - 800 == small.height - 400          # the block below the map: the same height
+
+
+def test_the_drawn_in_name_keeps_its_size_when_the_map_grows():
+    """1.65.4 (user: the name above the map as a picture of its own, the map's size freely)."""
+    import glob
+    import os
+    from PIL import Image
+    from dbdmapscout.mapimage import title_split
+    from dbdmapscout.overlay_win32 import compose
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    path = sorted(glob.glob(os.path.join(root, "maps", "**", "*.webp"), recursive=True))[0]
+    img = Image.open(path).convert("RGBA")
+    split = title_split(img)[2]
+    small = compose(img, 500, "", True, False, 500, split)
+    big = compose(img, 800, "", True, False, 500, split)
+    name_h = round(split * 500 / img.height)
+    assert small.height == 500                                     # same as before at the standard size
+    assert big.height == name_h + round((img.height - split) * 800 / img.height)   # only the map grew
+    assert compose(img, 800, "", True, False, 0, split).height == 800              # no own text size: as before
+
+
+def test_a_map_wider_than_the_bar_stays_at_its_outer_edge():
+    """1.65.4: "Karte darf grösser als der Balken werden" – at the bar's outer edge, never off the screen."""
+    from dbdmapscout import layout
+    assert layout.clamp_x("left", 100, 600, 0, 3440, 440, 17) == 17
+    assert layout.clamp_x("right", 3000, 600, 0, 3440, 440, 17) == 3440 - 17 - 600
+    assert layout.clamp_x("right", 3200, 300, 0, 3440, 440, 17) == 3440 - 17 - 300     # fits: as before
+    x, _y, w, _h, _mh = layout.preview_rect(3440, 1440, "auto", 0, 0, 0.6, 0.012, True, 0.9, grow=True)
+    assert w > 440 and x == 17                                     # bigger than the bar, from its outer edge
+    assert layout.preview_rect(3440, 1440, "auto", 0, 0, 0.6, 0.012, True, 0.9)[2] <= 440 - 2 * 17
