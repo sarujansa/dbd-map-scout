@@ -111,40 +111,70 @@ def fit_scale(w: float, h: float, avail_w: float, avail_h: float) -> float:
     return min(1.0, avail_w / w, avail_h / h)
 
 
+def preview_place(gw: int, gh: int, anchor: str, pos_x: float, pos_y: float, margin: int, keep_in_bar: bool,
+                  w: int, h: int, drop: int = 0):
+    """Top-left corner of an overlay of w × h on a full-screen DBD (App._place_overlay's rules for the preview);
+    ``drop``: room the system values take above a map at the top of the same bar."""
+    bar = bar_width(gw, gh)
+    if anchor == "auto":
+        x, y = max(margin, (bar - w) / 2), margin + drop
+    elif anchor == "custom":
+        x, y = pos_x * max(0, gw - w), pos_y * max(0, gh - h)
+    else:
+        x = margin if anchor.endswith("left") else gw - w - margin
+        y = margin + drop if anchor.startswith("top") else gh - h - margin
+    side = bar_side(anchor, x, w, 0, gw, bar) if (anchor == "auto" or keep_in_bar) else None
+    if side:
+        x = clamp_x(side, x, w, 0, gw, bar, margin)
+    return int(x), int(y)
+
+
 def preview_rect(gw: int, gh: int, anchor: str, pos_x: float, pos_y: float, height_frac: float,
-                 margin_frac: float, keep_in_bar: bool, aspect: float, info_rows: int = 0):
+                 margin_frac: float, keep_in_bar: bool, aspect: float, info_rows: int = 0, drop: int = 0):
     """Where the overlay sits on a full-screen DBD of gw × gh (the overlay tab's preview, since 1.61): (x, y, w,
-    h, map_h) – the same rules as App._place_overlay for the common case (no window mode, no system values above
-    the map, no bars above/below). ``aspect`` = map width / height, ``info_rows`` = lines below the map (timer
-    counts double)."""
+    h, map_h) – the same rules as App._place_overlay for the common case (no window mode, no bars above/below).
+    ``aspect`` = map width / height, ``info_rows`` = lines below the map (timer counts double), ``drop`` = room
+    of the system values above the map (1.64)."""
     margin = int(gh * margin_frac)
     height = int(gh * min(0.9, max(0.05, height_frac)))
-    height = min(height, gh - 2 * margin)
+    height = min(height, gh - drop - 2 * margin)
     bar = bar_width(gw, gh)
 
     def size(hm):
         info = 0 if not info_rows else round(hm * (0.11 + 0.055 * max(0, info_rows - 2)))
         return max(1, round(hm * aspect)), hm + info
 
-    def place(w, h):
-        if anchor == "auto":
-            return max(margin, (bar - w) / 2), margin
-        if anchor == "custom":
-            return pos_x * max(0, gw - w), pos_y * max(0, gh - h)
-        return (margin if anchor.endswith("left") else gw - w - margin,
-                margin if anchor.startswith("top") else gh - h - margin)
-
     w, h = size(height)
-    side = bar_side(anchor, place(w, h)[0], w, 0, gw, bar) if (anchor == "auto" or keep_in_bar) else None
+    x0, _y0 = preview_place(gw, gh, anchor, pos_x, pos_y, margin, False, w, h, drop)
+    side = bar_side(anchor, x0, w, 0, gw, bar) if (anchor == "auto" or keep_in_bar) else None
     if side:
         avail = max_width(bar, margin)
         if w > avail:
             height = max(40, int(height * avail / w))
             w, h = size(height)
-    x, y = place(w, h)
-    if side:
-        x = clamp_x(side, x, w, 0, gw, bar, margin)
-    return int(x), int(y), w, h, height
+    x, y = preview_place(gw, gh, anchor, pos_x, pos_y, margin, keep_in_bar, w, h, drop)
+    return x, y, w, h, height
+
+
+def hud_preview_xy(side: str, gw: int, gh: int, margin: int, size, own=None, map_rect=None):
+    """Top-left corner of the system values on a full-screen DBD (App._hud_place / _hud_follow_map, 1.64)."""
+    w, h = size
+    if side == "custom":
+        fx, fy = own or (1.0, 0.0)
+        return int(fx * max(0, gw - w)), int(fy * max(0, gh - h))
+    if side == "above" and map_rect:
+        x, y, mw, mh = map_rect
+        gap = max(2, margin // 2)
+        bar = bar_width(gw, gh)
+        lo, hi = 0, gw - w
+        if bar >= MIN_BAR and x < bar:
+            lo, hi = gap, bar - gap - w
+        elif bar >= MIN_BAR and x + mw > gw - bar:
+            lo, hi = gw - bar + gap, gw - gap - w
+        hx = min(max(x + (mw - w) / 2, lo), max(lo, hi))
+        hy = y - gap - h if y - gap - h >= 0 else y + mh + gap
+        return int(hx), int(hy)
+    return int(hud_x("left" if side == "left" else "right", 0, gw, margin, w)), margin
 
 
 def pos_from_point(gw: int, gh: int, w: int, h: int, cx: float, cy: float):
