@@ -1489,7 +1489,7 @@ class PreviewView(QWidget):
         return (self.width() - sw * s) / 2, (self.height() - sh * s) / 2, s
 
     def paintEvent(self, _e):
-        from PySide6.QtCore import QRectF
+        from PySide6.QtCore import QPointF, QRectF
         from PySide6.QtGui import QFont, QPainter, QPen
         d = self._data
         if not d.get("screen"):
@@ -1532,6 +1532,11 @@ class PreviewView(QWidget):
         p.setOpacity(1.0)
         if d.get("editing"):                       # moving is on: a frame round the screen and a note
             accent = QColor(qt_theme.colours(True)["accent"])
+            cx, cy = screen.center().x(), screen.center().y()         # centre cross (1.64.5)
+            for pen in (QPen(QColor(0, 0, 0, 150), 3), QPen(QColor(255, 255, 255, 220), 1, Qt.DashLine)):
+                p.setPen(pen)
+                p.drawLine(QPointF(cx, screen.top()), QPointF(cx, screen.bottom()))
+                p.drawLine(QPointF(screen.left(), cy), QPointF(screen.right(), cy))
             p.setPen(QPen(accent, 2))
             p.setBrush(Qt.NoBrush)
             p.drawRoundedRect(screen.adjusted(-1, -1, 1, 1), 4, 4)
