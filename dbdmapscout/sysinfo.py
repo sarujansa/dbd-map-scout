@@ -275,18 +275,17 @@ def temp_colour(t: float, warm: float, hot: float):
 
 
 def hud_rows(s: Snapshot) -> list:
-    """Rows for the HUD: [[(text, colour), ...], ...]; only values that were read."""
+    """Rows for the HUD: [[(text, colour), ...], ...]; only values that were read. The GPU's power is not in the
+    overlay (1.65.2, user's wish) – it is still recorded for the statistics."""
     rows = []
-    for name, temp, load, warm, hot, extra in (
-            ("CPU", s.cpu_temp, s.cpu_load, CPU_WARM, CPU_HOT, None),
-            ("GPU", s.gpu_temp, s.gpu_load, GPU_WARM, GPU_HOT, s.gpu_power)):
+    for name, temp, load, warm, hot in (
+            ("CPU", s.cpu_temp, s.cpu_load, CPU_WARM, CPU_HOT),
+            ("GPU", s.gpu_temp, s.gpu_load, GPU_WARM, GPU_HOT)):
         segs = []
         if temp is not None:
             segs.append((f"{temp:.0f}°C", temp_colour(temp, warm, hot)))
         if load is not None:
             segs.append((f"{load:.0f} %", WHITE))
-        if extra is not None:
-            segs.append((f"{extra:.0f} W", WHITE))
         if segs:
             row = [(name + " ", DIM)]
             for i, seg in enumerate(segs):

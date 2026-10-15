@@ -232,6 +232,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self.sel_size_label = self._slider(pos, _("Grösse"), self.sel_size_var, *MAP_SCALE, self._sel_size_changed,
                                            key="ov.sel_size")
         self.sel_scale = self._qt_reg["ov.sel_size"]
+        self.size_cap_var = ui.StringVar(value="")       # 1.65.2: the bar is what limits the map's size
+        self._reg("ov.size_cap", ui.Label(pos, textvariable=self.size_cap_var, style="Dim.TLabel"))
         r = ui.Frame(pos)
         r.pack(fill="x", pady=(0, 4))
         self._reg("ov.anchor.label", ui.Label(r, text=_("Vorgabe"), width=12)).pack(side="left")
@@ -1177,9 +1179,11 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         text_h = self._text_height(gh)
         self.overlay.text_height = text_h
         w, h = self.overlay.render(height)
-        if side and w > avail:                  # info block below is wider than the map (rare)
+        if side and w > avail:                  # the lines below are wider than the bar: smaller text, same map
             self.overlay.text_height = max(40, int(text_h * avail / w))
-            w, h = self.overlay.render(max(80, int(height * avail / w)))
+            w, h = self.overlay.render(height)
+            if w > avail:                       # still too wide (very long line): the map too, as before
+                w, h = self.overlay.render(max(80, int(height * avail / w)))
         x, y = place(w, h)
         if side and side != "slot":
             x = layout.clamp_x(side, x, w, gx, gw, bar, margin)

@@ -81,8 +81,18 @@ def slot_x(slot, w: float, margin: float) -> float:
     return x0 + margin
 
 
-def hud_x(side: str, gx: float, gw: float, margin: float, w: float) -> float:
-    """x of the system values at the top of a bar: left bar from its left edge, right bar flush right."""
+def bar_centre(side: str, gx: float, gw: float, bar: float) -> float:
+    """x of the middle of the left/right black bar."""
+    return gx + bar / 2 if side == "left" else gx + gw - bar / 2
+
+
+def hud_x(side: str, gx: float, gw: float, margin: float, w: float, bar: float = 0) -> float:
+    """x of the system values at the top of a bar: centred in it (1.65.2, user: "untereinander und mittig"),
+    without a wide bar from the left edge / flush right."""
+    if bar >= MIN_BAR:
+        lo, hi = (gx + margin, gx + bar - margin - w) if side == "left" else \
+            (gx + gw - bar + margin, gx + gw - margin - w)
+        return min(max(bar_centre(side, gx, gw, bar) - w / 2, lo), max(lo, hi))
     return gx + margin if side == "left" else gx + gw - margin - w
 
 
@@ -174,7 +184,7 @@ def hud_preview_xy(side: str, gw: int, gh: int, margin: int, size, own=None, map
         hx = min(max(x + (mw - w) / 2, lo), max(lo, hi))
         hy = y - gap - h if y - gap - h >= 0 else y + mh + gap
         return int(hx), int(hy)
-    return int(hud_x("left" if side == "left" else "right", 0, gw, margin, w)), margin
+    return int(hud_x("left" if side == "left" else "right", 0, gw, margin, w, bar_width(gw, gh))), margin
 
 
 def pos_from_point(gw: int, gh: int, w: int, h: int, cx: float, cy: float):
@@ -185,21 +195,23 @@ def pos_from_point(gw: int, gh: int, w: int, h: int, cx: float, cy: float):
 
 
 def media_xy(spot: str, game, size, margin: int, hud=None, own=None):
-    """Top-left corner of the music card (1.64): "below" the system values (left-aligned with them; without
-    them at the top of the right bar), "bottom_right" / "bottom_left" in the black bar, "custom" = ``own``
-    (share of the free room in the game window, like the system values' own place)."""
+    """Top-left corner of the music card (1.64): "below" the system values (centred under them; without them at
+    the top of the right bar), "bottom_right" / "bottom_left" in the black bar (1.65.2: centred in it, on one
+    line with the system values above), "custom" = ``own`` (share of the free room in the game window, like the
+    system values' own place)."""
     gx, gy, gw, gh = game
     w, h = size
+    bar = bar_width(gw, gh)
     if spot == "custom":
         fx, fy = own or (1.0, 1.0)
         return gx + fx * max(0, gw - w), gy + fy * max(0, gh - h)
-    if spot == "bottom_left":
-        return gx + margin, gy + gh - margin - h
-    if spot == "bottom_right":
-        return gx + gw - margin - w, gy + gh - margin - h
+    if spot in ("bottom_left", "bottom_right"):
+        side = "left" if spot == "bottom_left" else "right"
+        return hud_x(side, gx, gw, margin, w, bar), gy + gh - margin - h
     if hud:
-        return min(hud[0], gx + gw - margin - w), hud[1] + hud[3] + max(2, margin // 2)
-    return gx + gw - margin - w, gy + margin
+        x = min(max(hud[0] + hud[2] / 2 - w / 2, gx + margin), gx + gw - margin - w)
+        return x, hud[1] + hud[3] + max(2, margin // 2)
+    return hud_x("right", gx, gw, margin, w, bar), gy + margin
 
 
 def steady_width(state, key, w: int):

@@ -20,8 +20,10 @@ log = logging.getLogger(__name__)
 IS_WIN = sys.platform == "win32"
 POLL_EVERY = 2.0            # seconds between two looks
 STALE_AFTER = 6.0           # a reading older than this is not shown (thread stuck / stopped)
-MAX_CHARS = 22              # characters per line: longer titles wrap (1.65, user: "der ganze Titel") …
-TITLE_LINES, ARTIST_LINES = 4, 2    # … onto this many lines – only beyond that "…"
+MAX_CHARS = 22              # a line this long fits the card at full size; longer ones get smaller text (1.65.2,
+                            # user: "lieber die Schrift kleiner statt Zeilenumbruch") and wrap only below that
+TITLE_LINES, ARTIST_LINES = 4, 2    # at most this many lines when even the smaller text does not fit
+LONGEST = 90                # characters kept of a title (beyond that "…")
 PLAYING = 4                 # GlobalSystemMediaTransportControlsSessionPlaybackStatus.PLAYING
 COVER_PX = 160              # cover kept at most this big (the card shows it at ~70 px on 1440p)
 MAX_COVER_BYTES = 4_000_000     # a bigger "thumbnail" is not read
@@ -108,15 +110,14 @@ def wrap(text: str, limit: int = MAX_CHARS, lines: int = TITLE_LINES) -> list:
 
 
 def rows(now: NowPlaying, wall: float, label: str, dim, white) -> list:
-    """HUD rows (pure): nothing unless something plays and the reading is fresh. Title and artist are shown
-    whole, wrapped onto several lines."""
+    """HUD rows (pure): nothing unless something plays and the reading is fresh. Title and artist whole, one row
+    each – the card sets them smaller when they are long (overlay_win32.fit_lines)."""
     if not playing(now, wall):
         return []
-    title = wrap(now.title, MAX_CHARS, TITLE_LINES)
-    out = [[(label, dim), (title[0], white)] if label else [(title[0], white)]]
-    out += [[(line, white)] for line in title[1:]]
+    title = clip(now.title, LONGEST)                # one row each: the card makes long ones smaller (fit_lines)
+    out = [[(label, dim), (title, white)] if label else [(title, white)]]
     if now.artist:
-        out += [[(line, dim)] for line in wrap(now.artist, MAX_CHARS, ARTIST_LINES)]
+        out.append([(clip(now.artist, LONGEST), dim)])
     return out
 
 
