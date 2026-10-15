@@ -581,6 +581,8 @@ EN = {
     "Verschieben aktiv – ziehen (rastet ein, Alt = frei), Pfeiltasten = fein, Ecke/Mausrad = Grösse":
         "Moving is on – drag (snaps, Alt = free), arrow keys = fine, corner/mouse wheel = size",
     "Rückgängig": "Undo",
+    "Gilt nur für {map}": "Applies to {map} only",
+    "Gilt für alle Maps (keine Map eingeblendet)": "Applies to all maps (no map on display)",
     "Die Karte ist so breit wie der schwarze Balken – grösser geht so nicht. Grösser mit „Karte darf grösser als der Balken werden“ (ragt dann ins Spielbild).":
         "The map is as wide as the black bar – it cannot get bigger like this. Bigger with “The map may grow bigger than the bar” (it then reaches into the game picture).",
     "Karte darf grösser als der Balken werden (ragt dann ins Spielbild)": "The map may grow bigger than the bar (it then reaches into the game picture)",

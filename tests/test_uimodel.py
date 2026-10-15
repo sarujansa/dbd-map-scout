@@ -260,8 +260,16 @@ def test_the_program_starts_shows_every_page_and_quits(app_root):
     keys = [k for k, _l in qt_window.PAGES]
     assert app.qt.current_key() == "setup"                    # first start: the setup assistant
     steps = []
+    failed = []
 
     def step(i=0):
+        try:
+            _step(i)
+        except BaseException as e:                   # a failed check ends the program (else the loop runs on)
+            failed.append(e)
+            app.quit()
+
+    def _step(i=0):
         steps.append(i)
         if i < len(keys):
             app.qt.show_page(keys[i])
@@ -294,7 +302,8 @@ def test_the_program_starts_shows_every_page_and_quits(app_root):
             assert (app.settings["overlay"]["media_pos"], app.settings["overlay"]["media_xy"]) == ("custom", [0.0, 0.0])
             assert (app.settings["sysinfo"], app.settings["sysinfo_pos"]) == ("custom", [0.0, 0.0])
             o = app.settings["overlay"]
-            assert (o["hud_scale"], o["media_scale"], o["height"]) == (1.5, 2.0, 0.5)
+            assert (o["hud_scale"], o["media_scale"], o["height"]) == (1.5, 2.0, 0.36)
+            assert o["map_heights"][app.current[0]] == 0.5          # a map on display: its own size (1.65.5)
             assert app._sel == "map" and app.sel_scale.cget("to") == 90 and app.media_size_var.get() == 200
             assert (app.settings["color_theme"], app.settings["accent_custom"]) == ("custom", "#e0508f")
             assert app.swatches.current == "#e0508f" and app.theme_var.get() == "Eigene Farbe"
@@ -313,6 +322,8 @@ def test_the_program_starts_shows_every_page_and_quits(app_root):
     app.root.after(300, step)
     t0 = time.monotonic()
     app.run()
+    if failed:
+        raise failed[0]
     assert time.monotonic() - t0 < 60
     assert steps[-1] == len(keys) + 2 and app._quitting
     assert not errors, errors
@@ -458,5 +469,32 @@ def test_undo_arrow_keys_and_a_layout_per_window_size(app_root, monkeypatch):
         app._set_size("map", 20)
         app._size_cap_tick()
         assert app.size_cap_var.get() == ""
+    finally:
+        app.quit()
+
+
+def test_size_changes_with_a_map_on_display_are_for_that_map(app_root):
+    """1.65.5 (user: "sobald ich eine Map in der Runde bearbeite, zählt dies nur für die Map")."""
+    from dbdmapscout.app import App
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        o = app.settings["overlay"]
+        app._select("map")
+        assert app._size_scope_text().startswith("Gilt für alle Maps")
+        app._set_size("map", 40)                              # no map on display: all maps
+        assert o["height"] == 0.4 and not o.get("map_heights")
+        mid = list(app.catalog.maps)[2]
+        app.show_map(mid, 1, "manual")
+        assert app._size_scope_text() == f"Gilt nur für {app.catalog.maps[mid].name}"
+        app._set_size("map", 55)                              # a map on display: only this one
+        assert o["height"] == 0.4 and o["map_heights"][mid] == 0.55 and app._map_height() == 0.55
+        app._resize(0.05)                                     # hotkeys: the same map
+        assert o["map_heights"][mid] == 0.6
+        app._unload_test_map()
+        app.toggle_edit()                                     # the test map: all maps again
+        assert app._test_map and app._own_size_map() is None
+        app._set_size("map", 30)
+        assert o["height"] == 0.3 and len(o["map_heights"]) == 1
+        app.toggle_edit()
     finally:
         app.quit()

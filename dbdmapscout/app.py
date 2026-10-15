@@ -232,6 +232,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self.sel_size_label = self._slider(pos, _("Grösse"), self.sel_size_var, *MAP_SCALE, self._sel_size_changed,
                                            key="ov.sel_size")
         self.sel_scale = self._qt_reg["ov.sel_size"]
+        self.size_scope_var = ui.StringVar(value="")     # 1.65.5: this map only / all maps
+        self._reg("ov.size_scope", ui.Label(pos, textvariable=self.size_scope_var, style="Dim.TLabel"))
         self.size_cap_var = ui.StringVar(value="")       # 1.65.2: the bar is what limits the map's size
         self._reg("ov.size_cap", ui.Label(pos, textvariable=self.size_cap_var, style="Dim.TLabel"))
         r = ui.Frame(pos)
@@ -761,8 +763,9 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self._layout_mark()
         o = self.settings["overlay"]
         new = round(min(MAX_HEIGHT, max(0.15, self._map_height() + delta)), 3)
-        if self.current:
-            o.setdefault("map_heights", {})[self.current[0]] = new
+        mid = self._own_size_map()               # the test map changes the size of all maps (1.65.5)
+        if mid:
+            o.setdefault("map_heights", {})[mid] = new
         else:
             o["height"] = new
             self.size_var.set(new * 100)
