@@ -350,7 +350,7 @@ def test_server_in_aws_global_range_without_region(tmp_path, monkeypatch):
     result.write_text(json.dumps({"ok": True, "t": 1000.0, "flows": [{"ip": "54.115.7.8", "port": 7786, "pps": 180.0}]}))
     w.poll(1000.5)
     assert w.server["region"] == connwatch.UNKNOWN and w.ping_ms is None and not pinged
-    assert w.text() == "Region unbekannt (54.115.7.8)"
+    assert w.text() == "Global (54.115.7.8)"
     w.poll(1001.0)
     assert w.server["region"] == connwatch.UNKNOWN and not pinged
     assert connwatch.aws_global("54.115.0.1") and not connwatch.aws_global("3.120.45.67")
