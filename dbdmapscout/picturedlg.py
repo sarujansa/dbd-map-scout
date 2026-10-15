@@ -7,12 +7,10 @@ from __future__ import annotations
 
 import os
 import sys
-import tkinter as tk
-from tkinter import filedialog, ttk
-
-from PIL import Image, ImageTk
+from PIL import Image
 
 from . import mapimage as mi, tooltip
+from . import uimodel as ui
 from .i18n import _
 from .textnorm import fold
 
@@ -59,83 +57,80 @@ class PictureDialog:
                        (" – " + _("eigenes Bild") if cat.is_own(mid, v) else "") for mid, v in self.choices]
         self.realms = sorted(cat.realms)
         self.src = None
-        self._photos = []
         self._base = None                    # picked picture after trim/background removal (preview)
 
-        d = self.dlg = tk.Toplevel(app.root)
+        d = self.dlg = ui.Toplevel(app.ui_root)
         d.title(_("Kartenbild hinzufügen"))
-        d.transient(app.root)
-        d.resizable(False, False)
-        body = ttk.Frame(d, padding=12)
+        body = ui.Frame(d, padding=12)
         body.pack(fill="both", expand=True)
 
-        row = ttk.Frame(body)
+        row = ui.Frame(body)
         row.pack(fill="x")
-        ttk.Button(row, text=_("Bild wählen …"), command=self.choose).pack(side="left")
-        self.file_var = tk.StringVar(value=_("Noch kein Bild gewählt (PNG, JPG, WebP, GIF)"))
-        ttk.Label(row, textvariable=self.file_var, style="Dim.TLabel", wraplength=360).pack(side="left", padx=8)
+        ui.Button(row, text=_("Bild wählen …"), command=self.choose).pack(side="left")
+        self.file_var = ui.StringVar(value=_("Noch kein Bild gewählt (PNG, JPG, WebP, GIF)"))
+        ui.Label(row, textvariable=self.file_var, style="Dim.TLabel", wraplength=360).pack(side="left", padx=8)
 
-        self.mode = tk.StringVar(value="new" if name or map_id is None and not app.current else "replace")
-        mf = ttk.LabelFrame(body, text=_("Für welche Map?"), padding=8)
+        self.mode = ui.StringVar(value="new" if name or map_id is None and not app.current else "replace")
+        mf = ui.LabelFrame(body, text=_("Für welche Map?"), padding=8)
         mf.pack(fill="x", pady=(10, 0))
-        ttk.Radiobutton(mf, text=_("Bild einer vorhandenen Map ersetzen"), variable=self.mode, value="replace",
+        ui.Radiobutton(mf, text=_("Bild einer vorhandenen Map ersetzen"), variable=self.mode, value="replace",
                         command=self._mode_changed).pack(anchor="w")
         pre = map_id or (app.current[0] if app.current else None)
         pre_v = variant if map_id else (app.current[1] if app.current else 1)
-        self.map_var = tk.StringVar(value=self.labels[self.choices.index((pre, pre_v))]
+        self.map_var = ui.StringVar(value=self.labels[self.choices.index((pre, pre_v))]
                                     if (pre, pre_v) in self.choices else "")
-        self.map_cb = ttk.Combobox(mf, textvariable=self.map_var, values=self.labels, state="readonly",
+        self.map_cb = ui.Combobox(mf, textvariable=self.map_var, values=self.labels, state="readonly",
                                    width=48, height=18)
         self.map_cb.pack(fill="x", padx=(22, 0), pady=(2, 6))
         self.map_cb.bind("<<ComboboxSelected>>", lambda e: (self._update_buttons(),
                                                               self._render_preview(again=False)))
-        ttk.Radiobutton(mf, text=_("Neue Map (fehlt im Programm)"), variable=self.mode, value="new",
+        ui.Radiobutton(mf, text=_("Neue Map (fehlt im Programm)"), variable=self.mode, value="new",
                         command=self._mode_changed).pack(anchor="w")
-        nf = ttk.Frame(mf)
+        nf = ui.Frame(mf)
         nf.pack(fill="x", padx=(22, 0), pady=(2, 0))
-        ttk.Label(nf, text=_("Name"), width=7).grid(row=0, column=0, sticky="w")
-        self.name_var = tk.StringVar(value=name.title() if name.isupper() else name)
+        ui.Label(nf, text=_("Name"), width=7).grid(row=0, column=0, sticky="w")
+        self.name_var = ui.StringVar(value=name.title() if name.isupper() else name)
         self.name_var.trace_add("write", lambda *a: self._render_preview(again=False))
-        self.name_entry = ttk.Entry(nf, textvariable=self.name_var, width=40)
+        self.name_entry = ui.Entry(nf, textvariable=self.name_var, width=40)
         self.name_entry.grid(row=0, column=1, sticky="we", pady=1)
-        ttk.Label(nf, text="Realm", width=7).grid(row=1, column=0, sticky="w")
-        self.realm_var = tk.StringVar(value=self._realm_guess(realm))
-        self.realm_cb = ttk.Combobox(nf, textvariable=self.realm_var, values=self.realms, width=38, height=18)
+        ui.Label(nf, text="Realm", width=7).grid(row=1, column=0, sticky="w")
+        self.realm_var = ui.StringVar(value=self._realm_guess(realm))
+        self.realm_cb = ui.Combobox(nf, textvariable=self.realm_var, values=self.realms, width=38, height=18)
         self.realm_cb.grid(row=1, column=1, sticky="we", pady=1)
-        ttk.Label(nf, text=_("Name so, wie er im Map-Banner steht – dann wird die Map automatisch erkannt."),
+        ui.Label(nf, text=_("Name so, wie er im Map-Banner steht – dann wird die Map automatisch erkannt."),
                   style="Dim.TLabel", wraplength=380).grid(row=2, column=0, columnspan=2, sticky="w", pady=(2, 0))
 
-        self.bg_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(body, text=_("Hintergrund entfernen (Dunkelblau und Graulila der Community-Karten) "
+        self.bg_var = ui.BooleanVar(value=True)
+        ui.Checkbutton(body, text=_("Hintergrund entfernen (Dunkelblau und Graulila der Community-Karten) "
                                      "und Rand abschneiden"), variable=self.bg_var,
                         command=self._render_preview).pack(anchor="w", pady=(10, 0))
-        self.title_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(body, text=_("Map-Namen oben einfügen (wie bei den mitgelieferten Karten)"),
+        self.title_var = ui.BooleanVar(value=True)
+        ui.Checkbutton(body, text=_("Map-Namen oben einfügen (wie bei den mitgelieferten Karten)"),
                         variable=self.title_var, command=lambda: self._render_preview(again=False)).pack(anchor="w")
 
-        pv = ttk.Frame(body)
+        pv = ui.Frame(body)
         pv.pack(fill="x", pady=(8, 0))
-        self.before = ttk.Label(pv, text=_("Original"), anchor="center", width=30)
-        self.before._dbdms_pil = None            # the previews as PIL images, for the Qt window
+        self.before = ui.Label(pv, text=_("Original"), anchor="center", width=30)
+        self.before._dbdms_pil = None            # the previews as PIL images (shown by the window)
         self.before.pack(side="left", padx=(0, 6))
-        self.after = ttk.Label(pv, text=_("Ergebnis"), anchor="center", width=30)
+        self.after = ui.Label(pv, text=_("Ergebnis"), anchor="center", width=30)
         self.after._dbdms_pil = None
         self.after.pack(side="left")
 
-        self.msg = tk.StringVar(value="")
-        ttk.Label(body, textvariable=self.msg, style="Dim.TLabel", wraplength=440).pack(anchor="w", pady=(8, 0))
-        br = ttk.Frame(body)
+        self.msg = ui.StringVar(value="")
+        ui.Label(body, textvariable=self.msg, style="Dim.TLabel", wraplength=440).pack(anchor="w", pady=(8, 0))
+        br = ui.Frame(body)
         br.pack(fill="x", pady=(8, 0))
-        ttk.Button(br, text=_("Ordner öffnen"), command=self.open_dir).pack(side="left")
-        self.del_btn = ttk.Button(br, text=_("Eigenes Bild löschen"), command=self.delete)
+        ui.Button(br, text=_("Ordner öffnen"), command=self.open_dir).pack(side="left")
+        self.del_btn = ui.Button(br, text=_("Eigenes Bild löschen"), command=self.delete)
         self.del_btn.pack(side="left", padx=6)
-        self.save_btn = ttk.Button(br, text=_("Speichern"), command=self.save)
+        self.save_btn = ui.Button(br, text=_("Speichern"), command=self.save)
         self.save_btn.pack(side="right")
-        ttk.Button(br, text=_("Abbrechen"), command=d.destroy).pack(side="right", padx=6)
+        ui.Button(br, text=_("Abbrechen"), command=d.destroy).pack(side="right", padx=6)
         d.bind("<Escape>", lambda e: d.destroy())
         self._mode_changed()
         tooltip.attach_all(d)
-        app._dialog(d)                           # grab here, or the Qt window shows it
+        app._dialog(d)                           # the window shows it
 
     # ---------------------------------------------------------------- helpers
     def _realm_guess(self, text: str) -> str:
@@ -162,13 +157,11 @@ class PictureDialog:
         self.save_btn.configure(state="normal" if self.src else "disabled")
 
     def choose(self, path=None):
-        if path is None and self.app._qt_file("open", _("Kartenbild wählen"), "", self.choose,
-                                              _("Bilder") + " (*.png *.jpg *.jpeg *.webp *.gif *.bmp)"):
-            return                                  # the Qt window asks for the file, then calls again
-        if path is None:
-            types = [(_("Bilder"), "*.png *.jpg *.jpeg *.webp *.gif *.bmp"), (_("Alle Dateien"), "*.*")]
-            path = filedialog.askopenfilename(parent=self.dlg, title=_("Kartenbild wählen"), filetypes=types)
-        if not path or not self.dlg.winfo_exists():
+        if path is None:                            # the window asks for the file, then calls again
+            self.app._qt_file("open", _("Kartenbild wählen"), "", self.choose,
+                              _("Bilder") + " (*.png *.jpg *.jpeg *.webp *.gif *.bmp)")
+            return
+        if not self.dlg.winfo_exists():
             return
         try:
             with Image.open(path) as im:
@@ -211,10 +204,7 @@ class PictureDialog:
         except (OSError, ValueError) as e:
             self.msg.set(_("Bild konnte nicht verarbeitet werden: {error}", error=e))
             return
-        self._photos = [ImageTk.PhotoImage(before), ImageTk.PhotoImage(preview(result))]
         self.before._dbdms_pil, self.after._dbdms_pil = before, preview(result)
-        self.before.configure(image=self._photos[0], compound="top")
-        self.after.configure(image=self._photos[1], compound="top")
         self.msg.set(note)
 
     # ---------------------------------------------------------------- actions
@@ -249,14 +239,10 @@ class PictureDialog:
         stem, map_id, variant = t
         dest = mi.target_path(self.app.root_dir, stem, mi.is_animated(self.src))
         try:
-            self.dlg.configure(cursor="watch")
-            self.dlg.update_idletasks()
             mi.save(self.src, dest, self.bg_var.get(), self._title())
         except (OSError, ValueError) as e:
             self.msg.set(_("Speichern fehlgeschlagen: {error}", error=e))
             return
-        finally:
-            self.dlg.configure(cursor="")
         self.app.picture_saved(dest, map_id, variant)
         self.dlg.destroy()
 

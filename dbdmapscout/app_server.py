@@ -5,10 +5,8 @@ from __future__ import annotations
 
 import threading
 import time
-import tkinter as tk
-from tkinter import ttk
-
 from . import connwatch, regions
+from . import uimodel as ui
 from .capture import IS_WIN
 from .i18n import _
 
@@ -17,35 +15,32 @@ class ServerTab:
     # ----------------------------------------------------------- tab: server
     def _tab_server(self):
         outer, f = self._scroll_tab()
-        conn = ttk.LabelFrame(f, text=_("Verbundener Spielserver"), padding=8)
+        conn = ui.LabelFrame(f, text=_("Verbundener Spielserver"), padding=8)
         conn.pack(fill="x")
-        self.conn_show_var = tk.BooleanVar(value=bool(self.settings.get("show_connection")))
-        ttk.Checkbutton(conn, text=_("Anzeigen, mit welchem Server DBD verbunden ist"),
+        self.conn_show_var = ui.BooleanVar(value=bool(self.settings.get("show_connection")))
+        ui.Checkbutton(conn, text=_("Anzeigen, mit welchem Server DBD verbunden ist"),
                         variable=self.conn_show_var, command=self._conn_toggled).pack(anchor="w")
-        self.conn_tab_var = tk.StringVar(value="")
-        ttk.Label(conn, textvariable=self.conn_tab_var, style="Big.TLabel", wraplength=540).pack(anchor="w", pady=(2, 0))
-        ttk.Label(conn, text=_("Zeigt Region und Ping des Spielservers, auch im Overlay (braucht "
+        self.conn_tab_var = ui.StringVar(value="")
+        ui.Label(conn, textvariable=self.conn_tab_var, style="Big.TLabel", wraplength=540).pack(anchor="w", pady=(2, 0))
+        ui.Label(conn, text=_("Zeigt Region und Ping des Spielservers, auch im Overlay (braucht "
                                "Administratorrechte)."), style="Dim.TLabel", wraplength=540).pack(anchor="w")
 
-        reg = ttk.LabelFrame(f, text=_("Serverregionen"), padding=8)
+        reg = ui.LabelFrame(f, text=_("Serverregionen"), padding=8)
         reg.pack(fill="both", expand=True, pady=(8, 0))
-        ttk.Label(reg, text=_("DBD sucht Matches nur in den angehakten Regionen (über die Windows-hosts-Datei, "
+        ui.Label(reg, text=_("DBD sucht Matches nur in den angehakten Regionen (über die Windows-hosts-Datei, "
                               "das Spiel wird nicht verändert). Nach „Auswahl anwenden“ DBD neu starten."),
                   style="Dim.TLabel", wraplength=430).pack(anchor="w")
         f_outer, f = f, reg
-        tf = ttk.Frame(f)
+        tf = ui.Frame(f)
         tf.pack(fill="both", expand=True, pady=(6, 0))
-        t = ttk.Treeview(tf, columns=("ping", "state"), show="tree headings", height=11, selectmode="browse")
+        t = ui.Treeview(tf, columns=("ping", "state"), show="tree headings", height=11, selectmode="browse")
         t.heading("#0", text=_("Region"), anchor="w")
         t.heading("ping", text="Ping", anchor="e")
         t.heading("state", text=_("hosts-Datei"), anchor="w")
         t.column("#0", width=215, stretch=True)
         t.column("ping", width=78, anchor="e", stretch=False)
         t.column("state", width=120, anchor="w", stretch=False)
-        sb = ttk.Scrollbar(tf, orient="vertical", command=t.yview)
-        t.configure(yscrollcommand=sb.set)
         t.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
         self.srv_tree = t
         t._dbdms_click = self._srv_toggle         # a click toggles the region (also from the Qt window)
         saved = self.settings.get("regions_selected")
@@ -55,19 +50,17 @@ class ServerTab:
             for code, name, grp in regions.REGIONS:
                 if grp == g:
                     t.insert(f"g:{g}", "end", iid=f"r:{code}", text=_(name), values=("", ""))
-        t.bind("<Button-1>", self._srv_click)
-        t.bind("<space>", lambda e: self._srv_toggle(t.focus()))
-        row = ttk.Frame(f)
+        row = ui.Frame(f)
         row.pack(fill="x", pady=(6, 0))
-        self.srv_btns = [ttk.Button(row, text=_("Ping messen"), command=self.srv_measure),
-                         ttk.Button(row, text=_("Auswahl anwenden"), command=self.srv_apply),
-                         ttk.Button(row, text=_("Alles freigeben"), command=self.srv_release)]
+        self.srv_btns = [ui.Button(row, text=_("Ping messen"), command=self.srv_measure),
+                         ui.Button(row, text=_("Auswahl anwenden"), command=self.srv_apply),
+                         ui.Button(row, text=_("Alles freigeben"), command=self.srv_release)]
         self.srv_btns[0].pack(side="left")
         self.srv_btns[1].pack(side="left", padx=6)
         self.srv_btns[2].pack(side="left")
-        self.srv_status = tk.StringVar(value="")
-        ttk.Label(f, textvariable=self.srv_status, wraplength=430).pack(anchor="w", pady=(6, 0))
-        ttk.Label(f_outer, text=_("Mit VPN unzuverlässig. Region-Tools sind von BHVR weder erlaubt noch verboten – "
+        self.srv_status = ui.StringVar(value="")
+        ui.Label(f, textvariable=self.srv_status, wraplength=430).pack(anchor="w", pady=(6, 0))
+        ui.Label(f_outer, text=_("Mit VPN unzuverlässig. Region-Tools sind von BHVR weder erlaubt noch verboten – "
                                   "auf eigene Verantwortung."), style="Dim.TLabel", wraplength=440).pack(
             anchor="w", pady=(6, 0))
         self._srv_render()
@@ -158,17 +151,6 @@ class ServerTab:
         show = self.settings["overlay"].get("show_server", True)
         self.overlay.set_server(connwatch.region_name(srv["region"]) if srv and show else "",
                                 self.conn.ping_ms)
-        main = _("Verbunden mit: {server}", server=text) if self.conn.running else ""
-        if main != self.conn_var.get():
-            self.conn_var.set(main)
-
-    def _srv_click(self, e):
-        t = self.srv_tree
-        if t.identify_region(e.x, e.y) not in ("tree", "cell"):
-            return
-        iid = t.identify_row(e.y)
-        if iid and t.identify_element(e.x, e.y) != "Treeitem.indicator":
-            self._srv_toggle(iid)
 
     def _srv_toggle(self, iid):
         if not iid or self._srv_busy:

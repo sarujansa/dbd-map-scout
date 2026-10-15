@@ -38,21 +38,25 @@ def _claim_mutex(name: str) -> bool:
     return ctypes.get_last_error() not in (ERROR_ALREADY_EXISTS, ERROR_ACCESS_DENIED)
 
 
+def _message(text: str, error: bool = False):
+    """A message box without a window of our own (Windows), else stderr."""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(None, text, "DbD Map Scout", 0x10 if error else 0x40)
+            return
+        except Exception:
+            pass
+    print(text, file=sys.stderr)
+
+
 def _single_instance() -> bool:
     """Only one running copy (a second one could not register the hotkeys)."""
     if sys.platform != "win32":
         return True
     from .restart import MUTEX_NAME
     if not _claim_mutex(MUTEX_NAME):
-        try:
-            import tkinter as tk
-            from tkinter import messagebox
-            r = tk.Tk()
-            r.withdraw()
-            messagebox.showinfo("DbD Map Scout", _("DbD Map Scout läuft bereits."))
-            r.destroy()
-        except Exception:
-            pass
+        _message(_("DbD Map Scout läuft bereits."))
         return False
     return True
 
@@ -125,15 +129,7 @@ def main():
     except Exception:
         text = traceback.format_exc()
         logging.getLogger("dbdmapscout").error(text)
-        try:
-            import tkinter as tk
-            from tkinter import messagebox
-            r = tk.Tk()
-            r.withdraw()
-            messagebox.showerror("DbD Map Scout", _("Start fehlgeschlagen:") + "\n\n" + text[-1500:])
-            r.destroy()
-        except Exception:
-            print(text, file=sys.stderr)
+        _message(_("Start fehlgeschlagen:") + "\n\n" + text[-1500:], error=True)
         sys.exit(1)
 
 

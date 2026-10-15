@@ -1,19 +1,14 @@
-"""Info texts shown when the mouse rests on a button or checkbox (Tk, no extra package).
+"""Info texts shown when the mouse rests on a button or checkbox (the Qt window shows them).
 
-``attach_all(root, lookup)`` walks the widget tree once after the UI is built and gives every
+``attach_all(root, lookup)`` walks the UI model once after a tab or dialog is built and gives every
 button/checkbox a tooltip whose text ``lookup(widget)`` returns (a string, a callable returning
-one – for buttons whose label changes – or None). The texts themselves are in ``TIPS`` below,
+one – for buttons whose label changes – or None); ``widget._dbdms_tip()`` is the text now. The texts themselves are in ``TIPS`` below,
 keyed by the button label, so they stay in one place.
 """
 from __future__ import annotations
 
-import tkinter as tk
-from tkinter import ttk
-
+from . import uimodel as ui
 from .i18n import _, source
-
-DELAY_MS = 550
-WRAP = 320
 
 # German label -> German info text (buttons/checkboxes with a fixed label); both translated via i18n
 TIPS = {
@@ -67,10 +62,6 @@ TIPS = {
     "Falsch erkannt": "Die erkannte Map stimmt nicht: Karte ausblenden, Timer zurücksetzen, die Runde wird nicht "
                       "gezählt. Geht auch im Spiel mit dem Hotkey (Standard Strg+Alt+X).",
     "Stimmt": "Die Map stimmt – Hinweis „unsicher“ ausblenden.",
-    "Neues Fenster (Qt) – aus: das bisherige Fenster":
-        "Steuerfenster mit Navigation links und Seite „Übersicht“ (Standard seit 1.56). Ausgeschaltet erscheint "
-        "wieder das bisherige Fenster. Gilt ab dem nächsten Start.",
-    "Im bisherigen Fenster öffnen": "Öffnet diese Seite im bisherigen Fenster (sie zieht später ins neue um).",
     # maps tab
     "Kartenbild hinzufügen …": "Eigenes Bild für eine Map wählen: vorhandenes Bild ersetzen oder neue Map "
                                "anlegen. Rand und Hintergrund werden automatisch entfernt.",
@@ -181,76 +172,12 @@ def tip_for_label(text: str):
     return None
 
 
-class Tooltip:
-    """Small borderless window next to the mouse after a short rest on ``widget``."""
-    colours = ("#2b2d31", "#e3e5e8", "#3a3c42")            # bg, fg, border – set by the app (theme)
-
-    def __init__(self, widget, text):
-        self.widget, self.text = widget, text
-        self._after = self._win = None
-        widget.bind("<Enter>", self._schedule, add="+")
-        widget.bind("<Leave>", self.hide, add="+")
-        widget.bind("<ButtonPress>", self.hide, add="+")
-        widget.bind("<Destroy>", self.hide, add="+")
-        widget._dbdms_tip = self
-
-    def _text(self):
-        t = self.text() if callable(self.text) else self.text
-        return t or ""
-
-    def _schedule(self, _e=None):
-        self._cancel()
-        self._after = self.widget.after(DELAY_MS, self.show)
-
-    def _cancel(self):
-        if self._after:
-            try:
-                self.widget.after_cancel(self._after)
-            except tk.TclError:
-                pass
-            self._after = None
-
-    def show(self):
-        self._after = None
-        text = self._text()
-        if not text or self._win:
-            return
-        try:
-            x = self.widget.winfo_pointerx() + 14
-            y = self.widget.winfo_rooty() + self.widget.winfo_height() + 6
-        except tk.TclError:
-            return
-        bg, fg, border = Tooltip.colours
-        w = self._win = tk.Toplevel(self.widget)
-        w.wm_overrideredirect(True)
-        try:
-            w.attributes("-topmost", True)
-        except tk.TclError:
-            pass
-        frame = tk.Frame(w, background=border, padx=1, pady=1)
-        frame.pack()
-        tk.Label(frame, text=text, justify="left", wraplength=WRAP, background=bg, foreground=fg,
-                 font=("Segoe UI", 9), padx=8, pady=5).pack()
-        w.update_idletasks()
-        # keep it on the screen
-        sw, sh = w.winfo_screenwidth(), w.winfo_screenheight()
-        tw, th = w.winfo_reqwidth(), w.winfo_reqheight()
-        x = min(x, sw - tw - 4)
-        if y + th > sh - 4:
-            y = self.widget.winfo_rooty() - th - 6
-        w.geometry(f"+{max(0, x)}+{max(0, y)}")
-
-    def hide(self, _e=None):
-        self._cancel()
-        if self._win is not None:
-            try:
-                self._win.destroy()
-            except tk.TclError:
-                pass
-            self._win = None
+def _resolver(text):
+    """The text now: tooltips of buttons whose label changes are callables."""
+    return lambda: (text() if callable(text) else text) or ""
 
 
-TIPPABLE = (ttk.Button, ttk.Checkbutton, ttk.Radiobutton)
+TIPPABLE = (ui.Button, ui.Checkbutton, ui.Radiobutton)
 
 
 def attach_all(root, lookup=None):
@@ -265,12 +192,9 @@ def attach_all(root, lookup=None):
             continue
         text = lookup(w) if lookup else None
         if text is None:
-            try:
-                text = tip_for_label(str(w.cget("text")))
-            except tk.TclError:
-                text = None
+            text = tip_for_label(str(w.cget("text")))
         if text:
-            Tooltip(w, text)
+            w._dbdms_tip = _resolver(text)
             count += 1
     return count
 

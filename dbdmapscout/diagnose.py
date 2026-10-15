@@ -48,9 +48,18 @@ def _win_info(hwnd):
     return out
 
 
+def _qt_version() -> str:
+    try:
+        import PySide6
+        from PySide6.QtCore import qVersion
+        return f"{qVersion()} (PySide6 {PySide6.__version__})"
+    except Exception as e:  # pragma: no cover
+        return f"? ({e})"
+
+
 def collect(app) -> str:
     lines = [f"DbD Map Scout {__version__} – Diagnose {time.strftime('%Y-%m-%d %H:%M:%S')}",
-             f"Python {sys.version.split()[0]} · Tk {app.root.tk.call('info', 'patchlevel')} · {platform.platform()}"]
+             f"Python {sys.version.split()[0]} · Qt {_qt_version()} · {platform.platform()}"]
     try:
         import cv2, mss, numpy, onnxruntime, PIL
         lines.append(f"numpy {numpy.__version__} · opencv {cv2.__version__} · onnxruntime {onnxruntime.__version__} · "

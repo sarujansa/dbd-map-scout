@@ -20,7 +20,7 @@ DEFAULTS = {
     "overlay": {
         "anchor": "auto",              # auto | top-left | top-right | bottom-left | bottom-right | custom
                                         # auto = in the black bar left of a 16:9 picture, else top-left
-        "native_window": True,          # Windows: native layered window (False = Tk window)
+        "native_window": True,          # Windows: native layered window (False = Qt window)
         "pos_x": 0.0,                   # anchor=custom: 0 = left edge, 1 = right edge of the free space
         "pos_y": 0.0,                   # anchor=custom: 0 = top, 1 = bottom
         "margin": 0.012,                # distance to the window edge (fraction of the game height)
@@ -54,12 +54,8 @@ DEFAULTS = {
     },
     "ui_language": "auto",            # auto (Windows language) | de | en
     "dark_mode": True,
-    "ui_zoom": 1.0,                     # control window: font size factor (uiscale.ZOOMS)
-    "ui_style": "fluent_gold",          # control window design (theme.STYLES)
-    "ui_toolkit": "qt",                 # control window: "qt" (default since 1.56) or "tk" (the previous one)
-    "qt_geometry": "",                  # Qt window: QWidget.saveGeometry() as base64
-    "window_geometry": "",
-    "window_zoomed": False,             # control window maximised (window_geometry = size before that)
+    "ui_zoom": 1.0,                     # control window: font size factor (qt_theme.ZOOMS)
+    "qt_geometry": "",                  # control window: QWidget.saveGeometry() as base64
     "log_categories": ["Erkennung", "Overlay", "System", "Fehler"],
     "ocr_threads": 2,
     "save_debug_images": False,
@@ -100,7 +96,7 @@ def export_settings(data: dict, path: str) -> None:
 
 
 # per-PC values that must not come along from a backup (other folder / other machine)
-LOCAL_KEYS = ("setup_version", "setup_root", "window_geometry", "window_zoomed", "qt_geometry", "official_dir")
+LOCAL_KEYS = ("setup_version", "setup_root", "qt_geometry", "official_dir")
 
 
 def read_backup(path: str, current: dict) -> dict:
