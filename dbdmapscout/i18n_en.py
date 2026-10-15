@@ -581,6 +581,8 @@ EN = {
     "Verschieben aktiv – ziehen (rastet ein, Alt = frei), Pfeiltasten = fein, Ecke/Mausrad = Grösse":
         "Moving is on – drag (snaps, Alt = free), arrow keys = fine, corner/mouse wheel = size",
     "Rückgängig": "Undo",
+    "Die Karte ist so breit wie der schwarze Balken – grösser geht hier nicht. Grösser nur mit ausgeschaltetem „Im schwarzen Balken halten“ (ragt dann ins Spielbild).":
+        "The map is as wide as the black bar – it cannot get bigger here. Bigger only with “Keep the map in the black bar” switched off (it then reaches into the game picture).",
     "Nimmt die letzte Änderung an Position oder Grösse zurück (Karte, Systemwerte, Musik) – auch mit Strg+Z auf dieser Seite. Ein ganzes Ziehen zählt als ein Schritt.":
         "Takes back the last change of place or size (map, system values, music) – also with Ctrl+Z on this page. A whole drag counts as one step.",
     "Merkt Position und Grösse aller Elemente getrennt für jede Grösse des DBD-Fensters (z. B. Vollbild 3440×1440 und ein kleineres Fenster) und lädt sie automatisch, sobald DBD in dieser Grösse läuft.":
