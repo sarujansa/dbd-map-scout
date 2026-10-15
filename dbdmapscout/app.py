@@ -648,7 +648,16 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
     def toggle_edit(self):
         """Edit mode: the map (and system values with an own position) can be dragged."""
         on = not self.overlay.editing
+        if on and not self.overlay.has_map():     # 1.64.3 (user): a test map to grab, also in the game
+            first = next(iter(self._list_items.values()), None)
+            if first:
+                self.show_map(first[0], first[1], "manual", _("Testanzeige"))
+                self._test_map = True            # loaded only for moving: hidden again by "Fertig"
         self.overlay.set_editing(on)
+        if not on and getattr(self, "_test_map", False) and time.time() >= getattr(self, "_force_until", 0):
+            self._test_map = False               # still the test map (no map chosen meanwhile): away again
+            self.user_visible = False
+            self._round_ended(time.time())
         self.edit_btn.configure(text=_("Fertig") if on else _("Mit der Maus verschieben"))
         if on:                     # 1.64.1: also without a map – the preview (tab Overlay) shows everything
             self._log(_("Karte, Systemwerte und Musik mit der Maus ziehen (im Spiel oder in der Vorschau), "
