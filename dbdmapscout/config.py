@@ -38,6 +38,11 @@ DEFAULTS = {
         "floor_auto": True,             # maps with floors (Midwich): all one below the other (False: bottom only)
         "show_record": True,            # own record on the map below the timer (official match data)
         "show_map": True,               # off: overlay shows only timer, server and ping
+        "show_media": True,             # "Läuft gerade": music of the Windows media controls (1.64)
+        "media_pos": "below",           # its own window: below / bottom_right / bottom_left / custom
+        "media_xy": [1.0, 1.0],         # custom: share of the free room in the DBD window (dragged in edit mode)
+        "media_scale": 1.0,             # size of the music card (slider 60–200 %)
+        "media_cover": True,            # album cover left of title and artist
         "show_today": True,             # block "today" with the system values at the top of a black bar (1.62)
     },
     "hotkeys": {

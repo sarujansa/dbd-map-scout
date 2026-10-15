@@ -126,6 +126,9 @@ def collect(app) -> str:
     if mon is not None:
         lines.append(mon.diag_line() + f" (Anzeige={app.settings.get('sysinfo')}, Rechteck="
                      f"{getattr(getattr(app, 'worker', None), 'hud_rect', None)})")
+    med = getattr(app, "media", None)
+    if med is not None:
+        lines.append(med.diag_line() + f" (Anzeige={app.settings['overlay'].get('show_media')})")
     conn = getattr(app, "conn", None)
     if conn is not None:
         lines.extend(conn.diag_lines())
