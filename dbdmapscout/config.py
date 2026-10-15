@@ -38,6 +38,7 @@ DEFAULTS = {
         "floor_auto": True,             # maps with floors (Midwich): all one below the other (False: bottom only)
         "show_record": True,            # own record on the map below the timer (official match data)
         "show_map": True,               # off: overlay shows only timer, server and ping
+        "show_media": True,             # "Läuft gerade": music of the Windows media controls, below "today" (1.64)
         "show_today": True,             # block "today" with the system values at the top of a black bar (1.62)
     },
     "hotkeys": {
