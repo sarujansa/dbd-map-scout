@@ -55,7 +55,7 @@ def parse(combo: str):
     return mods, vk
 
 
-# Tk keysym -> our key names (for recording a hotkey by pressing it)
+# key names as the window reports them (Tk-style keysyms, qt_window.HotkeyButton) -> ours
 _TK_KEYS = {"Left": "left", "Right": "right", "Up": "up", "Down": "down", "Prior": "pageup", "Next": "pagedown",
             "Home": "home", "End": "end", "Insert": "insert", "Delete": "delete", "space": "space",
             "Tab": "tab", "plus": "plus", "minus": "minus", "comma": "comma", "period": "period",
@@ -74,7 +74,7 @@ _VK_NAME = {v: k for k, v in VK.items()}
 
 
 def _key_from_vk(vk):
-    """Windows virtual-key code (Tk's event.keycode on Windows) -> our key name; layout independent."""
+    """Windows virtual-key code (the pressed key's native code on Windows) -> our key name; layout independent."""
     if vk is None:
         return None
     if 0x30 <= vk <= 0x39 or 0x41 <= vk <= 0x5A:
@@ -83,7 +83,7 @@ def _key_from_vk(vk):
 
 
 def combo_from_keys(mods, keysym: str, keycode=None):
-    """Held modifiers + pressed key (Tk keysym, Windows keycode) -> ('ctrl+alt+m', None) or (None, reason).
+    """Held modifiers + pressed key (keysym, Windows keycode) -> ('ctrl+alt+m', None) or (None, reason).
 
     A global hotkey swallows its keys in every program, DBD included – so letters, digits and the
     like need Ctrl or Alt (Shift alone would steal capital letters in the chat). F-keys may use
@@ -94,7 +94,7 @@ def combo_from_keys(mods, keysym: str, keycode=None):
         return None, None                                # still holding modifiers
     vk_key = _key_from_vk(keycode)
     if vk_key and vk_key.startswith("numpad"):
-        key = vk_key                                     # Tk on Windows may call numpad 1 just "1"
+        key = vk_key                                     # numpad 1 may come as just "1"
     elif len(ks) == 1 and ks.isalnum():
         key = ks.lower()
     elif ks[:1] == "F" and ks[1:].isdigit() and 1 <= int(ks[1:]) <= 24:

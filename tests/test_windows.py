@@ -29,13 +29,31 @@ def test_every_module_imports():
 
 @pytest.fixture(scope="module")
 def root():
-    """One Tk for all tests (like the program): a second Tk interpreter in the same process does not
-    find its message catalogue on the Windows runner."""
-    tk = pytest.importorskip("tkinter")
-    r = tk.Tk()
-    r.withdraw()
-    yield r
-    r.destroy()
+    """The program's main loop (Qt) – what the overlays and the notification window get as ``root``."""
+    from dbdmapscout import qt_window
+    from dbdmapscout.mainloop import MainLoop
+    return MainLoop(qt_window.application())
+
+
+def pump(ms=100):
+    """Let Qt's loop run a moment (window messages, timers)."""
+    import time
+    from PySide6.QtWidgets import QApplication
+    end = time.monotonic() + ms / 1000
+    while time.monotonic() < end:
+        QApplication.processEvents()
+        time.sleep(0.01)
+
+
+def _window(x, y, w, h):
+    """A plain top-level window at this place: (widget, hwnd)."""
+    from PySide6.QtWidgets import QWidget
+    win = QWidget()
+    win.setWindowTitle("test")
+    win.setGeometry(x, y, w, h)
+    win.show()
+    pump()
+    return win, int(win.winId())
 
 
 def test_native_overlay_renders_and_shows(root):
@@ -48,22 +66,22 @@ def test_native_overlay_renders_and_shows(root):
     w, h = ov.render(400)
     assert w > 0 and h > 400                                  # map + info block below it
     ov.show_at(20, 20)
-    root.update()
+    pump()
     assert ov.is_visible()
     ov.hide()
-    root.update()
+    pump()
     assert not ov.is_visible()
     ov.destroy()
 
 
 def test_notification_window_never_takes_the_focus(root):
     import ctypes
-    from dbdmapscout.overlay import GWL_EXSTYLE, WS_EX_NOACTIVATE, _GetLong, _user32
+    from dbdmapscout.overlay import GWL_EXSTYLE, WS_EX_NOACTIVATE, _GetLong
     from dbdmapscout.toast import Toast
     t = Toast(root)
     t.show("Lobby gefunden", "nach 04:12 – READY drücken.", seconds=5)
-    root.update()
-    h = int(_user32.GetParent(t.win.winfo_id()) or 0) or t.win.winfo_id()
+    pump()
+    h = int(t.win.winId())
     assert _GetLong(h, GWL_EXSTYLE) & WS_EX_NOACTIVATE
     assert ctypes.windll.user32.GetForegroundWindow() != h
     t.close()
@@ -79,34 +97,25 @@ def test_window_and_cursor_queries():
 
 
 def test_window_geometry_of_a_real_window(root):
-    import tkinter as tk
     from dbdmapscout import capture
-    w = tk.Toplevel(root)
-    w.geometry("640x400+50+60")
-    w.update()
-    hwnd = int(w.wm_frame(), 16)
+    w, hwnd = _window(50, 60, 640, 400)
+    r = w.devicePixelRatioF()
     client, outer, window, monitor = capture.window_geometry(hwnd)
-    w.destroy()
+    w.close()
     assert client and outer and window and monitor
-    assert client[2] >= 600 and client[3] >= 380
+    assert client[2] >= 600 * r and client[3] >= 380 * r
     # title bar: client starts below the outer top, outer lies inside GetWindowRect
     assert outer[1] < client[1] and window[0] <= outer[0] and outer[2] <= window[2]
     assert monitor[2] > 0 and monitor[3] > 0
 
 
 def test_windows_above_see_what_covers_a_window(root):
-    import tkinter as tk
     from dbdmapscout import capture
     from dbdmapscout.overlay_win32 import Win32Overlay, make_overlay
-    low = tk.Toplevel(root)
-    low.geometry("400x300+80+80")
-    low.update()
-    high = tk.Toplevel(root)
-    high.geometry("200x150+150+150")
-    high.update()
-    high.lift()
-    high.update()
-    lo, hi = int(low.wm_frame(), 16), int(high.wm_frame(), 16)
+    low, lo = _window(80, 80, 400, 300)
+    high, hi = _window(150, 150, 200, 150)
+    high.raise_()
+    pump()
     hi_rect = capture.window_geometry(hi)[1]
     above = capture.windows_above(lo)
     assert hi_rect in above and capture.overlaps(capture.window_geometry(lo)[0], above)
@@ -116,14 +125,14 @@ def test_windows_above_see_what_covers_a_window(root):
     ov.set_map(os.path.join(ROOT, "maps", "McMillan", "Coal Tower.webp"))
     ov.render(200)
     ov.show_at(100, 100)
-    root.update()
+    pump()
     assert ov.shown and capture.window_geometry(ov._hwnd)[1] not in capture.windows_above(lo)  # click-through
     ov.destroy()
-    high.withdraw()
-    high.update()
+    high.hide()
+    pump()
     assert hi_rect not in capture.windows_above(lo)                            # hidden windows hide nothing
-    high.destroy()
-    low.destroy()
+    high.close()
+    low.close()
 
 
 def test_hotkeys_register_and_stop():
@@ -260,7 +269,7 @@ def test_system_values_window_can_be_dragged_in_edit_mode(root):
     rows = [[("CPU ", (210, 214, 224, 255)), ("62°C", (134, 239, 172, 255))]]
     w, h = hud.render(rows, 1440)
     hud.show_at(30, 30)
-    root.update()
+    pump()
     ex = ow._GetLong(hud.hwnd(), ow.GWL_EXSTYLE)
     assert ex & ow.WS_EX_TRANSPARENT                          # click-through while playing
     hud.set_editing(True)
@@ -275,75 +284,12 @@ def test_system_values_window_can_be_dragged_in_edit_mode(root):
     hud.destroy()
 
 
-def test_control_window_follows_its_size(root):
-    import tkinter as tk
-    import tkinter.font as tkfont
-    from tkinter import ttk
-    from dbdmapscout import uiscale
-    top = tk.Toplevel(root)
-    top.geometry("700x300+40+40")
-    frame = ttk.Frame(top, padding=8)
-    frame.pack(fill="both", expand=True)
-    text = ttk.Label(frame, text="lang " * 80, wraplength=400)
-    text.pack(anchor="w")
-    row = ttk.Frame(frame)
-    row.pack(fill="x")
-    beside = ttk.Label(row, text="kurz " * 40, wraplength=300)
-    beside.pack(side="left")
-    ttk.Combobox(row, values=["a"], width=20).pack(side="right")
-    tree = ttk.Treeview(frame, columns=("a", "b"), show="headings", height=3)
-    tree.heading("a", text="Map")
-    tree.heading("b", text="Runden")
-    tree.column("a", width=150, stretch=False)
-    tree.column("b", width=60, stretch=False)
-    tree.pack(fill="x")
-    wrap = uiscale.AutoWrap(top)
-    assert len(wrap.labels) == 2
-    tables = uiscale.stretch_tables(top)
-    assert {c for _t, c, _w, _m in tables} == {"a", "b"} and tree.column("a", "stretch")
-    top.update()
-    wrap.update()
-    narrow = int(float(str(text.cget("wraplength"))))
-    assert 600 <= narrow <= 700                                     # the window's width, not the fixed 400
-    assert int(float(str(beside.cget("wraplength")))) < narrow - 100   # the choice box beside it keeps its room
-    top.geometry("1200x300")                                        # the runner's screen may be narrower
-    top.update()
-    wrap.update()
-    wide = int(float(str(text.cget("wraplength"))))
-    assert top.winfo_width() > 760 and wide > narrow + 50           # wider window: longer lines …
-    assert top.winfo_width() - 80 <= wide <= top.winfo_width()      # … as wide as the window really got
-    size = tkfont.nametofont("TkDefaultFont").cget("size")
-    uiscale.apply_zoom(root, 1.5)
-    assert abs(tkfont.nametofont("TkDefaultFont").cget("size")) == max(6, round(abs(size) * 1.5))
-    uiscale.apply_zoom(root, 1.0)
-    assert tkfont.nametofont("TkDefaultFont").cget("size") == size  # back to the size it had
-    top.destroy()
-
-
-def test_every_design_loads_and_switches(root):
-    from tkinter import ttk
-    from dbdmapscout import theme
-    style = ttk.Style(root)
-    for design, _label in theme.STYLES:
-        for dark in (True, False):
-            theme.apply.failed = ""
-            bg = theme.apply(root, dark, design=design)
-            assert not theme.apply.failed
-            root.winfo_rgb(bg)          # a colour Tk knows (light classic on Windows: "SystemButtonFace")
-            if design != "classic":
-                assert style.theme_use() == f"dbdms-{'gold' if design == 'fluent_gold' else 'blue'}-" \
-                                            f"{'dark' if dark else 'light'}"
-    theme.apply(root, True, design=theme.DEFAULT_STYLE)        # loaded once: switching back reuses the theme
-    assert not theme.apply.failed
-
-
-def test_qt_window_runs_in_tks_loop(root):
-    """Stage 1 runs Qt inside Tk's mainloop: real Win32 clicks reach Qt while Tcl dispatches the messages, the
-    slot only hands the action over (tkinter from there could kill Python), and Tk's timers keep running."""
+def test_window_gets_real_clicks_while_the_timers_run(root):
+    """Qt's loop is the program's main loop: real Win32 clicks reach the window, the slot only hands the action
+    over (post), and the timers (MainLoop.after) keep running."""
     import ctypes
     from PySide6.QtCore import QPoint
     from dbdmapscout import qt_window
-    qt_window.application()
     posted = []
     win = qt_window.MainWindow(lambda a, arg=None: posted.append(a))
     win.apply_theme(True, 1.0)
@@ -356,87 +302,20 @@ def test_qt_window_runs_in_tks_loop(root):
 
     def tick(n=0):
         ticks.append(n)
-        if n == 10:                                  # a real click, delivered by Tk's message loop
+        if n == 10:                                  # a real click, delivered by the message loop
             p = btn.mapTo(win, QPoint(btn.width() // 2, btn.height() // 2))
             r = win.devicePixelRatioF()
             lparam = (round(p.y() * r) << 16) | round(p.x() * r)
             user32.PostMessageW(win.hwnd(), 0x0201, 1, lparam)       # WM_LBUTTONDOWN, MK_LBUTTON
             user32.PostMessageW(win.hwnd(), 0x0202, 0, lparam)       # WM_LBUTTONUP
         if n < 40:
-            root.after(25, tick, n + 1)
+            root.after(25, lambda: tick(n + 1))
         else:
-            root.quit()
+            root.qapp.quit()
     root.after(25, tick)
-    root.mainloop()                                  # only Tk's loop – no processEvents
+    root.mainloop()
     assert len(ticks) == 41 and posted == ["scan"]
     win.allow_close = True
     win.close()
     import shiboken6
     shiboken6.delete(win)                            # no Qt window may live on until the interpreter shuts down
-
-
-def test_tk_tab_structure_for_the_qt_window(root):
-    """app_qt.tk_layout/tk_state/tk_act on real Tk widgets: what the Qt pages Statistik/Server are built from."""
-    import tkinter as tk
-    from tkinter import ttk
-    from dbdmapscout.app_qt import tk_act, tk_layout, tk_state
-    top = tk.Toplevel(root)
-    nb = ttk.Notebook(top)
-    nb.pack()
-    tab = ttk.Frame(nb)
-    nb.add(tab, text="Statistik")
-    card = ttk.LabelFrame(tab, text="Regionen")
-    card.pack(fill="x")
-    clicked, sorted_by = [], []
-    row = ttk.Frame(card)
-    row.pack(fill="x")
-    ttk.Button(row, text="Ping messen", command=lambda: clicked.append("ping")).pack(side="left")
-    ttk.Label(row, text="rechts", style="Dim.TLabel").pack(side="right")
-    t = ttk.Treeview(card, columns=("ping",), show="tree headings", selectmode="browse")
-    t.heading("ping", text="Ping", command=lambda: sorted_by.append("ping"))
-    t.insert("", "end", iid="g:eu", text="Europa")
-    t.insert("g:eu", "end", iid="r:fra", text="Frankfurt", values=("31 ms",), tags=("p_good",))
-    t.tag_configure("p_good", foreground="#7cc47f")
-    t.pack()
-    reg = {}
-    node = tk_layout(tab, reg)
-    top.update()
-    assert node["kind"] == "box" and node["children"][0]["kind"] == "card"
-    rowdesc = node["children"][0]["children"][0]
-    assert rowdesc["row"] and [c["side"] for c in rowdesc["children"]] == ["left", "right"]
-    st = tk_state(t)
-    assert st["rows"][1][:4] == ("r:fra", 1, "Frankfurt", ["31 ms"]) and st["colours"] == {"p_good": "#7cc47f"}
-    tk_act(t, ("click", "r:fra"))
-    assert t.selection() == ("r:fra",)
-    tk_act(t, ("sort", "ping"))
-    tk_act(reg[str(row.winfo_children()[0])], None)
-    assert sorted_by == ["ping"] and clicked == ["ping"]
-    top.destroy()
-
-
-def test_tk_dialog_structure_for_the_qt_window(root):
-    """A Tk dialog as the Qt window sees it: radio buttons, entries, pictures; visible up to the Toplevel."""
-    import tkinter as tk
-    from tkinter import ttk
-    from dbdmapscout.app_qt import tk_act, tk_layout, tk_shown, tk_state
-    dlg = tk.Toplevel(root)
-    dlg.withdraw()
-    body = ttk.Frame(dlg)
-    body.pack()
-    mode = tk.StringVar(value="replace")
-    r = ttk.Radiobutton(body, text="Neue Map", variable=mode, value="new")
-    r.pack()
-    name = tk.StringVar(value="")
-    e = ttk.Entry(body, textvariable=name)
-    e.pack()
-    pic = ttk.Label(body, text="Ergebnis")
-    pic._dbdms_pil = None
-    pic.pack()
-    reg = {}
-    node = tk_layout(body, reg)
-    assert [c["kind"] for c in node["children"]] == ["radio", "entry", "image"]
-    assert tk_shown(r)                                        # a hidden dialog still counts as shown inside
-    tk_act(r)
-    tk_act(e, "Shattered Square")
-    assert mode.get() == "new" and name.get() == "Shattered Square" and tk_state(r)["value"]
-    dlg.destroy()

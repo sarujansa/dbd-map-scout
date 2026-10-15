@@ -53,7 +53,7 @@ class Hotkeys:
             b.configure(text=pretty(combo) if combo else _("– aus –"))
 
     def _hk_begin(self, key):
-        """Start recording ``key`` (Tk button or the Qt window's HotkeyButton)."""
+        """Start recording ``key`` (the window's HotkeyButton sends the keys pressed, _hk_qt_key)."""
         if self._hk_rec:
             self._hk_stop(save=False)
         self._hk_rec, self._hk_mods = key, set()
@@ -64,19 +64,11 @@ class Hotkeys:
         self.hk_status.set(_("Neue Kombination drücken – Esc bricht ab, Entf schaltet den Hotkey aus."))
 
     def _hk_qt_key(self, key, mods, keysym, keycode):
-        """A key pressed in the Qt window while ``key`` records – checked exactly like a Tk key press."""
+        """A key pressed in the window while ``key`` records."""
         if self._hk_rec != key:
             return
         self._hk_mods = set(mods)
         self._hk_key(SimpleNamespace(keysym=keysym or "", keycode=keycode))
-
-    def _hk_record(self, key):
-        self._hk_begin(key)
-        b = self.hk_buttons[key]
-        b.focus_set()
-        b.bind("<KeyPress>", self._hk_key)
-        b.bind("<KeyRelease>", self._hk_key_up)
-        b.bind("<FocusOut>", lambda e: self._hk_stop(save=False))
 
     def _hk_key(self, e):
         key = self._hk_rec
@@ -108,19 +100,10 @@ class Hotkeys:
         self._hk_stop(save=True, combo=combo)
         return "break"
 
-    def _hk_key_up(self, e):
-        m = modifier_name(e.keysym)
-        if m:
-            self._hk_mods.discard(m)
-        return "break"
-
     def _hk_stop(self, save: bool, combo: str = ""):
         key, self._hk_rec = self._hk_rec, None
         if key is None:
             return
-        b = self.hk_buttons[key]
-        for seq in ("<KeyPress>", "<KeyRelease>", "<FocusOut>"):
-            b.unbind(seq)
         if save:
             self.settings["hotkeys"][key] = combo
             self._save_soon()

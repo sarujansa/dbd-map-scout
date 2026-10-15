@@ -8,7 +8,6 @@ EN = {
     # ------------------------------------------------------------------ start
     "DbD Map Scout läuft bereits.": "DbD Map Scout is already running.",
     "Start fehlgeschlagen:": "Start failed:",
-    "Starte …": "Starting …",
     "Kein Windows: Fenstersuche, Hotkeys und Click-Through sind nur unter Windows aktiv.":
         "Not Windows: window search, hotkeys and click-through only work on Windows.",
     "Bereit. {n} Maps geladen, Spielsprachen: {langs}.": "Ready. {n} maps loaded, game languages: {langs}.",
@@ -50,7 +49,6 @@ EN = {
     "(unsicher)": "(unsure)",
     "manuell gewählt": "chosen by hand",
     "per Scan gefunden": "found by scan",
-    "Runde läuft: {time}": "Round running: {time}",
     "Letzte Runde: {time}": "Last round: {time}",
     "Unbekannte Map gelesen: „{text}“": "Unknown map read: “{text}”",
 
@@ -690,7 +688,6 @@ EN = {
     "Eigenes Bild löschen": "Delete own picture",
     "Speichern": "Save",
     "Bilder": "Pictures",
-    "Alle Dateien": "All files",
     "Kartenbild wählen": "Choose map picture",
     "Für diese Map lässt sich kein Bild speichern.": "No picture can be saved for this map.",
     "Erst ein Bild wählen.": "Choose a picture first.",
@@ -1040,15 +1037,6 @@ EN = {
         "loads no driver of its own.",
     "Direkt über der Karte (wandert mit)": "Right above the map (moves with it)",
     "Schriftgröße": "Font size",
-    "Spaltenbreiten und kleinste Fenstergröße passen sich beim nächsten Start an. "
-    "Fenstergröße und -position merkt sich das Programm.":
-        "Column widths and the smallest window size adapt at the next start. The program remembers the window's "
-        "size and position.",
-    "Design": "Design",
-    "Windows 11, Gold": "Windows 11, gold",
-    "Windows 11, Blau": "Windows 11, blue",
-    "Klassisch": "Classic",
-    "Design nicht ladbar, nehme das klassische: {error}": "Design could not be loaded, using the classic one: {error}",
     "Übersicht": "Overview",
     "Aktuelle Map": "Current map",
     "Rundenzeit": "Round time",
@@ -1063,20 +1051,5 @@ EN = {
     "Systemwerte sind aus (Tab Overlay → Systemwerte).": "System values are off (Overlay tab → System values).",
     "Systemwerte gibt es nur unter Windows.": "System values are only available on Windows.",
     "Erscheinen, sobald DBD läuft.": "Appear as soon as DBD is running.",
-    "Diese Seite ist noch im bisherigen Fenster – sie zieht in den nächsten Versionen um. Das Fenster wurde "
-    "geöffnet.": "This page is still in the previous window – it moves over in the next versions. That window has "
-                 "been opened.",
-    "Im bisherigen Fenster öffnen": "Open in the previous window",
-    "Öffnet diese Seite im bisherigen Fenster (sie zieht später ins neue um).":
-        "Opens this page in the previous window (it moves to the new one later).",
-    "Neue Oberfläche (Qt) nicht verfügbar, das bisherige Fenster bleibt: {error}":
-        "New window (Qt) not available, keeping the previous one: {error}",
-    "Neues Fenster": "New window",
-    "Neues Fenster (Qt) – aus: das bisherige Fenster": "New window (Qt) – off: the previous window",
-    "Steuerfenster mit Navigation links und Seite „Übersicht“ (Standard seit 1.56). Ausgeschaltet erscheint "
-    "wieder das bisherige Fenster. Gilt ab dem nächsten Start.":
-        "Control window with navigation on the left and the page \"Overview\" (default since 1.56). Switched off, "
-        "the previous window appears again. Takes effect at the next start.",
-    "Gilt ab dem nächsten Start. Jetzt neu starten?": "Takes effect at the next start. Restart now?",
     "OK": "OK",
 }

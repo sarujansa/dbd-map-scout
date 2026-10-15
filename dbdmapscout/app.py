@@ -1,21 +1,17 @@
-"""Control window (Tk) + overlay + hotkeys, glued together."""
+"""Control window (Qt) + overlay + hotkeys, glued together."""
 from __future__ import annotations
 
 import collections
 import logging
 import os
 import queue
-import re
 import sys
 import threading
 import time
-import tkinter as tk
 import traceback
-from tkinter import messagebox, ttk
 
-from PIL import Image, ImageTk
-
-from . import __version__, i18n, layout, mapimage, regions, theme, tooltip, uiscale
+from . import i18n, layout, mapimage, regions, tooltip
+from . import uimodel as ui
 from .capture import IS_WIN, describe_window, find_game_window, foreground_root, is_game_window
 from .catalog import Catalog
 from .config import Settings
@@ -27,7 +23,6 @@ from .hotkeys import pretty
 from .overlay import load_frames
 from .overlay_win32 import make_overlay
 from .roundtimer import RoundTimer
-from .status import DOT_STYLE, user_state
 from .textnorm import fmt_duration, fold, roman
 from .worker import DetectionWorker
 from .app_server import ServerTab
@@ -49,9 +44,6 @@ ANCHORS = [("auto", N_("automatisch")), ("top-left", N_("oben links")), ("top-ri
 CATS = [N_("Erkennung"), N_("Overlay"), N_("System"), N_("Fehler")]   # log categories (keys; shown translated)
 
 
-DEFAULT_HEIGHT = 700                  # first start (later: the saved window size)
-
-
 def anchor_label(key: str) -> str:
     return _(dict(ANCHORS).get(key, "automatisch"))
 
@@ -67,11 +59,10 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         self.catalog = Catalog(root_dir, self.settings["languages"], self.settings.get("user_aliases"))
         self._unknown = None             # (name text, realm text) of the last banner that matched no map
         self.events: queue.Queue = queue.Queue()
-
-        self.root = tk.Tk()
         self._quitting = False
-        self._qt_early()                 # Qt control window (setting ui_toolkit): Tk window hidden from the start
-        self.root.title(f"DbD Map Scout {__version__}")
+        self._errors_seen = set()
+        self._log_entries = collections.deque(maxlen=1500)
+        self._qt_init()                  # Qt application; self.root = its main loop (timers, clipboard …)
         ico = os.path.join(root_dir, "dbdmapscout.ico")        # also made by the shortcut setup
         if IS_WIN and not os.path.exists(ico):
             try:
@@ -79,18 +70,11 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
                 save_ico(ico)                                  # the taskbar button shows this icon
             except OSError:
                 pass
-        if IS_WIN and os.path.exists(ico):
-            try:
-                self.root.iconbitmap(default=ico)
-            except tk.TclError:
-                pass
-        self.root.minsize(470, 420)                  # tabs scroll when the window is small
-        self.root.protocol("WM_DELETE_WINDOW", self.quit)
-        self.root.report_callback_exception = self._tk_error
 
         self.current = None            # (map_id, variant)
         self._floor = None             # maps with floors (Midwich): position of the floor shown, None = all of them
         self.source = None             # "auto" | "manual" | "scan"
+        self._detail = ""              # how the map on display was found ("automatisch erkannt (97 %)" …)
         self.user_visible = True       # overlay toggle
         self.hidden_after_match = False  # match over -> hidden until the next map
         self.menu_paused = False         # a DBD menu is open (pointer visible) -> hidden for now
@@ -106,12 +90,14 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         self.game = None
         self._game_checked = 0.0
         self._save_job = None
-        self._thumb = None
         self._list_items = {}
-        self._log_entries = collections.deque(maxlen=1500)
         self._syncing = False
         self._last_place = None
-        self._errors_seen = set()
+        self._log_alert = False          # an error in the log the user has not looked at yet
+        self._worker_status = ""
+        self._layout_unsure = False
+        self._unsure = None              # doubtful detection: {"label", "t", "shown", "fit", "name"}
+        self._rejected = None            # (map_id, time) thrown away with "Falsch erkannt"
         self.srv_ping = {}               # region code -> latency result
         self.srv_state = {}              # result of regions.current_state()
         self._srv_busy = False
@@ -124,15 +110,13 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
 
         self.overlay = make_overlay(self.root, prefer_native=self.settings["overlay"].get("native_window", True))
         self.overlay.game_hwnd = lambda: self.game.hwnd if self.game else None
-        # window procedures (dispatched by Tcl's message loop) must not call tkinter: hand over to _poll
+        # window procedures: hand over to _poll (one place, in order with the other events)
         self.overlay.on_moved = lambda x, y: self.events.put(("call", self._overlay_dragged, (x, y)))
         self.overlay.on_wheel = lambda d: self.events.put(("call", self._resize, (0.02 * d,)))
         self._hud_init()                 # system values at the top of a black bar (CPU/GPU temperature …)
 
         self._build_ui()
         self._apply_overlay_settings()
-        self._restore_geometry()
-        self.root.after(1500, self._track_geometry)     # after the window settled at the restored size
 
         self.worker = DetectionWorker(root_dir, self.settings, self.catalog, self.events, simulate=simulate)
         self.worker.start()
@@ -153,99 +137,14 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         self.tray = Tray(lambda action: self.events.put(("tray", action)))
         if IS_WIN and self.settings.get("tray", True):
             self._tray_start()
-        self.root.bind("<Unmap>", self._on_unmap)
         self._qt_build(start_in_tray)
-        if start_in_tray and self.qt is None:             # autostart with Windows
-            if self.tray.active:
-                self.root.withdraw()
-            else:
-                self.root.iconify()
         threading.Thread(target=self._setup_then_read_autostart, daemon=True, name="autostart").start()
 
     # ================================================================== UI
     def _build_ui(self):
-        theme.apply(self.root, False)             # base styles; dark mode is applied at the end
-        # ---------------------------------------------------------- header
-        head = ttk.Frame(self.root)
-        head.pack(fill="x", padx=10, pady=(8, 2))
-        self.dot = ttk.Label(head, text="●", style="DotWarn.TLabel")
-        self.dot.pack(side="left")
-        self.status_var = tk.StringVar(value=_("Starte …"))
-        self._worker_status = ""
-        ttk.Label(head, textvariable=self.status_var, wraplength=430).pack(side="left", padx=(4, 0))
-
-        card = ttk.Frame(self.root)
-        card.pack(fill="x", padx=10, pady=4)
-        self.thumb_label = ttk.Label(card)
-        self.thumb_label.pack(side="left", padx=(0, 10))
-        info = ttk.Frame(card)
-        info.pack(side="left", fill="x", expand=True)
-        self.map_var = tk.StringVar(value=_("Noch keine Map"))
-        self.realm_var = tk.StringVar(value="")
-        self.detail_var = tk.StringVar(value=_("Wird beim Match-Start automatisch erkannt."))
-        ttk.Label(info, textvariable=self.map_var, style="Big.TLabel").pack(anchor="w")
-        self.timer_var = tk.StringVar(value="")
-        self.conn_var = tk.StringVar(value="")
-        self.queue_var = tk.StringVar(value="")
-        # the other lines are only packed while they have text: empty labels would still take a row each
-        # (4 rows ≈ 80 px less for the tabs)
-        self._info_lines = []
-        for var, style, wrap in ((self.realm_var, "TLabel", 0), (self.detail_var, "Dim.TLabel", 320),
-                                 (self.timer_var, "TLabel", 0), (self.conn_var, "TLabel", 0),
-                                 (self.queue_var, "Dim.TLabel", 0)):
-            self._info_lines.append((var, ttk.Label(info, textvariable=var, style=style, wraplength=wrap)))
-            var.trace_add("write", lambda *_a: self._info_relayout())
-        self._info_relayout()
-
-        btns = ttk.Frame(self.root)
-        btns.pack(fill="x", padx=10, pady=(2, 6))
-        self.toggle_btn = ttk.Button(btns, text=_("Overlay ausblenden"), command=self.toggle_overlay)
-        self.toggle_btn.pack(side="left")
-        # only shown for maps with several layouts (7 of 45), labelled with the one on display
-        self.layout_btn = ttk.Button(btns, text="Layout ▸", command=self.next_variant)
-        self._layout_unsure = False
-        # only shown for maps with floors (Midwich), labelled with the floor on display
-        self.floor_btn = ttk.Button(btns, text=_("Beide Etagen") + " ▸", command=self.next_floor)
-        self.rotate_btn = ttk.Button(btns, text=_("Drehen ↻"), command=self.rotate_map)
-        self.rotate_btn.pack(side="left", padx=(4, 0))
-        self.scan_btn = ttk.Button(btns, text=_("Scannen"), command=self.scan_now)
-        self.scan_btn.pack(side="left", padx=(4, 0))
-
-        # shown when a banner matched no map: assign the read name to a map with one click
-        self.unknown_bar = ttk.Frame(self.root)
-        self.unknown_var = tk.StringVar(value="")
-        ttk.Button(self.unknown_bar, text="✕", width=3, command=self._hide_unknown).pack(side="right")
-        ttk.Button(self.unknown_bar, text=_("Bild hinzufügen …"),
-                   command=lambda: self.add_picture(from_unknown=True)).pack(side="right")
-        ttk.Button(self.unknown_bar, text=_("Zuordnen …"), command=self.assign_unknown).pack(side="right", padx=4)
-        ttk.Label(self.unknown_bar, textvariable=self.unknown_var, wraplength=300).pack(side="left", fill="x")
-
-        # shown when a map was read with a poor fit: one click to throw it away (or to keep it)
-        self.unsure_bar = ttk.Frame(self.root)
-        self.unsure_var = tk.StringVar(value="")
-        ttk.Button(self.unsure_bar, text=_("Stimmt"), command=self._confirm_unsure).pack(side="right")
-        ttk.Button(self.unsure_bar, text=_("Falsch erkannt"), command=self.reject_detection).pack(side="right", padx=4)
-        ttk.Label(self.unsure_bar, textvariable=self.unsure_var, wraplength=300).pack(side="left", fill="x")
-        self._unsure = None             # doubtful detection: {"label", "t", "shown", "fit", "name"}
-        self._rejected = None           # (map_id, time) thrown away with "Falsch erkannt"
-
-        # first start only: nothing to do but play – and the hotkeys that matter
-        self.welcome_bar = ttk.Frame(self.root)
-        ttk.Button(self.welcome_bar, text=_("Verstanden"), command=self._hide_welcome).pack(side="right")
-        hk = self.settings.get("hotkeys") or {}
-        ttk.Label(self.welcome_bar, wraplength=520, justify="left",
-                  text=_("So geht's: DBD starten und spielen – die Karte erscheint beim Match-Start von selbst und "
-                         "verschwindet nach der Runde. Hotkeys: {toggle} ein/aus, {rotate} drehen, {edit} "
-                         "verschieben (ändern unter Einstellungen).", toggle=pretty(hk.get("toggle_overlay") or "–"),
-                         rotate=pretty(hk.get("rotate_map") or "–"), edit=pretty(hk.get("edit_position") or "–"))
-                  ).pack(side="left", fill="x")
-        show_welcome = not self.settings.get("welcome_seen") and not self.settings.get("window_geometry")
-
-        # ------------------------------------------------------- tab menu
-        self.nb = ttk.Notebook(self.root)
-        self.nb.pack(fill="both", expand=True, padx=8, pady=(0, 4))
-        if show_welcome:
-            self.welcome_bar.pack(fill="x", padx=10, pady=(0, 6), before=self.nb)
+        """The tabs as a UI model (uimodel.py); the Qt window draws them (app_qt.py, qt_window.py)."""
+        self.ui_root = ui.Root()
+        self.nb = ui.Notebook(self.ui_root)
         self.tab_maps = self._tab_maps()
         self.tab_overlay = self._tab_overlay()
         self.tab_detect = self._tab_detect()
@@ -253,7 +152,6 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         self.tab_log = self._tab_log()
         self.tab_stats = self._tab_stats()
         self.tab_settings = self._tab_settings()
-        # most used first, technical last
         self.nb.add(self.tab_maps, text="Maps")
         self.nb.add(self.tab_overlay, text=_("Overlay"))
         self.nb.add(self.tab_stats, text=_("Statistik"))
@@ -262,145 +160,37 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         self.nb.add(self.tab_detect, text=_("Erkennung"))
         self.nb.add(self.tab_log, text="Log")
         self.nb.bind("<<NotebookTabChanged>>", lambda e: self._tab_changed())
-
         self._apply_theme()
-        tooltip.attach_all(self.root, self._tip_lookup)
-        for seq in ("<MouseWheel>", "<Button-4>", "<Button-5>"):     # Windows / Linux
-            self.root.bind_all(seq, self._on_wheel, add="+")
-        # the window follows its size (1.48): hints wrap at the width there is, table columns stretch
-        self._autowrap = uiscale.AutoWrap(self.root)
-        tables = uiscale.stretch_tables(self.root)
-        # pages scroll vertically only: never narrower than the widest page (and the tab row) – measured
-        # with the hints at their narrowest wrap and the columns at their narrowest width
-        self._autowrap.narrow()
-        for tree, col, _width, minimum in tables:
-            tree.column(col, width=minimum)
-        self.root.update_idletasks()
-        widest = max([p["inner"].winfo_reqwidth() for p in self._pages] + [self.nb.winfo_reqwidth() - 20]
-                     + [p.winfo_reqwidth() for p in getattr(self, "_fixed_pages", [])])
-        self.root.minsize(max(470, widest + 40), 420)
-        for tree, col, width, _minimum in tables:
-            tree.column(col, width=width)
-        self._autowrap.soon()
+        tooltip.attach_all(self.ui_root, self._tip_lookup)
 
-    def _info_relayout(self):
-        for _var, lbl in self._info_lines:
-            lbl.pack_forget()
-        for var, lbl in self._info_lines:
-            if var.get():
-                lbl.pack(anchor="w")
-
-    # ------------------------------------------------------------ scrollable tabs
     def _scroll_tab(self):
-        """(outer, inner): the tab page scrolls vertically when its content is taller than the window.
-        When there is room, inner fills the page, so lists and the log still grow with the window."""
-        outer = ttk.Frame(self.nb)
-        canvas = tk.Canvas(outer, highlightthickness=0, borderwidth=0, yscrollincrement=8)
-        sb = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
-        inner = ttk.Frame(canvas, padding=8)
-        outer._dbdms_inner = inner                 # the content, for the Qt window (app_qt.tk_layout)
-        item = canvas.create_window(0, 0, window=inner, anchor="nw")
-        canvas.configure(yscrollcommand=sb.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        page = {"canvas": canvas, "sb": sb, "inner": inner, "item": item, "size": None}
-        self._pages = getattr(self, "_pages", [])
-        self._pages.append(page)
-        canvas.bind("<Configure>", lambda e: self._layout_page(page))
-        return outer, inner
+        """(outer, inner) of a tab page (the Qt page scrolls by itself: both are the same frame)."""
+        f = ui.Frame(self.nb)
+        return f, f
 
-    def _fixed_tab(self):
-        """(outer, inner) for a tab that is one big list (maps, log): no page scrolling – the list fills
-        the tab and scrolls itself (two scroll bars next to each other looked broken)."""
-        outer = ttk.Frame(self.nb, padding=8)
-        self._fixed_pages = getattr(self, "_fixed_pages", [])
-        self._fixed_pages.append(outer)
-        return outer, outer
-
-    def _layout_page(self, page):
-        c, inner = page["canvas"], page["inner"]
-        w, h = c.winfo_width(), c.winfo_height()
-        need = inner.winfo_reqheight()
-        if w <= 1 or h <= 1 or page["size"] == (w, h, need):
-            return
-        page["size"] = (w, h, need)
-        c.itemconfigure(page["item"], width=w, height=max(h, need))
-        c.configure(scrollregion=(0, 0, w, max(h, need)))
-        if need > h + 1:
-            if not page["sb"].winfo_manager():
-                page["sb"].pack(side="right", fill="y", before=c)
-        else:
-            c.yview_moveto(0)
-            if page["sb"].winfo_manager():
-                page["sb"].pack_forget()
-
-    def _layout_pages(self):
-        """Content can grow later (advanced options, hints): checked with the overlay tick."""
-        for page in getattr(self, "_pages", []):
-            self._layout_page(page)
-
-    def _on_wheel(self, e):
-        """Mouse wheel scrolls the tab page under the pointer – lists, the log and choice boxes keep
-        their own scrolling."""
-        try:
-            w = self.root.winfo_containing(e.x_root, e.y_root)
-        except (tk.TclError, KeyError):
-            return
-        pages = {str(p["canvas"]): p for p in getattr(self, "_pages", [])}
-        while w is not None:
-            if isinstance(w, (ttk.Treeview, tk.Text, tk.Listbox, ttk.Combobox)):
-                return
-            page = pages.get(str(w))
-            if page:
-                if page["sb"].winfo_manager():
-                    step = -1 if (getattr(e, "num", 0) == 4 or getattr(e, "delta", 0) > 0) else 1
-                    page["canvas"].yview_scroll(step * 6, "units")
-                return
-            w = w.master
+    _fixed_tab = _scroll_tab
 
     # ------------------------------------------------------------ tab: maps
     def _tab_maps(self):
-        outer, f = self._fixed_tab()
-        srow = ttk.Frame(f)
-        srow.pack(fill="x", pady=(0, 6))
-        ttk.Label(srow, text=_("Suche")).pack(side="left")
-        self.search_var = tk.StringVar()
-        self.search_var.trace_add("write", lambda *_: self._fill_list())
-        entry = ttk.Entry(srow, textvariable=self.search_var)
-        entry.pack(side="left", fill="x", expand=True, padx=(8, 0))
-        entry.bind("<Return>", lambda e: self._pick_first())
-        tf = ttk.Frame(f)
-        tf.pack(fill="both", expand=True)
-        self.tree = ttk.Treeview(tf, show="tree", height=12, selectmode="browse")
-        sb = ttk.Scrollbar(tf, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=sb.set)
-        self.tree.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
-        self.tree.bind("<Double-1>", lambda e: self._pick_selected())
-        self.tree.bind("<Return>", lambda e: self._pick_selected())
-        ttk.Label(f, text=_("Doppelklick zeigt die Map. Die Erkennung übernimmt beim nächsten Match wieder."),
-                  style="Dim.TLabel", wraplength=420).pack(anchor="w", pady=(6, 0))
-        prow = ttk.Frame(f)
-        prow.pack(fill="x", pady=(6, 0))
-        ttk.Button(prow, text=_("Kartenbild hinzufügen …"), command=self.add_picture).pack(side="left")
-        ttk.Label(prow, text=_("eigenes Bild für eine Map (Hintergrund wird entfernt)"), style="Dim.TLabel").pack(
-            side="left", padx=8)
+        """The maps page is Qt's own (qt_window.MapsPage: search + list); here only the list for the hotkeys."""
+        outer, _f = self._scroll_tab()
         self._fill_list()
         return outer
 
     # --------------------------------------------------------- tab: overlay
     def _slider(self, parent, label, var, lo, hi, cmd, fmt="{:.0f} %", key=None):
-        row = ttk.Frame(parent)
+        row = ui.Frame(parent)
         row.pack(fill="x", pady=3)
-        ttk.Label(row, text=label, width=12).pack(side="left")
-        val = ttk.Label(row, text=fmt.format(var.get()), width=6, anchor="e")
+        ui.Label(row, text=label, width=12).pack(side="left")
+        val = ui.Label(row, text=fmt.format(var.get()), width=6, anchor="e")
         val.pack(side="right")
 
         def changed(_=None):
             val.configure(text=fmt.format(var.get()))
             cmd()
-        scale = ttk.Scale(row, from_=lo, to=hi, variable=var, command=changed)
+        scale = ui.Scale(row, from_=lo, to=hi, variable=var, command=changed)
         scale.pack(side="left", fill="x", expand=True, padx=6)
-        scale._dbdms_label, scale._dbdms_fmt = label, fmt          # for the Qt window (_tk_state)
+        scale._dbdms_label, scale._dbdms_fmt = label, fmt          # for the window (app_qt.ui_state)
         if key:
             self._reg(key, scale)
         return val
@@ -408,56 +198,56 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
     def _tab_overlay(self):
         outer, f = self._scroll_tab()
         o = self.settings["overlay"]
-        pos = self._reg("ov.pos", ttk.LabelFrame(f, text=_("Position"), padding=8))
+        pos = self._reg("ov.pos", ui.LabelFrame(f, text=_("Position"), padding=8))
         pos.pack(fill="x")
-        r = ttk.Frame(pos)
+        r = ui.Frame(pos)
         r.pack(fill="x", pady=(0, 4))
-        self._reg("ov.anchor.label", ttk.Label(r, text=_("Vorgabe"), width=12)).pack(side="left")
-        self.anchor_var = tk.StringVar(value=anchor_label(o["anchor"]))
-        cb = self._reg("ov.anchor", ttk.Combobox(r, textvariable=self.anchor_var, values=[_(a[1]) for a in ANCHORS],
+        self._reg("ov.anchor.label", ui.Label(r, text=_("Vorgabe"), width=12)).pack(side="left")
+        self.anchor_var = ui.StringVar(value=anchor_label(o["anchor"]))
+        cb = self._reg("ov.anchor", ui.Combobox(r, textvariable=self.anchor_var, values=[_(a[1]) for a in ANCHORS],
                                                  state="readonly", width=16))
         cb.pack(side="left", padx=6)
         cb.bind("<<ComboboxSelected>>", lambda e: self._anchor_changed())
-        self._reg("ov.reset", ttk.Button(r, text=_("Zurücksetzen"), command=self._reset_position)).pack(side="right")
-        self.posx_var = tk.DoubleVar(value=o.get("pos_x", 0.0) * 100)
-        self.posy_var = tk.DoubleVar(value=o.get("pos_y", 0.0) * 100)
+        self._reg("ov.reset", ui.Button(r, text=_("Zurücksetzen"), command=self._reset_position)).pack(side="right")
+        self.posx_var = ui.DoubleVar(value=o.get("pos_x", 0.0) * 100)
+        self.posy_var = ui.DoubleVar(value=o.get("pos_y", 0.0) * 100)
         self.posx_label = self._slider(pos, _("Horizontal"), self.posx_var, 0, 100, self._pos_changed, key="ov.posx")
         self.posy_label = self._slider(pos, _("Vertikal"), self.posy_var, 0, 100, self._pos_changed, key="ov.posy")
-        r2 = ttk.Frame(pos)
+        r2 = ui.Frame(pos)
         r2.pack(fill="x", pady=(4, 0))
-        self.edit_btn = self._reg("ov.edit", ttk.Button(r2, text=_("Mit der Maus verschieben"), command=self.toggle_edit))
+        self.edit_btn = self._reg("ov.edit", ui.Button(r2, text=_("Mit der Maus verschieben"), command=self.toggle_edit))
         self.edit_btn.pack(side="left")
-        self.test_btn = self._reg("ov.test", ttk.Button(r2, text=_("Overlay testen"), command=self.test_overlay))
+        self.test_btn = self._reg("ov.test", ui.Button(r2, text=_("Overlay testen"), command=self.test_overlay))
         self.test_btn.pack(side="left", padx=(6, 0))
-        self.pos_hint_var = tk.StringVar(value="")
-        self._reg("ov.pos_hint", ttk.Label(pos, textvariable=self.pos_hint_var, style="Dim.TLabel",
+        self.pos_hint_var = ui.StringVar(value="")
+        self._reg("ov.pos_hint", ui.Label(pos, textvariable=self.pos_hint_var, style="Dim.TLabel",
                                            wraplength=520)).pack(anchor="w", pady=(4, 0))
         self._pos_hint()
 
-        look = self._reg("ov.look", ttk.LabelFrame(f, text=_("Darstellung"), padding=8))
+        look = self._reg("ov.look", ui.LabelFrame(f, text=_("Darstellung"), padding=8))
         look.pack(fill="x", pady=(8, 0))
-        self.size_var = tk.DoubleVar(value=o["height"] * 100)
+        self.size_var = ui.DoubleVar(value=o["height"] * 100)
         self.size_label = self._slider(look, _("Grösse"), self.size_var, 15, 90, self._size_changed, key="ov.size")
-        self.map_size_row = ttk.Frame(look)
-        self.map_size_var = tk.StringVar(value="")
-        self._reg("ov.map_size", ttk.Label(self.map_size_row, textvariable=self.map_size_var, style="Dim.TLabel",
+        self.map_size_row = ui.Frame(look)
+        self.map_size_var = ui.StringVar(value="")
+        self._reg("ov.map_size", ui.Label(self.map_size_row, textvariable=self.map_size_var, style="Dim.TLabel",
                                            wraplength=330)).pack(side="left")
-        self._reg("ov.map_size_reset", ttk.Button(self.map_size_row, text=_("Für diese Map zurücksetzen"),
+        self._reg("ov.map_size_reset", ui.Button(self.map_size_row, text=_("Für diese Map zurücksetzen"),
                                                   command=self._reset_map_size)).pack(side="right")
         self._size_row_after = self.size_label.master
-        self.opacity_var = tk.DoubleVar(value=o["opacity"] * 100)
+        self.opacity_var = ui.DoubleVar(value=o["opacity"] * 100)
         self._slider(look, _("Deckkraft"), self.opacity_var, 25, 100, self._opacity_changed, key="ov.opacity")
-        self.focus_var = tk.BooleanVar(value=o["only_when_game_focused"])
-        self.caption_var = tk.BooleanVar(value=o["show_caption"])
-        self.transp_var = tk.BooleanVar(value=o.get("transparent", True))
-        self.timer_show_var = tk.BooleanVar(value=o.get("show_timer", True))
-        self.server_show_var = tk.BooleanVar(value=o.get("show_server", True))
-        self.keep_bar_var = tk.BooleanVar(value=o.get("keep_in_bar", True))
-        self.show_map_var = tk.BooleanVar(value=o.get("show_map", True))
-        self.waiting_var = tk.BooleanVar(value=o.get("show_waiting", True))
-        self.floor_auto_var = tk.BooleanVar(value=o.get("floor_auto", True))
-        self.record_var = tk.BooleanVar(value=o.get("show_record", True))
-        self._reg("ov.keep_bar", ttk.Checkbutton(
+        self.focus_var = ui.BooleanVar(value=o["only_when_game_focused"])
+        self.caption_var = ui.BooleanVar(value=o["show_caption"])
+        self.transp_var = ui.BooleanVar(value=o.get("transparent", True))
+        self.timer_show_var = ui.BooleanVar(value=o.get("show_timer", True))
+        self.server_show_var = ui.BooleanVar(value=o.get("show_server", True))
+        self.keep_bar_var = ui.BooleanVar(value=o.get("keep_in_bar", True))
+        self.show_map_var = ui.BooleanVar(value=o.get("show_map", True))
+        self.waiting_var = ui.BooleanVar(value=o.get("show_waiting", True))
+        self.floor_auto_var = ui.BooleanVar(value=o.get("floor_auto", True))
+        self.record_var = ui.BooleanVar(value=o.get("show_record", True))
+        self._reg("ov.keep_bar", ui.Checkbutton(
             pos, text=_("Karte im schwarzen Rand halten (Ultrawide: nie ins Spielbild ragen)"),
             variable=self.keep_bar_var, command=self._overlay_flags_changed)).pack(anchor="w", pady=(4, 0))
         for key, text, var in (("show_map", N_("Karte anzeigen (aus: nur Timer, Ort und Ping)"), self.show_map_var),
@@ -471,86 +261,86 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
                                 self.floor_auto_var),
                                ("record", N_("Eigene Bilanz auf der Map unter dem Timer (Stats-Seite)"), self.record_var),
                                ("transparent", N_("Transparenter Rand um die Karte"), self.transp_var)):
-            self._reg(f"ov.{key}", ttk.Checkbutton(look, text=_(text), variable=var,
+            self._reg(f"ov.{key}", ui.Checkbutton(look, text=_(text), variable=var,
                                                    command=self._overlay_flags_changed)).pack(anchor="w", pady=1)
-        sysf = self._reg("ov.sys", ttk.LabelFrame(f, text=_("Systemwerte (CPU/GPU-Temperatur, Auslastung, VRAM, RAM)"),
+        sysf = self._reg("ov.sys", ui.LabelFrame(f, text=_("Systemwerte (CPU/GPU-Temperatur, Auslastung, VRAM, RAM)"),
                                                   padding=8))
         sysf.pack(fill="x", pady=(8, 0))
-        r = ttk.Frame(sysf)
+        r = ui.Frame(sysf)
         r.pack(fill="x")
-        self._reg("ov.sysinfo.label", ttk.Label(r, text=_("Anzeige"), width=12)).pack(side="left")
+        self._reg("ov.sysinfo.label", ui.Label(r, text=_("Anzeige"), width=12)).pack(side="left")
         labels = dict(HUD_SIDES)
-        self.sysinfo_var = tk.StringVar(value=_(labels.get(self.settings.get("sysinfo", "off"), labels["off"])))
-        cb = self._reg("ov.sysinfo", ttk.Combobox(r, textvariable=self.sysinfo_var, values=[_(t) for _k, t in HUD_SIDES],
+        self.sysinfo_var = ui.StringVar(value=_(labels.get(self.settings.get("sysinfo", "off"), labels["off"])))
+        cb = self._reg("ov.sysinfo", ui.Combobox(r, textvariable=self.sysinfo_var, values=[_(t) for _k, t in HUD_SIDES],
                                                   state="readonly", width=38))
         cb.pack(side="left", padx=6)
         cb.bind("<<ComboboxSelected>>", lambda e: self._sysinfo_changed())
-        self._reg("ov.sys_text", ttk.Label(sysf, text=_("Oben im schwarzen Rand, solange eine Karte im Match zu sehen ist. „Eigene Position“: "
+        self._reg("ov.sys_text", ui.Label(sysf, text=_("Oben im schwarzen Rand, solange eine Karte im Match zu sehen ist. „Eigene Position“: "
                                "mit „Mit der Maus verschieben“ (Tab Overlay) zusammen mit der Karte ziehen; im "
                                "schmalen Fenster bleibt die Anzeige im Balken oben. GPU-Werte von NVIDIA-Karten "
                                "(Treiber), CPU-Temperatur nur mit HWiNFO („Shared Memory Support“ an) – das "
                                "Programm lädt keinen eigenen Treiber."),
                   style="Dim.TLabel", wraplength=520)).pack(anchor="w", pady=(4, 0))
-        self.sysinfo_hint_var = tk.StringVar(value="")
-        self._reg("ov.sys_hint", ttk.Label(sysf, textvariable=self.sysinfo_hint_var, style="Dim.TLabel",
+        self.sysinfo_hint_var = ui.StringVar(value="")
+        self._reg("ov.sys_hint", ui.Label(sysf, textvariable=self.sysinfo_hint_var, style="Dim.TLabel",
                                            wraplength=520)).pack(anchor="w")
         return outer
 
     # ------------------------------------------------------- tab: detection
     def _tab_detect(self):
         outer, f = self._scroll_tab()
-        auto = ttk.LabelFrame(f, text=_("Automatik"), padding=8)
+        auto = ui.LabelFrame(f, text=_("Automatik"), padding=8)
         auto.pack(fill="x")
-        self.auto_var = tk.BooleanVar(value=self.settings["auto_detect"])
-        self.hide_var = tk.BooleanVar(value=self.settings["hide_after_match"])
-        ttk.Checkbutton(auto, text=_("Map beim Match-Start automatisch erkennen"), variable=self.auto_var,
+        self.auto_var = ui.BooleanVar(value=self.settings["auto_detect"])
+        self.hide_var = ui.BooleanVar(value=self.settings["hide_after_match"])
+        ui.Checkbutton(auto, text=_("Map beim Match-Start automatisch erkennen"), variable=self.auto_var,
                         command=self._detect_flags_changed).pack(anchor="w", pady=1)
-        ttk.Checkbutton(auto, text=_("Overlay ausblenden, sobald ich nicht mehr in der Runde bin"),
+        ui.Checkbutton(auto, text=_("Overlay ausblenden, sobald ich nicht mehr in der Runde bin"),
                         variable=self.hide_var, command=self._detect_flags_changed).pack(anchor="w", pady=1)
-        ttk.Label(auto, text=_("erkennt Ergebnisbildschirm, Lobby/Menüs, Ladebildschirm und geschlossenes DBD"),
+        ui.Label(auto, text=_("erkennt Ergebnisbildschirm, Lobby/Menüs, Ladebildschirm und geschlossenes DBD"),
                   style="Dim.TLabel", wraplength=400).pack(anchor="w", padx=(22, 0))
-        self.menu_var = tk.BooleanVar(value=self.settings.get("pause_in_menus", True))
-        ttk.Checkbutton(auto, text=_("Overlay pausieren, solange ein DBD-Menü offen ist"),
+        self.menu_var = ui.BooleanVar(value=self.settings.get("pause_in_menus", True))
+        ui.Checkbutton(auto, text=_("Overlay pausieren, solange ein DBD-Menü offen ist"),
                         variable=self.menu_var, command=self._detect_flags_changed).pack(anchor="w", pady=(4, 1))
-        ttk.Label(auto, text=_("erkannt am sichtbaren Mauszeiger (ESC-Menü, Ergebnisbildschirm, Lobby)"),
+        ui.Label(auto, text=_("erkannt am sichtbaren Mauszeiger (ESC-Menü, Ergebnisbildschirm, Lobby)"),
                   style="Dim.TLabel", wraplength=400).pack(anchor="w", padx=(22, 0))
-        lang = ttk.LabelFrame(f, text=_("Spielsprache (Map-Namen)"), padding=8)
+        lang = ui.LabelFrame(f, text=_("Spielsprache (Map-Namen)"), padding=8)
         lang.pack(fill="x", pady=(8, 0))
-        grid = ttk.Frame(lang)
+        grid = ui.Frame(lang)
         grid.pack(anchor="w")
         self.lang_vars = {}
         for i, (code, label) in enumerate(LANGS):
-            v = tk.BooleanVar(value=code in self.settings["languages"])
+            v = ui.BooleanVar(value=code in self.settings["languages"])
             self.lang_vars[code] = v
-            ttk.Checkbutton(grid, text=label, variable=v, command=self._langs_changed).grid(
+            ui.Checkbutton(grid, text=label, variable=v, command=self._langs_changed).grid(
                 row=i // 5, column=i % 5, sticky="w", padx=(0, 12), pady=1)
 
-        chk = ttk.LabelFrame(f, text=_("Abgleich mit der Stats-Seite"), padding=8)
+        chk = ui.LabelFrame(f, text=_("Abgleich mit der Stats-Seite"), padding=8)
         chk.pack(fill="x", pady=(8, 0))
-        self.off_check_var = tk.StringVar(value="")         # filled when the tab is opened (_official_check_render)
-        ttk.Label(chk, textvariable=self.off_check_var, wraplength=420, justify="left").pack(anchor="w")
+        self.off_check_var = ui.StringVar(value="")         # filled when the tab is opened (_official_check_render)
+        ui.Label(chk, textvariable=self.off_check_var, wraplength=420, justify="left").pack(anchor="w")
 
         # technical options: folded away, only needed when something does not work
-        self.adv_open = tk.BooleanVar(value=bool(self.settings.get("show_advanced", False)))
-        self.adv_btn = ttk.Button(f, command=self._toggle_advanced)
+        self.adv_open = ui.BooleanVar(value=bool(self.settings.get("show_advanced", False)))
+        self.adv_btn = ui.Button(f, command=self._toggle_advanced)
         self.adv_btn.pack(anchor="w", pady=(10, 0))
-        adv = self.adv_frame = ttk.LabelFrame(f, text=_("Erweitert"), padding=8)
-        self.wgc_var = tk.BooleanVar(value=self.settings.get("window_capture", True))
-        ttk.Checkbutton(adv, text=_("Auch erkennen, wenn andere Fenster über DBD liegen"),
+        adv = self.adv_frame = ui.LabelFrame(f, text=_("Erweitert"), padding=8)
+        self.wgc_var = ui.BooleanVar(value=self.settings.get("window_capture", True))
+        ui.Checkbutton(adv, text=_("Auch erkennen, wenn andere Fenster über DBD liegen"),
                         variable=self.wgc_var, command=self._detect_flags_changed).pack(anchor="w", pady=1)
-        ttk.Label(adv, text=_("Fensteraufnahme wie bei OBS, nur solange DBD im Hintergrund ist"),
+        ui.Label(adv, text=_("Fensteraufnahme wie bei OBS, nur solange DBD im Hintergrund ist"),
                   style="Dim.TLabel", wraplength=400).pack(anchor="w", padx=(22, 0))
-        self.rate_var = tk.DoubleVar(value=float(self.settings.get("scans_per_second", 5)))
+        self.rate_var = ui.DoubleVar(value=float(self.settings.get("scans_per_second", 5)))
         self._slider(adv, _("Scans/Sek."), self.rate_var, 2, 10, self._rate_changed, fmt="{:.0f}")
-        self.watch_var = tk.StringVar(value=_("Rundenende-Erkennung: {state}", state=_("keine Map angezeigt")))
-        ttk.Label(adv, textvariable=self.watch_var, style="Dim.TLabel", wraplength=420).pack(anchor="w", pady=(4, 6))
-        self.debug_var = tk.BooleanVar(value=self.settings["save_debug_images"])
-        ttk.Checkbutton(adv, text=_("Debug-Bilder speichern (Ordner debug/)"), variable=self.debug_var,
+        self.watch_var = ui.StringVar(value=_("Rundenende-Erkennung: {state}", state=_("keine Map angezeigt")))
+        ui.Label(adv, textvariable=self.watch_var, style="Dim.TLabel", wraplength=420).pack(anchor="w", pady=(4, 6))
+        self.debug_var = ui.BooleanVar(value=self.settings["save_debug_images"])
+        ui.Checkbutton(adv, text=_("Debug-Bilder speichern (Ordner debug/)"), variable=self.debug_var,
                         command=self._detect_flags_changed).pack(anchor="w")
-        r = ttk.Frame(adv)
+        r = ui.Frame(adv)
         r.pack(fill="x", pady=(6, 0))
-        ttk.Button(r, text=_("Bildschirm jetzt scannen"), command=self.scan_now).pack(side="left")
-        ttk.Button(r, text=_("Diagnose kopieren"), command=self.show_diagnose).pack(side="left", padx=6)
+        ui.Button(r, text=_("Bildschirm jetzt scannen"), command=self.scan_now).pack(side="left")
+        ui.Button(r, text=_("Diagnose kopieren"), command=self.show_diagnose).pack(side="left", padx=6)
         self._show_advanced()
         return outer
 
@@ -571,58 +361,38 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
     # -------------------------------------------------------------- tab: log
     def _tab_log(self):
         outer, f = self._fixed_tab()
-        top = ttk.Frame(f)
+        top = ui.Frame(f)
         top.pack(fill="x", pady=(0, 6))
-        ttk.Label(top, text=_("Anzeigen:")).pack(side="left")
+        ui.Label(top, text=_("Anzeigen:")).pack(side="left")
         enabled = set(self.settings.get("log_categories", CATS))
         self.cat_vars = {}
         for c in CATS:
-            v = tk.BooleanVar(value=c in enabled)
+            v = ui.BooleanVar(value=c in enabled)
             self.cat_vars[c] = v
-            ttk.Checkbutton(top, text=_(c), variable=v, command=self._log_filter_changed).pack(side="left", padx=(6, 0))
-        tf = ttk.Frame(f)
-        tf.pack(fill="both", expand=True)
-        self.log_text = tk.Text(tf, height=14, width=58, wrap="word", state="disabled", relief="flat",
-                                font=("Segoe UI", 9),
-                                highlightthickness=0, borderwidth=0, padx=6, pady=4)
-        sb = ttk.Scrollbar(tf, orient="vertical", command=self.log_text.yview)
-        self.log_text.configure(yscrollcommand=sb.set)
-        # the Qt window shows the same entries itself (coloured like here): (entries, dark mode)
-        self.log_text._dbdms_lines = lambda: ([e for e in self._log_entries if self.cat_vars[e[1]].get()][-400:],
-                                              bool(self.settings.get("dark_mode", True)))
-        self.log_text.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
-        bottom = ttk.Frame(f)
+            ui.Checkbutton(top, text=_(c), variable=v, command=self._log_filter_changed).pack(side="left", padx=(6, 0))
+        # the Qt window shows the entries itself (coloured by category): (entries, dark mode)
+        self.log_text = ui.Log(f, lines=lambda: ([e for e in self._log_entries if self.cat_vars[e[1]].get()][-400:],
+                                                 bool(self.settings.get("dark_mode", True))))
+        self.log_text.pack(fill="both", expand=True)
+        bottom = ui.Frame(f)
         bottom.pack(fill="x", pady=(6, 0))
-        ttk.Button(bottom, text=_("Leeren"), command=self._clear_log).pack(side="left")
-        ttk.Button(bottom, text=_("Log-Datei öffnen"), command=self._open_logfile).pack(side="left", padx=6)
-        ttk.Button(bottom, text=_("Diagnose kopieren"), command=self.show_diagnose).pack(side="left")
+        ui.Button(bottom, text=_("Leeren"), command=self._clear_log).pack(side="left")
+        ui.Button(bottom, text=_("Log-Datei öffnen"), command=self._open_logfile).pack(side="left", padx=6)
+        ui.Button(bottom, text=_("Diagnose kopieren"), command=self.show_diagnose).pack(side="left")
         return outer
 
     # ----------------------------------------------------------- map list
     def _fill_list(self):
-        self.tree.delete(*self.tree.get_children())
-        self._list_items = {}
-        realms = {}
-        for m in self.catalog.search(self.search_var.get()):
-            realm = self.catalog.realm_display(m) or _("Eigene Bilder")
-            if realm not in realms:
-                realms[realm] = self.tree.insert("", "end", text=realm, open=bool(self.search_var.get()))
-            for v in [v for v in sorted(m.variants) if m.variants[v]]:
-                label = m.label(v) if len(m.variants) > 1 else m.name
-                iid = self.tree.insert(realms[realm], "end", text=label)
-                self._list_items[iid] = (m.id, v)
+        """The maps as listed on the maps page (search applied): order for the hotkeys next/previous map."""
+        self._list_items = {i: (mid, v) for i, (_r, _l, mid, v) in enumerate(self._qt_map_items())}
 
-    def _pick_selected(self):
-        sel = self.tree.selection()
-        if sel and sel[0] in self._list_items:
-            mid, v = self._list_items[sel[0]]
-            self.show_map(mid, v, "manual")
-
-    def _pick_first(self):
-        for mid, v in self._list_items.values():
-            self.show_map(mid, v, "manual")
-            return
+    def _search_maps(self, text):
+        """Show the maps page with this search (a scan found only the realm)."""
+        self._qt_search = text
+        self._qt_maps_rev = getattr(self, "_qt_maps_rev", 0) + 1
+        self._fill_list()
+        if self.qt is not None:
+            self.qt.show_page("maps", search=text)
 
     # ============================================================ actions
     def show_map(self, map_id: str, variant: int, source: str, detail: str = "", keep_timer: bool = False):
@@ -657,30 +427,23 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         self.hidden_after_match = False
         self.menu_paused = False
         self._watch(source)
-        self.map_var.set(m.label(shown))
         self.tray.set_title(f"DbD Map Scout – {m.label(shown)}")
-        self.realm_var.set(self.catalog.realm_display(m))
         self._detail = detail or {"manual": _("manuell gewählt"), "scan": _("per Scan gefunden")}.get(source, "")
-        self.detail_var.set(self._detail)
         self._set_thumb(frames[0][0])
-        self._update_toggle_text()
         self._show_map_size()
-        self._update_layout_btn()
         if source == "manual":
             self._log(_("Map gewählt: {map}", map=m.label(shown)), "Overlay")
         self._tick_overlay(reschedule=False)
 
     def _set_thumb(self, img):
-        thumb = img.copy()
-        thumb.thumbnail((88, 88))
-        bg = Image.new("RGBA", thumb.size, (40, 40, 44, 255))
-        bg.alpha_composite(thumb)
-        self._thumb = ImageTk.PhotoImage(bg)
-        src = img.copy()                          # for the Qt overview (bigger, no backdrop)
+        src = img.copy()                          # for the overview page
         src.thumbnail((480, 480))
         self._thumb_src = src
         self._thumb_rev = getattr(self, "_thumb_rev", 0) + 1
-        self.thumb_label.configure(image=self._thumb)
+
+    def _current_label(self) -> str:
+        m = self.catalog.maps.get(self.current[0]) if self.current else None
+        return m.label(self.current[1]) if m else ""
 
     def toggle_overlay(self):
         if not self.overlay.has_map():
@@ -698,7 +461,6 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
             self._round_started(time.time())
         elif was_on and not self._map_on():
             self._round_ended(time.time())
-        self._update_toggle_text()
         self._log(_("Overlay eingeblendet.") if self.user_visible else _("Overlay ausgeblendet."), "Overlay")
         self._tick_overlay(reschedule=False)
 
@@ -712,24 +474,10 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         """A map is on display for this round (a menu pause or another active window only hides it briefly)."""
         return self.overlay.has_map() and self.user_visible and not self.hidden_after_match
 
-    def _update_toggle_text(self):
-        on = self.user_visible and not self.hidden_after_match and not self.menu_paused
-        self.toggle_btn.configure(text=_("Overlay ausblenden") if on else _("Overlay einblenden"))
-
     def _layouts(self):
         """Layouts with a picture of the map on display ([] without a map)."""
         m = self.catalog.maps.get(self.current[0]) if self.current else None
         return [v for v in sorted(m.variants) if m.variants[v]] if m else []
-
-    def _update_layout_btn(self):
-        vs = self._layouts()
-        if len(vs) < 2:
-            self.layout_btn.pack_forget()
-            return
-        text = _("Layout {n} von {total}", n=roman(self.current[1]), total=roman(vs[-1])) + " ▸"
-        self.layout_btn.configure(text=text + (" " + _("(unsicher)") if self._layout_unsure else ""))
-        if not self.layout_btn.winfo_manager():
-            self.layout_btn.pack(side="left", padx=(4, 0), before=self.rotate_btn)
 
     def next_floor(self):
         """Button/hotkey: maps with floors (Midwich) – all one below the other -> bottom -> ... -> top -> all."""
@@ -749,35 +497,32 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         elif self._floor is not None:
             self._floor %= len(floors)
         self.overlay.set_floor(floors[self._floor] if self._floor is not None else None)
-        if not floors:
-            self.floor_btn.pack_forget()
-            return
-        self.floor_btn.configure(text=(_("Etage {n} von {total}", n=self._floor + 1, total=len(floors))
-                                       if self._floor is not None else _("Beide Etagen")) + " ▸")
-        if not self.floor_btn.winfo_manager():
-            self.floor_btn.pack(side="left", padx=(4, 0), before=self.rotate_btn)
 
     def _hk_hint(self, name):
         combo = (self.settings.get("hotkeys") or {}).get(name)
         return " " + _("Hotkey: {keys}", keys=pretty(combo)) if combo else ""
 
+    def _button_tip(self, key):
+        """Tooltips of the overview's buttons whose label changes (None: tooltip.TIPS by label)."""
+        if key == "toggle":
+            on = self.user_visible and not self.hidden_after_match and not self.menu_paused
+            return (_("Karte ausblenden (die automatische Erkennung läuft weiter).") if on else
+                    _("Karte wieder einblenden.")) + self._hk_hint("toggle_overlay")
+        if key == "layout":
+            return (_("Die Erkennung war beim Layout nicht sicher – stimmt es nicht, hier weiterschalten.")
+                    + " " if self._layout_unsure else "") + \
+                _("Wechselt zum nächsten Layout dieser Map (z. B. Coal Tower ↔ Coal Tower II). Die Layouts ab II "
+                  "gibt es seit Patch 8.6.0 nur noch in Custom Games.") + self._hk_hint("next_variant")
+        if key == "rotate":
+            return tooltip.tip_for_label("Drehen ↻") + self._hk_hint("rotate_map")
+        if key == "floor":
+            return _("Wechselt die Anzeige bei Karten mit Etagen (Midwich): beide untereinander → "
+                     "unten → oben → beide. Gilt bis zur nächsten Map.") + self._hk_hint("next_floor")
+        return None
+
     def _tip_lookup(self, w):
         """Tooltips for buttons whose label changes or repeats (the rest: tooltip.TIPS by label)."""
         hk = {b: k for k, b in self.hk_buttons.items()}
-        if w is self.toggle_btn:
-            return lambda: (_("Karte ausblenden (die automatische Erkennung läuft weiter).")
-                            if self.toggle_btn.cget("text") == _("Overlay ausblenden") else
-                            _("Karte wieder einblenden.")) + self._hk_hint("toggle_overlay")
-        if w is self.layout_btn:
-            return lambda: (_("Die Erkennung war beim Layout nicht sicher – stimmt es nicht, hier weiterschalten.")
-                            + " " if self._layout_unsure else "") + \
-                _("Wechselt zum nächsten Layout dieser Map (z. B. Coal Tower ↔ Coal Tower II). Die Layouts ab II "
-                  "gibt es seit Patch 8.6.0 nur noch in Custom Games.") + self._hk_hint("next_variant")
-        if w is self.rotate_btn:
-            return lambda: tooltip.tip_for_label(self.rotate_btn.cget("text")) + self._hk_hint("rotate_map")
-        if w is self.floor_btn:
-            return lambda: _("Wechselt die Anzeige bei Karten mit Etagen (Midwich): beide untereinander → "
-                             "unten → oben → beide. Gilt bis zur nächsten Map.") + self._hk_hint("next_floor")
         if w is self.test_btn:
             return lambda: (_("Test sofort beenden.") if self.test_btn.cget("text") == _("Test beenden") else
                             _("Zeigt die Karte 10 s an ihrer normalen Position – auch wenn sie gerade ausgeblendet "
@@ -854,8 +599,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
                 fh.write(text)
         except OSError:
             pass
-        self.root.clipboard_clear()
-        self.root.clipboard_append(text)
+        self.root.clipboard_set(text)
         self._log(_("Diagnose in die Zwischenablage kopiert (auch als diagnose.txt gespeichert)."), "System")
         log.info(text)
 
@@ -976,51 +720,55 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
 
     # ============================================================= events
     def _poll(self):
-        try:
-            while True:
-                if self._quitting:
-                    return
+        """Every 50 ms: the events of the detection, the hotkeys, the tray and the window, in order. One failing
+        event is reported and the rest still runs (the loop must never stop)."""
+        while not self._quitting:
+            try:
                 ev = self.events.get_nowait()
-                if isinstance(ev, tuple) and ev[0] == "hotkey":
-                    self._hotkey(ev[1])
-                elif isinstance(ev, tuple) and ev[0] == "hotkey_failed":
-                    self._hotkey_failed(*ev[1:])
-                elif isinstance(ev, tuple) and ev[0] == "srv_ping":
-                    self._srv_ping_done(ev[1])
-                elif isinstance(ev, tuple) and ev[0] == "srv_fw":
-                    if ev[1]:
-                        self._log(_("Firewall-Regeln von Make Your Choice („Enforced“) gefunden – sie sperren "
-                                    "Regionen unabhängig von der hosts-Datei. In Make Your Choice „Revert to Default“ "
-                                    "drücken."), "Fehler")
-                        self.srv_status.set(_("Achtung: Firewall-Regeln von Make Your Choice aktiv (siehe Log).")
-                                            + "  " + self.srv_status.get())
-                elif isinstance(ev, tuple) and ev[0] == "tray":
-                    {"open": self._show_main, "toggle": self.toggle_overlay,
-                     "quit": self.quit}.get(ev[1], lambda: None)()
-                elif isinstance(ev, tuple) and ev[0] == "autostart":
-                    self._autostart_state(*ev[1:])
-                elif isinstance(ev, tuple) and ev[0] == "setup_done":
-                    self._setup_done(ev[1], ev[2])
-                elif isinstance(ev, tuple) and ev[0] == "status_log":
-                    self._log(ev[1], "System")
-                elif isinstance(ev, tuple) and ev[0] == "conn_started":
-                    self._conn_started(ev[1])
-                elif isinstance(ev, tuple) and ev[0] == "upd_check":
-                    self._update_checked(*ev[1:])
-                elif isinstance(ev, tuple) and ev[0] == "srv_job":
-                    self._srv_job_done(ev[1], ev[2])
-                elif isinstance(ev, tuple) and ev[0] == "ui":
-                    self._qt_event(ev[1], ev[2])
-                elif isinstance(ev, tuple) and ev[0] == "call":       # from a window procedure (overlay, HUD)
-                    ev[1](*ev[2])
-                else:
-                    self._event(ev)
-        except queue.Empty:
-            pass
-        if self._quitting:
-            return
-        self._qt_pump()
-        self.root.after(50, self._poll)
+            except queue.Empty:
+                break
+            try:
+                self._dispatch(ev)
+            except Exception:
+                self._report_once("Ereignis", traceback.format_exc())
+        if not self._quitting:
+            self.root.after(50, self._poll)
+
+    def _dispatch(self, ev):
+        if isinstance(ev, tuple) and ev[0] == "hotkey":
+            self._hotkey(ev[1])
+        elif isinstance(ev, tuple) and ev[0] == "hotkey_failed":
+            self._hotkey_failed(*ev[1:])
+        elif isinstance(ev, tuple) and ev[0] == "srv_ping":
+            self._srv_ping_done(ev[1])
+        elif isinstance(ev, tuple) and ev[0] == "srv_fw":
+            if ev[1]:
+                self._log(_("Firewall-Regeln von Make Your Choice („Enforced“) gefunden – sie sperren "
+                            "Regionen unabhängig von der hosts-Datei. In Make Your Choice „Revert to Default“ "
+                            "drücken."), "Fehler")
+                self.srv_status.set(_("Achtung: Firewall-Regeln von Make Your Choice aktiv (siehe Log).")
+                                    + "  " + self.srv_status.get())
+        elif isinstance(ev, tuple) and ev[0] == "tray":
+            {"open": self._show_main, "toggle": self.toggle_overlay,
+             "quit": self.quit}.get(ev[1], lambda: None)()
+        elif isinstance(ev, tuple) and ev[0] == "autostart":
+            self._autostart_state(*ev[1:])
+        elif isinstance(ev, tuple) and ev[0] == "setup_done":
+            self._setup_done(ev[1], ev[2])
+        elif isinstance(ev, tuple) and ev[0] == "status_log":
+            self._log(ev[1], "System")
+        elif isinstance(ev, tuple) and ev[0] == "conn_started":
+            self._conn_started(ev[1])
+        elif isinstance(ev, tuple) and ev[0] == "upd_check":
+            self._update_checked(*ev[1:])
+        elif isinstance(ev, tuple) and ev[0] == "srv_job":
+            self._srv_job_done(ev[1], ev[2])
+        elif isinstance(ev, tuple) and ev[0] == "ui":
+            self._qt_event(ev[1], ev[2])
+        elif isinstance(ev, tuple) and ev[0] == "call":       # from a window procedure (overlay, HUD)
+            ev[1](*ev[2])
+        else:
+            self._event(ev)
 
     def _hotkey(self, name):
         {"toggle_overlay": self.toggle_overlay, "next_variant": self.next_variant, "scan_now": self.scan_now,
@@ -1066,7 +814,6 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
                             name=d["name_text"], realm=d["realm_text"]), "Erkennung")
                 if len(m.variants) > 1 and vp < 0.8:
                     self._layout_unsure = True
-                    self._update_layout_btn()
                     self._log(_("Layout unsicher – falls falsch: Layout-Knopf oder {keys}.",
                                 keys=pretty(self.settings["hotkeys"].get("next_variant") or "–")), "Erkennung")
         elif k == "ignored":                       # banner-like text well into a round (worker: strict reading)
@@ -1082,8 +829,6 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
                         "oder mit „Zuordnen …“ dauerhaft zuordnen.", text=txt), "Erkennung")
             if len(fold(txt)) >= self.catalog.MIN_ALIAS:
                 self._unknown = (txt, d.get("realm_text") or "")
-                self.unknown_var.set(_("Unbekannte Map gelesen: „{text}“", text=txt))
-                self.unknown_bar.pack(fill="x", padx=10, pady=(0, 6), before=self.nb)
         elif k == "queue":
             self._queue_event(d)
         elif k == "match_end":
@@ -1097,7 +842,6 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
                 was_visible = self.user_visible
                 self.hidden_after_match = True
                 self.menu_paused = False
-                self._update_toggle_text()
                 reason = _(d.get("reason") or "Ergebnisbildschirm")
                 self._log(_("Runde vorbei ({reason}) – Overlay ausgeblendet.", reason=reason) if was_visible
                           else _("Runde vorbei ({reason}).", reason=reason), "Erkennung")
@@ -1106,12 +850,10 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
             if d.get("on"):
                 if self.overlay.has_map() and not self.hidden_after_match and not self.menu_paused:
                     self.menu_paused = True
-                    self._update_toggle_text()
                     self._log(_("Menü offen (Mauszeiger sichtbar) – Overlay pausiert."), "Overlay")
                     self._tick_overlay(reschedule=False)
             elif self.menu_paused:
                 self.menu_paused = False
-                self._update_toggle_text()
                 self._log(_("Zurück im Spiel – Overlay wieder sichtbar."), "Overlay")
                 self._tick_overlay(reschedule=False)
         elif k == "watch_info":
@@ -1123,7 +865,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         elif k == "error":
             self._log(_("Die Erkennung ist abgestürzt – Details in dbdmapscout.log"), "Fehler")
             log.error(d["text"])
-            messagebox.showerror("DbD Map Scout", _("Die Erkennung ist abgestürzt:") + "\n\n" + d["text"][-1500:])
+            self._inform("DbD Map Scout", _("Die Erkennung ist abgestürzt:") + "\n\n" + d["text"][-1500:])
 
     # ---------------------------------------------------------- round timer
     def _round_started(self, t):
@@ -1136,35 +878,13 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
 
     def _tick_timer(self):
         r = self.round
-        if r.start_t is None:
-            text, overlay_text = "", ""
-        elif r.running:
-            overlay_text = fmt_duration(r.elapsed(time.time()))
-            text = _("Runde läuft: {time}", time=overlay_text)
-        else:
-            text, overlay_text = _("Letzte Runde: {time}", time=fmt_duration(r.elapsed(0))), ""
-        if text != self.timer_var.get():
-            self.timer_var.set(text)
-        q = self._queue_text(time.time())
-        if q != self.queue_var.get():
-            self.queue_var.set(q)
+        overlay_text = fmt_duration(r.elapsed(time.time())) if r.start_t is not None and r.running else ""
         self.overlay.set_timer(overlay_text if self.settings["overlay"].get("show_timer", True) else "")
 
     def _set_status(self, text):
         """Technical status from the worker: goes to the log; the status line shows a plain summary."""
         self._worker_status = text
         self._log(text, "System")
-        self._update_state()
-
-    def _update_state(self):
-        st = user_state(self._worker_status, auto_detect=bool(self.settings.get("auto_detect", True)),
-                        game_found=self.game is not None, simulate=bool(self.simulate),
-                        has_map=self.overlay.has_map(), map_label=self.map_var.get() if self.current else "",
-                        visible_wanted=self.user_visible, hidden_after_match=self.hidden_after_match,
-                        menu_paused=self.menu_paused)
-        if st.text != self.status_var.get():
-            self.status_var.set(st.text)
-            self.dot.configure(style=f"Dot{DOT_STYLE[st.kind].title()}.TLabel")
 
     def _scan_result(self, d):
         hits = d.get("hits") or []
@@ -1187,11 +907,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
             if len(in_realm) == 1:
                 self.show_map(in_realm[0].id, 1, "scan", _("Realm „{realm}“ hat nur diese Map", realm=realms[0].text))
             else:
-                self.search_var.set(self.catalog.realms.get(realm, {}).get("en", realm))
-                if self.qt is not None:
-                    self._open_tab("maps")              # the list lives in the Tk window for now
-                else:
-                    self.nb.select(self.tab_maps)
+                self._search_maps(self.catalog.realms.get(realm, {}).get("en", realm))
                 self._log(_("Scan: Realm „{realm}“ gefunden – bitte Map in der Liste wählen.", realm=realms[0].text), "Erkennung")
             return
         self._log(_("Scan ({s} s): kein Map- oder Realm-Name auf dem Bildschirm.", s=f"{d['seconds']:.1f}"), "Erkennung")
@@ -1205,7 +921,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
             self._note_window()
         if self.game and not self.game.minimized and self.game.width > 100:
             return self.game.rect
-        return (0, 0, self.root.winfo_screenwidth(), self.root.winfo_screenheight())
+        return (0, 0) + self.root.screen_size()
 
     def _tick_overlay(self, reschedule=True):
         try:
@@ -1227,12 +943,6 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         except Exception:
             self._report_once("hotkeys", traceback.format_exc())
         try:
-            self._update_state()
-            self._layout_pages()
-            self._to_tray_if_minimised()
-        except Exception:
-            self._report_once("status", traceback.format_exc())
-        try:
             self._qt_refresh()
         except Exception:
             self._report_once("Qt", traceback.format_exc())
@@ -1253,9 +963,6 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
             last = text.strip().splitlines()[-1] if text.strip() else text
             self._log(_("{text} – Details in dbdmapscout.log", text=f"{key}: {last}"), "Fehler")
 
-    def _tk_error(self, exc, val, tb):
-        self._report_once(getattr(exc, "__name__", "tk"), "".join(traceback.format_exception(exc, val, tb)))
-
     def _place_overlay(self):
         o = self.settings["overlay"]
         self.worker.map_on_screen = self.overlay.has_map() and not self.hidden_after_match
@@ -1270,12 +977,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
                 self._test_map = False
                 self.user_visible = False
                 self._round_ended(time.time())
-                self._update_toggle_text()
             self._log(_("Test beendet."), "Overlay")
-        for b, ok in ((self.toggle_btn, self.overlay.has_map()), (self.rotate_btn, self.current is not None)):
-            want = "normal" if ok else "disabled"
-            if str(b.cget("state")) != want:
-                b.configure(state=want)
         if (time.time() >= getattr(self, "_force_until", 0) and hasattr(self, "test_btn")
                 and self.test_btn.cget("text") != _("Overlay testen")):
             self.test_btn.configure(text=_("Overlay testen"))
@@ -1306,7 +1008,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
             self.overlay.hide()
             self.worker.overlay_rect = None
             return
-        if self.overlay.editing and self.overlay._drag:
+        if self.overlay.editing and self.overlay.dragging:
             return                                           # user is dragging
         self.overlay.opacity = o["opacity"]
         margin = int(gh * o["margin"])
@@ -1319,7 +1021,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         # window narrower than 16:9: the trial has bars above/below – the map goes there whatever the position
         # setting says (user: own position at 1440p, the bar in the small window); not while dragging it
         vb = None if self.overlay.editing else layout.vbars(self.worker.vbars, gw, gh, time.time())
-        self.overlay.info_beside = bool(vb)     # Tk overlay: attribute unused
+        self.overlay.info_beside = bool(vb)
         if vb:
             self._place_in_bottom_bar(gx, gy, gw, gh, vb[1], margin, height, sliders=a != "custom")
             return
@@ -1413,7 +1115,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         if (o["only_when_game_focused"] and IS_WIN and not self.overlay.editing and not self.simulate
                 and self.game is not None):
             fg = foreground_root()
-            own = {self.overlay.hwnd(), self._root_hwnd(), self._qt_hwnd()}
+            own = {self.overlay.hwnd(), self._qt_hwnd()}
             if fg not in own and not is_game_window(fg):
                 return _("aktives Fenster ist {window}", window=describe_window(fg))
         return None
@@ -1455,14 +1157,6 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
                 "Overlay"))
         elif reason != _("ausgeblendet"):
             self._log(_("Overlay pausiert: {reason}.", reason=reason), "Overlay")
-
-    def _root_hwnd(self):
-        if not IS_WIN:
-            return 0
-        try:
-            return int(self.root.wm_frame(), 16)
-        except (tk.TclError, ValueError):
-            return 0
 
     # ============================================================ settings
     def _apply_overlay_settings(self):
@@ -1570,14 +1264,13 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         self.settings.set("window_capture", bool(self.wgc_var.get()))
         if not self.menu_var.get() and self.menu_paused:
             self.menu_paused = False
-            self._update_toggle_text()
             self._tick_overlay(reschedule=False)
         self.settings.set("save_debug_images", bool(self.debug_var.get()))
         self._save_soon()
 
     # ---------------------------------------------------------- own map assignments
     def _hide_welcome(self):
-        self.welcome_bar.pack_forget()
+        self._qt_welcome = False
         self.settings.set("welcome_seen", True)
         self._save_soon()
 
@@ -1590,8 +1283,6 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         u["shown"] = True
         keys = pretty(self.settings["hotkeys"].get("reject_map") or "–")
         self.overlay.set_note(_("? unsicher – {keys} = falsch", keys=keys))
-        self.unsure_var.set(_("Unsicher erkannt: {map} (gelesen „{name}“)", map=u["label"], name=u["name"]))
-        self.unsure_bar.pack(fill="x", padx=10, pady=(0, 6), before=self.nb)
         self._log(_("Unsicher erkannt: {map} – gelesen „{name}“, Passung {fit}. Falls falsch: {keys} oder "
                     "„Falsch erkannt“.", map=u["label"], name=u["name"], fit=f"{u['fit']:.1f}", keys=keys),
                   "Erkennung")
@@ -1601,7 +1292,6 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         if u is None:
             return
         self.overlay.set_note("")
-        self.unsure_bar.pack_forget()
         if confirmed and u["shown"]:
             self._log(_("{map} bestätigt.", map=u["label"]), "Erkennung")
 
@@ -1613,7 +1303,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         if self.current is None or self.source != "auto" or self.hidden_after_match:
             self._log(_("Nichts zu verwerfen: keine automatisch erkannte Map eingeblendet."), "Erkennung")
             return
-        label = self.map_var.get()
+        label = self._current_label()
         self._rejected = (self.current[0], time.time())
         self._clear_unsure()
         if self._hist is not None:
@@ -1624,14 +1314,11 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         self.round.clear()
         self.hidden_after_match = True              # waiting card again; the next banner shows its map
         self.menu_paused = False
-        self._update_toggle_text()
         self._detail = _("als falsch verworfen")
-        self.detail_var.set(self._detail)
         self._log(_("Verworfen: {map} – die Runde wird nicht gezählt.", map=label), "Erkennung")
         self._tick_overlay(reschedule=False)
 
     def _hide_unknown(self):
-        self.unknown_bar.pack_forget()
         self._unknown = None
 
     def assign_unknown(self):
@@ -1642,22 +1329,22 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         entries = [m for m in self.catalog.sorted_entries() if not m.custom]
         labels = [f"{m.name} ({self.catalog.realm_display(m)})" for m in entries]
         guess = self.catalog.suggest(name, realm)
-        dlg = tk.Toplevel(self.root)
+        dlg = ui.Toplevel(self.ui_root)
         dlg.title(_("Map zuordnen"))
         dlg.transient(self.root)
         dlg.resizable(False, False)
-        body = ttk.Frame(dlg, padding=12)
+        body = ui.Frame(dlg, padding=12)
         body.pack(fill="both", expand=True)
-        ttk.Label(body, text=_("Gelesen: „{text}“", text=name) + (f" / „{realm}“" if realm else ""),
+        ui.Label(body, text=_("Gelesen: „{text}“", text=name) + (f" / „{realm}“" if realm else ""),
                   wraplength=380).pack(anchor="w")
-        ttk.Label(body, text=_("Welche Map war das? Der Name wird künftig automatisch erkannt."),
+        ui.Label(body, text=_("Welche Map war das? Der Name wird künftig automatisch erkannt."),
                   style="Dim.TLabel", wraplength=380).pack(anchor="w", pady=(2, 8))
-        var = tk.StringVar(value=labels[[m.id for m in entries].index(guess)] if guess in
+        var = ui.StringVar(value=labels[[m.id for m in entries].index(guess)] if guess in
                            [m.id for m in entries] else "")
-        cb = ttk.Combobox(body, textvariable=var, values=labels, state="readonly", width=44, height=18)
+        cb = ui.Combobox(body, textvariable=var, values=labels, state="readonly", width=44, height=18)
         cb.pack(fill="x")
-        msg = tk.StringVar(value="")
-        ttk.Label(body, textvariable=msg, style="Dim.TLabel", wraplength=380).pack(anchor="w", pady=(6, 0))
+        msg = ui.StringVar(value="")
+        ui.Label(body, textvariable=msg, style="Dim.TLabel", wraplength=380).pack(anchor="w", pady=(6, 0))
 
         def ok():
             if var.get() not in labels:
@@ -1681,10 +1368,10 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
                       "Erkennung")
             self.show_map(m.id, 1, "manual", _("zugeordnet: „{text}“", text=name))
 
-        row = ttk.Frame(body)
+        row = ui.Frame(body)
         row.pack(fill="x", pady=(10, 0))
-        ttk.Button(row, text=_("Zuordnen"), command=ok).pack(side="right")
-        ttk.Button(row, text=_("Abbrechen"), command=dlg.destroy).pack(side="right", padx=6)
+        ui.Button(row, text=_("Zuordnen"), command=ok).pack(side="right")
+        ui.Button(row, text=_("Abbrechen"), command=dlg.destroy).pack(side="right", padx=6)
         dlg.bind("<Return>", lambda e: ok())
         dlg.bind("<Escape>", lambda e: dlg.destroy())
         tooltip.attach_all(dlg)
@@ -1755,40 +1442,18 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         self._log(_("Spielsprachen: {langs}", langs=", ".join(langs)), "System")
 
     def _apply_theme(self):
-        dark = bool(self.dark_var.get())
-        tooltip.Tooltip.colours = (("#2b2d31", "#e3e5e8", "#50535a") if dark else
-                                   ("#ffffe1", "#1b1b1b", "#8a8a8a"))
-        design = self.settings.get("ui_style", theme.DEFAULT_STYLE)
-        self._page_bg = page_bg = theme.apply(self.root, dark, text_widgets=(self.log_text,), design=design)
-        if theme.apply.failed and not getattr(self, "_style_failed_told", False):
-            self._style_failed_told = True
-            self._log(_("Design nicht ladbar, nehme das klassische: {error}", error=theme.apply.failed), "Fehler")
-        uiscale.apply_zoom(self.root, float(self.settings.get("ui_zoom", 1.0)))      # after the theme's fonts
-        for chart in (getattr(self, "trend", None), getattr(self, "sys_trend", None)):
-            if chart is not None:
-                chart.canvas.configure(background=page_bg)
-        for page in getattr(self, "_pages", []):
-            page["canvas"].configure(background=page_bg)
-        colors = theme.LOG_COLORS[dark]
-        self.log_text.tag_configure("ts", foreground=colors["ts"])
-        for c in CATS:
-            self.log_text.tag_configure(f"cat_{c}", foreground=colors[c])
-        self.log_text.tag_configure("msg", foreground=colors["text"])
+        """Dark/light: the Qt window's colours, the server table's ping colours and the charts."""
+        from .theme import LOG_COLORS
+        dark = bool(self.dark_var.get()) if hasattr(self, "dark_var") else bool(self.settings.get("dark_mode", True))
+        colors = LOG_COLORS[dark]
         for tag, key in (("p_good", "Erkennung"), ("p_bad", "Fehler"), ("p_na", "ts")):
             self.srv_tree.tag_configure(tag, foreground=colors[key])
         self.srv_tree.tag_configure("p_mid", foreground="#d29922" if dark else "#9a6700")
         self.srv_tree.tag_configure("group", foreground=colors["text"])
-        self.log_text.tag_configure("msg_Fehler", foreground=colors["Fehler"])
-        self.root.after(50, lambda: theme._titlebar(self.root, dark))   # frame exists only after mapping
+        for chart in (getattr(self, "trend", None), getattr(self, "sys_trend", None)):
+            if chart is not None:
+                chart.dark = dark
         self._qt_theme()
-
-    def _style_changed(self):
-        design = next((k for k, lbl in theme.STYLES if _(lbl) == self.style_var.get()), theme.DEFAULT_STYLE)
-        self.settings.set("ui_style", design)
-        self._apply_theme()
-        if getattr(self, "_autowrap", None):
-            self._autowrap.soon()
-        self._save_soon()
 
     def _dark_changed(self):
         self.settings.set("dark_mode", bool(self.dark_var.get()))
@@ -1805,54 +1470,23 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         entry = (time.strftime("%H:%M:%S"), cat if cat in CATS else "System", text)
         self._log_entries.append(entry)
         log.info(f"[{_(entry[1])}] {text}")
-        if self.cat_vars[entry[1]].get():
-            self._append_log(entry)
-        if entry[1] == "Fehler" and self.nb.select() != str(self.tab_log):
-            self.nb.tab(self.tab_log, text="Log ⚠")
-            self._log_alert = True
-        elif entry[1] == "Fehler" and getattr(self, "qt", None) is not None and self.root.state() == "withdrawn":
-            self._log_alert = True                # the hidden Tk window still shows Log: say it in the Qt window
-
-    def _append_log(self, entry):
-        ts, cat, text = entry
-        t = self.log_text
-        t.configure(state="normal")
-        t.insert("end", ts + "  ", "ts")
-        t.insert("end", f"{_(cat):<9}", f"cat_{cat}")
-        t.insert("end", "  " + text + "\n", "msg_Fehler" if cat == "Fehler" else "msg")
-        lines = int(t.index("end-1c").split(".")[0])
-        if lines > 1200:
-            t.delete("1.0", f"{lines - 1200}.0")
-        t.see("end")
-        t.configure(state="disabled")
-
-    def _render_log(self):
-        t = self.log_text
-        t.configure(state="normal")
-        t.delete("1.0", "end")
-        t.configure(state="disabled")
-        for entry in self._log_entries:
-            if self.cat_vars[entry[1]].get():
-                self._append_log(entry)
+        q = getattr(self, "qt", None)
+        if entry[1] == "Fehler" and (q is None or not q.isVisible() or q.current_key() != "log"):
+            self._log_alert = True                # "Log ⚠" in the window until the log is opened
 
     def _log_filter_changed(self):
         self.settings.set("log_categories", [c for c in CATS if self.cat_vars[c].get()])
         self._save_soon()
-        self._render_log()
 
     def _clear_log(self):
         self._log_entries.clear()
-        self._render_log()
 
     def _tab_changed(self):
-        if getattr(self, "_autowrap", None):
-            self._autowrap.soon()                # labels of a tab shown for the first time
         if self.nb.select() == str(self.tab_stats):
             self._stats_render()
         if self.nb.select() == str(self.tab_detect):
             self._official_check_render()
         if self.nb.select() == str(self.tab_log):
-            self.nb.tab(self.tab_log, text="Log")
             self._log_alert = False
         if self.nb.select() == str(self.tab_server):
             self._srv_refresh()
@@ -1875,85 +1509,12 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         except OSError as e:
             self._log(_("Kann {path} nicht öffnen: {error}", path=path, error=e), "Fehler")
 
-    # ======================================================== window state
-    def _restore_geometry(self):
-        geo = self.settings.get("window_geometry") or ""
-        m = re.fullmatch(r"(\d+)x(\d+)([+-])(-?\d+)([+-])(-?\d+)", geo)
-        if not m:                              # first start: tall enough that most tabs need no scrolling
-            try:
-                self.root.update_idletasks()
-                h = min(DEFAULT_HEIGHT, self.root.winfo_screenheight() - 80)
-                self.root.geometry(f"{self.root.winfo_reqwidth()}x{max(h, self.root.winfo_reqheight())}")
-            except tk.TclError:
-                pass
-            return
-        try:
-            w, h = int(m.group(1)), int(m.group(2))
-            x = int(m.group(4)) * (-1 if m.group(3) == "-" else 1)
-            y = int(m.group(6)) * (-1 if m.group(5) == "-" else 1)
-        except ValueError:
-            return
-        try:                                   # never narrower than the content (e.g. after new tabs)
-            self.root.update_idletasks()
-            w, h = max(w, self.root.winfo_reqwidth()), max(h, 600)
-        except tk.TclError:
-            pass
-        vx, vy, vw, vh = 0, 0, self.root.winfo_screenwidth(), self.root.winfo_screenheight()
-        if IS_WIN:
-            try:
-                import ctypes
-                u = ctypes.windll.user32
-                vx, vy, vw, vh = u.GetSystemMetrics(76), u.GetSystemMetrics(77), u.GetSystemMetrics(78), u.GetSystemMetrics(79)
-            except Exception:
-                pass
-        if vx - 50 <= x <= vx + vw - 100 and vy - 10 <= y <= vy + vh - 100:
-            self.root.geometry(f"{w}x{h}+{x}+{y}")
-        else:
-            self.root.geometry(f"{w}x{h}")
-        if IS_WIN and self.settings.get("window_zoomed") and self._qt_mod is None:
-            try:
-                self.root.state("zoomed")
-            except tk.TclError:
-                pass
-
-    def _track_geometry(self):
-        """Remember size, position and 'maximised' as soon as they change (before 1.50 only when quitting from
-        a visible normal window – closing from the tray, logging off or a crash lost them)."""
-        self._geo_job = None
-
-        def note(e):
-            if e.widget is self.root and self._geo_job is None:
-                self._geo_job = self.root.after(1000, save)
-
-        def save():
-            self._geo_job = None
-            try:
-                state = self.root.state()
-            except tk.TclError:
-                return
-            if state not in ("normal", "zoomed"):
-                return                       # minimised / in the tray: keep the last visible size
-            zoomed = state == "zoomed"
-            changed = zoomed != bool(self.settings.get("window_zoomed"))
-            if not zoomed and self.root.geometry() != self.settings.get("window_geometry"):
-                self.settings.set("window_geometry", self.root.geometry())
-                changed = True
-            if changed:
-                self.settings.set("window_zoomed", zoomed)
-                self._save_soon()
-
-        self.root.bind("<Configure>", note, add="+")
-
+    # ================================================================ quit
     def quit(self):
         if self._quitting:                       # e.g. tray "Beenden" and the window's X in the same poll
             return
         self._quitting = True
         try:
-            if self.root.state() == "normal":
-                self.settings.set("window_geometry", self.root.geometry())
-                self.settings.set("window_zoomed", False)
-            elif self.root.state() == "zoomed":
-                self.settings.set("window_zoomed", True)
             self._qt_close()
             self.settings.save()
             self.tray.stop()
@@ -1966,8 +1527,9 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
                 self.overlay.destroy()
             if self.hud is not None:
                 self.hud.destroy()
+            self.toast.close()
         finally:
-            self.root.destroy()
+            self.root.quit()
 
     def run(self):
         self.root.mainloop()
