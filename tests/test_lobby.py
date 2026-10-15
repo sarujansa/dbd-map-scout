@@ -134,6 +134,19 @@ def test_custom_game_has_no_wait_and_no_role():
     assert found == Found(0, None, None, custom=True)
 
 
+def test_lobby_before_its_countdown_is_no_custom_game():
+    """1.64.4 (user diagnosis: "Zustand custom" in a normal match): READY with nothing below right after a search
+    is the found lobby before its countdown starts – with the wait; in a lobby (someone left, countdown stopped)
+    it stays a lobby. Only without a search before is it a custom game."""
+    q = QueueTracker()
+    ev = run(q, [(0, V("search", "survivor", 0)), (1, V("search", "survivor", 1)),
+                 (90, V("custom")), (91, V("custom")),                         # READY, no countdown yet
+                 (100, V("lobby", "survivor")), (130, V("custom")), (131, V("custom"))])
+    found = [e[1] for e in ev if e[0] == "found"]
+    assert len(found) == 1 and not found[0].custom and found[0].wait == pytest.approx(90, abs=1)
+    assert found[0].role == "survivor" and q.state == "lobby"
+
+
 def test_lobby_without_seen_search_has_no_wait():
     q = QueueTracker()
     ev = run(q, [(0, V("lobby", "survivor")), (1, V("lobby", "survivor"))])
