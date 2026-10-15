@@ -43,6 +43,7 @@ DEFAULTS = {
         "media_pos": "bottom_right",    # its own window: below / bottom_right / bottom_left / custom (1.64.7)
         "media_xy": [1.0, 1.0],         # custom: share of the free room in the DBD window (dragged in edit mode)
         "media_progress": True,         # music card: how far the song is (bar + times, 1.64.7)
+        "map_style": "classic",         # callout maps: classic = as supplied / dark = see-through floor (1.66)
         "media_style": "big",           # music card: big = cover on top (1.64.7) / compact = cover left (1.64)
         "media_scale": 1.0,             # size of the music card (slider 60–200 %)
         "media_cover": True,            # album cover left of title and artist

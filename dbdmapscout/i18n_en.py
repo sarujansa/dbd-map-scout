@@ -1178,4 +1178,8 @@ EN = {
     'Systemwerte': 'System values',
     'Ziehst: {name}': 'Dragging: {name}',
     'Unter der Maus: {name}': 'Under the mouse: {name}',
+    'Original (lila Boden)': 'Original (lilac floor)',
+    'Dunkel – wie Fallen Refuge (durchsichtiger Boden)': 'Dark – like Fallen Refuge (see-through floor)',
+    'Kartenstil': 'Map style',
+    'Kartenstil: {style}.': 'Map style: {style}.',
 }
