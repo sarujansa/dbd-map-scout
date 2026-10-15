@@ -691,6 +691,8 @@ def test_search_finds_a_setting_and_lights_its_card(qapp, keep):
     win = keep(qt_window.MainWindow(lambda a, arg=None: posted.put((a, arg))))
     win.resize(1100, 800)
     win.show()
+    qapp.processEvents()
+    assert posted.empty()                                     # opening the window does not focus the search
     win.search.setFocus()
     qapp.processEvents()
     assert ("search_open", None) in [posted.get_nowait() for _i in range(posted.qsize())]   # App fills the pages

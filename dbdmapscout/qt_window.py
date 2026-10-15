@@ -1942,6 +1942,7 @@ class MainWindow(QMainWindow):
         self.search.setObjectName("navsearch")
         self.search.setPlaceholderText(_("Einstellung suchen …"))
         self.search.setClearButtonEnabled(True)
+        self.search.setFocusPolicy(Qt.ClickFocus)  # not the window's first focus: only by a click or Ctrl+F
         self.search_btn = QPushButton()
         self.search_btn.setObjectName("navsearchbtn")
         self.search_btn.setToolTip(_("Einstellung suchen (Strg+F)"))
