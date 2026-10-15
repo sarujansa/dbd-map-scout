@@ -78,8 +78,8 @@ class SysInfo:
         sys_on = side in HUD_SHOWN
         today = bool(self.settings["overlay"].get("show_today", True))
         self._media_ctx = (gx, gy, gw, gh, show)            # the music card is placed after the map
-        if not sys_on and today:
-            side = "right"                                  # only "today": at the top of the right bar
+        if not sys_on and today:                            # only "today": top of the right bar or dragged
+            side = "custom" if self.settings.get("today_side") == "custom" else "right"
         on = (sys_on or today) and self.hud is not None
         self.sysmon.active = sys_on and self.hud is not None and self.game is not None
         bar = layout.bar_width(gw, gh)
@@ -89,7 +89,7 @@ class SysInfo:
         rows = sysinfo.hud_rows(snap) if sys_on and self.hud is not None else []
         if on and today:
             rows = rows + ([[(" ", sysinfo.DIM)]] if rows else []) + self._today_rows(time.time())
-        editing = on and side == "custom" and self.overlay.editing
+        editing = on and self.overlay.editing          # 1.64.1: always draggable while moving, like the music
         if self.hud is not None:
             self.hud.set_editing(editing)
         if editing and not rows:
@@ -170,9 +170,8 @@ class SysInfo:
         """System values dropped somewhere: remember the place relative to the DBD window (like the map)."""
         gx, gy, gw, gh = self._game_rect()
         w, h = self.hud.size
-        self.settings.set("sysinfo_pos", [round(min(1.0, max(0.0, (x - gx) / max(1, gw - w))), 4),
-                                          round(min(1.0, max(0.0, (y - gy) / max(1, gh - h))), 4)])
-        self._save_soon()
+        self._hud_own_place(round(min(1.0, max(0.0, (x - gx) / max(1, gw - w))), 4),
+                            round(min(1.0, max(0.0, (y - gy) / max(1, gh - h))), 4))
 
     def _media_place(self):
         """The music card (1.64, user: own place, cover, size slider): below the system values (default), bottom
@@ -224,6 +223,28 @@ class SysInfo:
         if hasattr(self, "media_pos_var"):
             self.media_pos_var.set(_(dict(MEDIA_SPOTS)["custom"]))
         self._save_soon()
+
+    def _hud_own_place(self, fx, fy):
+        """System values (or "today" alone) dragged in the preview: their own place from now on (1.64.1). With
+        the system values off only "today" moves – they are not switched on by it."""
+        self.settings.set("sysinfo_pos", [fx, fy])
+        if self.settings.get("sysinfo", "off") in HUD_SHOWN:
+            self.settings.set("sysinfo", "custom")
+            if hasattr(self, "sysinfo_var"):
+                self.sysinfo_var.set(_(dict(HUD_SIDES)["custom"]))
+        else:
+            self.settings.set("today_side", "custom")
+        self._save_soon()
+        self._tick_overlay(reschedule=False)
+
+    def _music_own_place(self, fx, fy):
+        """Music card dragged in the preview: its own place from now on (1.64.1)."""
+        o = self.settings["overlay"]
+        o["media_xy"], o["media_pos"] = [fx, fy], "custom"
+        if hasattr(self, "media_pos_var"):
+            self.media_pos_var.set(_(dict(MEDIA_SPOTS)["custom"]))
+        self._save_soon()
+        self._tick_overlay(reschedule=False)
 
     def _media_spot_changed(self):
         key = dict((_(label), k) for k, label in MEDIA_SPOTS).get(self.media_pos_var.get(), "below")

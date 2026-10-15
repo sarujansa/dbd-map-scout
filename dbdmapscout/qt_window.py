@@ -1448,12 +1448,16 @@ class PreviewView(QWidget):
         self._data = {}
         self._pix = None                       # (picture object, size) -> QPixmap
         self._dragging = False
+        self._grab = None                      # (layer name, dx, dy) while an element is dragged
+        self.setMouseTracking(True)            # open hand over an element
         sp = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         sp.setHeightForWidth(True)
         self.setSizePolicy(sp)
         self.setMinimumHeight(120)
         self.setCursor(Qt.PointingHandCursor)
-        self.setToolTip(_("Klicken oder ziehen: Die Karte kommt an diese Stelle (eigene Position)."))
+        self.setToolTip(_("Erst „Mit der Maus verschieben“ drücken, dann Karte, Systemwerte oder Musik anfassen "
+                          "und ziehen – oder auf eine freie Stelle klicken: Die Karte kommt dorthin. Ende mit "
+                          "„Fertig“."))
 
     def hasHeightForWidth(self):
         return True
@@ -1526,6 +1530,17 @@ class PreviewView(QWidget):
             p.drawPixmap(round(ox + lx * s), round(oy + ly * s), pix)
         self._pix = fresh
         p.setOpacity(1.0)
+        if d.get("editing"):                       # moving is on: a frame round the screen and a note
+            accent = QColor(qt_theme.colours(True)["accent"])
+            p.setPen(QPen(accent, 2))
+            p.setBrush(Qt.NoBrush)
+            p.drawRoundedRect(screen.adjusted(-1, -1, 1, 1), 4, 4)
+            nf = QFont(self.font())
+            nf.setBold(True)
+            p.setFont(nf)
+            p.setPen(accent)
+            p.drawText(game.adjusted(0, 6, 0, 0), Qt.AlignHCenter | Qt.AlignTop,
+                       _("Verschieben aktiv – Elemente ziehen, dann „Fertig“"))
         x, y, w, h, _mh = d.get("rect") or (0, 0, 0, 0, 0)
         if w and h:
             rx, ry = ox + x * s, oy + y * s
@@ -1535,25 +1550,49 @@ class PreviewView(QWidget):
             p.drawRect(QRectF(rx, ry, w * s, h * s))
         p.end()
 
-    def _move(self, e):
+    def _screen_pos(self, e):
         ox, oy, s = self._frame()
-        if s <= 0:
-            return
         pos = e.position()
-        self._post("act", (self._key, ("move", (pos.x() - ox) / s, (pos.y() - oy) / s)))
+        return ((pos.x() - ox) / s, (pos.y() - oy) / s) if s > 0 else None
+
+    def layer_at(self, x, y):
+        """(name, dx, dy) of the topmost element under screen point (x, y), or None (1.64.1)."""
+        for name, lx, ly, lw, lh in reversed(self._data.get("layers") or ()):
+            if lx <= x <= lx + lw and ly <= y <= ly + lh:
+                return name, x - lx, y - ly
+        return None
+
+    def _move(self, e):
+        pt = self._screen_pos(e)
+        if pt is None:
+            return
+        if self._grab:                     # an element held at the place it was grabbed: its corner follows
+            name, dx, dy = self._grab
+            self._post("act", (self._key, ("place", name, pt[0] - dx, pt[1] - dy)))
+        else:                              # empty place: the map's centre goes there
+            self._post("act", (self._key, ("move", pt[0], pt[1])))
 
     def mousePressEvent(self, e):
-        if e.button() == Qt.LeftButton:
+        if e.button() == Qt.LeftButton and self._data.get("editing"):
+            pt = self._screen_pos(e)
+            self._grab = self.layer_at(*pt) if pt else None
             self._dragging = True
             self.setCursor(Qt.ClosedHandCursor)
-            self._move(e)
+            if not self._grab:
+                self._move(e)
 
     def mouseMoveEvent(self, e):
         if self._dragging:
             self._move(e)
+        elif not self._data.get("editing"):
+            self.setCursor(Qt.ArrowCursor)
+        else:
+            pt = self._screen_pos(e)
+            self.setCursor(Qt.OpenHandCursor if pt and self.layer_at(*pt) else Qt.PointingHandCursor)
 
     def mouseReleaseEvent(self, _e):
         self._dragging = False
+        self._grab = None
         self.setCursor(Qt.PointingHandCursor)
 
 
