@@ -573,9 +573,9 @@ EN = {
     "Test beendet.": "Test ended.",
     "Diagnose in die Zwischenablage kopiert (auch als diagnose.txt gespeichert).":
         "Diagnostics copied to the clipboard (also saved as diagnose.txt).",
-    "Erst eine Map wählen, dann lässt sich das Overlay verschieben.": "Choose a map first, then the overlay can be moved.",
-    "Overlay mit der Maus ziehen, Mausrad = Grösse. Danach „Fertig“ oder Hotkey.":
-        "Drag the overlay with the mouse, mouse wheel = size. Then “Done” or the hotkey.",
+    "Karte, Systemwerte und Musik mit der Maus ziehen (im Spiel oder in der Vorschau), Mausrad = Grösse. Danach „Fertig“ oder Hotkey.":
+        "Drag the map, the system values and the music with the mouse (in the game or in the preview), mouse wheel = size. Then “Done” or the hotkey.",
+    "Verschieben aktiv – Elemente ziehen, dann „Fertig“": "Moving is on – drag the elements, then “Done”",
     "Position zurückgesetzt (automatisch).": "Position reset (automatic).",
     "keine Map": "no map",
     "ausgeblendet": "hidden",
@@ -1092,8 +1092,8 @@ EN = {
     'über {n} Runden': 'over {n} rounds',
     # 1.61: overlay preview
     'Bilanz: Ø 2,8 Kills · 12 Runden': 'Record: avg. 2.8 kills · 12 rounds',
-    'Klicken oder ziehen: Die Karte kommt an diese Stelle (eigene Position).':
-        'Click or drag: the map goes to this place (own position).',
+    'Erst „Mit der Maus verschieben“ drücken, dann Karte, Systemwerte oder Musik anfassen und ziehen – oder auf eine freie Stelle klicken: Die Karte kommt dorthin. Ende mit „Fertig“.':
+        'First press “Move with the mouse”, then grab and drag the map, the system values or the music – or click an empty spot: the map goes there. End with “Done”.',
     'Spielbild': 'Game picture',
     'Map-Name': 'Map name',
     # 1.62: colour themes
