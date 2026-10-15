@@ -48,7 +48,7 @@ SPECS = {
         ("card", "ov.pos", (
             ("preview", "ov.preview"),
             ("row", (("label", "ov.sel.label"), ("combo", "ov.sel"), ("stretch",))), ("slider", "ov.sel_size"),
-            ("hint", "ov.size_cap"),
+            ("hint", "ov.size_scope"), ("hint", "ov.size_cap"),
             ("row", (("label", "ov.anchor.label"), ("combo", "ov.anchor"), ("stretch",), ("button", "ov.reset"))),
             ("slider", "ov.posx"), ("slider", "ov.posy"),
             ("row", (("button", "ov.edit"), ("button", "ov.test"), ("button", "ov.undo"), ("stretch",))),
