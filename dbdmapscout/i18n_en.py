@@ -1091,11 +1091,11 @@ EN = {
     'Ø GPU-Temperatur': 'Avg. GPU temperature',
     'über {n} Runden': 'over {n} rounds',
     # 1.61: overlay preview
-    'FRANKFURT · PING 31 MS': 'FRANKFURT · PING 31 MS',
+    'Bilanz: Ø 2,8 Kills · 12 Runden': 'Record: avg. 2.8 kills · 12 rounds',
     'Klicken oder ziehen: Die Karte kommt an diese Stelle (eigene Position).':
         'Click or drag: the map goes to this place (own position).',
     'Spielbild': 'Game picture',
-    'Ø 2,8 KILLS · 12 RUNDEN': 'AVG. 2.8 KILLS · 12 ROUNDS',
+    'Map-Name': 'Map name',
     # 1.62: colour themes
     'Farbthema': 'Colour theme',
     'Gold (Standard)': 'Gold (default)',
