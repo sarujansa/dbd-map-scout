@@ -474,6 +474,9 @@ def make_control(kind, key, post):
         w.clicked.connect(lambda checked: post("act", (key, checked)))
     elif kind == "button":
         w = QPushButton()
+        # Tab only, no focus by click (1.62.2): a button that disables itself on click passed its focus on and
+        # the page scrolled to whatever came next in the tab order
+        w.setFocusPolicy(Qt.TabFocus)
         w.clicked.connect(lambda _c=False: post("act", (key, None)))
     elif kind == "combo":
         w = QComboBox()
@@ -677,6 +680,26 @@ class CardColumn(QWidget):
         self.cards = [(i, by_id[i]) for i in ids]
         for _i, card in self.cards:
             self._lay.addWidget(card)
+        self._tab_order()
+
+    def _tab_order(self):
+        """Tab order = the order shown (1.62.2): Qt keeps the order the widgets were made in. A button that
+        disables itself on click ("Jetzt nach Updates suchen") hands its focus to the next one in that chain –
+        a card that now sits far below – and the page scrolled down to it."""
+        def focusable(card):
+            return [w for w in card.findChildren(QWidget) if w.focusPolicy() & Qt.TabFocus]
+        widgets = [w for _i, card in self.cards for w in focusable(card)]
+        if len(widgets) < 2:
+            return
+        inside = set(map(id, widgets))
+        by_id = dict(self.cards)
+        first = next((w for i in self._default for w in focusable(by_id[i])), None)
+        prev = first.previousInFocusChain() if first is not None else None
+        while prev is not None and id(prev) in inside:
+            prev = prev.previousInFocusChain()
+        chain = ([prev] if prev is not None else []) + widgets
+        for a, b in zip(chain, chain[1:]):
+            QWidget.setTabOrder(a, b)
 
     def begin(self, card):
         self._drag = card
@@ -729,8 +752,10 @@ class CardColumn(QWidget):
         card.setProperty("dragging", False)
         card.style().unpolish(card)
         card.style().polish(card)
-        if self.ids() != self._before and self.on_order is not None:
-            self.on_order(self.ids())
+        if self.ids() != self._before:
+            self._tab_order()
+            if self.on_order is not None:
+                self.on_order(self.ids())
 
 
 def _card_head(card_layout):

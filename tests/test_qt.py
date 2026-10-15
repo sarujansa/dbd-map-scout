@@ -367,6 +367,40 @@ def test_cards_can_be_put_in_own_order(qapp, keep):
     assert first.ids() == ["a", "b", "c"]
 
 
+def test_moved_card_keeps_the_page_still_and_tabs_in_shown_order(qapp, keep):
+    """1.62.2 (user: Updates at position 2, a click made the page jump down): a button that disables itself
+    took the focus by click and passed it on in the tab order of creation – to a card far below."""
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QPushButton, QScrollArea
+    from dbdmapscout import qt_window
+    posted = queue.Queue()
+    spec = tuple(("card", k, (("button", k + ".b"),) + tuple(("hint", f"{k}.h{i}") for i in range(12)))
+                 for k in "abcd")
+    page = keep(qt_window.FormPage(lambda a, arg=None: posted.put((a, arg)), "Einstellungen", spec, "settings"))
+    page.resize(700, 400)
+    page.show()
+    for k in "abcd":
+        page.controls[k + ".h0"][1].setText("Zeile\n" * 4)
+    page.apply_order({"0": ["a", "d", "b", "c"]})
+    qapp.processEvents()
+    button = page.controls["d.b"][1]
+    assert isinstance(button, QPushButton) and not button.focusPolicy() & Qt.ClickFocus
+    bar = page.findChildren(QScrollArea)[0].verticalScrollBar()
+    bar.setValue(0)
+    button.clicked.connect(lambda: button.setEnabled(False))   # like "Jetzt nach Updates suchen"
+    QTest.mouseClick(button, Qt.LeftButton, Qt.NoModifier, QPoint(5, 5))
+    qapp.processEvents()
+    assert bar.value() == 0
+    chain, w = [], page.controls["a.b"][1]
+    for _ in range(4):
+        chain.append(w)
+        w = w.nextInFocusChain()
+        while not isinstance(w, QPushButton):
+            w = w.nextInFocusChain()
+    assert chain == [page.controls[k + ".b"][1] for k in "adbc"]
+
+
 def test_chart_draws_columns_and_a_line(qapp, keep):
     from dbdmapscout import qt_window
     chart = keep(qt_window.Chart())
