@@ -581,6 +581,16 @@ class Tiles(Widget):
         self.data = []
 
 
+class Preview(Widget):
+    """A picture the window draws from ``source()`` (a dict, read on every refresh) – clicks and drags on it go
+    to ``command(value)``. The overlay tab's screen with the map on it (since 1.61)."""
+
+    def __init__(self, master=None, source=None, command=None, **kw):
+        super().__init__(master, **kw)
+        self.source = source or (lambda: {})
+        self.command = command
+
+
 class Toplevel(Widget):
     """A dialog: shown by the Qt window as a non-modal window built from its content (App._dialog)."""
 

@@ -31,6 +31,16 @@ class ServerTab:
                               "das Spiel wird nicht verändert). Nach „Auswahl anwenden“ DBD neu starten."),
                   style="Dim.TLabel", wraplength=430).pack(anchor="w")
         f_outer, f = f, reg
+        row = ui.Frame(f)
+        row.pack(fill="x", pady=(6, 0))          # above the list (1.61): one sees them without scrolling
+        self.srv_btns = [ui.Button(row, text=_("Ping messen"), command=self.srv_measure),
+                         ui.Button(row, text=_("Auswahl anwenden"), command=self.srv_apply),
+                         ui.Button(row, text=_("Alles freigeben"), command=self.srv_release)]
+        self.srv_btns[0].pack(side="left")
+        self.srv_btns[1].pack(side="left", padx=6)
+        self.srv_btns[2].pack(side="left")
+        self.srv_status = ui.StringVar(value="")
+        ui.Label(f, textvariable=self.srv_status, wraplength=430).pack(anchor="w", pady=(6, 0))
         tf = ui.Frame(f)
         tf.pack(fill="x", pady=(6, 0))
         t = ui.Treeview(tf, columns=("ping", "state"), show="tree headings", height=11, selectmode="browse")
@@ -50,16 +60,6 @@ class ServerTab:
             for code, name, grp in regions.REGIONS:
                 if grp == g:
                     t.insert(f"g:{g}", "end", iid=f"r:{code}", text=_(name), values=("", ""))
-        row = ui.Frame(f)
-        row.pack(fill="x", pady=(6, 0))
-        self.srv_btns = [ui.Button(row, text=_("Ping messen"), command=self.srv_measure),
-                         ui.Button(row, text=_("Auswahl anwenden"), command=self.srv_apply),
-                         ui.Button(row, text=_("Alles freigeben"), command=self.srv_release)]
-        self.srv_btns[0].pack(side="left")
-        self.srv_btns[1].pack(side="left", padx=6)
-        self.srv_btns[2].pack(side="left")
-        self.srv_status = ui.StringVar(value="")
-        ui.Label(f, textvariable=self.srv_status, wraplength=430).pack(anchor="w", pady=(6, 0))
         ui.Label(f_outer, text=_("Mit VPN unzuverlässig. Region-Tools sind von BHVR weder erlaubt noch verboten – "
                                   "auf eigene Verantwortung."), style="Dim.TLabel", wraplength=440).pack(
             anchor="w", pady=(6, 0))
