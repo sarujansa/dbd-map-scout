@@ -12,9 +12,10 @@ import html
 import sys
 
 from PIL import Image
-from PySide6.QtCore import QByteArray, QEvent, QSize, Qt, QTimer
+from PySide6.QtCore import QByteArray, QEvent, QObject, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QFontDatabase, QIcon, QImage, QPalette, QPixmap
-from PySide6.QtWidgets import (QApplication, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel,
+from PySide6.QtWidgets import (QAbstractScrollArea, QAbstractSlider, QAbstractSpinBox, QApplication, QComboBox,
+                               QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel,
                                QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QPlainTextEdit, QProgressBar,
                                QPushButton, QRadioButton,
                                QScrollArea, QSizePolicy, QSlider, QStackedWidget, QTabWidget, QTreeWidget,
@@ -154,7 +155,31 @@ def application() -> QApplication:
         app.setStyle("Fusion")
         app.setQuitOnLastWindowClosed(False)          # closing goes through the App (quit / tray)
         QFontDatabase.addApplicationFont(FIRA)         # map names like on the map pictures
+    global _WHEEL_GUARD
+    if _WHEEL_GUARD is None:
+        _WHEEL_GUARD = WheelGuard(app)
+        app.installEventFilter(_WHEEL_GUARD)
     return app
+
+
+_WHEEL_GUARD = None                                    # kept here: Python would free the filter otherwise
+
+
+class WheelGuard(QObject):
+    """The mouse wheel scrolls the page, never a setting (1.64.8, user: scrolling the page changed some random
+    field). Qt hands the wheel to the combo box or slider under the mouse; here it goes to the page's scroll bar."""
+
+    def eventFilter(self, obj, event):
+        if event.type() != QEvent.Wheel or not isinstance(obj, (QComboBox, QAbstractSlider, QAbstractSpinBox)):
+            return False
+        if isinstance(obj, QAbstractSlider) and obj.inherits("QScrollBar"):
+            return False                               # the scroll bars themselves scroll as usual
+        area = obj.parentWidget()
+        while area is not None and not isinstance(area, QAbstractScrollArea):
+            area = area.parentWidget()
+        if area is not None:
+            QApplication.sendEvent(area.verticalScrollBar(), event)
+        return True                                    # the setting never changes
 
 
 def pixmap_from_pil(img: Image.Image, height: int, ratio: float = 1.0) -> QPixmap:

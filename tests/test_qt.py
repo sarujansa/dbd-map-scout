@@ -917,3 +917,36 @@ def test_old_oled_theme_becomes_the_switch(tmp_path):
     path.write_text(json.dumps({"settings_version": 3, "color_theme": "oled"}), encoding="utf-8")
     s = Settings(str(path))
     assert s["color_theme"] == "gold" and s["oled_black"] is True
+
+
+def test_the_mouse_wheel_scrolls_the_page_not_a_setting(qapp):
+    """User: scrolling the page with the mouse wheel changed some random field (combo box, slider)."""
+    from PySide6.QtCore import QPoint, QPointF, Qt
+    from PySide6.QtGui import QWheelEvent
+    from PySide6.QtWidgets import QComboBox, QScrollArea, QSlider, QVBoxLayout, QWidget
+    sa = QScrollArea()
+    sa.setWidgetResizable(True)
+    body = QWidget()
+    lay = QVBoxLayout(body)
+    combo, slider = QComboBox(), QSlider()
+    combo.addItems(["a", "b", "c"])
+    slider.setRange(0, 100)
+    slider.setValue(50)
+    lay.addWidget(combo)
+    lay.addWidget(slider)
+    body.setMinimumHeight(3000)
+    sa.setWidget(body)
+    sa.resize(300, 200)
+    sa.show()
+    qapp.processEvents()
+
+    def wheel(w):
+        e = QWheelEvent(QPointF(5, 5), QPointF(w.mapToGlobal(QPoint(5, 5))), QPoint(0, 0), QPoint(0, -120),
+                        Qt.NoButton, Qt.NoModifier, Qt.NoScrollPhase, False)
+        qapp.sendEvent(w, e)
+
+    wheel(combo)
+    wheel(slider)
+    assert combo.currentIndex() == 0 and slider.value() == 50
+    assert sa.verticalScrollBar().value() > 0                         # the page scrolled instead
+    sa.close()
