@@ -95,6 +95,16 @@ class SettingsTab:
         self.dark_var = ui.BooleanVar(value=self.settings.get("dark_mode", True))
         self._reg("st.dark", ui.Checkbutton(look, text=_("Dark Mode"), variable=self.dark_var,
                                              command=self._dark_changed)).pack(anchor="w", pady=(4, 0))
+        tr = ui.Frame(look)
+        tr.pack(fill="x", pady=(6, 0))
+        self._reg("st.theme.label", ui.Label(tr, text=_("Farbthema"))).pack(side="left")
+        self._themes = [(k, _(label)) for k, (label, _c) in qt_theme.THEMES.items()]
+        self.theme_var = ui.StringVar(value=dict(self._themes).get(self.settings.get("color_theme", "gold"),
+                                                                   self._themes[0][1]))
+        tcb = self._reg("st.theme", ui.Combobox(tr, textvariable=self.theme_var, state="readonly", width=18,
+                                                 values=[lbl for _k, lbl in self._themes]))
+        tcb.pack(side="left", padx=8)
+        tcb.bind("<<ComboboxSelected>>", lambda e: self._theme_changed())
         zr = ui.Frame(look)
         zr.pack(fill="x", pady=(6, 0))
         self._reg("st.zoom.label", ui.Label(zr, text=_("Schriftgröße"))).pack(side="left")
@@ -237,6 +247,12 @@ class SettingsTab:
             self.quit()
         else:
             self._inform(_("Einstellungen importieren"), _("Bitte das Programm jetzt neu starten."))
+
+    def _theme_changed(self):
+        key = next((k for k, lbl in self._themes if lbl == self.theme_var.get()), "gold")
+        self.settings.set("color_theme", key)
+        self._save_soon()
+        self._apply_theme()
 
     def _card_order_reset(self):
         """The cards of all pages back in their built-in order."""
