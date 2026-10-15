@@ -382,8 +382,17 @@ def test_moving_without_a_map_shows_a_test_map(app_root):
         assert app.overlay.editing and app.overlay.has_map() and app._test_map
         assert app.edit_btn.cget("text") == "Fertig"
         app.toggle_edit()
-        assert not app.overlay.editing and not app.user_visible and not app._test_map
-        app.toggle_edit()                                     # again: the loaded test map is reused
+        assert not app.overlay.editing and not app._test_map
+        # 1.65.2 (user: after the test "Warte auf Map" never came again): the test map is gone completely
+        assert not app.overlay.has_map() and app.current is None and not app.worker.map_on_screen
+        assert app.worker.watch_gen is None and app.round.start_t is None
+        assert app._waiting_lines() == ["Warte auf Map"]
+        app.test_overlay()                                    # "Overlay testen" without a map: the same after it
+        assert app.overlay.has_map() and app._test_map
+        app._force_until = 0
+        app._tick_overlay(reschedule=False)
+        assert not app.overlay.has_map() and app._waiting_lines() == ["Warte auf Map"]
+        app.toggle_edit()                                     # again: a test map to grab
         mid = list(app.catalog.maps)[3]
         app.show_map(mid, 1, "manual")                        # a real choice while moving …
         app.toggle_edit()
