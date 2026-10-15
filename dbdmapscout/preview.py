@@ -34,9 +34,11 @@ def sample_snapshot():
     return sysinfo.Snapshot(t=time.time(), **SAMPLE_SNAPSHOT)
 
 
-def overlay_picture(pic, map_h: int, caption: str, transparent: bool, timer: str, server: str, ping, record: str):
-    """The map window's picture (PictureOverlay.render for one frame); ``pic`` None = info only."""
-    text_h = max(40, map_h)
+def overlay_picture(pic, map_h: int, caption: str, transparent: bool, timer: str, server: str, ping, record: str,
+                    text_h: int = 0):
+    """The map window's picture (PictureOverlay.render for one frame); ``pic`` None = info only; ``text_h``: size
+    of the name and the lines below (1.65: its own, not the map's)."""
+    text_h = max(40, text_h or map_h)
     base = compose(pic, map_h, caption, transparent, False, text_h) if pic is not None \
         else Image.new("RGBA", (1, 1), (0, 0, 0, 0))
     if timer or server or record:
@@ -93,19 +95,22 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
     _x, _y, _w, _h, mh = layout.preview_rect(gw, gh, o["anchor"], o.get("pos_x", 0.0), o.get("pos_y", 0.0),
                                              height_frac, o["margin"], o.get("keep_in_bar", True), aspect, rows,
                                              drop)
+    text_h = int(gh * 0.36 * min(2.0, max(0.5, float(o.get("text_scale", 1.0)))))     # App._text_height
     over = fitted(lambda h: overlay_picture(map_pic, h, caption, o.get("transparent", True), info.get("timer", ""),
-                                            info.get("server", ""), info.get("ping"), info.get("record", "")),
-                  mh, 0, ("map", id(map_pic), caption, o.get("transparent", True), repr(info)))
+                                            info.get("server", ""), info.get("ping"), info.get("record", ""),
+                                            text_h),
+                  mh, 0, ("map", id(map_pic), caption, o.get("transparent", True), repr(info), text_h))
     x0, _y0 = layout.preview_place(gw, gh, o["anchor"], o.get("pos_x", 0.0), o.get("pos_y", 0.0), margin, False,
                                    over.width, over.height, drop)
     in_bar = (o["anchor"] == "auto" or o.get("keep_in_bar", True)) and \
         layout.bar_side(o["anchor"], x0, over.width, 0, gw, bar)
     if in_bar and over.width > avail:                   # info block wider than the map: smaller, like the game
+        f = avail / over.width
         over = fitted(lambda h: overlay_picture(map_pic, h, caption, o.get("transparent", True),
                                                 info.get("timer", ""), info.get("server", ""), info.get("ping"),
-                                                info.get("record", "")),
-                      max(80, int(mh * avail / over.width)), 0,
-                      ("map", id(map_pic), caption, o.get("transparent", True), repr(info)))
+                                                info.get("record", ""), max(40, int(text_h * f))),
+                      max(80, int(mh * f)), 0,
+                      ("map", id(map_pic), caption, o.get("transparent", True), repr(info), int(text_h * f)))
     mx, my = layout.preview_place(gw, gh, o["anchor"], o.get("pos_x", 0.0), o.get("pos_y", 0.0), margin,
                                   o.get("keep_in_bar", True), over.width, over.height, drop)
     map_rect = (mx, my, over.width, over.height)
