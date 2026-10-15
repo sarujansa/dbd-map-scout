@@ -47,8 +47,6 @@ class StatsTab:
     # -------------------------------------------------------------- tab: statistics
     def _tab_stats(self):
         outer, f = self._scroll_tab()
-        self.stats_today_var = ui.StringVar(value="")       # today at a glance, independent of the filters
-        ui.Label(f, textvariable=self.stats_today_var, wraplength=540).pack(anchor="w", pady=(0, 6))
         fr = ui.Frame(f)
         fr.pack(fill="x", pady=(0, 6))
         self._stats_periods = [(k, _(label)) for k, label in STATS_PERIODS]
@@ -75,21 +73,22 @@ class StatsTab:
                                             values=[lbl for _k, lbl in self._stats_killers])
         self.stats_killer_cb.pack(side="left", padx=(8, 0))
         self.stats_killer_cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
-        # dashboard (1.58): key figures, maps, killer × map for what the filters selected
-        self.stats_dash = ui.Dashboard(f)
-        self.stats_dash.pack(fill="x")
-        self.stats_lost_var = ui.StringVar(value="")
-        self.stats_lost_label = ui.Label(f, textvariable=self.stats_lost_var, wraplength=540)   # only when needed
-        ui.Label(f, text=_("Runden vom Map-Banner bis zum Rundenende (ab 1 min), nur lokal gespeichert. Kills, Escapes "
-                            "und Bloodpoints laut stats.deadbydaylight.com, sobald eine Runde dort zugeordnet ist."),
-                  style="Dim.TLabel", wraplength=540).pack(anchor="w", pady=(2, 6))
-        row = ui.Frame(f)                              # above the tables: they fill the rest of the tab
-        row.pack(fill="x", pady=(0, 6))
-        ui.Button(row, text=_("Stats-Seite öffnen"), command=lambda: self._official_open(False)).pack(side="left")
-        ui.Button(row, text=_("Verlauf löschen"), command=self._stats_clear).pack(side="left", padx=(6, 0))
-        # one table at a time: sub-tabs instead of five tables below each other
+        ui.Button(fr, text=_("Verlauf löschen"), command=self._stats_clear).pack(side="right")
+        ui.Button(fr, text=_("Stats-Seite öffnen"),
+                  command=lambda: self._official_open(False)).pack(side="right", padx=(0, 6))
+        # one thing at a time: the dashboard and each table on a sub-tab of its own, filling the window's height
+        # (1.58.1 – before, dashboard and buttons stood above the tables and left them a few rows)
         self.stats_nb = ui.Notebook(f)
         self.stats_nb.pack(fill="both", expand=True)
+        box_d = self._stats_page(_("Übersicht"))
+        self.stats_dash = ui.Dashboard(box_d)       # 1.58: key figures, maps, killer × map for the filters
+        self.stats_dash.pack(fill="x")
+        self.stats_lost_var = ui.StringVar(value="")
+        self.stats_lost_label = ui.Label(box_d, textvariable=self.stats_lost_var, wraplength=540)  # only when needed
+        ui.Label(box_d, text=_("Runden vom Map-Banner bis zum Rundenende (ab 1 min), nur lokal gespeichert. Kills, "
+                                "Escapes und Bloodpoints laut stats.deadbydaylight.com, sobald eine Runde dort "
+                                "zugeordnet ist."),
+                  style="Dim.TLabel", wraplength=540).pack(anchor="w", pady=(6, 0))
         box = self._stats_page(_("Maps"))
         self.stats_maps = self._stats_tree(box, (("map", _("Map"), 130, "w"), ("n", _("Runden"), 62, "e"),
                                                  ("k", _("Killer"), 58, "e"), ("kills", _("Ø Kills"), 62, "e"),
@@ -225,27 +224,6 @@ class StatsTab:
             return _("ohne Region")
         return _(regions.NAMES.get(code, code))
 
-    def _today_text(self, d, s=None):
-        """``s``: official.summary() of today's rounds with official data (kills, escapes, bloodpoints)."""
-        if not d["count"]:
-            return _("Heute: noch keine Runde.")
-        parts = [_("Heute: {n} Runden ({time})", n=d["count"], time=fmt_duration(d["total"]))]
-        if d["killer"] or d["survivor"]:
-            parts.append(_("{k} Killer / {s} Survivor", k=d["killer"], s=d["survivor"]))
-        if s and s["killer"]:
-            parts.append(_("Ø {kills} Kills", kills=f"{s['kills']:.1f}"))
-        if s and s["survivor"]:
-            parts.append(_("{share} entkommen", share=f"{s['escaped']:.0%}"))
-        if s and s["bp_matches"]:
-            parts.append(_("{bp} BP", bp=_bp(s["bp"])))
-        if d["wait"] is not None:
-            parts.append(_("Ø Wartezeit {time}", time=fmt_duration(d["wait"])))
-        if d["top_killer"]:
-            parts.append(_("meist {killer}", killer=killer_label(d["top_killer"])))
-        if d["ping"] is not None:
-            parts.append(_("Ping {ms} ms", ms=f"{d['ping']:.0f}"))
-        return " · ".join(parts)
-
     def _official_join(self):
         """The rounds (rounds.jsonl) with their official matches – the base of the statistics and the check.
         Rounds whose end was never detected count with the page's length once a match fits them."""
@@ -307,9 +285,6 @@ class StatsTab:
             killer = None
         self.stats_killer_cb.configure(values=[lbl for _k, lbl in self._stats_killers])
         self.stats_killer_var.set(dict(self._stats_killers)[killer])
-        day = history.period_start("day", time.time())
-        today = [off[id(r)] for r in all_rounds if r.t >= day and id(r) in off and not r.custom]
-        self.stats_today_var.set(self._today_text(history.today(all_rounds, time.time()), official.summary(today)))
         since = history.period_start(period, time.time())
         rounds = history.select(all_rounds, since=since, region=wanted, role=role, killer=killer)
         ids = {id(r) for r in rounds}

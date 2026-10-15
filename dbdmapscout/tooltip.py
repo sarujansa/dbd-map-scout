@@ -44,6 +44,8 @@ TIPS = {
         "Zeigt unter dem Rundentimer, wie es dir auf dieser Map bisher ging: als Killer Ø Kills, als Survivor den "
         "Anteil Escapes – aus den Runden mit Daten der Stats-Seite, ab 3 Runden.",
     "Verstanden": "Hinweis schliessen – er erscheint nicht wieder.",
+    "Anzeigen": "Blendet die gewählte Map jetzt als Overlay ein – die Erkennung übernimmt beim nächsten Match "
+                "wieder.",
     "Killer setzen": "Setzt den Killer nur für die markierte Runde und zählt sie als Killer-Runde – z. B. wenn sie "
                      "fälschlich als Survivor gezählt wurde oder der Name falsch gelesen wurde.",
     "Zuordnungen löschen": "Entfernt alle eigenen Killer-Zuordnungen; die Namen erscheinen wieder so, wie sie gelesen "
