@@ -70,3 +70,31 @@ def test_centre_guides_are_thin_lines_and_blacked_out_for_the_detection():
     img = np.full((1440, 3440, 3), 200, np.uint8)
     w._mask_overlay(img, 0, 0)
     assert img[:, 1719:1722].max() == 0 and img[719:722].max() == 0 and img[100, 100].min() == 200
+
+
+def test_onnxruntime_telemetry_is_off_before_it_is_loaded():
+    """1.64.7: onnxruntime sends Microsoft telemetry (measured in the container: mobile.events.data.microsoft.com,
+    4 tries in 40 s) unless ORT_DISABLE_TELEMETRY is set before it loads – the package sets it on import, so even
+    a fresh interpreter that loads onnxruntime through dbdmapscout has it."""
+    import subprocess
+    code = ("import os; os.environ.pop('ORT_DISABLE_TELEMETRY', None); import dbdmapscout.ocr; "
+            "print(os.environ.get('ORT_DISABLE_TELEMETRY'))")
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
+                         cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    assert out.stdout.strip() == "1", out.stderr
+
+
+def test_system_values_keep_their_place_while_values_change_width():
+    """1.64.7 (user: "bewegt sich immer leicht nach rechts und links"): placed by the widest width seen."""
+    state, w = layout.steady_width(None, ("right", 1440, ("CPU ",)), 300)
+    state, w2 = layout.steady_width(state, ("right", 1440, ("CPU ",)), 280)       # "100 %" → "38 %"
+    assert w == w2 == 300
+    state, w3 = layout.steady_width(state, ("right", 1440, ("CPU ", "GPU ")), 250)   # other rows: anew
+    assert w3 == 250
+
+
+def test_edit_frame_names_the_element_without_changing_its_size():
+    from dbdmapscout.overlay_win32 import BORDER, add_border
+    pic = add_border(Image.new("RGBA", (300, 200), (0, 0, 0, 0)), "MUSIK")
+    assert pic.size == (300, 200)                              # no jump after "Fertig"
+    assert pic.getpixel((2, 2)) == BORDER and pic.getpixel((150, 199)) == BORDER

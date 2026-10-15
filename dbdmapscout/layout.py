@@ -201,3 +201,13 @@ def media_xy(spot: str, game, size, margin: int, hud=None, own=None):
         return min(hud[0], gx + gw - margin - w), hud[1] + hud[3] + max(2, margin // 2)
     return gx + gw - margin - w, gy + margin
 
+
+def steady_width(state, key, w: int):
+    """(new state, width to place by) for a block whose width changes with its values (1.64.7, user: the system
+    values moved left and right): the widest width seen for the same ``key`` (side, size, row labels) – placed
+    by it, a right-aligned block keeps its left edge instead of following every "38 %" → "100 %"."""
+    if state is None or state[0] != key:
+        return (key, w), w
+    width = max(state[1], w)
+    return (key, width), width
+
