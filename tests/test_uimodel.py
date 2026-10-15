@@ -277,6 +277,11 @@ def test_the_program_starts_shows_every_page_and_quits(app_root):
             app._qt_post("act", ("ov.preview", ("move", 300, 300)))   # a click on the overlay preview
             app._qt_post("act", ("ov.preview", ("place", "music", 0, 0)))     # the music card dragged there
             app._qt_post("act", ("ov.preview", ("place", "hud", 0, 0)))       # the system values too
+            app._qt_post("act", ("ov.preview", ("select", "hud")))            # picked (1.64.9) …
+            app._qt_post("act", ("ov.sel_size", 150))                         # … and sized by the one slider
+            app._qt_post("act", ("ov.preview", ("resize", "music", 10 ** 6)))  # corner/wheel: as big as it goes
+            app._qt_post("act", ("ov.sel", "Karte"))                          # the map from the list
+            app._qt_post("act", ("ov.sel_size", 50))
             app._qt_post("act", ("ov.edit", None))                   # "Fertig"
             app._qt_post("setup_done")
             app._qt_post("act", ("st.swatches", "#E0508F"))   # a square of the colour palette
@@ -288,6 +293,9 @@ def test_the_program_starts_shows_every_page_and_quits(app_root):
             assert app.settings["overlay"]["anchor"] == "custom"
             assert (app.settings["overlay"]["media_pos"], app.settings["overlay"]["media_xy"]) == ("custom", [0.0, 0.0])
             assert (app.settings["sysinfo"], app.settings["sysinfo_pos"]) == ("custom", [0.0, 0.0])
+            o = app.settings["overlay"]
+            assert (o["hud_scale"], o["media_scale"], o["height"]) == (1.5, 2.0, 0.5)
+            assert app._sel == "map" and app.sel_scale.cget("to") == 90 and app.media_size_var.get() == 200
             assert (app.settings["color_theme"], app.settings["accent_custom"]) == ("custom", "#e0508f")
             assert app.swatches.current == "#e0508f" and app.theme_var.get() == "Eigene Farbe"
             order = app.settings["card_order"]["settings"]["0"]

@@ -42,6 +42,15 @@ MEDIA_SPOTS = [("below", N_("Unter den Systemwerten")), ("bottom_right", N_("Rec
                ("custom", N_("Eigene Position (mit der Maus verschieben)"))]
 MEDIA_STYLES = [("big", N_("Groß – Cover oben, Titel darunter")), ("compact", N_("Kompakt – Cover links"))]
 MEDIA_SCALE = (60, 200)                     # slider of the music card, percent
+HUD_SCALE = (60, 200)                       # size of the system values / "today", percent (1.64.9)
+MAP_SCALE = (15, 90)                        # size of the map, percent of the game height
+# 1.64.9 (user: one size for what was picked instead of three sliders): the elements of the preview
+SELECTABLE = (("map", N_("Karte")), ("hud", N_("Systemwerte · Heute")), ("music", N_("Musik")))
+
+
+def hud_scale(o: dict) -> float:
+    """Size factor of the system values / "today" (setting overlay.hud_scale, 1.64.9)."""
+    return min(HUD_SCALE[1], max(HUD_SCALE[0], float(o.get("hud_scale", 1.0)) * 100)) / 100
 
 
 def make_hud(title: str = "DbD Map Scout Systemwerte"):
@@ -113,12 +122,13 @@ class SysInfo:
         avail_w, avail_h = (gw / 2 - 2 * margin, vb[1 if beside else 0] - 2 * margin) if vb else \
             (layout.max_width(bar, margin) if bar >= layout.MIN_BAR else gw / 3, gh)
         self.hud.opacity = o["opacity"]
-        w, h = self.hud.render(rows, gh)
+        hh = int(gh * hud_scale(o))
+        w, h = self.hud.render(rows, hh)
         f = layout.fit_scale(w, h, avail_w, avail_h)
         if f < 1:                                           # narrow bar / low bar: smaller text
-            w, h = self.hud.render(rows, max(200, int(gh * f)))
+            w, h = self.hud.render(rows, max(200, int(hh * f)))
         labels = tuple(r[0][0] for r in rows if r)
-        self._hud_steady, sw = layout.steady_width(getattr(self, "_hud_steady", None), (side, gh, labels), w)
+        self._hud_steady, sw = layout.steady_width(getattr(self, "_hud_steady", None), (side, hh, labels), w)
         if follow or beside:                                # shown by _hud_follow_map() after the map
             self._hud_pending = "beside" if beside else "above"
             return ("above", h) if follow else None
@@ -295,7 +305,80 @@ class SysInfo:
     def _media_size_changed(self):
         self.settings["overlay"]["media_scale"] = round(float(self.media_size_var.get()) / 100, 2)
         self._save_soon()
+        self._sel_sync()
         self._tick_overlay(reschedule=False)
+
+    # ---- 1.64.9: pick an element (preview or list), then one slider / the corner / the wheel sizes it
+    def _sel_range(self, name):
+        """(low, high, value) in percent of the element's size setting."""
+        o = self.settings["overlay"]
+        if name == "hud":
+            return HUD_SCALE + (hud_scale(o) * 100,)
+        if name == "music":
+            return MEDIA_SCALE + (min(MEDIA_SCALE[1], max(MEDIA_SCALE[0], o.get("media_scale", 1.0) * 100)),)
+        return MAP_SCALE + (self._map_height() * 100,)
+
+    def _select(self, name):
+        """The element the size slider works on (a click on it in the preview, or the list)."""
+        if name not in dict(SELECTABLE) or name == getattr(self, "_sel", "map"):
+            return
+        self._sel = name
+        self.sel_var.set(_(dict(SELECTABLE)[name]))
+        self._sel_sync()
+
+    def _sel_picked(self):
+        names = {_(label): k for k, label in SELECTABLE}
+        self._select(names.get(self.sel_var.get(), "map"))
+
+    def _sel_sync(self):
+        """Slider range, label and value for the element picked (also when its size changed elsewhere)."""
+        scale = getattr(self, "sel_scale", None)
+        if scale is None:
+            return
+        lo, hi, value = self._sel_range(getattr(self, "_sel", "map"))
+        scale.configure(from_=lo, to=hi)
+        self.sel_size_var.set(round(value))
+        self.sel_size_label.configure(text=f"{value:.0f} %")
+
+    def _sel_size_changed(self):
+        self._set_size(getattr(self, "_sel", "map"), float(self.sel_size_var.get()))
+
+    def _set_size(self, name, percent):
+        """Size of one element in percent (slider, corner in the preview, wheel). The map: its own size when the
+        map on display has one (hotkeys), else the size of all maps – the one you see is the one that changes."""
+        lo, hi, _v = self._sel_range(name)
+        percent = min(hi, max(lo, percent))
+        o = self.settings["overlay"]
+        if name == "hud":
+            o["hud_scale"] = round(percent / 100, 2)
+        elif name == "music":
+            o["media_scale"] = round(percent / 100, 2)
+            self.media_size_var.set(round(percent))
+        else:
+            value = round(percent / 100, 3)
+            own = o.get("map_heights") or {}
+            if self.current and own.get(self.current[0]):
+                own[self.current[0]] = value
+                self._show_map_size()
+            else:
+                o["height"] = value
+                self.size_var.set(value * 100)
+                self.size_label.configure(text=f"{percent:.0f} %")
+        if name == getattr(self, "_sel", "map"):
+            self.sel_size_var.set(round(percent))
+            self.sel_size_label.configure(text=f"{percent:.0f} %")
+        self._save_soon()
+        self._tick_overlay(reschedule=False)
+
+    def _resize_to(self, name, height):
+        """The preview's corner or wheel: element ``name`` this tall (screen px) – its setting scaled by how much
+        taller than now. Picks the element too."""
+        self._select(name)
+        sizes = {n: h for n, _x, _y, _w, h in self._preview_data()["layers"]}
+        if not sizes.get(name):
+            return
+        _lo, _hi, value = self._sel_range(name)
+        self._set_size(name, value * height / sizes[name])
 
     def _sysinfo_changed(self):
         key = dict((_(label), k) for k, label in HUD_SIDES).get(self.sysinfo_var.get(), "off")
