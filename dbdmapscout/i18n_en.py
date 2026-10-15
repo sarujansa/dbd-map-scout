@@ -1103,7 +1103,6 @@ EN = {
     'Eisblau': 'Ice blue',
     'Giftgrün': 'Toxic green',
     'Lila': 'Purple',
-    'OLED-Schwarz': 'OLED black',
     # 1.62: block "today" in the black bar
     'Darunter „Heute“: Runden, Spielzeit, Ø Kills/Entkommen, Uhrzeit (auch wenn die Systemwerte aus sind: rechts oben)':
         'Below them "Today": rounds, play time, avg. kills/escaped, clock (also with the system values off: top right)',
@@ -1114,4 +1113,8 @@ EN = {
     'UHR ': 'TIME ',
     '{n} RUNDEN · {time}': '{n} ROUNDS · {time}',
     'Ø KILLS ': 'AVG. KILLS ',
+    # 1.62.1: OLED black with every accent
+    'OLED-Schwarz (echtes Schwarz statt Grau im Dark Mode)': 'OLED black (true black instead of grey in dark mode)',
+    'Hintergründe in echtem Schwarz statt Dunkelgrau – passt zu OLED-Bildschirmen und geht mit jeder Akzentfarbe. Im hellen Modus ohne Wirkung.':
+        'Backgrounds in true black instead of dark grey – suits OLED screens and goes with every accent colour. No effect in light mode.',
 }
