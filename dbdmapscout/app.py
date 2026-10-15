@@ -30,7 +30,7 @@ from .app_stats import StatsTab
 from .app_lobby import LobbyInfo
 from .app_hotkeys import Hotkeys
 from .app_settings import SettingsTab
-from .app_sysinfo import HUD_SHOWN, HUD_SIDES, MEDIA_SCALE, MEDIA_SPOTS, MEDIA_STYLES, SysInfo
+from .app_sysinfo import HUD_SHOWN, HUD_SIDES, MAP_SCALE, MEDIA_SCALE, MEDIA_SPOTS, MEDIA_STYLES, SELECTABLE, SysInfo
 from .app_qt import QtShell
 
 LANGS = [("en", "EN"), ("de", "DE"), ("fr", "FR"), ("es", "ES"), ("es-MX", "ES-MX"), ("it", "IT"),
@@ -211,6 +211,20 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         pos.pack(fill="x")
         # 1.61: the screen with the map on it – where and how big, live; a click or drag places it there
         self._reg("ov.preview", ui.Preview(pos, source=self._preview_data, command=self._preview_pick)).pack(fill="x")
+        # 1.64.9: the element picked in the preview (or here) – one slider sizes it
+        rs = ui.Frame(pos)
+        rs.pack(fill="x", pady=(4, 0))
+        self._reg("ov.sel.label", ui.Label(rs, text=_("Element"), width=12)).pack(side="left")
+        self._sel = "map"
+        self.sel_var = ui.StringVar(value=_(dict(SELECTABLE)["map"]))
+        scb = self._reg("ov.sel", ui.Combobox(rs, textvariable=self.sel_var, state="readonly", width=24,
+                                               values=[_(t) for _k, t in SELECTABLE]))
+        scb.pack(side="left", padx=6)
+        scb.bind("<<ComboboxSelected>>", lambda e: self._sel_picked())
+        self.sel_size_var = ui.DoubleVar(value=o["height"] * 100)
+        self.sel_size_label = self._slider(pos, _("Grösse"), self.sel_size_var, *MAP_SCALE, self._sel_size_changed,
+                                           key="ov.sel_size")
+        self.sel_scale = self._qt_reg["ov.sel_size"]
         r = ui.Frame(pos)
         r.pack(fill="x", pady=(0, 4))
         self._reg("ov.anchor.label", ui.Label(r, text=_("Vorgabe"), width=12)).pack(side="left")
@@ -238,7 +252,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         look = self._reg("ov.look", ui.LabelFrame(f, text=_("Darstellung"), padding=8))
         look.pack(fill="x", pady=(8, 0))
         self.size_var = ui.DoubleVar(value=o["height"] * 100)
-        self.size_label = self._slider(look, _("Grösse"), self.size_var, 15, 90, self._size_changed, key="ov.size")
+        self.size_label = self._slider(look, _("Grösse"), self.size_var, *MAP_SCALE, self._size_changed, key="ov.size")
         self.map_size_row = ui.Frame(look)
         self.map_size_var = ui.StringVar(value="")
         self._reg("ov.map_size", ui.Label(self.map_size_row, textvariable=self.map_size_var, style="Dim.TLabel",
@@ -707,6 +721,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
             self.size_var.set(new * 100)
             self.size_label.configure(text=f"{new * 100:.0f} %")
         self._show_map_size()
+        self._sel_sync()
         self._save_soon()
         self._tick_overlay(reschedule=False)
 
@@ -766,6 +781,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
                 self.map_size_row.pack(fill="x", pady=(0, 3), after=self._size_row_after)
         elif self.map_size_row.winfo_manager():
             self.map_size_row.pack_forget()
+        self._sel_sync()                          # the size slider shows the size of the map on display
 
     def _reset_map_size(self):
         if not self.current:
@@ -1337,7 +1353,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
                 "layers": [(name, round(lx / f), round(ly / f), round(img.width / f), round(img.height / f))
                            for name, img, lx, ly in layers],
                 "pics": {name: img for name, img, _lx, _ly in layers}, "opacity": o["opacity"],
-                "editing": bool(self.overlay.editing)}
+                "editing": bool(self.overlay.editing), "selected": getattr(self, "_sel", "map")}
 
     def _preview_sample(self):
         """A map picture for the preview while none is on display (the first one of the catalog), loaded once."""
@@ -1358,7 +1374,13 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         return getattr(self, "_preview_pic", None)
 
     def _preview_pick(self, value):
+        if value[0] == "select":                  # 1.64.9: a click on an element picks it for the size slider
+            self._select(value[1])
+            return
         if not self.overlay.editing:              # only after "Mit der Maus verschieben" (user, 1.64.1)
+            return
+        if value[0] == "resize":                  # corner of the picked element / wheel over it
+            self._resize_to(value[1], value[2])
             return
         self._preview_pick_now(value)
 
@@ -1403,6 +1425,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
 
     def _size_changed(self):
         self.settings["overlay"]["height"] = round(self.size_var.get() / 100, 3)
+        self._sel_sync()
         self._save_soon()
         self._tick_overlay(reschedule=False)
 

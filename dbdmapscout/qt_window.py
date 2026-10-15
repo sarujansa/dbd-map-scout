@@ -46,12 +46,12 @@ SPECS = {
     "overlay": (
         ("card", "ov.pos", (
             ("preview", "ov.preview"),
+            ("row", (("label", "ov.sel.label"), ("combo", "ov.sel"), ("stretch",))), ("slider", "ov.sel_size"),
             ("row", (("label", "ov.anchor.label"), ("combo", "ov.anchor"), ("stretch",), ("button", "ov.reset"))),
             ("slider", "ov.posx"), ("slider", "ov.posy"),
             ("row", (("button", "ov.edit"), ("button", "ov.test"), ("stretch",))),
             ("hint", "ov.pos_hint"), ("check", "ov.keep_bar"))),
         ("card", "ov.look", (
-            ("slider", "ov.size"),
             ("row", (("hint", "ov.map_size"), ("stretch",), ("button", "ov.map_size_reset"))),
             ("slider", "ov.opacity"),
             ("check", "ov.show_map"), ("check", "ov.focus"), ("check", "ov.caption"), ("check", "ov.timer"),
@@ -62,7 +62,7 @@ SPECS = {
             ("hint", "ov.sys_text"), ("hint", "ov.sys_hint"), ("check", "ov.today"),
             ("check", "ov.media"), ("row", (("label", "ov.media_pos.label"), ("combo", "ov.media_pos"), ("stretch",))),
             ("row", (("label", "ov.media_style.label"), ("combo", "ov.media_style"), ("stretch",))),
-            ("slider", "ov.media_size"), ("check", "ov.media_cover"), ("check", "ov.media_progress"))),
+            ("check", "ov.media_cover"), ("check", "ov.media_progress"))),
     ),
     "settings": (
         ("card", "st.look", (
@@ -1479,15 +1479,16 @@ class PreviewView(QWidget):
         self._dragging = False
         self._grab = None                      # (layer name, dx, dy) while an element is dragged
         self._hover = None                     # layer under the mouse while moving (1.64.7)
+        self._sizing = None                    # (layer name, x, y, w, h) while its corner is dragged (1.64.9)
         self.setMouseTracking(True)            # open hand over an element
         sp = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         sp.setHeightForWidth(True)
         self.setSizePolicy(sp)
         self.setMinimumHeight(120)
         self.setCursor(Qt.PointingHandCursor)
-        self.setToolTip(_("Erst „Mit der Maus verschieben“ drücken, dann Karte, Systemwerte oder Musik anfassen "
-                          "und ziehen – oder auf eine freie Stelle klicken: Die Karte kommt dorthin. Ende mit "
-                          "„Fertig“."))
+        self.setToolTip(_("Klick auf Karte, Systemwerte oder Musik wählt das Element für den Regler „Grösse“. "
+                          "Mit „Mit der Maus verschieben“: Element ziehen = verschieben, an der Ecke ziehen oder "
+                          "Mausrad = Grösse, Klick auf eine freie Stelle setzt die Karte dorthin. Ende mit „Fertig“."))
 
     def hasHeightForWidth(self):
         return True
@@ -1575,7 +1576,7 @@ class PreviewView(QWidget):
             p.setFont(nf)
             p.setPen(accent)
             p.drawText(game.adjusted(0, 6, 0, 0), Qt.AlignHCenter | Qt.AlignTop,
-                       _("Verschieben aktiv – Elemente ziehen, dann „Fertig“"))
+                       _("Verschieben aktiv – ziehen = verschieben, Ecke oder Mausrad = Grösse, dann „Fertig“"))
         if d.get("editing"):                       # every element named; the one under the mouse in accent colour
             accent = QColor(qt_theme.colours(True)["accent"])
             held = self._grab[0] if self._grab else self._hover
@@ -1585,7 +1586,7 @@ class PreviewView(QWidget):
             p.setFont(tf)
             for name, lx, ly, lw, lh in d.get("layers") or ():
                 r = QRectF(ox + lx * s, oy + ly * s, lw * s, lh * s)
-                on = name == held
+                on = name == held or name == d.get("selected")
                 p.setPen(QPen(accent if on else QColor(255, 255, 255, 140), 2 if on else 1,
                               Qt.SolidLine if on else Qt.DashLine))
                 p.setBrush(Qt.NoBrush)
@@ -1596,6 +1597,12 @@ class PreviewView(QWidget):
                 p.fillRect(tr, accent if on else QColor(30, 30, 34, 220))
                 p.setPen(QColor(20, 16, 4) if on else QColor(235, 235, 235))
                 p.drawText(tr, Qt.AlignCenter, tag)
+            sel = self._layer(d.get("selected"))
+            if sel:                                # the picked element: its corner sizes it (1.64.9)
+                hr = self._handle_rect(sel, ox, oy, s)
+                p.setPen(QPen(QColor(20, 16, 4), 1))
+                p.setBrush(accent)
+                p.drawRect(hr)
             if held:
                 p.setPen(accent)
                 p.setFont(tf)
@@ -1603,6 +1610,9 @@ class PreviewView(QWidget):
                     _("Unter der Maus: {name}", name=_(PREVIEW_NAMES.get(held, held)))
                 p.drawText(game.adjusted(0, 0, 0, -6), Qt.AlignHCenter | Qt.AlignBottom, what)
         x, y, w, h, _mh = d.get("rect") or (0, 0, 0, 0, 0)
+        sel = self._layer(d.get("selected"))
+        if sel:                                    # the element the size slider works on (1.64.9)
+            _n, x, y, w, h = sel
         if w and h and not d.get("editing"):
             rx, ry = ox + x * s, oy + y * s
             pen = QPen(QColor(qt_theme.colours(True)["accent"]), 1.5, Qt.DashLine)
@@ -1615,6 +1625,38 @@ class PreviewView(QWidget):
         ox, oy, s = self._frame()
         pos = e.position()
         return ((pos.x() - ox) / s, (pos.y() - oy) / s) if s > 0 else None
+
+    def _layer(self, name):
+        return next((lay for lay in self._data.get("layers") or () if lay[0] == name), None)
+
+    HANDLE = 12                                # px (widget): the corner that sizes the picked element
+
+    def _handle_rect(self, layer, ox, oy, s):
+        from PySide6.QtCore import QRectF
+        _n, lx, ly, lw, lh = layer
+        k = self.HANDLE
+        return QRectF(ox + (lx + lw) * s - k / 2, oy + (ly + lh) * s - k / 2, k, k)
+
+    def _on_handle(self, e):
+        """The picked element when the mouse is on its corner (moving mode only)."""
+        sel = self._layer(self._data.get("selected")) if self._data.get("editing") else None
+        if sel is None:
+            return None
+        ox, oy, s = self._frame()
+        return sel if self._handle_rect(sel, ox, oy, s).adjusted(-3, -3, 3, 3).contains(e.position()) else None
+
+    def wheelEvent(self, e):
+        """Moving mode: the wheel over an element sizes it (like the wheel over the map in the game); else the
+        page scrolls."""
+        pt = self._screen_pos(e) if self._data.get("editing") else None
+        hit = self.layer_at(*pt) if pt else None
+        steps = e.angleDelta().y() / 120
+        if not hit or not steps:
+            e.ignore()
+            return
+        lay = self._layer(hit[0])
+        self._post("act", (self._key, ("resize", hit[0], lay[4] * 1.06 ** steps)))
+        e.accept()
 
     def layer_at(self, x, y):
         """(name, dx, dy) of the topmost element under screen point (x, y), or None (1.64.1)."""
@@ -1634,15 +1676,31 @@ class PreviewView(QWidget):
             self._post("act", (self._key, ("move", pt[0], pt[1])))
 
     def mousePressEvent(self, e):
-        if e.button() == Qt.LeftButton and self._data.get("editing"):
-            pt = self._screen_pos(e)
-            self._grab = self.layer_at(*pt) if pt else None
+        if e.button() != Qt.LeftButton:
+            return
+        corner = self._on_handle(e)
+        if corner:
+            self._sizing = corner
+            return
+        pt = self._screen_pos(e)
+        hit = self.layer_at(*pt) if pt else None
+        if hit:                                # 1.64.9: a click picks the element for the size slider
+            self._post("act", (self._key, ("select", hit[0])))
+        if self._data.get("editing"):
+            self._grab = hit
             self._dragging = True
             self.setCursor(Qt.ClosedHandCursor)
             if not self._grab:
                 self._move(e)
 
     def mouseMoveEvent(self, e):
+        if self._sizing:                       # the corner: as big as the mouse is from the top left corner
+            pt = self._screen_pos(e)
+            if pt:
+                name, lx, ly, lw, lh = self._sizing
+                f = max((pt[0] - lx) / max(1, lw), (pt[1] - ly) / max(1, lh), 0.05)
+                self._post("act", (self._key, ("resize", name, lh * f)))
+            return
         if self._dragging:
             self._move(e)
         elif not self._data.get("editing"):
@@ -1650,7 +1708,8 @@ class PreviewView(QWidget):
         else:
             pt = self._screen_pos(e)
             hit = self.layer_at(*pt) if pt else None
-            self.setCursor(Qt.OpenHandCursor if hit else Qt.PointingHandCursor)
+            self.setCursor(Qt.SizeFDiagCursor if self._on_handle(e) else
+                           Qt.OpenHandCursor if hit else Qt.PointingHandCursor)
             if (hit[0] if hit else None) != self._hover:
                 self._hover = hit[0] if hit else None
                 self.update()
@@ -1662,7 +1721,7 @@ class PreviewView(QWidget):
 
     def mouseReleaseEvent(self, _e):
         self._dragging = False
-        self._grab = None
+        self._grab = self._sizing = None
         self.setCursor(Qt.PointingHandCursor)
 
 
