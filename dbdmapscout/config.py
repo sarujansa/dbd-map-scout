@@ -32,7 +32,8 @@ DEFAULTS = {
         "show_waiting": True,           # no map on screen: small card "Warte auf Map" + lobby state
         "show_server": True,            # connected server region below the timer (needs the Server tab option)
         "transparent": True,            # transparent area around the map (off = dark rectangle)
-        "keep_in_bar": True,            # ultrawide: shrink/move the map so it stays inside the black bar
+        "keep_in_bar": True,
+        "grow_past_bar": False,         # a map bigger than the bar may reach into the game picture (1.65.4)            # ultrawide: shrink/move the map so it stays inside the black bar
         "map_heights": {},              # map id -> own size (hotkeys / mouse wheel with that map on display)
         "map_rotations": {},            # map id -> map turned clockwise by 90/180/270° (button / hotkey)
         "floor_auto": True,             # maps with floors (Midwich): all one below the other (False: bottom only)

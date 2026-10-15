@@ -293,6 +293,10 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self._reg("ov.keep_bar", ui.Checkbutton(
             pos, text=_("Karte im schwarzen Rand halten (Ultrawide: nie ins Spielbild ragen)"),
             variable=self.keep_bar_var, command=self._overlay_flags_changed)).pack(anchor="w", pady=(4, 0))
+        self.grow_var = ui.BooleanVar(value=o.get("grow_past_bar", False))
+        self._reg("ov.grow", ui.Checkbutton(
+            pos, text=_("Karte darf grösser als der Balken werden (ragt dann ins Spielbild)"),
+            variable=self.grow_var, command=self._overlay_flags_changed)).pack(anchor="w", pady=(2, 0))
         for key, text, var in (("show_map", N_("Karte anzeigen (aus: nur Timer, Ort und Ping)"), self.show_map_var),
                                ("focus", N_("Nur zeigen, wenn DBD das aktive Fenster ist"), self.focus_var),
                                ("caption", N_("Map-Namen über der Karte anzeigen"), self.caption_var),
@@ -1190,12 +1194,15 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         avail = layout.max_width(bar, margin)
         if slot is not None:                     # the free space works like a bar: fit, never cover DBD
             side, avail = "slot", layout.max_width(slot[2], margin)
-        if side:
+        # 1.65.4 (user: "die Grösse beliebig ändern"): a map bigger than the bar may reach into the game picture;
+        # it stays at the bar's outer edge
+        grow = bool(o.get("grow_past_bar", False)) and side in ("left", "right")
+        if side and not grow:
             height = layout.fit_height(height, avail, iw, ih)
         text_h = self._text_height(gh)
         self.overlay.text_height = text_h
         w, h = self.overlay.render(height)
-        if side and w > avail:                  # the lines below are wider than the bar: smaller text, same map
+        if side and w > avail and not grow:     # the lines below are wider than the bar: smaller text, same map
             self.overlay.text_height = max(40, int(text_h * avail / w))
             w, h = self.overlay.render(height)
             if w > avail:                       # still too wide (very long line): the map too, as before
@@ -1512,6 +1519,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         o["show_timer"] = bool(self.timer_show_var.get())
         o["show_server"] = bool(self.server_show_var.get())
         o["keep_in_bar"] = bool(self.keep_bar_var.get())
+        o["grow_past_bar"] = bool(self.grow_var.get())
         o["show_waiting"] = bool(self.waiting_var.get())
         if bool(self.record_var.get()) != o.get("show_record", True):
             o["show_record"] = bool(self.record_var.get())

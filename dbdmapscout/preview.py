@@ -39,11 +39,25 @@ def overlay_picture(pic, map_h: int, caption: str, transparent: bool, timer: str
     """The map window's picture (PictureOverlay.render for one frame); ``pic`` None = info only; ``text_h``: size
     of the name and the lines below (1.65: its own, not the map's)."""
     text_h = max(40, text_h or map_h)
-    base = compose(pic, map_h, caption, transparent, False, text_h) if pic is not None \
+    base = compose(pic, map_h, caption, transparent, False, text_h, _split(pic)) if pic is not None \
         else Image.new("RGBA", (1, 1), (0, 0, 0, 0))
     if timer or server or record:
         base = add_info(base, timer, server, text_h, backdrop=not transparent, ping=ping, record=record)
     return base
+
+
+_SPLITS: dict = {}
+
+
+def _split(pic):
+    """Row where the map starts below its drawn-in name (mapimage.title_split), once per picture (1.65.4)."""
+    key = id(pic)
+    if key not in _SPLITS:
+        from .mapimage import title_split
+        parts = title_split(pic)
+        _SPLITS.clear() if len(_SPLITS) > 16 else None
+        _SPLITS[key] = parts[2] if parts else None
+    return _SPLITS[key]
 
 
 _CACHE: dict = {}             # one picture per layer: a slider that moves the map does not redraw the others
@@ -94,7 +108,7 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
     rows += 1 if info.get("timer") else 0
     _x, _y, _w, _h, mh = layout.preview_rect(gw, gh, o["anchor"], o.get("pos_x", 0.0), o.get("pos_y", 0.0),
                                              height_frac, o["margin"], o.get("keep_in_bar", True), aspect, rows,
-                                             drop)
+                                             drop, bool(o.get("grow_past_bar", False)))
     text_h = int(gh * 0.36 * min(2.0, max(0.5, float(o.get("text_scale", 1.0)))))     # App._text_height
     over = fitted(lambda h: overlay_picture(map_pic, h, caption, o.get("transparent", True), info.get("timer", ""),
                                             info.get("server", ""), info.get("ping"), info.get("record", ""),
@@ -104,7 +118,7 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
                                    over.width, over.height, drop)
     in_bar = (o["anchor"] == "auto" or o.get("keep_in_bar", True)) and \
         layout.bar_side(o["anchor"], x0, over.width, 0, gw, bar)
-    if in_bar and over.width > avail:                   # lines wider than the bar: smaller text, like the game
+    if in_bar and over.width > avail and not o.get("grow_past_bar", False):   # lines wider: smaller text
         f = avail / over.width
         over = fitted(lambda h: overlay_picture(map_pic, h, caption, o.get("transparent", True),
                                                 info.get("timer", ""), info.get("server", ""), info.get("ping"),

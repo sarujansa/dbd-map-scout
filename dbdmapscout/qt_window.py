@@ -52,7 +52,7 @@ SPECS = {
             ("row", (("label", "ov.anchor.label"), ("combo", "ov.anchor"), ("stretch",), ("button", "ov.reset"))),
             ("slider", "ov.posx"), ("slider", "ov.posy"),
             ("row", (("button", "ov.edit"), ("button", "ov.test"), ("button", "ov.undo"), ("stretch",))),
-            ("hint", "ov.pos_hint"), ("check", "ov.keep_bar"), ("check", "ov.per_size"), ("hint", "ov.per_size_hint"))),
+            ("hint", "ov.pos_hint"), ("check", "ov.keep_bar"), ("check", "ov.grow"), ("check", "ov.per_size"), ("hint", "ov.per_size_hint"))),
         ("card", "ov.look", (
             ("row", (("hint", "ov.map_size"), ("stretch",), ("button", "ov.map_size_reset"))),
             ("slider", "ov.opacity"),

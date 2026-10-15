@@ -52,12 +52,15 @@ def fit_height(height: int, avail: float, img_w: int, img_h: int, minimum: int =
 
 
 def clamp_x(side: str, x: float, w: float, gx: float, gw: float, bar: float, margin: float) -> float:
-    """Move x so that [x, x+w] lies inside the bar (with margin)."""
+    """Move x so that [x, x+w] lies inside the bar (with margin). Wider than the bar (1.65.4: may grow past it):
+    at the bar's outer edge, reaching into the game picture – never off the screen."""
     if side == "left":
         lo, hi = gx + margin, gx + bar - margin - w
     else:
         lo, hi = gx + gw - bar + margin, gx + gw - margin - w
-    return min(max(x, lo), max(lo, hi))
+    if hi < lo:
+        return lo if side == "left" else hi
+    return min(max(x, lo), hi)
 
 
 def outside_slot(ox: float, ow: float, mx: float, mw: float, min_w: float = MIN_BAR):
@@ -140,7 +143,8 @@ def preview_place(gw: int, gh: int, anchor: str, pos_x: float, pos_y: float, mar
 
 
 def preview_rect(gw: int, gh: int, anchor: str, pos_x: float, pos_y: float, height_frac: float,
-                 margin_frac: float, keep_in_bar: bool, aspect: float, info_rows: int = 0, drop: int = 0):
+                 margin_frac: float, keep_in_bar: bool, aspect: float, info_rows: int = 0, drop: int = 0,
+                 grow: bool = False):
     """Where the overlay sits on a full-screen DBD of gw × gh (the overlay tab's preview, since 1.61): (x, y, w,
     h, map_h) – the same rules as App._place_overlay for the common case (no window mode, no bars above/below).
     ``aspect`` = map width / height, ``info_rows`` = lines below the map (timer counts double), ``drop`` = room
@@ -157,7 +161,7 @@ def preview_rect(gw: int, gh: int, anchor: str, pos_x: float, pos_y: float, heig
     w, h = size(height)
     x0, _y0 = preview_place(gw, gh, anchor, pos_x, pos_y, margin, False, w, h, drop)
     side = bar_side(anchor, x0, w, 0, gw, bar) if (anchor == "auto" or keep_in_bar) else None
-    if side:
+    if side and not grow:
         avail = max_width(bar, margin)
         if w > avail:
             height = max(40, int(height * avail / w))
