@@ -212,6 +212,30 @@ class SysInfo:
         win.show_at(int(x), int(y))
         self.worker.media_rect = (int(x), int(y), w, h)
 
+    def _guides_place(self):
+        """Centre cross over the DBD window while moving (1.64.5): two thin click-through windows, hidden
+        otherwise. The worker blacks them out (a long light line would look like a banner's separator)."""
+        on = self.overlay.editing and self.game is not None
+        if not on:
+            for g in getattr(self, "_guides", ()):
+                g.hide()
+            self.worker.guide_rects = ()
+            return
+        if not getattr(self, "_guides", None):
+            self._guides = [g for g in (make_hud("DbD Map Scout Mitte"), make_hud("DbD Map Scout Mitte"))
+                            if g is not None]
+            if len(self._guides) < 2:
+                return
+        from .overlay_win32 import guide_line
+        gx, gy, gw, gh = self._game_rect()
+        v, hz = self._guides
+        v.set_picture(guide_line(gh, True), ("v", gh))
+        hz.set_picture(guide_line(gw, False), ("h", gw))
+        vx, hy = gx + gw // 2 - 1, gy + gh // 2 - 1
+        v.show_at(vx, gy)
+        hz.show_at(gx, hy)
+        self.worker.guide_rects = ((vx, gy, 3, gh), (gx, hy, gw, 3))
+
     def _media_dragged(self, x, y):
         """Music card dropped somewhere (edit mode): from now on its own place there."""
         gx, gy, gw, gh = self._game_rect()

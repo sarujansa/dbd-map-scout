@@ -53,3 +53,20 @@ def test_same_inputs_reuse_the_pictures():
     a, _r = _layers(_o())
     b, _r = _layers(_o(height=0.3))                                # only the map changed
     assert a[1][1] is b[1][1] and a[2][1] is b[2][1] and a[0][1] is not b[0][1]
+
+
+def test_centre_guides_are_thin_lines_and_blacked_out_for_the_detection():
+    """1.64.5 (user: Mittellinie als Kreuz beim Ausrichten): 3-px lines with light dashes on a dark edge; the
+    worker blacks them out like the overlay (a long light line would look like a banner's separator)."""
+    import numpy as np
+    from dbdmapscout.overlay_win32 import guide_line
+    from dbdmapscout.worker import DetectionWorker
+    v, h = guide_line(1440, True), guide_line(3440, False)
+    assert v.size == (3, 1440) and h.size == (3440, 3)
+    assert v.getpixel((1, 0))[:3] == (255, 255, 255) and v.getpixel((0, 0))[:3] == (0, 0, 0)
+    w = DetectionWorker.__new__(DetectionWorker)
+    w.overlay_rect = w.hud_rect = w.media_rect = None
+    w.guide_rects = ((1719, 0, 3, 1440), (0, 719, 3440, 3))
+    img = np.full((1440, 3440, 3), 200, np.uint8)
+    w._mask_overlay(img, 0, 0)
+    assert img[:, 1719:1722].max() == 0 and img[719:722].max() == 0 and img[100, 100].min() == 200

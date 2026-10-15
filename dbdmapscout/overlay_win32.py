@@ -384,6 +384,21 @@ def render_music(rows, cover, height: int) -> Image.Image:
     return pic
 
 
+def guide_line(length: int, vertical: bool, dash: int = 14) -> Image.Image:
+    """A centre guide line (1.64.5, user: "Mittellinie als Kreuz beim Ausrichten"): 3 px – light dashes on a dark
+    edge, visible on bright and dark game pictures alike."""
+    w, h = (3, length) if vertical else (length, 3)
+    pic = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(pic)
+    d.rectangle((0, 0, w - 1, h - 1), fill=(0, 0, 0, 150))
+    for i in range(0, length, 2 * dash):
+        if vertical:
+            d.line([(1, i), (1, min(length - 1, i + dash - 1))], fill=(255, 255, 255, 230))
+        else:
+            d.line([(i, 1), (min(length - 1, i + dash - 1), 1)], fill=(255, 255, 255, 230))
+    return pic
+
+
 class HudWindow:
     """Small click-through layered window for the system values at the top of a black bar (and, 1.64, the
     music card). In edit mode (the overlay's "Mit der Maus verschieben") it can be dragged like the map:
@@ -435,6 +450,14 @@ class HudWindow:
         _u.SetWindowPos(self._hwnd, HWND_TOPMOST, 0, 0, 0, 0,
                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED)
         self._key = None                                  # re-render with/without border
+
+    def set_picture(self, pic, key):
+        """Show a ready picture (the centre guide lines, 1.64.5); ``key`` says when it changed."""
+        if key != self._key:
+            self._key = key
+            self._data, self.size = premultiplied_bgra(pic), pic.size
+            self._pos = None
+        return self.size
 
     def render(self, rows, height: int, cover=None):
         """Prepare the picture; returns its size (0, 0 without rows). ``cover``: the music card's picture."""
