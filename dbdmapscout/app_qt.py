@@ -45,7 +45,7 @@ def _side(w) -> str:
 
 KINDS = ((ui.Treeview, "table"), (ui.Checkbutton, "check"), (ui.Button, "button"), (ui.Combobox, "combo"),
          (ui.Scale, "slider"), (ui.Entry, "entry"), (ui.Radiobutton, "radio"), (ui.Log, "log"),
-         (ui.Chart, "chart"), (ui.Dashboard, "dashboard"))
+         (ui.Chart, "chart"), (ui.Dashboard, "dashboard"), (ui.Tiles, "tiles"))
 
 
 def ui_layout(w, reg: dict):
@@ -101,6 +101,9 @@ def ui_state(w) -> dict:
     if lines is not None:                         # the log: its entries (ts, category, text), filtered
         entries, dark = lines()
         st.update(lines=entries, dark=dark, rev=getattr(w, "_dbdms_rev", 0))
+        return st
+    if isinstance(w, ui.Tiles):
+        st.update(data=w.data)
         return st
     if isinstance(w, ui.Dashboard):
         st.update(data=w.data, dark=w.dark)
@@ -220,9 +223,11 @@ class QtShell:
         self.qt = self._qt_mod.MainWindow(self._qt_post, ico if os.path.exists(ico) else None, layouts)
         self.qt.setWindowTitle(f"DbD Map Scout {__version__}")
         self._qt_theme()
-        # first start: the hint what to do (gone with "Verstanden" or from the next start)
-        self._qt_welcome = not self.settings.get("welcome_seen") and not self.settings.get("qt_geometry")
+        # first start: the setup assistant (language, overlay, keys) instead of the overview
+        first = not self.settings.get("welcome_seen") and not self.settings.get("qt_geometry")
         self.qt.restore_b64(self.settings.get("qt_geometry") or "")
+        if first:
+            self.qt.show_setup(True)
         self.qt.set_card_order(self.settings.get("card_order") or {})
         self._qt_refresh(force=True)
         if not start_in_tray:
@@ -331,6 +336,17 @@ class QtShell:
             self._qt_search = str(arg or "")
             self._qt_maps_rev = getattr(self, "_qt_maps_rev", 0) + 1
             self._fill_list()
+        elif action == "search_open":                # the search reads the texts of all pages: fill them now
+            reg, auto = self.__dict__.get("_qt_reg", {}), self._qt_auto
+            for page, form in self.qt.forms.items():
+                src = auto if page in self._qt_mod.AUTO_PAGES else reg
+                self.qt.show_states(page, {k: ui_state(src[k]) for k in form.controls if k in src})
+            self.qt.update_search_index()
+        elif action == "setup_done":                 # assistant finished or skipped: not again on the next start
+            self.settings.set("welcome_seen", True)
+            self._save_soon()
+            self.qt.show_setup(False)
+            self._qt_refresh(force=True)
         elif action == "card_order":                 # a card dragged to another place: remember the order
             page, run, ids = arg
             orders = dict(self.settings.get("card_order") or {})
@@ -355,7 +371,7 @@ class QtShell:
         else:
             {"scan": self.scan_now, "rotate": self.rotate_map, "toggle": self.toggle_overlay,
              "reject": self.reject_detection, "confirm": self._confirm_unsure, "layout": self.next_variant,
-             "floor": self.next_floor, "welcome": self._hide_welcome}.get(action, lambda: None)()
+             "floor": self.next_floor}.get(action, lambda: None)()
         self._qt_refresh(force=True)
 
     def _show_main(self):

@@ -12,7 +12,7 @@ import html
 import sys
 
 from PIL import Image
-from PySide6.QtCore import QByteArray, QEvent, QSize, Qt
+from PySide6.QtCore import QByteArray, QEvent, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QFontDatabase, QIcon, QImage, QPalette, QPixmap
 from PySide6.QtWidgets import (QApplication, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel,
                                QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QPlainTextEdit, QProgressBar,
@@ -33,6 +33,8 @@ NAV_W, NAV_COMPACT_W = 190, 62    # px (logical): navigation with names / only i
 NAV_COMPACT_BELOW = 960           # px (logical) window width from which the navigation shows only icons
 AUTO_PAGES = ("stats", "server", "detect", "log")   # built from the tab's structure (app_qt.ui_layout)
 THUMB_H = 170                     # px (logical) of the map picture on the overview
+SETUP_W = 820                     # px (logical): widest step of the setup assistant
+FOUND_MS = 1800                   # ms a search hit's card stays lit
 SLIDER_MAX = 420                  # px (logical): longest slider (overlay position, size, opacity)
 
 # Hand-made pages: every key names a widget of the UI model registered with App._reg; texts, values,
@@ -66,7 +68,8 @@ SPECS = {
         ("card", "st.notify", (
             ("check", "st.lobby_notify"), ("check", "st.lobby_remind"), ("check", "st.notify_background_only"),
             ("hint", "st.notify_text"), ("row", (("button", "st.notify_test"), ("stretch",))))),
-        ("card", "st.start", (("check", "st.tray"), ("check", "st.autostart"), ("hint", "st.autostart_info"))),
+        ("card", "st.start", (("check", "st.tray"), ("check", "st.autostart"), ("hint", "st.autostart_info"),
+                              ("row", (("button", "st.setup_again"), ("stretch",))))),
         ("card", "st.hotkeys", (
             ("grid", 2, tuple(("row", (("label", f"st.hk.{k}.label"), ("stretch",), ("hotkey", f"st.hk.{k}")))
                               for k in ("toggle_overlay", "next_variant", "scan_now", "prev_map", "next_map",
@@ -87,6 +90,33 @@ SPECS = {
 }
 
 
+# The setup assistant on the first start (1.60, user's wish): three steps of controls that are also on the pages
+# (same keys – the same widgets of the UI model). ("note", text) = an explaining line of the step itself.
+GAME_LANGS = ("en", "de", "fr", "es", "es-MX", "it", "pl", "pt-BR", "tr")   # app.LANGS (test: the same)
+SETUP_HOTKEYS = ("toggle_overlay", "rotate_map", "edit_position", "scan_now", "reject_map")
+SETUP = (
+    (N_("Sprache"), (
+        ("note", N_("Das Programm liest beim Match-Start den Map-Namen aus dem Bild. Hake die Sprache an, in der "
+                    "du Dead by Daylight spielst (mehrere gehen).")),
+        ("grid", 5, tuple(("check", f"det.lang.{code}") for code in GAME_LANGS)),
+        ("note", N_("Sprache dieses Programms:")),
+        ("row", (("combo", "st.lang"), ("stretch",))), ("hint", "st.lang_note"))),
+    (N_("Overlay"), (
+        ("note", N_("Die Karte erscheint beim Match-Start von selbst und verschwindet nach der Runde. „automatisch“ "
+                    "legt sie in den schwarzen Rand neben dem Spielbild (Ultrawide) bzw. neben das DBD-Fenster.")),
+        ("row", (("label", "ov.anchor.label"), ("combo", "ov.anchor"), ("stretch",))),
+        ("slider", "ov.size"),
+        ("row", (("button", "ov.test"), ("button", "ov.edit"), ("stretch",))),
+        ("note", N_("„Overlay testen“ zeigt die Karte sofort, „Mit der Maus verschieben“ lässt sie dich hinziehen.")))),
+    (N_("Tasten und Start"), (
+        ("note", N_("Die wichtigsten Tasten – zum Ändern draufklicken und die neue Kombination drücken. Alle "
+                    "Tasten findest du später unter Einstellungen.")),
+        ("grid", 1, tuple(("row", (("label", f"st.hk.{k}.label"), ("stretch",), ("hotkey", f"st.hk.{k}")))
+                          for k in SETUP_HOTKEYS)),
+        ("check", "st.autostart"), ("check", "st.lobby_notify"))),
+)
+
+
 def _spec_keys(items):
     for it in items:
         kind = it[0]
@@ -103,8 +133,10 @@ def _spec_keys(items):
 
 def page_keys(page: str | None = None) -> set:
     """Widget keys a hand-made page shows (all pages without ``page``) – also the whitelist for its clicks."""
-    pages = [page] if page else list(SPECS)
-    return {k for p in pages for k in _spec_keys(SPECS.get(p, ()))}
+    if page == "setup":
+        return {k for _t, items in SETUP for k in _spec_keys(items)}
+    pages = [page] if page else list(SPECS) + ["setup"]
+    return {k for p in pages for k in (page_keys("setup") if p == "setup" else _spec_keys(SPECS.get(p, ())))}
 
 
 def application() -> QApplication:
@@ -220,17 +252,6 @@ class OverviewPage(QWidget):
         top.addWidget(self.pill)
         page.addLayout(top)
 
-        # first start only: what to do and the hotkeys that matter
-        self.welcome = _card()
-        wl = QHBoxLayout(self.welcome)
-        wl.setContentsMargins(14, 10, 14, 10)
-        self.welcome_text = _label(wrap=True)
-        wl.addWidget(self.welcome_text, 1)
-        b = QPushButton(_("Verstanden"))
-        b.clicked.connect(lambda: self._post("welcome"))
-        wl.addWidget(b, alignment=Qt.AlignVCenter)
-        page.addWidget(self.welcome)
-
         # the map on display: picture, name, values, actions
         card = _card()
         cl = QHBoxLayout(card)
@@ -334,8 +355,6 @@ class OverviewPage(QWidget):
         if pill != self._pill_style:                  # re-styling repaints: only on a change
             self._pill_style = pill
             self.pill.setStyleSheet(pill)
-        self.welcome.setVisible(bool(o.welcome))
-        _set(self.welcome_text, o.welcome)
         _set(self.map_name, o.map_label or _("Noch keine Map"))
         _set(self.map_line, o.map_line)
         _set(self.queue, o.queue)
@@ -482,6 +501,8 @@ def make_control(kind, key, post):
         w = Chart()
     elif kind == "dashboard":
         w = DashboardView()
+    elif kind == "tiles":
+        w = TilesView()
     elif kind == "log":
         w = LogView()
     elif kind == "radio":
@@ -564,7 +585,7 @@ def show_control(kind, w, extra, st):
             s.setRange(round(st.get("lo", 0)), round(st.get("hi", 100)))
             s.setValue(round(st.get("value", 0)))
             s.blockSignals(False)
-    elif kind in ("table", "chart", "log", "dashboard"):
+    elif kind in ("table", "chart", "log", "dashboard", "tiles"):
         w.show_state(st)
     elif kind == "hotkey":
         w.show_text(st.get("text", ""))
@@ -626,7 +647,6 @@ class CardColumn(QWidget):
         self._before = None
         self.on_order = on_order
         self._scroll = None
-        from PySide6.QtCore import QTimer
         self._timer = QTimer(self)        # scrolls the page while the card is held at its top/bottom edge
         self._timer.setInterval(30)
         self._timer.timeout.connect(self._autoscroll)
@@ -808,6 +828,9 @@ class FormPage(QWidget, _Arranged):
             return
         if kind == "stretch":
             lay.addStretch()
+            return
+        if kind == "note":                          # a fixed text of the page itself (setup assistant)
+            lay.addWidget(_label(_(item[1]), wrap=True))
             return
         w, extra = make_control(kind, item[1], self._post)
         if isinstance(lay, FlowRow):
@@ -1314,6 +1337,36 @@ class Heatmap(QWidget):
             QToolTip.hideText()
 
 
+class TilesView(QWidget):
+    """Key figure tiles (uimodel.Tiles): as many side by side as fit (TileGrid), each a FactBox on a card."""
+
+    def __init__(self):
+        super().__init__()
+        self._grid = TileGrid(self, min_width=150, columns=6)
+        self._tiles = []
+        self._shown = None
+
+    def show_state(self, st):
+        data = st.get("data") or []
+        if data is self._shown:
+            return
+        self._shown = data
+        while len(self._tiles) < len(data):
+            card = _card()
+            cl = QVBoxLayout(card)
+            cl.setContentsMargins(14, 12, 14, 12)
+            box = FactBox(bar=True)
+            box.sub.setWordWrap(True)
+            cl.addWidget(box)
+            self._grid.addWidget(card)
+            self._tiles.append((card, box))
+        for i, (card, box) in enumerate(self._tiles):
+            card.setVisible(i < len(data))
+            if i < len(data):
+                box.show_fact(data[i])
+        self.setVisible(bool(data))
+
+
 class DashboardView(QWidget):
     """The statistics dashboard (dashboard.Dashboard): key figure tiles, the most played maps, killer × map."""
 
@@ -1767,6 +1820,9 @@ def nav_icon(key: str, colour: str, ratio: float = 1.0, alert: bool = False) -> 
             p.drawLine(QPointF(x, y), QPointF(x, y + dy * k))
         p.setBrush(col)
         p.drawEllipse(QPointF(c, c), 2.2, 2.2)
+    elif key == "search":                      # magnifier
+        p.drawEllipse(QPointF(c - 1.5, c - 1.5), 5.0, 5.0)
+        p.drawLine(QPointF(c + 2.2, c + 2.2), QPointF(size - m, size - m))
     elif key == "log":                         # lines of text
         for i, w in enumerate((1.0, 0.75, 0.9)):
             y = m + 2 + i * 5
@@ -1778,6 +1834,63 @@ def nav_icon(key: str, colour: str, ratio: float = 1.0, alert: bool = False) -> 
         p.drawEllipse(QPointF(size - 3.5, size - 3.5), 3.5, 3.5)
     p.end()
     return pm
+
+
+class SetupPage(QWidget):
+    """The setup assistant (first start, or "Einrichtung starten" in the settings): SETUP's steps one at a time,
+    "Zurück" / "Weiter" / "Fertig" and "Überspringen". Done or skipped: post("setup_done")."""
+
+    def __init__(self, post):
+        super().__init__()
+        self.setObjectName("page")
+        self._post = post
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+        self.steps = QStackedWidget()
+        self.pages = [FormPage(post, _("Einrichtung: {step}", step=_(title)), items) for title, items in SETUP]
+        for page in self.pages:
+            page.setMaximumWidth(SETUP_W)               # a wide window: the keys stay next to their names
+            self.steps.addWidget(page)
+        lay.addWidget(self.steps, 1)
+        foot = QHBoxLayout()
+        foot.setContentsMargins(22, 10, 22, 16)
+        self.skip = QPushButton(_("Überspringen"))
+        self.skip.clicked.connect(lambda: self._post("setup_done"))
+        self.where = _label(cls="dim")
+        self.back = QPushButton(_("Zurück"))
+        self.back.clicked.connect(lambda: self.go(self.steps.currentIndex() - 1))
+        self.next = QPushButton()
+        self.next.setObjectName("primary")
+        self.next.clicked.connect(self._next)
+        foot.addWidget(self.skip)
+        foot.addStretch()
+        foot.addWidget(self.where)
+        foot.addSpacing(12)
+        foot.addWidget(self.back)
+        foot.addWidget(self.next)
+        lay.addLayout(foot)
+        self.go(0)
+
+    def go(self, i: int):
+        i = max(0, min(len(self.pages) - 1, i))
+        self.steps.setCurrentIndex(i)
+        _set(self.where, _("Schritt {n} von {total}", n=i + 1, total=len(self.pages)))
+        self.back.setEnabled(i > 0)
+        _set(self.next, _("Fertig") if i == len(self.pages) - 1 else _("Weiter"))
+
+    def _next(self):
+        if self.steps.currentIndex() == len(self.pages) - 1:
+            self._post("setup_done")
+        else:
+            self.go(self.steps.currentIndex() + 1)
+
+    def show_states(self, states):
+        for page in self.pages:
+            page.show_states(states)
+
+
+SEARCH_KINDS = ("check", "radio", "button", "title", "label", "slider")   # what the search finds on a page
 
 
 class MainWindow(QMainWindow):
@@ -1798,6 +1911,7 @@ class MainWindow(QMainWindow):
         self.nav.setObjectName("nav")
         self.nav.setFixedWidth(NAV_W)
         self._nav_compact = False
+        self._nav_kept = False
         self.nav.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.stack = QStackedWidget()
         self.overview = OverviewPage(post)
@@ -1813,9 +1927,45 @@ class MainWindow(QMainWindow):
             self.nav.addItem(item)
             page = {"overview": self.overview, "maps": self.maps}.get(key) or self.forms.get(key) or QWidget()
             self.stack.addWidget(page)
+        self.setup = SetupPage(post)
+        self.stack.addWidget(self.setup)
+        self._setup_on = False
         self.nav.setCurrentRow(0)
         self.nav.currentRowChanged.connect(self._page_changed)
-        lay.addWidget(self.nav)
+        # search over the settings of all pages (1.60): a field above the navigation, Ctrl+F
+        side = QWidget()
+        side.setObjectName("navside")
+        sl = QVBoxLayout(side)
+        sl.setContentsMargins(0, 0, 0, 0)
+        sl.setSpacing(0)
+        self.search = QLineEdit()
+        self.search.setObjectName("navsearch")
+        self.search.setPlaceholderText(_("Einstellung suchen …"))
+        self.search.setClearButtonEnabled(True)
+        self.search.setFocusPolicy(Qt.ClickFocus)  # not the window's first focus: only by a click or Ctrl+F
+        self.search_btn = QPushButton()
+        self.search_btn.setObjectName("navsearchbtn")
+        self.search_btn.setToolTip(_("Einstellung suchen (Strg+F)"))
+        self.search_btn.clicked.connect(self.focus_search)
+        self.search_btn.hide()
+        sl.addWidget(self.search)
+        sl.addWidget(self.search_btn)
+        sl.addWidget(self.nav, 1)
+        self._found = {}                  # completer text -> (page key, widget)
+        from PySide6.QtCore import QStringListModel
+        from PySide6.QtWidgets import QCompleter
+        self._search_model = QStringListModel()
+        self.completer = QCompleter(self._search_model, self)
+        self.completer.setCaseSensitivity(Qt.CaseInsensitive)
+        self.completer.setFilterMode(Qt.MatchContains)
+        self.completer.setMaxVisibleItems(12)
+        self.completer.activated.connect(self.go_to_found)
+        self.search.setCompleter(self.completer)
+        self.search.installEventFilter(self)
+        self.search.returnPressed.connect(self._search_first)
+        from PySide6.QtGui import QKeySequence, QShortcut
+        QShortcut(QKeySequence.Find, self, activated=self.focus_search)
+        lay.addWidget(side)
         right = QVBoxLayout()
         right.setContentsMargins(0, 0, 0, 0)
         right.setSpacing(0)
@@ -1847,14 +1997,98 @@ class MainWindow(QMainWindow):
         self.dialogs = {}                 # dialog path (UI model) -> DialogWindow
 
     def _page_changed(self, row):
+        self._setup_on = False                                     # the navigation leaves the assistant
         self.stack.setCurrentIndex(row)
         self._post("page", PAGES[row][0])                          # the App fills it now
 
     def current_key(self) -> str:
-        return PAGES[max(0, self.nav.currentRow())][0]
+        return "setup" if self._setup_on else PAGES[max(0, self.nav.currentRow())][0]
+
+    def show_setup(self, on: bool = True):
+        """The setup assistant instead of a page (first start); the navigation still leads away from it."""
+        self._setup_on = bool(on)
+        if on:
+            self.setup.go(0)
+            self.stack.setCurrentWidget(self.setup)
+        else:
+            self.stack.setCurrentIndex(max(0, self.nav.currentRow()))
+
+    # ------------------------------------------------------------- search over the settings
+    def search_index(self) -> dict:
+        """{shown text: (page key, widget)} – every tick box, button, slider, card title and label the pages show
+        now (folded parts like "Mehr" only once they are open)."""
+        out = {}
+        labels = dict(PAGES)
+        for key, page in self.forms.items():
+            for ckey, (kind, w, extra) in page.controls.items():
+                if kind not in SEARCH_KINDS:
+                    continue
+                target = extra[0] if kind == "slider" else w
+                text = " ".join(target.text().split())
+                if len(text) < 3 or not w.isVisibleTo(page) or text.startswith("▸"):
+                    continue
+                entry = f"{text}  ·  {_(labels[key])}"
+                out.setdefault(entry, (key, w))
+        return out
+
+    def eventFilter(self, obj, e):
+        if obj is self.search and e.type() == QEvent.FocusIn:
+            self._post("search_open")             # the App fills every page once (texts come from the model)
+        return super().eventFilter(obj, e)
+
+    def update_search_index(self):
+        """After the App filled the pages: what the search offers (open parts, the language now …)."""
+        self._found = self.search_index()
+        self._search_model.setStringList(sorted(self._found, key=str.lower))
+
+    def focus_search(self):
+        if self._nav_compact:
+            self._compact_nav(False, keep=True)                    # room for the field while searching
+        self.search.setFocus()
+        self.search.selectAll()
+
+    def _search_first(self):
+        if self.completer.completionCount():
+            self.go_to_found(self.completer.currentCompletion())
+
+    def go_to_found(self, entry: str):
+        """Open the page of a search hit, scroll to it and light up its card for a moment."""
+        hit = self._found.get(entry)
+        if hit is None:
+            return
+        key, w = hit
+        self.show_page(key)
+        self.search.clear()
+        self.search.clearFocus()
+        if self._nav_kept:
+            self._nav_kept = False
+            self._compact_nav(self.width() < NAV_COMPACT_BELOW)
+
+        def scroll():
+            sa = w.parentWidget()
+            while sa is not None and not isinstance(sa, QScrollArea):
+                sa = sa.parentWidget()
+            if sa is not None:
+                sa.ensureWidgetVisible(w, 0, 120)
+            card = w
+            while card is not None and card.property("class") != "card":
+                card = card.parentWidget()
+            target = card or w
+            target.setProperty("found", True)
+            target.style().unpolish(target)
+            target.style().polish(target)
+
+            def done():
+                target.setProperty("found", False)
+                target.style().unpolish(target)
+                target.style().polish(target)
+            QTimer.singleShot(FOUND_MS, done)
+        QTimer.singleShot(0, scroll)
 
     def show_states(self, page, states):
-        if page in self.forms:
+        if page == "setup":
+            self.setup.show_states(states)
+        elif page in self.forms:
             self.forms[page].show_states(states)
 
     def visible_keys(self, page) -> set:
@@ -1917,6 +2151,8 @@ class MainWindow(QMainWindow):
 
     def show_page(self, key, search=None):
         """Go to a page (e.g. the maps with a search: a scan found only the realm)."""
+        if self._setup_on:
+            self.show_setup(False)
         if search is not None:
             self.maps.search.blockSignals(True)
             self.maps.search.setText(search)
@@ -2008,12 +2244,24 @@ class MainWindow(QMainWindow):
         super().resizeEvent(e)
         self._compact_nav(self.width() < NAV_COMPACT_BELOW)
 
-    def _compact_nav(self, on: bool):
-        """A narrow window: the navigation shows only its icons (names as hover text) – the page gets the room."""
+    def _compact_nav(self, on: bool, keep: bool = False):
+        """A narrow window: the navigation shows only its icons (names as hover text) – the page gets the room.
+        ``keep``: opened for a search (Ctrl+F) – stays open until a hit is chosen."""
+        if keep:
+            self._nav_kept = True
+        elif self._nav_kept:
+            return
         if on == self._nav_compact:
             return
         self._nav_compact = on
+        self.search.setVisible(not on)
+        self.search_btn.setVisible(on)
+        if on:
+            self.search_btn.setIcon(QIcon(nav_icon("search", qt_theme.PALETTE[self._dark]["dim"],
+                                                   self.devicePixelRatioF() or 1.0)))
         self.nav.setFixedWidth(NAV_COMPACT_W if on else NAV_W)
+        self.search.setFixedWidth(NAV_W)
+        self.search_btn.setFixedWidth(NAV_COMPACT_W)
         for row, (_key, label) in enumerate(PAGES):
             item = self.nav.item(row)
             item.setText("" if on else _(label))

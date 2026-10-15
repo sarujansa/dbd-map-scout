@@ -17,7 +17,8 @@ from .i18n import N_, _
 from .lobby import KILLERS, killer_label
 from .textnorm import fold
 from .textnorm import fmt_duration
-from .dashboard import _bp
+from .dashboard import Tile, _bp
+from .theme import DOT
 from .trendchart import TrendChart
 
 log = logging.getLogger("dbdmapscout")
@@ -29,10 +30,29 @@ WEEKDAYS = [N_("Montag"), N_("Dienstag"), N_("Mittwoch"), N_("Donnerstag"), N_("
             N_("Sonntag")]
 STATS_SYS_GROUPS = [("map", N_("nach Map")), ("hour", N_("nach Uhrzeit")), ("weekday", N_("nach Wochentag")),
                     ("killer", N_("nach Killer"))]
-SYS_PEAK_LABELS = {"gpu_temp_max": N_("GPU {v} °C"), "cpu_temp_max": N_("CPU {v} °C"),
-                   "gpu_power_max": N_("GPU {v} W"), "vram_used_max": N_("VRAM {v} GB"),
-                   "ram_used_max": N_("RAM {v} GB"), "gpu_hot_max": N_("Hotspot {v} °C"),
-                   "gpu_mem_max": N_("GPU-Speicher {v} °C"), "throttle_s": N_("gedrosselt {v}")}
+SYS_PEAK_ROWS = {"gpu_temp_max": (N_("GPU-Temperatur"), " °C"), "gpu_hot_max": (N_("Hotspot"), " °C"),
+                 "gpu_mem_max": (N_("GPU-Speicher"), " °C"), "cpu_temp_max": (N_("CPU-Temperatur"), " °C"),
+                 "gpu_power_max": (N_("GPU-Leistung"), " W"), "vram_used_max": (N_("VRAM"), " GB"),
+                 "ram_used_max": (N_("RAM"), " GB"), "throttle_s": (N_("Gedrosselt"), "")}
+
+
+def sys_tiles(avg) -> list:
+    """Tiles of the System sub-tab from history.sys_average(): averages over the rounds, throttling."""
+    n = avg["n"]
+    rounds = _("über {n} Runden", n=n)
+    out = []
+    for key, title, unit in (("gpu_temp", N_("Ø GPU-Temperatur"), " °C"), ("cpu_temp", N_("Ø CPU-Temperatur"), " °C"),
+                             ("gpu_load", N_("Ø GPU-Last"), " %"), ("gpu_power", N_("Ø GPU-Leistung"), " W")):
+        if key in avg:
+            out.append(Tile(_(title), f"{avg[key]:.0f}{unit}", rounds,
+                            frac=avg[key] / 100 if key == "gpu_load" else None))
+    thr = avg["throttle_rounds"]
+    out.append(Tile(_("GPU gedrosselt"), _("{n} von {total}", n=thr, total=n),
+                    _("Runden, zusammen {time}", time=fmt_duration(avg["throttle_s"])) if thr else _("Runden"),
+                    colour=DOT["warn"] if thr else None))
+    return out
+
+
 RESULTS = {"escaped": N_("entkommen"), "dead": N_("tot"), "abandoned": N_("aufgegeben"), "gone": N_("verlassen")}
 
 
@@ -119,29 +139,41 @@ class StatsTab:
         ui.Label(box_v, text=_("Nur Runden, die einem Match auf der Stats-Seite zugeordnet sind. Die Maus über einer "
                                 "Säule zeigt Wert und Anzahl der Runden."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
-        box_s = self._stats_page(_("System"))
-        sr = ui.Frame(box_s)
+        box_s = self._stats_page(_("System"))       # 1.60: tiles, highest values, table, trend (was a text block)
+        self.stats_sys_var = ui.StringVar(value="")       # only when there are no values
+        ui.Label(box_s, textvariable=self.stats_sys_var, wraplength=400).pack(anchor="w")
+        self.stats_sys_tiles = ui.Tiles(box_s)
+        self.stats_sys_tiles.pack(fill="x")
+        self.stats_sys_peaks_box = ui.LabelFrame(box_s, text=_("Höchstwerte"), padding=8)
+        self.stats_sys_peaks = ui.Treeview(self.stats_sys_peaks_box, columns=("what", "value", "when", "map"),
+                                           show="headings", selectmode="none")
+        for key, title, width, anchor in (("what", _("Wert"), 150, "w"), ("value", _("Höchstwert"), 90, "e"),
+                                          ("when", _("Wann"), 110, "w"), ("map", _("Map"), 180, "w")):
+            self.stats_sys_peaks.heading(key, text=title, anchor=anchor)
+            self.stats_sys_peaks.column(key, width=width, anchor=anchor, stretch=key == "map")
+        self.stats_sys_peaks.pack(fill="x")               # as tall as its rows
+        grp = ui.LabelFrame(box_s, text=_("Aufgeteilt"), padding=8)
+        grp.pack(fill="both", expand=True, pady=(8, 0))
+        sr = ui.Frame(grp)
         sr.pack(fill="x", pady=(0, 4))
-        self.stats_sys_var = ui.StringVar(value="")
-        ui.Label(sr, textvariable=self.stats_sys_var, wraplength=400).pack(side="left", anchor="w")
         self._stats_sys_groups = [(k, _(label)) for k, label in STATS_SYS_GROUPS]
         self.stats_sys_by_var = ui.StringVar(value=self._stats_sys_groups[0][1])
         cb = ui.Combobox(sr, textvariable=self.stats_sys_by_var, values=[lbl for _k, lbl in self._stats_sys_groups],
                           state="readonly", width=16)
-        cb.pack(side="right", anchor="n")
+        cb.pack(side="left")
         cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
-        self.stats_sys = self._stats_tree(box_s, (("grp", _("Wann/Wo"), 125, "w"), ("n", _("Runden"), 52, "e"),
-                                                  ("gpu", _("GPU Ø °C"), 64, "e"), ("gpumax", _("GPU max"), 60, "e"),
-                                                  ("hot", _("Hotspot max"), 82, "e"),
-                                                  ("cpu", _("CPU Ø °C"), 64, "e"), ("cpumax", _("CPU max"), 60, "e"),
-                                                  ("load", _("GPU Ø Last"), 72, "e"), ("pwr", _("Ø Watt"), 56, "e"),
-                                                  ("thr", _("Gedrosselt"), 74, "e")), 6)
+        self.stats_sys = self._stats_tree(grp, (("grp", _("Wann/Wo"), 125, "w"), ("n", _("Runden"), 52, "e"),
+                                                ("gpu", _("GPU Ø °C"), 64, "e"), ("gpumax", _("GPU max"), 60, "e"),
+                                                ("hot", _("Hotspot max"), 82, "e"),
+                                                ("cpu", _("CPU Ø °C"), 64, "e"), ("cpumax", _("CPU max"), 60, "e"),
+                                                ("load", _("GPU Ø Last"), 72, "e"), ("pwr", _("Ø Watt"), 56, "e"),
+                                                ("thr", _("Gedrosselt"), 74, "e")), 6)
+        self.sys_trend = TrendChart(box_s, bool(self.settings.get("dark_mode", True)), panels=("temp",))
         ui.Label(box_s, text=_("Werte der Systemwerte-Anzeige (Tab Overlay) während der Runden – nur Runden, in denen "
                                 "sie eingeschaltet war. CPU-Temperatur nur mit HWiNFO. „Wann/Wo“ zeigt, auf welchen "
                                 "Maps oder zu welcher Tageszeit der PC am heißesten läuft. „Gedrosselt“: Sekunden, in "
                                 "denen die GPU wegen Temperatur oder Hardware langsamer lief (nur NVIDIA)."),
-                  style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 6))
-        self.sys_trend = TrendChart(box_s, bool(self.settings.get("dark_mode", True)), panels=("temp",))
+                  style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(6, 0))
         box_r = self._stats_page(_("Serverregionen"))
         self.stats_regs = self._stats_tree(box_r, (("reg", _("Region"), 190, "w"), ("n", _("Runden"), 65, "e"),
                                                    ("avg", _("Ø Dauer"), 75, "e"), ("share", _("Anteil"), 65, "e"),
@@ -386,27 +418,20 @@ class StatsTab:
     def _stats_sys_render(self, rounds, unit):
         """Sub-tab System: averages, highest values (when and where) and the table by map/time/killer."""
         avg = history.sys_average(rounds)
-        if not avg["n"]:
-            self.stats_sys_var.set(_("Noch keine Systemwerte in dieser Auswahl (Tab Overlay → Systemwerte "
-                                     "einschalten)."))
+        self.stats_sys_var.set("" if avg["n"] else _("Noch keine Systemwerte in dieser Auswahl (Tab Overlay → "
+                                                     "Systemwerte einschalten)."))
+        self.stats_sys_tiles.data = sys_tiles(avg) if avg["n"] else []
+        peaks = history.sys_peaks(rounds)
+        t = self.stats_sys_peaks
+        t.delete(*t.get_children())
+        for key, v, r in peaks:
+            name, suffix = SYS_PEAK_ROWS[key]
+            value = fmt_duration(v) if key == "throttle_s" else (f"{v:.1f}" if "_used" in key else f"{v:.0f}") + suffix
+            t.insert("", "end", values=(_(name), value, time.strftime("%d.%m. %H:%M", time.localtime(r.t)), r.map))
+        if peaks:
+            self.stats_sys_peaks_box.pack(fill="x", pady=(8, 0), after=self.stats_sys_tiles)
         else:
-            parts = [_("Ø über {n} Runden:", n=avg["n"])]
-            for key, fmt in (("gpu_temp", N_("GPU {v} °C")), ("cpu_temp", N_("CPU {v} °C")),
-                             ("gpu_load", N_("GPU-Last {v} %")), ("gpu_power", N_("GPU {v} W"))):
-                if key in avg:
-                    parts.append(_(fmt, v=f"{avg[key]:.0f}"))
-            lines = [" ".join(parts[:1]) + " " + " · ".join(parts[1:])]
-            if avg["throttle_rounds"]:
-                lines.append(_("⚠ GPU gedrosselt in {n} von {total} Runden, zusammen {time}.",
-                               n=avg["throttle_rounds"], total=avg["n"], time=fmt_duration(avg["throttle_s"])))
-            peaks = [_("{value} am {when} ({map})",
-                       value=_(SYS_PEAK_LABELS[key], v=fmt_duration(v) if key == "throttle_s" else
-                               f"{v:.1f}" if "_used" in key else f"{v:.0f}"),
-                       when=time.strftime("%d.%m. %H:%M", time.localtime(r.t)), map=r.map)
-                     for key, v, r in history.sys_peaks(rounds)]
-            if peaks:
-                lines.append(_("Höchstwerte:") + "\n  " + "\n  ".join(peaks))
-            self.stats_sys_var.set("\n".join(lines))
+            self.stats_sys_peaks_box.pack_forget()
         by = next((k for k, lbl in self._stats_sys_groups if lbl == self.stats_sys_by_var.get()), "map")
         t = self.stats_sys
         t.delete(*t.get_children())

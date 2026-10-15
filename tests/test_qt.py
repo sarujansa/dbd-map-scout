@@ -53,7 +53,7 @@ def test_overview_without_a_map():
     assert o.actions["scan"][0] and not o.actions["rotate"][0] and not o.actions["toggle"][0]
     assert not o.actions["reject"][0] and o.actions["confirm"] is None and o.actions["layout"] is None
     assert [f.title for f in o.facts] == ["Rundenzeit", "Server", "Ping", "Rolle"]
-    assert o.today[0].value == "0" and o.rounds == [] and not o.welcome
+    assert o.today[0].value == "0" and o.rounds == []
     assert "aus" in o.system_note                                   # system values switched off
 
 
@@ -75,13 +75,12 @@ def test_overview_with_a_map_in_a_round():
     assert o.today[0].value == "1" and o.rounds == [("Coal Tower", "Oni · 09:00")]
 
 
-def test_overview_doubt_unknown_and_welcome():
+def test_overview_doubt_and_unknown():
     app = fake_app(current=("coal", 1), source="auto", _unsure={"shown": True, "label": "Coal Tower", "name": "COAL"},
-                   _unknown=("SHATTERED SQUARE", ""), _qt_welcome=True)
-    app.settings["welcome_seen"] = False
+                   _unknown=("SHATTERED SQUARE", ""))
     o = overview.overview_model(app, time.time(), is_win=True)
     assert o.actions["confirm"] == (True, "Stimmt") and "COAL" in o.note
-    assert "SHATTERED SQUARE" in o.unknown and o.welcome.startswith("So geht's")
+    assert "SHATTERED SQUARE" in o.unknown
 
 
 def test_overview_system_values():
@@ -161,6 +160,7 @@ def _registered_keys():
     import ast
     import glob
     import os
+    from dbdmapscout.app import LANGS
     from dbdmapscout.app_hotkeys import HOTKEY_LABELS
     pkg = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dbdmapscout")
     keys = set()
@@ -178,7 +178,8 @@ def _registered_keys():
                     pattern = "".join(v.value if isinstance(v, ast.Constant) else "{}" for v in a.values)
                     names = [k for k, _l in HOTKEY_LABELS] + ["lobby_notify", "lobby_remind", "notify_background_only",
                                                               "show_map", "focus", "caption", "timer", "server",
-                                                              "waiting", "floors", "record", "transparent"]
+                                                              "waiting", "floors", "record", "transparent"] + \
+                        [code for code, _l in LANGS]
                     keys.update(pattern.format(k) for k in names)
     return keys
 
@@ -190,6 +191,8 @@ def test_every_control_of_the_hand_made_pages_exists():
     assert not missing, sorted(missing)
     assert {"ov.caption", "st.dark", "st.hk.reject_map"} <= qt_window.page_keys()
     assert qt_window.page_keys("overview") == set()
+    from dbdmapscout.app import LANGS
+    assert qt_window.GAME_LANGS == tuple(code for code, _l in LANGS)
 
 
 def test_form_page_shows_states_and_posts_clicks(qapp, keep):
@@ -657,3 +660,65 @@ def test_narrow_window_wraps_instead_of_cutting_off(qapp, keep):
     win.resize(780, 800)
     qapp.processEvents()
     assert win.nav.maximumWidth() == qt_window.NAV_COMPACT_W and not win.nav.item(0).text() and win.nav.item(0).toolTip()
+
+
+def test_setup_assistant_goes_through_its_steps(qapp, keep):
+    """1.60: first start = three steps (language, overlay, keys) with the widgets of the pages; done or skipped
+    posts setup_done; the navigation leads away from it."""
+    from dbdmapscout import qt_window
+    posted = queue.Queue()
+    win = keep(qt_window.MainWindow(lambda a, arg=None: posted.put((a, arg))))
+    win.show_setup(True)
+    assert win.current_key() == "setup" and win.stack.currentWidget() is win.setup
+    s = win.setup
+    assert s.steps.currentIndex() == 0 and not s.back.isEnabled() and s.next.text() == "Weiter"
+    assert qt_window.page_keys("setup") >= {"det.lang.en", "ov.anchor", "ov.test", "st.hk.toggle_overlay"}
+    win.show_states("setup", {"det.lang.en": {"text": "EN", "value": True, "enabled": True, "visible": True}})
+    assert s.pages[0].controls["det.lang.en"][1].isChecked()
+    s.next.click()
+    s.next.click()
+    assert s.steps.currentIndex() == 2 and s.next.text() == "Fertig"
+    s.next.click()
+    s.skip.click()
+    assert [posted.get_nowait()[0] for _i in range(2)] == ["setup_done", "setup_done"]
+    win.show_page("stats")
+    assert win.current_key() == "stats" and win.stack.currentWidget() is not win.setup
+
+
+def test_search_finds_a_setting_and_lights_its_card(qapp, keep):
+    from dbdmapscout import qt_window
+    posted = queue.Queue()
+    win = keep(qt_window.MainWindow(lambda a, arg=None: posted.put((a, arg))))
+    win.resize(1100, 800)
+    win.show()
+    qapp.processEvents()
+    assert posted.empty()                                     # opening the window does not focus the search
+    win.search.setFocus()
+    qapp.processEvents()
+    assert ("search_open", None) in [posted.get_nowait() for _i in range(posted.qsize())]   # App fills the pages
+    win.show_states("overlay", {"ov.caption": {"text": "Map-Namen über der Karte anzeigen", "value": False,
+                                               "enabled": True, "visible": True},
+                                "ov.look": {"text": "Darstellung", "visible": True}})
+    win.update_search_index()
+    hits = [e for e in win._found if e.startswith("Map-Namen über")]
+    assert hits == ["Map-Namen über der Karte anzeigen  ·  Overlay"]
+    win.go_to_found(hits[0])
+    assert win.current_key() == "overlay" and win.search.text() == ""
+    qapp.processEvents()
+    card = win.forms["overlay"].controls["ov.caption"][1]
+    while card.property("class") != "card":
+        card = card.parentWidget()
+    assert card.property("found") is True
+
+
+def test_tiles_view_shows_the_system_averages(qapp, keep):
+    from dbdmapscout import qt_window
+    from dbdmapscout.app_stats import sys_tiles
+    view = keep(qt_window.TilesView())
+    tiles = sys_tiles({"n": 17, "gpu_temp": 76.2, "gpu_load": 75, "throttle_rounds": 2, "throttle_s": 95})
+    assert [t.value for t in tiles] == ["76 °C", "75 %", "2 von 17"]
+    view.show_state({"data": tiles, "visible": True})
+    shown = [box.value.text() for card, box in view._tiles if not card.isHidden()]
+    assert shown == ["76 °C", "75 %", "2 von 17"]
+    view.show_state({"data": [], "visible": True})
+    assert view.isHidden()
