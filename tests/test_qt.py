@@ -622,3 +622,38 @@ def test_dashboard_view_draws_tiles_bars_and_heatmap(qapp, keep):
     assert v.tiles_box.isHidden() and not v.empty.isHidden()
     assert qt_window.heat_colour(4, dark=True) != qt_window.heat_colour(0, dark=True)
     assert qt_window.ink_on(qt_window.heat_colour(4, dark=False)).name() == "#f0efec"   # light ink on dark blue
+
+
+def test_narrow_window_wraps_instead_of_cutting_off(qapp, keep):
+    """1.59.1 (user's screenshots): rows of controls wrap, tiles take fewer columns, tick box texts wrap, the
+    navigation shows only icons – nothing wider than the window."""
+    from PySide6.QtWidgets import QPushButton, QWidget
+    from dbdmapscout import qt_window
+    from dbdmapscout.qt_layouts import FlowRow, TileGrid, WrapCheck
+    host = keep(QWidget())
+    row = FlowRow(host)
+    row.right = 1
+    buttons = [QPushButton(f"Knopf Nummer {i}") for i in range(5)]
+    for b in buttons:
+        row.addWidget(b)
+    wide, narrow = row.sizeHint().width() + 50, 260
+    assert row.heightForWidth(wide) < row.heightForWidth(narrow)              # wraps into more lines
+    host.resize(wide, 200)
+    row.setGeometry(host.rect())
+    assert buttons[-1].geometry().right() == wide - 1                         # one line: the last one right
+    assert row.minimumSize().width() <= max(b.sizeHint().width() for b in buttons)
+    grid = TileGrid(keep(QWidget()), min_width=150, columns=6)
+    for _i in range(4):
+        grid.addWidget(QWidget())
+    assert grid.cols_for(1200) == 4 and grid.cols_for(500) == 2 and grid.cols_for(100) == 1   # 2 × 2, not 3 + 1
+    check = keep(WrapCheck())
+    check.setText("Etagen (Midwich) untereinander zeigen (aus: nur die untere) " * 3)
+    assert check.minimumSizeHint().width() < 300                              # the text wraps
+    win = keep(qt_window.MainWindow(lambda a, arg=None: None))
+    win.resize(1200, 800)
+    win.show()
+    qapp.processEvents()
+    assert win.nav.maximumWidth() == qt_window.NAV_W and win.nav.item(0).text()
+    win.resize(780, 800)
+    qapp.processEvents()
+    assert win.nav.maximumWidth() == qt_window.NAV_COMPACT_W and not win.nav.item(0).text() and win.nav.item(0).toolTip()

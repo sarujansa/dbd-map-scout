@@ -14,13 +14,14 @@ import sys
 from PIL import Image
 from PySide6.QtCore import QByteArray, QEvent, QSize, Qt
 from PySide6.QtGui import QColor, QFontDatabase, QIcon, QImage, QPalette, QPixmap
-from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel,
+from PySide6.QtWidgets import (QApplication, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel,
                                QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QPlainTextEdit, QProgressBar,
                                QPushButton, QRadioButton,
                                QScrollArea, QSizePolicy, QSlider, QStackedWidget, QTabWidget, QTreeWidget,
                                QTreeWidgetItem, QVBoxLayout, QWidget)
 
 from . import qt_theme
+from .qt_layouts import FlowRow, TileGrid, WrapCheck
 from .i18n import N_, _
 from .mapimage import FONT as FIRA
 
@@ -28,6 +29,8 @@ from .mapimage import FONT as FIRA
 PAGES = (("overview", N_("Übersicht")), ("maps", "Maps"), ("overlay", N_("Overlay")), ("stats", N_("Statistik")),
          ("server", N_("Server")), ("settings", N_("Einstellungen")), ("detect", N_("Erkennung")), ("log", "Log"))
 NAV_ICON = 18                     # px (logical): every icon of the navigation in the same box
+NAV_W, NAV_COMPACT_W = 190, 62    # px (logical): navigation with names / only icons
+NAV_COMPACT_BELOW = 960           # px (logical) window width from which the navigation shows only icons
 AUTO_PAGES = ("stats", "server", "detect", "log")   # built from the tab's structure (app_qt.ui_layout)
 THUMB_H = 170                     # px (logical) of the map picture on the overview
 SLIDER_MAX = 420                  # px (logical): longest slider (overlay position, size, opacity)
@@ -208,13 +211,13 @@ class OverviewPage(QWidget):
         page.setContentsMargins(22, 18, 22, 18)
         page.setSpacing(14)
 
-        top = QHBoxLayout()
+        top = FlowRow(spacing=12)                 # narrow window: the status goes below the title
+        top.right = 1
         top.addWidget(_label(_("Übersicht"), "h1"))
-        top.addStretch()
         self.pill = QLabel()
         self.pill.setObjectName("pill")
         self.pill.setMaximumWidth(520)
-        top.addWidget(self.pill, alignment=Qt.AlignVCenter)
+        top.addWidget(self.pill)
         page.addLayout(top)
 
         # first start only: what to do and the hotkeys that matter
@@ -248,11 +251,10 @@ class OverviewPage(QWidget):
         self.queue = _label(cls="dim", wrap=True)
         info.addWidget(self.queue)
         info.addSpacing(8)
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(26)
+        grid = TileGrid(min_width=110, columns=4, spacing=20)    # four values side by side, or two by two
         self.facts = [FactBox() for _i in range(4)]
-        for i, box in enumerate(self.facts):
-            grid.addWidget(box, 0, i)
+        for box in self.facts:
+            grid.addWidget(box)
         info.addLayout(grid)
         self.note = _label(cls="note", wrap=True)
         info.addWidget(self.note)
@@ -269,8 +271,7 @@ class OverviewPage(QWidget):
             ul.addWidget(ub)
         info.addWidget(self.unknown)
         info.addStretch()
-        btns = QHBoxLayout()
-        btns.setSpacing(6)
+        btns = FlowRow(spacing=6)                 # the buttons wrap instead of running out of the card
         self.buttons = {}
         for key in ("scan", "rotate", "toggle", "reject", "confirm", "layout", "floor"):
             b = QPushButton()
@@ -279,7 +280,6 @@ class OverviewPage(QWidget):
             b.clicked.connect(lambda _c=False, k=key: self._post(k))
             btns.addWidget(b)
             self.buttons[key] = b
-        btns.addStretch()
         info.addLayout(btns)
         cl.addLayout(info, 1)
         page.addWidget(card)
@@ -291,22 +291,21 @@ class OverviewPage(QWidget):
         self.today_note = _label(cls="dim")
         head.addWidget(self.today_note)
         page.addLayout(head)
-        tiles = QHBoxLayout()
-        tiles.setSpacing(12)
+        tiles = TileGrid(min_width=170, columns=4)
         self.tiles = []
         for _i in range(4):
             t = _card()
             tl = QVBoxLayout(t)
             tl.setContentsMargins(14, 12, 14, 12)
             box = FactBox(bar=True)
+            box.sub.setWordWrap(True)
             tl.addWidget(box)
-            tiles.addWidget(t, 1)
+            tiles.addWidget(t)
             self.tiles.append(box)
         page.addLayout(tiles)
 
         # system values and the last rounds
-        row = QHBoxLayout()
-        row.setSpacing(12)
+        row = TileGrid(min_width=300, columns=2)  # side by side, below each other in a narrow window
         sysc = _card()
         self.sys_lay = QVBoxLayout(sysc)
         self.sys_lay.setContentsMargins(14, 12, 14, 12)
@@ -315,7 +314,7 @@ class OverviewPage(QWidget):
         self.sys_note = _label(cls="dim", wrap=True)
         self.sys_lay.addWidget(self.sys_note)
         self.sys_lay.addStretch()
-        row.addWidget(sysc, 1)
+        row.addWidget(sysc)
         last = _card()
         self.last_lay = QVBoxLayout(last)
         self.last_lay.setContentsMargins(14, 12, 14, 12)
@@ -324,7 +323,7 @@ class OverviewPage(QWidget):
         self.last_empty = _label(_("Noch keine Runden gespeichert."), "dim")
         self.last_lay.addWidget(self.last_empty)
         self.last_lay.addStretch()
-        row.addWidget(last, 1)
+        row.addWidget(last)
         page.addLayout(row)
         page.addStretch()
 
@@ -450,7 +449,7 @@ def make_control(kind, key, post):
     """(widget, extra) of one control of the UI model; clicks go out as post("act", (key, value))."""
     extra = None
     if kind == "check":
-        w = QCheckBox()
+        w = WrapCheck()                           # its text wraps in a narrow window (QCheckBox's does not)
         w.clicked.connect(lambda checked: post("act", (key, checked)))
     elif kind == "button":
         w = QPushButton()
@@ -778,10 +777,19 @@ class FormPage(QWidget, _Arranged):
     def _add(self, item, lay):
         kind = item[0]
         if kind == "row":
-            row = QHBoxLayout()
-            row.setSpacing(8)
-            for c in item[1]:
-                self._add(c, row)
+            kids = item[1]
+            if any(c[0] in ("hint", "slider") for c in kids):    # text that wraps beside controls: a plain row
+                row = QHBoxLayout()
+                row.setSpacing(8)
+                for c in kids:
+                    self._add(c, row)
+            else:                                     # controls only: they wrap when the window is narrow
+                row = FlowRow()
+                cut = next((i for i, c in enumerate(kids) if c[0] == "stretch"), len(kids))
+                row.right = len([c for c in kids[cut:] if c[0] != "stretch"])
+                for c in kids:
+                    if c[0] != "stretch":
+                        self._add(c, row)
             lay.addLayout(row)
             return
         if kind == "grid":                          # ("grid", columns, rows): the rows side by side (hotkeys)
@@ -802,7 +810,10 @@ class FormPage(QWidget, _Arranged):
             lay.addStretch()
             return
         w, extra = make_control(kind, item[1], self._post)
-        lay.addWidget(w, 1 if kind == "hint" and isinstance(lay, QHBoxLayout) else 0)   # text beside: takes the room
+        if isinstance(lay, FlowRow):
+            lay.addWidget(w)
+        else:
+            lay.addWidget(w, 1 if kind == "hint" and isinstance(lay, QHBoxLayout) else 0)  # text beside: takes the room
         self.controls[item[1]] = (kind, w, extra)
 
     def show_states(self, states):
@@ -1315,18 +1326,16 @@ class DashboardView(QWidget):
         self.empty = _label(cls="dim")
         lay.addWidget(self.empty)
         self.tiles_box = QWidget()
-        self.grid = QGridLayout(self.tiles_box)
-        self.grid.setContentsMargins(0, 0, 0, 0)
-        self.grid.setSpacing(12)
+        self.grid = TileGrid(self.tiles_box, min_width=140, columns=6)   # fewer columns in a narrow window
         self.tiles = []
-        for i in range(6):
+        for _i in range(6):
             card = _card()
             cl = QVBoxLayout(card)
             cl.setContentsMargins(14, 12, 14, 12)
             box = FactBox(bar=True)
             box.sub.setWordWrap(True)                 # "no killer rounds with stats data": wraps in a narrow window
             cl.addWidget(box)
-            self.grid.addWidget(card, 0, i)
+            self.grid.addWidget(card)
             self.tiles.append((card, box))
         lay.addWidget(self.tiles_box)
         self.maps_card, self.maps = self._chart_card(lay, _("Maps – am häufigsten gespielt"), MapBars())
@@ -1368,6 +1377,9 @@ class DashboardView(QWidget):
         _set(self.heat_note, "" if d.rows else _("Noch keine Killer-Runden mit Ergebnis von der Stats-Seite "
                                                  "(Einstellungen → Mehr → Offizielle Match-Daten)."))
         self.heat_note.setVisible(not d.rows)
+
+
+FLOW_KINDS = ("button", "combo", "check", "radio", "label", "entry", "value", "big")   # rows of these may wrap
 
 
 def _grows(node) -> bool:
@@ -1430,12 +1442,15 @@ class AutoPage(QWidget, _Arranged):
                     lay.addWidget(holder, 1 if top and _grows(n) else 0)
                 self.controls[key] = (kind, holder, None)
                 return
-            inner = QHBoxLayout() if n.get("row") else v
+            first = [c for c in kids if c.get("side") != "right"]
+            last = list(reversed([c for c in kids if c.get("side") == "right"]))
+            flow = n.get("row") and all(c["kind"] in FLOW_KINDS for c in kids)   # controls only: they wrap
+            inner = (FlowRow() if flow else QHBoxLayout()) if n.get("row") else v
             if inner is not v:
                 inner.setSpacing(8)
                 v.addLayout(inner)
-            first = [c for c in kids if c.get("side") != "right"]
-            last = list(reversed([c for c in kids if c.get("side") == "right"]))
+                if flow:
+                    inner.right = len(last)
             arrange = bool(self._page_key) and top and kind == "box" and inner is v and not _grows(n)  # own order
             col, run = None, 0
             for c in first:
@@ -1448,7 +1463,7 @@ class AutoPage(QWidget, _Arranged):
                     continue
                 col = None
                 self._build(c, inner, keys, top=top and inner is v)    # a table further down still gets the height
-            if n.get("row"):
+            if n.get("row") and not flow:
                 inner.addStretch()
             for c in last:
                 self._build(c, inner, keys, top=top and inner is v)
@@ -1489,7 +1504,9 @@ class AutoPage(QWidget, _Arranged):
         if kind == "table" and n.get("fit"):
             w.fit_rows()
         grow = kind in ("table", "chart", "log") or (kind == "hint" and isinstance(lay, QHBoxLayout))
-        if kind in ("button", "combo") and not isinstance(lay, QHBoxLayout):
+        if isinstance(lay, FlowRow):
+            lay.addWidget(w)
+        elif kind in ("button", "combo") and not isinstance(lay, QHBoxLayout):
             lay.addWidget(w, 0, Qt.AlignLeft)             # a button on a line of its own keeps its size
         else:
             lay.addWidget(w, 1 if grow else 0)
@@ -1779,7 +1796,9 @@ class MainWindow(QMainWindow):
         lay.setSpacing(0)
         self.nav = QListWidget()
         self.nav.setObjectName("nav")
-        self.nav.setFixedWidth(190)
+        self.nav.setFixedWidth(NAV_W)
+        self._nav_compact = False
+        self.nav.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.stack = QStackedWidget()
         self.overview = OverviewPage(post)
         self.maps = MapsPage(post)
@@ -1821,7 +1840,7 @@ class MainWindow(QMainWindow):
         lay.addLayout(right, 1)
         self.setCentralWidget(central)
         self.resize(1100, 760)
-        self.setMinimumSize(760, 520)
+        self.setMinimumSize(560, 480)            # narrower: the navigation shows only icons, the pages wrap
         self._log_alert = False
         self._dark = True
         self._nav_icons()
@@ -1987,3 +2006,15 @@ class MainWindow(QMainWindow):
     def resizeEvent(self, e):
         self.geometry_changed = True
         super().resizeEvent(e)
+        self._compact_nav(self.width() < NAV_COMPACT_BELOW)
+
+    def _compact_nav(self, on: bool):
+        """A narrow window: the navigation shows only its icons (names as hover text) – the page gets the room."""
+        if on == self._nav_compact:
+            return
+        self._nav_compact = on
+        self.nav.setFixedWidth(NAV_COMPACT_W if on else NAV_W)
+        for row, (_key, label) in enumerate(PAGES):
+            item = self.nav.item(row)
+            item.setText("" if on else _(label))
+            item.setToolTip(_(label) if on else "")
