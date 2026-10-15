@@ -1072,11 +1072,11 @@ EN = {
     "Neue Oberfläche (Qt) nicht verfügbar, das bisherige Fenster bleibt: {error}":
         "New window (Qt) not available, keeping the previous one: {error}",
     "Neues Fenster": "New window",
-    "Neues Fenster (Qt, Vorschau): Übersicht mit Navigation links": "New window (Qt, preview): overview with navigation on the left",
-    "Neues Steuerfenster mit Seite „Übersicht“ (Map, Timer, Server, Heute, Systemwerte, letzte Runden). Die "
-    "übrigen Seiten öffnen vorerst noch dieses Fenster. Gilt ab dem nächsten Start; ausschalten hier.":
-        "New control window with the page \"Overview\" (map, timer, server, today, system values, last rounds). The "
-        "other pages still open this window for now. Takes effect at the next start; switch it off here.",
+    "Neues Fenster (Qt) – aus: das bisherige Fenster": "New window (Qt) – off: the previous window",
+    "Steuerfenster mit Navigation links und Seite „Übersicht“ (Standard seit 1.56). Ausgeschaltet erscheint "
+    "wieder das bisherige Fenster. Gilt ab dem nächsten Start.":
+        "Control window with navigation on the left and the page \"Overview\" (default since 1.56). Switched off, "
+        "the previous window appears again. Takes effect at the next start.",
     "Gilt ab dem nächsten Start. Jetzt neu starten?": "Takes effect at the next start. Restart now?",
     "OK": "OK",
 }
