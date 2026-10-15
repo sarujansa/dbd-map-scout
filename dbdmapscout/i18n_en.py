@@ -581,8 +581,11 @@ EN = {
     "Verschieben aktiv – ziehen (rastet ein, Alt = frei), Pfeiltasten = fein, Ecke/Mausrad = Grösse":
         "Moving is on – drag (snaps, Alt = free), arrow keys = fine, corner/mouse wheel = size",
     "Rückgängig": "Undo",
-    "Die Karte ist so breit wie der schwarze Balken – grösser geht hier nicht. Grösser nur mit ausgeschaltetem „Im schwarzen Balken halten“ (ragt dann ins Spielbild).":
-        "The map is as wide as the black bar – it cannot get bigger here. Bigger only with “Keep the map in the black bar” switched off (it then reaches into the game picture).",
+    "Die Karte ist so breit wie der schwarze Balken – grösser geht so nicht. Grösser mit „Karte darf grösser als der Balken werden“ (ragt dann ins Spielbild).":
+        "The map is as wide as the black bar – it cannot get bigger like this. Bigger with “The map may grow bigger than the bar” (it then reaches into the game picture).",
+    "Karte darf grösser als der Balken werden (ragt dann ins Spielbild)": "The map may grow bigger than the bar (it then reaches into the game picture)",
+    "Erlaubt jede Kartengrösse: Ist die Karte breiter als der schwarze Balken, bleibt sie an dessen Aussenrand und ragt ins Spielbild. Aus: Die Karte wird nie breiter als der Balken (auf 3440×1440 etwa 31 % der Bildhöhe).":
+        "Allows any map size: when the map is wider than the black bar it stays at the bar's outer edge and reaches into the game picture. Off: the map is never wider than the bar (about 31 % of the height on 3440×1440).",
     "Nimmt die letzte Änderung an Position oder Grösse zurück (Karte, Systemwerte, Musik) – auch mit Strg+Z auf dieser Seite. Ein ganzes Ziehen zählt als ein Schritt.":
         "Takes back the last change of place or size (map, system values, music) – also with Ctrl+Z on this page. A whole drag counts as one step.",
     "Merkt Position und Grösse aller Elemente getrennt für jede Grösse des DBD-Fensters (z. B. Vollbild 3440×1440 und ein kleineres Fenster) und lädt sie automatisch, sobald DBD in dieser Grösse läuft.":

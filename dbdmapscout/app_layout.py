@@ -129,7 +129,7 @@ class LayoutMemory:
             bar = data.get("bar", 0)
             lay = next((lay for lay in data["layers"] if lay[0] == "map"), None)
             o = self.settings["overlay"]
-            in_bar = o["anchor"] == "auto" or o.get("keep_in_bar", True)
+            in_bar = (o["anchor"] == "auto" or o.get("keep_in_bar", True)) and not o.get("grow_past_bar", False)
             iw, ih = self.overlay.map_size() if self.overlay.has_map() else (0, 0)
             if not ih:
                 pic = self._preview_sample()
@@ -137,8 +137,8 @@ class LayoutMemory:
             if lay and in_bar and bar >= layout.MIN_BAR and (lay[1] < bar or lay[1] + lay[3] > gw - bar):
                 avail = layout.max_width(bar, int(gh * o["margin"]))
                 if self._map_height() * gh * iw / ih > avail + 2:     # the map itself wider than the bar
-                    text = _("Die Karte ist so breit wie der schwarze Balken – grösser geht hier nicht. Grösser "
-                             "nur mit ausgeschaltetem „Im schwarzen Balken halten“ (ragt dann ins Spielbild).")
+                    text = _("Die Karte ist so breit wie der schwarze Balken – grösser geht so nicht. Grösser mit "
+                             "„Karte darf grösser als der Balken werden“ (ragt dann ins Spielbild).")
         if text != self.size_cap_var.get():
             self.size_cap_var.set(text)
 

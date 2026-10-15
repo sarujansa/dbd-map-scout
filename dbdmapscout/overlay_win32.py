@@ -123,11 +123,26 @@ def _font(size: int, heavy: bool = False):
 
 
 def compose(img: Image.Image, height: int, caption: str, transparent: bool, border: bool,
-            text_h: int = 0) -> Image.Image:
+            text_h: int = 0, split: int | None = None) -> Image.Image:
     """Scaled map + optional caption bar (+ edit border) as one RGBA picture; ``text_h``: height the
-    caption is sized for (stacked floors: one floor), 0 = ``height``."""
-    w = max(1, round(img.width * height / img.height))
-    pic = img.resize((w, height), Image.LANCZOS)
+    caption is sized for (stacked floors: one floor), 0 = ``height``. ``split``: first row of the map below the
+    name drawn into the picture (mapimage.title_split) – the name is then scaled by ``text_h`` like the lines
+    below the map, the map alone by ``height`` (1.65.4, user: the map's size freely, the name stays)."""
+    if split and text_h and text_h != height and 0 < split < img.height:
+        title = img.crop((0, 0, img.width, split))
+        body = img.crop((0, split, img.width, img.height))
+        th = max(1, round(split * text_h / img.height))
+        bh = max(1, round(body.height * height / img.height))
+        title = title.resize((max(1, round(img.width * text_h / img.height)), th), Image.LANCZOS)
+        body = body.resize((max(1, round(img.width * height / img.height)), bh), Image.LANCZOS)
+        w = max(title.width, body.width)
+        pic = Image.new("RGBA", (w, th + bh), (0, 0, 0, 0))
+        pic.alpha_composite(title, ((w - title.width) // 2, 0))
+        pic.alpha_composite(body, ((w - body.width) // 2, th))
+        height = pic.height
+    else:
+        w = max(1, round(img.width * height / img.height))
+        pic = img.resize((w, height), Image.LANCZOS)
     if not transparent:
         bg = Image.new("RGBA", pic.size, BACKDROP + (255,))
         bg.alpha_composite(pic)
@@ -747,6 +762,17 @@ class PictureOverlay:
     def has_map(self) -> bool:
         return bool(self._frames)
 
+    def _title_split(self, frames):
+        """Row where the map starts below its drawn-in name (first picture; GIF floors have none), cached."""
+        if not frames:
+            return None
+        key = (id(frames[0][0]), len(frames))
+        if getattr(self, "_split_key", None) != key:
+            from .mapimage import title_split
+            parts = title_split(frames[0][0]) if len(frames) == 1 or self.stacked() <= 1 else None
+            self._split_key, self._split = key, (parts[2] if parts else None)
+        return self._split
+
     def floors(self) -> list:
         """Frame indices of the floors of the map (Midwich: bottom, top); [] = one floor."""
         return floor_frames(self._frames)
@@ -799,8 +825,10 @@ class PictureOverlay:
         new_base = base_key != self._base_key
         if new_base:                      # scaling is the slow part: done once per size, not per timer tick
             if self.show_map:
-                self._base = [(compose(img, height, base_key[1], self.transparent, False, text_h), dur)
-                              for img, dur in self._view_frames()[0]]
+                frames = self._view_frames()[0]
+                split = self._title_split(frames)
+                self._base = [(compose(img, height, base_key[1], self.transparent, False, text_h, split), dur)
+                              for img, dur in frames]
             else:                         # info only: an empty picture, the info block is drawn below it
                 self._base = [(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), 0)]
             self._base_key = base_key
