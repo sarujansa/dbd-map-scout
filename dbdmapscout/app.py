@@ -208,6 +208,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         o = self.settings["overlay"]
         pos = self._reg("ov.pos", ui.LabelFrame(f, text=_("Position"), padding=8))
         pos.pack(fill="x")
+        # 1.61: the screen with the map on it – where and how big, live; a click or drag places it there
+        self._reg("ov.preview", ui.Preview(pos, source=self._preview_data, command=self._preview_pick)).pack(fill="x")
         r = ui.Frame(pos)
         r.pack(fill="x", pady=(0, 4))
         self._reg("ov.anchor.label", ui.Label(r, text=_("Vorgabe"), width=12)).pack(side="left")
@@ -1226,6 +1228,68 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         o["pos_y"] = round(self.posy_var.get() / 100, 4)
         self._save_soon()
         self._tick_overlay(reschedule=False)
+
+    def _preview_data(self) -> dict:
+        """What the overlay tab's preview draws: the screen DBD runs on (full screen), the map where
+        _place_overlay would put it (layout.preview_rect), as big and transparent as set, the lines below it."""
+        o = self.settings["overlay"]
+        _gx, _gy, gw, gh = self._game_rect()
+        pic = None
+        if o.get("show_map", True):
+            pic = getattr(self, "_thumb_src", None) if self.current else None
+            pic = pic or self._preview_sample()
+        lines = []
+        if o.get("show_timer", True):
+            lines.append("03:27")
+        if o.get("show_server", True) and self.settings.get("show_connection"):
+            lines.append(_("FRANKFURT · PING 31 MS"))
+        if o.get("show_record", True):
+            lines.append(_("Ø 2,8 KILLS · 12 RUNDEN"))
+        aspect = pic.width / pic.height if pic is not None else 0.8
+        rows = (len(lines) + 1) if lines and o.get("show_timer", True) else len(lines)
+        x, y, w, h, mh = layout.preview_rect(gw, gh, o["anchor"], o.get("pos_x", 0.0), o.get("pos_y", 0.0),
+                                             self._map_height(), o["margin"], o.get("keep_in_bar", True),
+                                             aspect, rows)
+        if pic is None:
+            mh = 0
+        return {"screen": (gw, gh), "bar": layout.bar_width(gw, gh), "rect": (x, y, w, h, mh), "pic": pic,
+                "lines": lines, "opacity": o["opacity"], "transparent": o.get("transparent", True)}
+
+    def _preview_sample(self):
+        """A map picture for the preview while none is on display (the first one of the catalog), loaded once."""
+        if getattr(self, "_preview_pic", None) is None:
+            from PIL import Image
+            for mid in self.catalog.maps:
+                path, _v = self.catalog.image_path(mid, 1)
+                if path:
+                    try:
+                        with Image.open(path) as im:
+                            im.seek(0)
+                            pic = im.convert("RGBA")
+                        pic.thumbnail((480, 480))
+                        self._preview_pic = pic
+                        break
+                    except (OSError, ValueError):
+                        continue
+        return getattr(self, "_preview_pic", None)
+
+    def _preview_pick(self, value):
+        """A click or drag on the preview: the map's centre goes there – an own position (like the sliders)."""
+        what, cx, cy = value
+        if what != "move":
+            return
+        _x, _y, w, h, _mh = self._preview_data()["rect"]
+        _gx, _gy, gw, gh = self._game_rect()
+        fx, fy = layout.pos_from_point(gw, gh, w, h, cx, cy)
+        self._syncing = True
+        try:
+            self.posx_var.set(round(fx * 100, 1))
+            self.posy_var.set(round(fy * 100, 1))
+            self.posx_label.configure(text=f"{fx * 100:.0f} %")
+            self.posy_label.configure(text=f"{fy * 100:.0f} %")
+        finally:
+            self._syncing = False
+        self._pos_changed()
 
     def _size_changed(self):
         self.settings["overlay"]["height"] = round(self.size_var.get() / 100, 3)
