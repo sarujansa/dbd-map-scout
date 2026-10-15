@@ -648,7 +648,11 @@ class Table(QTreeWidget):
         rows = st.get("rows", [])
         shape = (tuple(tuple(c) for c in cols), tuple((r[0], r[1], r[2], tuple(r[3]), tuple(r[4])) for r in rows),
                  tuple(sorted(st.get("colours", {}).items())))
-        if shape != self._shape:
+        if shape != self._shape and self._shape is not None and shape[0] == self._shape[0] and shape[2] == \
+                self._shape[2] and [r[:2] for r in shape[1]] == [r[:2] for r in self._shape[1]]:
+            self._shape = shape                       # same rows, other values (pings, counts): update in place
+            self._update_cells(cols, rows, st.get("colours", {}))
+        elif shape != self._shape:
             self._shape = shape
             self._cols = [c[0] for c in cols]
             tree = bool(cols) and cols[0][0] == "#0"
@@ -681,8 +685,37 @@ class Table(QTreeWidget):
                 self.setColumnWidth(i, max(self.columnWidth(i), fm.horizontalAdvance(c[1]) + 24))
             if cols:
                 self.header().setSectionResizeMode(0, self.header().ResizeMode.Stretch)
+        self._select(st)
+
+    def _items(self):
+        it = self.invisibleRootItem()
+        stack = [it.child(i) for i in range(it.childCount() - 1, -1, -1)]
+        while stack:
+            item = stack.pop()
+            yield item
+            stack += [item.child(i) for i in range(item.childCount() - 1, -1, -1)]
+
+    def _update_cells(self, cols, rows, colours):
+        """Texts and colours of the rows already there (same rows in the same order) – no rebuild, no resizing,
+        the scroll position stays."""
+        tree = bool(cols) and cols[0][0] == "#0"
+        for item, (_iid, _depth, text, values, tags, _o) in zip(self._items(), rows):
+            cells = ([text] if tree else []) + list(values)
+            fg = next((colours[t] for t in tags if t in colours), None)
+            for i in range(len(cols)):
+                value = cells[i] if i < len(cells) else ""
+                if item.text(i) != value:
+                    item.setText(i, value)
+                item.setData(i, Qt.ForegroundRole, QColor(fg) if fg else None)
+
+    def _select(self, st):
         sel = set(st.get("selection", []))
-        self.setSelectionMode(QTreeWidget.SingleSelection if st.get("selectable") else QTreeWidget.NoSelection)
+        mode = QTreeWidget.SingleSelection if st.get("selectable") else QTreeWidget.NoSelection
+        if self.selectionMode() != mode:
+            self.setSelectionMode(mode)
+        if sel == getattr(self, "_sel", None) and sel == {i.data(0, Qt.UserRole) for i in self.selectedItems()}:
+            return                                # nothing changed: no walk over all rows 4×/s
+        self._sel = sel
         it = self.invisibleRootItem()
         stack = [it.child(i) for i in range(it.childCount())]
         self.blockSignals(True)
@@ -696,31 +729,48 @@ class Table(QTreeWidget):
 
 
 class LogView(QPlainTextEdit):
-    """The log (App._log_entries, filtered by the categories ticked) – coloured by category, follows new lines."""
+    """The log (App._log_entries, filtered by the categories ticked) – coloured by category, follows new lines.
+    New entries are appended (the entries are the App's own tuples, so the last one shown is found by identity);
+    only another colour scheme or ``rev`` (filter changed, log cleared) rebuilds the whole text."""
+
+    MAX_LINES = 400
 
     def __init__(self):
         super().__init__()
         self.setReadOnly(True)
         self.setMinimumHeight(360)
-        self._shown = None
+        self.setMaximumBlockCount(self.MAX_LINES)        # old lines drop off by themselves
+        self._last = None                                # last entry shown
+        self._look = None
+
+    def _row(self, entry, col):
+        ts, cat, text = entry
+        msg = col["Fehler"] if cat == "Fehler" else col["text"]
+        return (f'<span style="color:{col["ts"]}">{html.escape(ts)}</span>&nbsp;&nbsp;'
+                f'<span style="color:{col.get(cat, col["text"])}">{html.escape(_(cat))}</span>&nbsp;&nbsp;'
+                f'<span style="color:{msg}">{html.escape(text)}</span>')
 
     def show_state(self, st):
         from .theme import LOG_COLORS
-        lines = tuple(tuple(e) for e in st.get("lines", ()))
-        key = (lines, st.get("dark"))
-        if key == self._shown:
+        lines = list(st.get("lines", ()))
+        look = (st.get("dark"), st.get("rev"))           # colours / filter or cleared log
+        last = lines[-1] if lines else None
+        if last is self._last and look == self._look:
             return
-        self._shown = key
-        col = LOG_COLORS[bool(st.get("dark", True))]
+        col = LOG_COLORS[bool(look[0])]
         bar = self.verticalScrollBar()
         at_end = bar.value() >= bar.maximum() - 4
-        rows = []
-        for ts, cat, text in lines:
-            msg = col["Fehler"] if cat == "Fehler" else col["text"]
-            rows.append(f'<span style="color:{col["ts"]}">{html.escape(ts)}</span>&nbsp;&nbsp;'
-                        f'<span style="color:{col.get(cat, col["text"])}">{html.escape(_(cat))}</span>&nbsp;&nbsp;'
-                        f'<span style="color:{msg}">{html.escape(text)}</span>')
-        self.document().setHtml("<br>".join(rows))
+        start = None
+        if look == self._look and self._last is not None:
+            start = next((i + 1 for i in range(len(lines) - 1, -1, -1) if lines[i] is self._last), None)
+        if start is None:                                # filter/colours changed, log cleared: everything again
+            # one paragraph (block) per line, like appendHtml: the block limit then drops single old lines
+            self.document().setHtml("".join(f'<p style="margin:0">{self._row(e, col)}</p>'
+                                            for e in lines[-self.MAX_LINES:]))
+        else:
+            for e in lines[start:]:
+                self.appendHtml(self._row(e, col))
+        self._last, self._look = last, look
         if at_end:
             bar.setValue(bar.maximum())
 

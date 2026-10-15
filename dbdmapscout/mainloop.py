@@ -7,13 +7,27 @@ program's own Win32 windows (overlay, system values), as Tcl's did before.
 """
 from __future__ import annotations
 
+import collections
 import sys
+import time
 import traceback
 
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QGuiApplication
 
 IS_WIN = sys.platform == "win32"
+SLOW_MS = 30                # a timer callback this long, or this late, is noted for the diagnosis (window lag)
+SLOW_KEPT = 40
+
+
+def _name(fn) -> str:
+    """Readable name of a callback: "App._tick_overlay", lambdas by where they were written."""
+    name = getattr(fn, "__qualname__", None) or type(fn).__name__
+    if name.endswith("<lambda>"):
+        code = getattr(fn, "__code__", None)
+        if code is not None:
+            name += f" ({code.co_filename.rsplit('/', 1)[-1].rsplit(chr(92), 1)[-1]}:{code.co_firstlineno})"
+    return name
 
 
 class MainLoop:
@@ -21,22 +35,31 @@ class MainLoop:
         self.qapp = qapp
         self.on_error = on_error
         self._jobs = set()                  # running single-shot timers (a QTimer without a reference is lost)
+        # (time, what, took ms, late ms) of slow or late callbacks – "Diagnose kopieren" shows them
+        self.slow = collections.deque(maxlen=SLOW_KEPT)
 
     def after(self, ms, fn):
         t = QTimer()
         t.setSingleShot(True)
-        t.timeout.connect(lambda: self._fire(t, fn))
+        due = time.perf_counter() + max(0, int(ms)) / 1000
+        t.timeout.connect(lambda: self._fire(t, fn, due))
         self._jobs.add(t)
         t.start(max(0, int(ms)))
         return t
+
+    def note(self, what: str, took_ms: float, late_ms: float = 0.0):
+        """Remember something that held up the window (also used for the App's events)."""
+        if took_ms >= SLOW_MS or late_ms >= 2 * SLOW_MS:
+            self.slow.append((time.time(), what, took_ms, late_ms))
 
     def after_cancel(self, job):
         if job is not None:
             job.stop()
             self._jobs.discard(job)
 
-    def _fire(self, t, fn):
+    def _fire(self, t, fn, due=None):
         self._jobs.discard(t)
+        start = time.perf_counter()
         try:
             fn()
         except Exception:
@@ -44,6 +67,8 @@ class MainLoop:
                 self.on_error(traceback.format_exc())
             else:
                 traceback.print_exc()
+        late = (start - due) * 1000 if due is not None else 0.0      # the loop was busy elsewhere (paint, Qt …)
+        self.note(_name(fn), (time.perf_counter() - start) * 1000, late)
 
     def clipboard_set(self, text: str):
         QGuiApplication.clipboard().setText(text)

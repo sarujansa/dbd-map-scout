@@ -293,3 +293,23 @@ def test_quitting_ends_the_loop_although_the_window_refuses_to_close():
     win.close()
     import shiboken6
     shiboken6.delete(win)
+
+
+def test_slow_callbacks_are_noted_for_the_diagnosis():
+    pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
+    from dbdmapscout import diagnose, qt_window
+    from dbdmapscout.mainloop import MainLoop
+    loop = MainLoop(qt_window.application())
+
+    def slow():
+        time.sleep(0.05)
+
+    loop.after(0, slow)
+    loop.after(0, lambda: None)                               # fast: not noted
+    loop.after(120, loop.quit)
+    loop.mainloop()
+    assert [s[1] for s in loop.slow] == ["test_slow_callbacks_are_noted_for_the_diagnosis.<locals>.slow"]
+    assert loop.slow[0][2] >= 45
+    text = "\n".join(diagnose.lag_lines(loop.slow))
+    assert "Fenster-Hänger" in text and "slow" in text and " ms" in text
+    assert diagnose.lag_lines([]) == ["Fenster-Hänger (≥ 30 ms): keine"]

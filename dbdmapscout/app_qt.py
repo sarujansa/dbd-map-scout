@@ -86,7 +86,7 @@ def ui_state(w) -> dict:
     lines = getattr(w, "_dbdms_lines", None)
     if lines is not None:                         # the log: its entries (ts, category, text), filtered
         entries, dark = lines()
-        st.update(lines=entries, dark=dark)
+        st.update(lines=entries, dark=dark, rev=getattr(w, "_dbdms_rev", 0))
         return st
     chart = getattr(w, "_dbdms_chart", None)
     if chart is not None:
