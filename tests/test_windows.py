@@ -412,3 +412,31 @@ def test_tk_tab_structure_for_the_qt_window(root):
     tk_act(reg[str(row.winfo_children()[0])], None)
     assert sorted_by == ["ping"] and clicked == ["ping"]
     top.destroy()
+
+
+def test_tk_dialog_structure_for_the_qt_window(root):
+    """A Tk dialog as the Qt window sees it: radio buttons, entries, pictures; visible up to the Toplevel."""
+    import tkinter as tk
+    from tkinter import ttk
+    from dbdmapscout.app_qt import tk_act, tk_layout, tk_shown, tk_state
+    dlg = tk.Toplevel(root)
+    dlg.withdraw()
+    body = ttk.Frame(dlg)
+    body.pack()
+    mode = tk.StringVar(value="replace")
+    r = ttk.Radiobutton(body, text="Neue Map", variable=mode, value="new")
+    r.pack()
+    name = tk.StringVar(value="")
+    e = ttk.Entry(body, textvariable=name)
+    e.pack()
+    pic = ttk.Label(body, text="Ergebnis")
+    pic._dbdms_pil = None
+    pic.pack()
+    reg = {}
+    node = tk_layout(body, reg)
+    assert [c["kind"] for c in node["children"]] == ["radio", "entry", "image"]
+    assert tk_shown(r)                                        # a hidden dialog still counts as shown inside
+    tk_act(r)
+    tk_act(e, "Shattered Square")
+    assert mode.get() == "new" and name.get() == "Shattered Square" and tk_state(r)["value"]
+    dlg.destroy()

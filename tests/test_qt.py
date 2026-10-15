@@ -413,3 +413,37 @@ def test_hotkey_from_qt_is_checked_like_a_tk_key():
     h._hk_qt_key("rotate_map", ["ctrl", "alt"], "k", None)
     h._hk_qt_key("scan_now", ["ctrl"], "s", None)                    # not the one recording: ignored
     assert seen == [({"ctrl", "alt"}, "k", None)]
+
+
+# ------------------------------------------------------------------ stage 4b: Tk dialogs shown by the Qt window
+def test_dialog_window_mirrors_and_closes_both_ways(qapp, keep):
+    from PIL import Image
+    from dbdmapscout import qt_window
+    posted = queue.Queue()
+    node = {"kind": "box", "key": ".d", "row": False, "children": [
+        {"kind": "radio", "key": ".d.new"}, {"kind": "entry", "key": ".d.name"},
+        {"kind": "combo", "key": ".d.realm"}, {"kind": "image", "key": ".d.after"},
+        {"kind": "button", "key": ".d.save"}]}
+    win = keep(qt_window.MainWindow(lambda a, arg=None: posted.put((a, arg))))
+    win.open_dialog(".d", "Kartenbild hinzufügen", node)
+    dlg = win.dialogs[".d"]
+    pic = Image.new("RGBA", (80, 120), (200, 0, 0, 255))
+    win.show_dialog_states(".d", {
+        ".d.new": {"text": "Neue Map", "value": True, "enabled": True, "visible": True},
+        ".d.name": {"value": "Shattered Square", "enabled": True, "visible": True},
+        ".d.realm": {"value": "Ormond", "values": ["Autohaven"], "editable": True, "enabled": True, "visible": True},
+        ".d.after": {"text": "Ergebnis", "pil": pic, "visible": True},
+        ".d.save": {"text": "Speichern", "enabled": True, "visible": True}})
+    c = dlg.page.controls
+    assert c[".d.new"][1].isChecked() and c[".d.name"][1].text() == "Shattered Square"
+    assert c[".d.realm"][1].isEditable() and c[".d.realm"][1].currentText() == "Ormond"
+    assert not c[".d.after"][1].pixmap().isNull()
+    assert posted.empty()
+    c[".d.name"][1].textEdited.emit("Shattered Sq")
+    c[".d.new"][1].click()
+    assert [posted.get_nowait() for _i in range(2)] == [("act", (".d.name", "Shattered Sq")), ("act", (".d.new", None))]
+    win.close_dialog(".d")                                    # closed by the App (saved): no echo back
+    assert posted.empty() and ".d" not in win.dialogs
+    win.open_dialog(".d", "x", node)
+    win.dialogs[".d"].reject()                                # Esc / X in Qt: the Tk dialog goes too
+    assert posted.get_nowait() == ("dlg_close", ".d")
