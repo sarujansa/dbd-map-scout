@@ -30,7 +30,7 @@ from .app_stats import StatsTab
 from .app_lobby import LobbyInfo
 from .app_hotkeys import Hotkeys
 from .app_settings import SettingsTab
-from .app_sysinfo import HUD_SIDES, SysInfo
+from .app_sysinfo import HUD_SIDES, MEDIA_SCALE, MEDIA_SPOTS, SysInfo
 from .app_qt import QtShell
 
 LANGS = [("en", "EN"), ("de", "DE"), ("fr", "FR"), ("es", "ES"), ("es-MX", "ES-MX"), ("it", "IT"),
@@ -299,10 +299,32 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
                                                            "Uhrzeit (auch wenn die Systemwerte aus sind: rechts oben)"),
                                              variable=self.today_var, command=self._today_flag_changed)
                   ).pack(anchor="w", pady=(6, 0))
+        self.media_var = ui.BooleanVar(value=o.get("show_media", True))
+        self._reg("ov.media", ui.Checkbutton(sysf, text=_("„Läuft gerade“: Titel, Interpret und Cover der Musik "
+                                                           "(Spotify, Browser … – nur während sie spielt)"),
+                                             variable=self.media_var, command=self._today_flag_changed)
+                  ).pack(anchor="w", pady=(2, 0))
+        mr = ui.Frame(sysf)
+        mr.pack(fill="x", pady=(4, 0))
+        self._reg("ov.media_pos.label", ui.Label(mr, text=_("Musik"), width=12)).pack(side="left")
+        spots = dict(MEDIA_SPOTS)
+        self.media_pos_var = ui.StringVar(value=_(spots.get(o.get("media_pos", "below"), spots["below"])))
+        mcb = self._reg("ov.media_pos", ui.Combobox(mr, textvariable=self.media_pos_var, state="readonly", width=38,
+                                                     values=[_(t) for _k, t in MEDIA_SPOTS]))
+        mcb.pack(side="left", padx=6)
+        mcb.bind("<<ComboboxSelected>>", lambda e: self._media_spot_changed())
+        self.media_size_var = ui.DoubleVar(value=round(float(o.get("media_scale", 1.0)) * 100))
+        self._slider(sysf, _("Größe Musik"), self.media_size_var, *MEDIA_SCALE, self._media_size_changed,
+                     key="ov.media_size")
+        self.media_cover_var = ui.BooleanVar(value=o.get("media_cover", True))
+        self._reg("ov.media_cover", ui.Checkbutton(sysf, text=_("Albumcover zeigen"), variable=self.media_cover_var,
+                                                   command=self._today_flag_changed)).pack(anchor="w", pady=(2, 0))
         return outer
 
     def _today_flag_changed(self):
         self.settings["overlay"]["show_today"] = bool(self.today_var.get())
+        self.settings["overlay"]["show_media"] = bool(self.media_var.get())
+        self.settings["overlay"]["media_cover"] = bool(self.media_cover_var.get())
         self._save_soon()
         self._tick_overlay(reschedule=False)
 
@@ -988,6 +1010,12 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
             self._log(_("{text} – Details in dbdmapscout.log", text=f"{key}: {last}"), "Fehler")
 
     def _place_overlay(self):
+        try:
+            self._place_overlay_map()
+        finally:
+            self._media_place()                     # the music card goes where the map and system values are
+
+    def _place_overlay_map(self):
         o = self.settings["overlay"]
         self.worker.map_on_screen = self.overlay.has_map() and not self.hidden_after_match
         gx, gy, gw, gh = self._game_rect()               # keeps the game window info fresh
@@ -1607,6 +1635,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
             self.tray.stop()
             self.conn.stop()
             self.sysmon.stop()
+            self.media.stop()
             self.worker.stop()
             self.hotkeys.stop()
             self.worker.join(timeout=4)      # let a running OCR call finish cleanly
@@ -1614,6 +1643,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
                 self.overlay.destroy()
             if self.hud is not None:
                 self.hud.destroy()
+            if self.media_win is not None:
+                self.media_win.destroy()
             self.toast.close()
         finally:
             self.root.quit()

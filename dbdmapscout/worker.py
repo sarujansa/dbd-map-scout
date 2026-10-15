@@ -66,6 +66,7 @@ class DetectionWorker(threading.Thread):
         self.watch_gen = None            # set by the UI: (number, source) of the map on display
         self.overlay_rect = None         # set by the UI: overlay position on screen (x, y, w, h) or None
         self.hud_rect = None             # … and of the system values at the top of a bar
+        self.media_rect = None           # … and of the music card ("Läuft gerade", 1.64)
         self.vbars = None                # (top, bottom, time, (w, h)): black bars above/below the picture
         self._vbar_looks = collections.deque(maxlen=VBAR_LOOKS)
         self.watch_status = _("keine Map angezeigt")
@@ -279,7 +280,7 @@ class DetectionWorker(threading.Thread):
                 if img is None:
                     sep = res = None                # covered by another window: nothing of DBD to read
                 else:
-                    if source is None and via["screen"] and (self.overlay_rect or self.hud_rect):
+                    if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect):
                         self._mask_overlay(img, origin[0] + box[0], origin[1] + box[1])
                     sep, res = reader.read(img, fw, fh, letterboxed=self._letterboxed(fw, fh))
                 if sep is not None:
@@ -330,7 +331,7 @@ class DetectionWorker(threading.Thread):
                     cb = corner_box(fw, fh)
                     corner = grab(cb)
                     if corner is not None:
-                        if source is None and via["screen"] and (self.overlay_rect or self.hud_rect):
+                        if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect):
                             self._mask_overlay(corner, origin[0] + cb[0], origin[1] + cb[1])
                         view = lobby_reader.read(corner, fw, fh)
                         if view.button is not None:
@@ -375,7 +376,7 @@ class DetectionWorker(threading.Thread):
                         full = look = grab((0, 0, fw, fh))
                         if look is not None:                 # None: covered -> no observation, nothing changes
                             ignore = None
-                            if source is None and via["screen"] and (self.overlay_rect or self.hud_rect):
+                            if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect):
                                 ignore = self._mask_overlay(look, origin[0], origin[1])   # in place: no 14 MB copy
                             obs = out_of_match.observe(look, ignore)
                             self._note_vbars(look, fw, fh)
@@ -508,9 +509,9 @@ class DetectionWorker(threading.Thread):
     def _mask_overlay(self, img, left, top):
         """Black out our own overlay in a screenshot (it is always on top and would
         otherwise be read as part of the game picture)."""
-        hud = self.hud_rect
-        if hud:
-            self._black_out(img, hud, left, top)
+        for r in (self.hud_rect, self.media_rect):
+            if r:
+                self._black_out(img, r, left, top)
         return self._black_out(img, self.overlay_rect, left, top)
 
     @staticmethod

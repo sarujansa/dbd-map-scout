@@ -320,3 +320,27 @@ def test_window_gets_real_clicks_while_the_timers_run(root):
     win.close()
     import shiboken6
     shiboken6.delete(win)                            # no Qt window may live on until the interpreter shuts down
+
+
+def test_media_controls_are_read_without_error():
+    """1.64 "Läuft gerade": the checked pywinrt version reads the Windows media controls (the runner plays
+    nothing: no title, but no error either)."""
+    from importlib.metadata import version
+    from dbdmapscout import media
+    assert version("winrt-Windows.Media.Control") == version("winrt-runtime") == "3.2.1"
+    assert version("winrt-Windows.Storage.Streams") == "3.2.1"
+    from winrt.windows.storage.streams import Buffer, InputStreamOptions     # the cover is read with these
+    assert bytes(memoryview(Buffer(4))) is not None and InputStreamOptions.READ_AHEAD
+    import time
+    w = media.MediaWatcher()
+    w.active = w.want_cover = True
+    w.start()                                 # the real way: its own thread with its own COM apartment
+    try:
+        deadline = time.time() + 15
+        while w.now.t == 0 and not w.error and time.time() < deadline:
+            time.sleep(0.2)
+    finally:
+        w.stop()
+    assert w.error == "" and w.now.t > 0, w.error
+    assert "Fehler" not in w.diag_line()
+

@@ -48,6 +48,11 @@ TIPS = {
     "Darunter „Heute“: Runden, Spielzeit, Ø Kills/Entkommen, Uhrzeit (auch wenn die Systemwerte aus sind: rechts oben)":
         "Zeigt im schwarzen Balken, solange eine Karte im Match zu sehen ist, wie viele Runden du heute gespielt "
         "hast, wie lange, Ø Kills bzw. Entkommen laut Stats-Seite und die Uhrzeit.",
+    "„Läuft gerade“: Titel, Interpret und Cover der Musik (Spotify, Browser … – nur während sie spielt)":
+        "Liest Titel und Interpret aus der Windows-Mediensteuerung (dieselbe Liste wie beim Lautstärkeregler von "
+        "Windows) – nur Anzeige, das Programm steuert nichts und speichert nichts.",
+    "Albumcover zeigen":
+        "Das Bild zum Lied links neben Titel und Interpret – Windows liefert es mit; es bleibt nur im Speicher.",
     "OLED-Schwarz (echtes Schwarz statt Grau im Dark Mode)":
         "Hintergründe in echtem Schwarz statt Dunkelgrau – passt zu OLED-Bildschirmen und geht mit jeder "
         "Akzentfarbe. Im hellen Modus ohne Wirkung.",

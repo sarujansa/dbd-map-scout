@@ -58,7 +58,9 @@ SPECS = {
             ("check", "ov.transparent"))),
         ("card", "ov.sys", (
             ("row", (("label", "ov.sysinfo.label"), ("combo", "ov.sysinfo"), ("stretch",))),
-            ("hint", "ov.sys_text"), ("hint", "ov.sys_hint"), ("check", "ov.today"))),
+            ("hint", "ov.sys_text"), ("hint", "ov.sys_hint"), ("check", "ov.today"),
+            ("check", "ov.media"), ("row", (("label", "ov.media_pos.label"), ("combo", "ov.media_pos"), ("stretch",))),
+            ("slider", "ov.media_size"), ("check", "ov.media_cover"))),
     ),
     "settings": (
         ("card", "st.look", (
