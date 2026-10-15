@@ -103,7 +103,7 @@ class SettingsTab:
         scb.pack(side="left", padx=8)
         scb.bind("<<ComboboxSelected>>", lambda e: self._style_changed())
         self.qt_var = tk.BooleanVar(value=self.settings.get("ui_toolkit", "tk") == "qt")
-        self._reg("st.qt", ttk.Checkbutton(look, text=_("Neues Fenster (Qt, Vorschau): Übersicht mit Navigation links"),
+        self._reg("st.qt", ttk.Checkbutton(look, text=_("Neues Fenster (Qt) – aus: das bisherige Fenster"),
                                            variable=self.qt_var, command=self._toolkit_changed)).pack(anchor="w",
                                                                                                       pady=(4, 0))
         self.dark_var = tk.BooleanVar(value=self.settings.get("dark_mode", True))

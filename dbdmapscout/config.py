@@ -56,7 +56,7 @@ DEFAULTS = {
     "dark_mode": True,
     "ui_zoom": 1.0,                     # control window: font size factor (uiscale.ZOOMS)
     "ui_style": "fluent_gold",          # control window design (theme.STYLES)
-    "ui_toolkit": "tk",                 # control window: "tk" or "qt" (new window, stage 1 since 1.51)
+    "ui_toolkit": "qt",                 # control window: "qt" (default since 1.56) or "tk" (the previous one)
     "qt_geometry": "",                  # Qt window: QWidget.saveGeometry() as base64
     "window_geometry": "",
     "window_zoomed": False,             # control window maximised (window_geometry = size before that)
