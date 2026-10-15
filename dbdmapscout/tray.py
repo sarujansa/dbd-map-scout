@@ -1,7 +1,7 @@
 """Icon in the notification area (next to the clock) – pystray, own thread.
 
 Menu actions are only posted to the UI thread (``post(action)`` with "open" / "toggle" /
-"quit"); Tk is never touched from the tray thread.
+"quit"); the window is never touched from the tray thread.
 """
 from __future__ import annotations
 

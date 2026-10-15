@@ -1,6 +1,6 @@
-"""Everything the page "Übersicht" of the Qt window shows, collected from the running App (no Qt, no Tk calls).
+"""Everything the page "Übersicht" of the Qt window shows, collected from the running App (no Qt calls).
 
-Called on the Tk main thread from App._tick_overlay (4×/s); the only expensive part – rounds and official
+Called on the main thread from App._tick_overlay (4×/s); the only expensive part – rounds and official
 matches from the files – comes from App._joined(), which is cached by file time.
 """
 from __future__ import annotations
@@ -100,7 +100,8 @@ def actions(app) -> dict:
         out["confirm"] = (True, _("Stimmt"))
     vs = app._layouts()
     if len(vs) >= 2:
-        out["layout"] = (True, _("Layout {n} von {total}", n=roman(app.current[1]), total=roman(vs[-1])) + " ▸")
+        out["layout"] = (True, _("Layout {n} von {total}", n=roman(app.current[1]), total=roman(vs[-1])) + " ▸"
+                         + (" " + _("(unsicher)") if app._layout_unsure else ""))
     floors = app.overlay.floors() if app.current else []
     if floors:
         f = app._floor

@@ -7,12 +7,11 @@ import datetime
 import logging
 import os
 import time
-import tkinter as tk
 import webbrowser
-from tkinter import ttk
 from types import SimpleNamespace
 
 from . import history, official, regions, sysinfo
+from . import uimodel as ui
 from .capture import foreground_root, is_game_window
 from .i18n import N_, _
 from .lobby import KILLERS, killer_label
@@ -52,53 +51,51 @@ class StatsTab:
     # -------------------------------------------------------------- tab: statistics
     def _tab_stats(self):
         outer, f = self._scroll_tab()
-        self.stats_today_var = tk.StringVar(value="")       # today at a glance, independent of the filters
-        ttk.Label(f, textvariable=self.stats_today_var, wraplength=540).pack(anchor="w", pady=(0, 6))
-        fr = ttk.Frame(f)
+        self.stats_today_var = ui.StringVar(value="")       # today at a glance, independent of the filters
+        ui.Label(f, textvariable=self.stats_today_var, wraplength=540).pack(anchor="w", pady=(0, 6))
+        fr = ui.Frame(f)
         fr.pack(fill="x", pady=(0, 6))
         self._stats_periods = [(k, _(label)) for k, label in STATS_PERIODS]
-        self.stats_period_var = tk.StringVar(value=self._stats_periods[0][1])
-        cb = ttk.Combobox(fr, textvariable=self.stats_period_var, values=[lbl for _k, lbl in self._stats_periods],
+        self.stats_period_var = ui.StringVar(value=self._stats_periods[0][1])
+        cb = ui.Combobox(fr, textvariable=self.stats_period_var, values=[lbl for _k, lbl in self._stats_periods],
                           state="readonly", width=16)
         cb.pack(side="left")
         cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
         self._stats_regions = [(None, _("Alle Regionen"))]
-        self.stats_region_var = tk.StringVar(value=self._stats_regions[0][1])
-        self.stats_region_cb = ttk.Combobox(fr, textvariable=self.stats_region_var, state="readonly", width=20,
+        self.stats_region_var = ui.StringVar(value=self._stats_regions[0][1])
+        self.stats_region_cb = ui.Combobox(fr, textvariable=self.stats_region_var, state="readonly", width=20,
                                             values=[lbl for _c, lbl in self._stats_regions])
         self.stats_region_cb.pack(side="left", padx=(8, 0))
         self.stats_region_cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
         self._stats_roles = [(k, _(label)) for k, label in STATS_ROLES]
-        self.stats_role_var = tk.StringVar(value=self._stats_roles[0][1])
-        cb = ttk.Combobox(fr, textvariable=self.stats_role_var, values=[lbl for _k, lbl in self._stats_roles],
+        self.stats_role_var = ui.StringVar(value=self._stats_roles[0][1])
+        cb = ui.Combobox(fr, textvariable=self.stats_role_var, values=[lbl for _k, lbl in self._stats_roles],
                           state="readonly", width=13)
         cb.pack(side="left", padx=(8, 0))
         cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
         self._stats_killers = [(None, _("Alle Killer"))]
-        self.stats_killer_var = tk.StringVar(value=self._stats_killers[0][1])
-        self.stats_killer_cb = ttk.Combobox(fr, textvariable=self.stats_killer_var, state="readonly", width=14,
+        self.stats_killer_var = ui.StringVar(value=self._stats_killers[0][1])
+        self.stats_killer_cb = ui.Combobox(fr, textvariable=self.stats_killer_var, state="readonly", width=14,
                                             values=[lbl for _k, lbl in self._stats_killers])
         self.stats_killer_cb.pack(side="left", padx=(8, 0))
         self.stats_killer_cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
-        self.stats_var = tk.StringVar(value="")
-        self.stats_sum_label = ttk.Label(f, textvariable=self.stats_var, style="Big.TLabel", wraplength=540)
+        self.stats_var = ui.StringVar(value="")
+        self.stats_sum_label = ui.Label(f, textvariable=self.stats_var, style="Big.TLabel", wraplength=540)
         self.stats_sum_label.pack(anchor="w")
-        self.stats_res_var = tk.StringVar(value="")       # kills / escapes / bloodpoints (official data)
-        self.stats_res_label = ttk.Label(f, textvariable=self.stats_res_var, wraplength=540)     # only when needed
-        self.stats_lost_var = tk.StringVar(value="")
-        self.stats_lost_label = ttk.Label(f, textvariable=self.stats_lost_var, wraplength=540)   # only when needed
-        ttk.Label(f, text=_("Runden vom Map-Banner bis zum Rundenende (ab 1 min), nur lokal gespeichert. Kills, Escapes "
+        self.stats_res_var = ui.StringVar(value="")       # kills / escapes / bloodpoints (official data)
+        self.stats_res_label = ui.Label(f, textvariable=self.stats_res_var, wraplength=540)     # only when needed
+        self.stats_lost_var = ui.StringVar(value="")
+        self.stats_lost_label = ui.Label(f, textvariable=self.stats_lost_var, wraplength=540)   # only when needed
+        ui.Label(f, text=_("Runden vom Map-Banner bis zum Rundenende (ab 1 min), nur lokal gespeichert. Kills, Escapes "
                             "und Bloodpoints laut stats.deadbydaylight.com, sobald eine Runde dort zugeordnet ist."),
                   style="Dim.TLabel", wraplength=540).pack(anchor="w", pady=(2, 6))
-        row = ttk.Frame(f)                              # above the tables: they fill the rest of the tab
+        row = ui.Frame(f)                              # above the tables: they fill the rest of the tab
         row.pack(fill="x", pady=(0, 6))
-        ttk.Button(row, text=_("Stats-Seite öffnen"), command=lambda: self._official_open(False)).pack(side="left")
-        ttk.Button(row, text=_("Verlauf löschen"), command=self._stats_clear).pack(side="left", padx=(6, 0))
+        ui.Button(row, text=_("Stats-Seite öffnen"), command=lambda: self._official_open(False)).pack(side="left")
+        ui.Button(row, text=_("Verlauf löschen"), command=self._stats_clear).pack(side="left", padx=(6, 0))
         # one table at a time: sub-tabs instead of five tables below each other
-        self.stats_nb = ttk.Notebook(f)
+        self.stats_nb = ui.Notebook(f)
         self.stats_nb.pack(fill="both", expand=True)
-        self.stats_nb.bind("<<NotebookTabChanged>>",
-                           lambda e: getattr(self, "_autowrap", None) and self._autowrap.soon(), add="+")
         box = self._stats_page(_("Maps"))
         self.stats_maps = self._stats_tree(box, (("map", _("Map"), 130, "w"), ("n", _("Runden"), 62, "e"),
                                                  ("k", _("Killer"), 58, "e"), ("kills", _("Ø Kills"), 62, "e"),
@@ -110,34 +107,33 @@ class StatsTab:
                                                    ("avg", _("Ø Dauer"), 65, "e"), ("map", _("Häufigste Map"), 150, "w")),
                                            5, select=True)
         self.stats_kill.bind("<<TreeviewSelect>>", lambda e: self._stats_alias_buttons())
-        ar = ttk.Frame(box_k)
+        ar = ui.Frame(box_k)
         ar.pack(fill="x", pady=(6, 0))
         self._stats_alias_choices = sorted(KILLERS, key=killer_label)
-        self.stats_alias_var = tk.StringVar(value="")
-        self.stats_alias_cb = ttk.Combobox(ar, textvariable=self.stats_alias_var, state="disabled", width=16,
+        self.stats_alias_var = ui.StringVar(value="")
+        self.stats_alias_cb = ui.Combobox(ar, textvariable=self.stats_alias_var, state="disabled", width=16,
                                            values=[killer_label(k) for k in self._stats_alias_choices])
         self.stats_alias_cb.pack(side="left")
-        self.stats_alias_btn = ttk.Button(ar, text=_("Zuordnen"), command=self._stats_alias_set, state="disabled")
+        self.stats_alias_btn = ui.Button(ar, text=_("Zuordnen"), command=self._stats_alias_set, state="disabled")
         self.stats_alias_btn.pack(side="left", padx=(6, 0))
-        self.stats_alias_clear = ttk.Button(ar, text=_("Zuordnungen löschen"), command=self._stats_alias_reset)
+        self.stats_alias_clear = ui.Button(ar, text=_("Zuordnungen löschen"), command=self._stats_alias_reset)
         self.stats_alias_clear.pack(side="left", padx=(6, 0))
-        ttk.Label(box_k, text=_("Ein Skin oder neuer Killer steht unter seinem eigenen Namen? Zeile markieren, Killer "
+        ui.Label(box_k, text=_("Ein Skin oder neuer Killer steht unter seinem eigenen Namen? Zeile markieren, Killer "
                                 "wählen, „Zuordnen“ – gilt auch rückwirkend."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         box_v = self._stats_page(_("Verlauf"))
-        self.trend = TrendChart(box_v, bool(self.settings.get("dark_mode", True)),
-                                self._chart_bg())
-        ttk.Label(box_v, text=_("Nur Runden, die einem Match auf der Stats-Seite zugeordnet sind. Die Maus über einer "
+        self.trend = TrendChart(box_v, bool(self.settings.get("dark_mode", True)))
+        ui.Label(box_v, text=_("Nur Runden, die einem Match auf der Stats-Seite zugeordnet sind. Die Maus über einer "
                                 "Säule zeigt Wert und Anzahl der Runden."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         box_s = self._stats_page(_("System"))
-        sr = ttk.Frame(box_s)
+        sr = ui.Frame(box_s)
         sr.pack(fill="x", pady=(0, 4))
-        self.stats_sys_var = tk.StringVar(value="")
-        ttk.Label(sr, textvariable=self.stats_sys_var, wraplength=400).pack(side="left", anchor="w")
+        self.stats_sys_var = ui.StringVar(value="")
+        ui.Label(sr, textvariable=self.stats_sys_var, wraplength=400).pack(side="left", anchor="w")
         self._stats_sys_groups = [(k, _(label)) for k, label in STATS_SYS_GROUPS]
-        self.stats_sys_by_var = tk.StringVar(value=self._stats_sys_groups[0][1])
-        cb = ttk.Combobox(sr, textvariable=self.stats_sys_by_var, values=[lbl for _k, lbl in self._stats_sys_groups],
+        self.stats_sys_by_var = ui.StringVar(value=self._stats_sys_groups[0][1])
+        cb = ui.Combobox(sr, textvariable=self.stats_sys_by_var, values=[lbl for _k, lbl in self._stats_sys_groups],
                           state="readonly", width=16)
         cb.pack(side="right", anchor="n")
         cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
@@ -147,34 +143,33 @@ class StatsTab:
                                                   ("cpu", _("CPU Ø °C"), 64, "e"), ("cpumax", _("CPU max"), 60, "e"),
                                                   ("load", _("GPU Ø Last"), 72, "e"), ("pwr", _("Ø Watt"), 56, "e"),
                                                   ("thr", _("Gedrosselt"), 74, "e")), 6)
-        ttk.Label(box_s, text=_("Werte der Systemwerte-Anzeige (Tab Overlay) während der Runden – nur Runden, in denen "
+        ui.Label(box_s, text=_("Werte der Systemwerte-Anzeige (Tab Overlay) während der Runden – nur Runden, in denen "
                                 "sie eingeschaltet war. CPU-Temperatur nur mit HWiNFO. „Wann/Wo“ zeigt, auf welchen "
                                 "Maps oder zu welcher Tageszeit der PC am heißesten läuft. „Gedrosselt“: Sekunden, in "
                                 "denen die GPU wegen Temperatur oder Hardware langsamer lief (nur NVIDIA)."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 6))
-        self.sys_trend = TrendChart(box_s, bool(self.settings.get("dark_mode", True)),
-                                    self._chart_bg(), panels=("temp",))
+        self.sys_trend = TrendChart(box_s, bool(self.settings.get("dark_mode", True)), panels=("temp",))
         box_r = self._stats_page(_("Serverregionen"))
         self.stats_regs = self._stats_tree(box_r, (("reg", _("Region"), 190, "w"), ("n", _("Runden"), 65, "e"),
                                                    ("avg", _("Ø Dauer"), 75, "e"), ("share", _("Anteil"), 65, "e"),
                                                    ("ping", _("Ø Ping"), 70, "e")), 5)
-        ttk.Label(box_r, text=_("Region nur bekannt, wenn im Tab Server „Verbundener Spielserver“ an war."),
+        ui.Label(box_r, text=_("Region nur bekannt, wenn im Tab Server „Verbundener Spielserver“ an war."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         box_w = self._stats_page(_("Wartezeit in der Lobby"))
-        wr = ttk.Frame(box_w)
+        wr = ui.Frame(box_w)
         wr.pack(fill="x", pady=(0, 4))
-        self.stats_wait_var = tk.StringVar(value="")
-        ttk.Label(wr, textvariable=self.stats_wait_var, wraplength=360).pack(side="left")
+        self.stats_wait_var = ui.StringVar(value="")
+        ui.Label(wr, textvariable=self.stats_wait_var, wraplength=360).pack(side="left")
         self._stats_wait_groups = [(k, _(label)) for k, label in STATS_WAIT_GROUPS]
-        self.stats_wait_by_var = tk.StringVar(value=self._stats_wait_groups[0][1])
-        cb = ttk.Combobox(wr, textvariable=self.stats_wait_by_var, values=[lbl for _k, lbl in self._stats_wait_groups],
+        self.stats_wait_by_var = ui.StringVar(value=self._stats_wait_groups[0][1])
+        cb = ui.Combobox(wr, textvariable=self.stats_wait_by_var, values=[lbl for _k, lbl in self._stats_wait_groups],
                           state="readonly", width=16)
         cb.pack(side="right")
         cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
         self.stats_wait = self._stats_tree(box_w, (("grp", _("Wann/Wo"), 230, "w"), ("n", _("Runden"), 70, "e"),
                                                    ("avg", _("Ø Wartezeit"), 90, "e"), ("min", _("Kürzeste"), 80, "e")),
                                            7)
-        ttk.Label(box_w, text=_("Gemessen von „CANCEL“ (Suche läuft) bis zur gefundenen Lobby – nur wenn das Programm "
+        ui.Label(box_w, text=_("Gemessen von „CANCEL“ (Suche läuft) bis zur gefundenen Lobby – nur wenn das Programm "
                                 "die Suche gesehen hat. Custom Games haben keine Wartezeit."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         box2 = self._stats_page(_("Letzte Runden"))
@@ -184,47 +179,44 @@ class StatsTab:
                                                   ("srv", _("Server"), 100, "w")), 7,
                                            select=True)
         self.stats_last.bind("<<TreeviewSelect>>", lambda e: self._stats_role_buttons())
-        rr = ttk.Frame(box2)
+        rr = ui.Frame(box2)
         rr.pack(fill="x", pady=(6, 0))
-        ttk.Label(rr, text=_("Rolle der markierten Runde:")).pack(side="left")
+        ui.Label(rr, text=_("Rolle der markierten Runde:")).pack(side="left")
         self.stats_role_btns = []
         for role, label in (("killer", N_("Killer")), ("survivor", N_("Survivor")), ("custom", N_("Custom Game"))):
-            b = ttk.Button(rr, text=_(label), command=lambda r=role: self._stats_set_role(r), state="disabled")
+            b = ui.Button(rr, text=_(label), command=lambda r=role: self._stats_set_role(r), state="disabled")
             b.pack(side="left", padx=(6, 0))
             self.stats_role_btns.append(b)
-        self.stats_delete_btn = ttk.Button(rr, text=_("Runde löschen"), command=self._stats_delete_round,
+        self.stats_delete_btn = ui.Button(rr, text=_("Runde löschen"), command=self._stats_delete_round,
                                            state="disabled")
         self.stats_delete_btn.pack(side="right")
-        kr = ttk.Frame(box2)
+        kr = ui.Frame(box2)
         kr.pack(fill="x", pady=(6, 0))
-        ttk.Label(kr, text=_("Killer der markierten Runde:")).pack(side="left")
-        self.stats_round_killer_var = tk.StringVar(value="")
-        self.stats_round_killer_cb = ttk.Combobox(kr, textvariable=self.stats_round_killer_var, state="disabled",
+        ui.Label(kr, text=_("Killer der markierten Runde:")).pack(side="left")
+        self.stats_round_killer_var = ui.StringVar(value="")
+        self.stats_round_killer_cb = ui.Combobox(kr, textvariable=self.stats_round_killer_var, state="disabled",
                                                   width=16, values=[killer_label(k) for k in self._stats_alias_choices])
         self.stats_round_killer_cb.pack(side="left", padx=(6, 0))
-        self.stats_round_killer_btn = ttk.Button(kr, text=_("Killer setzen"), command=self._stats_set_killer,
+        self.stats_round_killer_btn = ui.Button(kr, text=_("Killer setzen"), command=self._stats_set_killer,
                                                  state="disabled")
         self.stats_round_killer_btn.pack(side="left", padx=(6, 0))
         self._stats_sort = ("n", True)
         return outer
 
     def _stats_page(self, title):
-        page = ttk.Frame(self.stats_nb, padding=6)
+        page = ui.Frame(self.stats_nb, padding=6)
         self.stats_nb.add(page, text=title)
         return page
 
     def _stats_tree(self, parent, cols, height, select=False):
-        tf = ttk.Frame(parent)
+        tf = ui.Frame(parent)
         tf.pack(fill="both", expand=True)
-        t = ttk.Treeview(tf, columns=[c[0] for c in cols], show="headings", height=height,
+        t = ui.Treeview(tf, columns=[c[0] for c in cols], show="headings", height=height,
                          selectmode="browse" if select else "none")
         for key, title, width, anchor in cols:
             t.heading(key, text=title, anchor=anchor, command=lambda k=key, tr=t: self._stats_sort_by(tr, k))
             t.column(key, width=width, anchor=anchor, stretch=key in ("map", "reg"))
-        sb = ttk.Scrollbar(tf, orient="vertical", command=t.yview)
-        t.configure(yscrollcommand=sb.set)
         t.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
         return t
 
     def _stats_sort_by(self, tree, key):
@@ -429,10 +421,6 @@ class StatsTab:
             t.selection_set(keep[0])
         self._stats_role_buttons()
 
-    def _chart_bg(self):
-        """Background of the charts = page background of the current design."""
-        return getattr(self, "_page_bg", None) or ttk.Style().lookup("TFrame", "background") or "#1e1f22"
-
     def _stats_sys_render(self, rounds, unit):
         """Sub-tab System: averages, highest values (when and where) and the table by map/time/killer."""
         avg = history.sys_average(rounds)
@@ -504,7 +492,6 @@ class StatsTab:
         hi = (int(max(values)) // 10 + 1) * 10 if values else 100
         last = values[-1] if values else None
         self.sys_trend.dark = bool(self.settings.get("dark_mode", True))
-        self.sys_trend.canvas.configure(background=self._chart_bg())
         self.sys_trend.draw({"temp": {
             "title": _("GPU-Temperatur – Ø {per}", per=per), "bars": bars, "kind": "line", "min": lo, "max": hi,
             "ticks": [(v, f"{v} °C") for v in range(lo, hi + 1, 10)],
@@ -774,7 +761,6 @@ class StatsTab:
         last_k = next((v for v, _l, _t in reversed(kb) if v is not None), None)
         last_s = next((v for v, _l, _t in reversed(sb) if v is not None), None)
         self.trend.dark = bool(self.settings.get("dark_mode", True))
-        self.trend.canvas.configure(background=self._chart_bg())
         self.trend.draw({
             "killer": {"title": _("Killer – Ø Kills {per}", per=per), "bars": kb, "max": 4,
                        "ticks": [(v, str(v)) for v in range(5)], "last": f"{last_k:.1f}" if last_k is not None else "",
@@ -870,8 +856,7 @@ class StatsTab:
         except OSError as e:
             self._log(_("Userscript nicht gefunden: {error}", error=e), "Fehler")
             return
-        self.root.clipboard_clear()
-        self.root.clipboard_append(text)
+        self.root.clipboard_set(text)
         msg = _("Userscript in die Zwischenablage kopiert. In Tampermonkey: „Neues Skript erstellen“ → alles ersetzen "
                 "(Strg+A, Strg+V) → Speichern. Danach stats.deadbydaylight.com öffnen und anmelden.")
         self._log(msg, "System")
