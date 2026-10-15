@@ -1465,6 +1465,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         for chart in (getattr(self, "trend", None), getattr(self, "sys_trend", None)):
             if chart is not None:
                 chart.dark = dark
+        if getattr(self, "stats_dash", None) is not None:
+            self.stats_dash.dark = dark
         self._qt_theme()
 
     def _dark_changed(self):

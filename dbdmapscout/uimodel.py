@@ -559,6 +559,15 @@ class Chart(Widget):
         self._dbdms_chart = source
 
 
+class Dashboard(Widget):
+    """The statistics dashboard (dashboard.Dashboard in ``data``), drawn by qt_window.DashboardView."""
+
+    def __init__(self, master=None, **kw):
+        super().__init__(master, **kw)
+        self.data = None
+        self.dark = True
+
+
 class Toplevel(Widget):
     """A dialog: shown by the Qt window as a non-modal window built from its content (App._dialog)."""
 

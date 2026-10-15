@@ -489,3 +489,51 @@ def test_navigation_icons_are_drawn_alike(qapp, keep):
     assert [win.nav.item(i).text() for i in range(win.nav.count())][-1] == "Log"
     win.show_log_alert(True)
     assert win.nav.item(win.nav.count() - 1).text() == "Log"           # the dot is in the icon, not in the text
+
+
+def _dash_data():
+    """Rounds with official matches: Nurse on Coal Tower 3 kills ×2, Oni on The Game once (too few for a cell),
+    one survivor round escaped."""
+    from dbdmapscout.official import Match, Player
+
+    def km(r, n):
+        return Match(t=r.t, map=r.map, role="killer", character=r.killer, bp=30000,
+                     opp=[Player("survivor", "", "DEAD" if i < n else "ESCAPED") for i in range(4)])
+    rs = [history.Round(t=100.0 + i, seconds=600, map_id=m, map=m, role=role, killer=k)
+          for i, (m, role, k) in enumerate([("Coal Tower", "killer", "The Nurse"), ("Coal Tower", "killer", "The Nurse"),
+                                            ("The Game", "killer", "The Oni"), ("The Game", "survivor", "")])]
+    pairs = [(rs[0], km(rs[0], 3)), (rs[1], km(rs[1], 3)), (rs[2], km(rs[2], 4)),
+             (rs[3], Match(t=rs[3].t, map="The Game", role="survivor", status="ESCAPED"))]
+    return rs, pairs
+
+
+def test_dashboard_model():
+    from dbdmapscout import dashboard
+    rs, pairs = _dash_data()
+    d = dashboard.build(rs, pairs)
+    titles = [t.title for t in d.tiles]
+    assert titles[:3] == ["Runden", "Ø Kills", "Entkommen"] and d.tiles[0].value == "4"
+    assert d.tiles[1].value == "3.33" and abs(d.tiles[1].frac - 10 / 12) < 1e-9 and d.tiles[2].value == "100%"
+    assert [m for m, _n, _r in d.maps] == ["Coal Tower", "The Game"] and d.maps_max == 2
+    assert "Ø 3.0 Kills" in d.maps[0][2] and "100% entkommen" in d.maps[1][2]
+    assert d.rows == ["Coal Tower"] and d.columns == ["The Nurse"]          # Oni: one round – no cell, no column
+    assert d.cells == {("Coal Tower", "The Nurse"): (3.0, 2)}
+    assert dashboard.build([], []).empty and dashboard.short_killer("The Nurse") == "Nurse"
+    assert dashboard.play_time(7200) == "2.0 h" and ":" in dashboard.play_time(600)
+
+
+def test_dashboard_view_draws_tiles_bars_and_heatmap(qapp, keep):
+    from dbdmapscout import dashboard, qt_window
+    rs, pairs = _dash_data()
+    v = keep(qt_window.DashboardView())
+    v.resize(900, 700)
+    v.show_state({"data": dashboard.build(rs, pairs), "dark": True})
+    v.show()
+    img = v.grab().toImage()
+    assert not img.isNull() and not v.tiles_box.isHidden() and not v.heat.isHidden()
+    assert v.tiles[0][1].value.text() == "4" and v.tiles[5][0].isVisible()
+    assert len(v.heat._hits) == 1 and "Nurse" in v.heat._hits[0][1] and "2 Runden" in v.heat._hits[0][1]
+    v.show_state({"data": dashboard.build([], []), "dark": True})
+    assert v.tiles_box.isHidden() and not v.empty.isHidden()
+    assert qt_window.heat_colour(4, dark=True) != qt_window.heat_colour(0, dark=True)
+    assert qt_window.ink_on(qt_window.heat_colour(4, dark=False)).name() == "#f0efec"   # light ink on dark blue

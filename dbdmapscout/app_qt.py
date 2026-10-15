@@ -42,7 +42,7 @@ def _side(w) -> str:
 
 KINDS = ((ui.Treeview, "table"), (ui.Checkbutton, "check"), (ui.Button, "button"), (ui.Combobox, "combo"),
          (ui.Scale, "slider"), (ui.Entry, "entry"), (ui.Radiobutton, "radio"), (ui.Log, "log"),
-         (ui.Chart, "chart"))
+         (ui.Chart, "chart"), (ui.Dashboard, "dashboard"))
 
 
 def ui_layout(w, reg: dict):
@@ -87,6 +87,9 @@ def ui_state(w) -> dict:
     if lines is not None:                         # the log: its entries (ts, category, text), filtered
         entries, dark = lines()
         st.update(lines=entries, dark=dark, rev=getattr(w, "_dbdms_rev", 0))
+        return st
+    if isinstance(w, ui.Dashboard):
+        st.update(data=w.data, dark=w.dark)
         return st
     chart = getattr(w, "_dbdms_chart", None)
     if chart is not None:
