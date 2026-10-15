@@ -30,6 +30,7 @@ PAGES = (("overview", N_("Übersicht")), ("maps", "Maps"), ("overlay", N_("Overl
 NAV_ICON = 18                     # px (logical): every icon of the navigation in the same box
 AUTO_PAGES = ("stats", "server", "detect", "log")   # built from the tab's structure (app_qt.ui_layout)
 THUMB_H = 170                     # px (logical) of the map picture on the overview
+SLIDER_MAX = 420                  # px (logical): longest slider (overlay position, size, opacity)
 
 # Hand-made pages: every key names a widget of the UI model registered with App._reg; texts, values,
 # enabled/shown come from it (App._qt_refresh → show_states), a click is done on it (post("act", (key, value))).
@@ -62,11 +63,12 @@ SPECS = {
             ("check", "st.lobby_notify"), ("check", "st.lobby_remind"), ("check", "st.notify_background_only"),
             ("hint", "st.notify_text"), ("row", (("button", "st.notify_test"), ("stretch",))))),
         ("card", "st.start", (("check", "st.tray"), ("check", "st.autostart"), ("hint", "st.autostart_info"))),
-        ("card", "st.hotkeys", tuple(("row", (("label", f"st.hk.{k}.label"), ("stretch",), ("hotkey", f"st.hk.{k}")))
-                                     for k in ("toggle_overlay", "next_variant", "scan_now", "prev_map", "next_map",
-                                               "bigger", "smaller", "edit_position", "rotate_map", "next_floor",
-                                               "reject_map"))
-         + (("row", (("button", "st.hk_defaults"), ("hint", "st.hk_status"))),)),
+        ("card", "st.hotkeys", (
+            ("grid", 2, tuple(("row", (("label", f"st.hk.{k}.label"), ("stretch",), ("hotkey", f"st.hk.{k}")))
+                              for k in ("toggle_overlay", "next_variant", "scan_now", "prev_map", "next_map",
+                                        "bigger", "smaller", "edit_position", "rotate_map", "next_floor",
+                                        "reject_map"))),
+            ("row", (("button", "st.hk_defaults"), ("hint", "st.hk_status"))))),
         ("card", "st.updates", (
             ("check", "st.update"), ("hint", "st.update_note"),
             ("row", (("button", "st.upd_btn"), ("button", "st.upd_apply"), ("stretch",))), ("hint", "st.upd_status"))),
@@ -89,6 +91,8 @@ def _spec_keys(items):
             yield from _spec_keys(it[2])
         elif kind == "row":
             yield from _spec_keys(it[1])
+        elif kind == "grid":
+            yield from _spec_keys(it[2])
         elif kind in ("check", "button", "combo", "slider", "label", "hint", "value", "plain", "hotkey"):
             yield it[1]
 
@@ -417,19 +421,23 @@ class OverviewPage(QWidget):
         self.last_empty.setVisible(not rounds)
 
 
-def _scroll_page(title):
-    """(page, body layout): a page that scrolls as a whole, with its title on top."""
+def _scroll_page(title, scroll=True):
+    """(page, body layout): a page that scrolls as a whole, with its title on top (``scroll`` False: a page that
+    fits the window, its parts scroll on their own)."""
     page = QWidget()
     page.setObjectName("page")
     outer = QVBoxLayout(page)
     outer.setContentsMargins(0, 0, 0, 0)
-    scroll = QScrollArea()
-    scroll.setWidgetResizable(True)
-    scroll.setFrameShape(QFrame.NoFrame)
-    outer.addWidget(scroll)
     body = QWidget()
     body.setObjectName("page")
-    scroll.setWidget(body)
+    if scroll:
+        sa = QScrollArea()
+        sa.setWidgetResizable(True)
+        sa.setFrameShape(QFrame.NoFrame)
+        outer.addWidget(sa)
+        sa.setWidget(body)
+    else:
+        outer.addWidget(body)
     lay = QVBoxLayout(body)
     lay.setContentsMargins(22, 18, 22, 18)
     lay.setSpacing(12)
@@ -461,10 +469,12 @@ def make_control(kind, key, post):
         value.setMinimumWidth(56)
         value.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         s = QSlider(Qt.Horizontal)
+        s.setMaximumWidth(SLIDER_MAX)              # a wide window: no slider across the whole page
         s.valueChanged.connect(lambda v: post("act", (key, v)))
         r.addWidget(name)
         r.addWidget(s, 1)
         r.addWidget(value)
+        r.addStretch()
         extra = (name, s, value)
     elif kind == "table":
         w = Table(key, post)
@@ -609,6 +619,20 @@ class FormPage(QWidget):
                 self._add(c, row)
             lay.addLayout(row)
             return
+        if kind == "grid":                          # ("grid", columns, rows): the rows side by side (hotkeys)
+            g = QGridLayout()
+            g.setHorizontalSpacing(28)
+            g.setVerticalSpacing(6)
+            cols = item[1]
+            per = -(-len(item[2]) // cols)            # down the first column, then the next
+            for i, c in enumerate(item[2]):
+                cell = QVBoxLayout()
+                self._add(c, cell)
+                g.addLayout(cell, i % per, i // per)
+            for c in range(cols):
+                g.setColumnStretch(c, 1)
+            lay.addLayout(g)
+            return
         if kind == "stretch":
             lay.addStretch()
             return
@@ -623,6 +647,17 @@ class FormPage(QWidget):
                 show_control(kind, w, extra, st)
 
 
+CHECKS = {"check:on": Qt.Checked, "check:off": Qt.Unchecked, "check:part": Qt.PartiallyChecked}   # uimodel.CHECK_*
+
+
+def _check(item, tags):
+    """A row tagged uimodel.CHECK_*: a tick box in the first column. Not user-checkable – the click goes to the
+    model like any click on the row, the model toggles and sends the new tag."""
+    state = next((CHECKS[t] for t in tags if t in CHECKS), None)
+    if state is not None and item.data(0, Qt.CheckStateRole) != state:
+        item.setCheckState(0, state)
+
+
 class Table(QTreeWidget):
     """A table of the UI model (uimodel.Treeview): columns, rows (with groups), colours by tag, selection. A click
     on a row or a heading goes to the model (sorting, selecting, the server tab's tick boxes)."""
@@ -631,6 +666,7 @@ class Table(QTreeWidget):
         super().__init__()
         self._key, self._post = key, post
         self._shape = None
+        self._fit = False
         self.setMinimumHeight(200)
         self.header().setStretchLastSection(False)
         self.header().setMinimumSectionSize(48)
@@ -660,6 +696,8 @@ class Table(QTreeWidget):
             tree = bool(cols) and cols[0][0] == "#0"
             self.setRootIsDecorated(tree and any(r[1] > 0 for r in rows))
             self.setHeaderLabels([c[1] for c in cols])
+            for i, c in enumerate(cols):                  # numbers right-aligned: their heading too
+                self.headerItem().setTextAlignment(i, (Qt.AlignRight if c[2] == "e" else Qt.AlignLeft) | Qt.AlignVCenter)
             self.clear()
             parents = {}
             colours = st.get("colours", {})
@@ -674,6 +712,7 @@ class Table(QTreeWidget):
                 if fg:
                     for i in range(len(cols)):
                         item.setForeground(i, QColor(fg))
+                _check(item, tags)
                 parent = parents.get(depth - 1)
                 if parent is not None:
                     parent.addChild(item)
@@ -682,12 +721,30 @@ class Table(QTreeWidget):
                 parents[depth] = item
                 item.setExpanded(True)
             fm = self.header().fontMetrics()
+            widths = st.get("widths") or []
+            stretch = st.get("stretch", 0) if 0 <= st.get("stretch", 0) < len(cols) else 0
             for i, c in enumerate(cols):
+                self.header().setSectionResizeMode(i, self.header().ResizeMode.Interactive)
                 self.resizeColumnToContents(i)
-                self.setColumnWidth(i, max(self.columnWidth(i), fm.horizontalAdvance(c[1]) + 24))
-            if cols:
-                self.header().setSectionResizeMode(0, self.header().ResizeMode.Stretch)
+                least = widths[i] if i < len(widths) and i != stretch else 0    # the model's width: room for "…"
+                self.setColumnWidth(i, max(self.columnWidth(i), fm.horizontalAdvance(c[1]) + 24, least))
+            if cols:                  # the name column takes the rest (not always the first: "Wann" stays readable)
+                self.header().setSectionResizeMode(stretch, self.header().ResizeMode.Stretch)
+            self._fit_height()
         self._select(st)
+
+    def fit_rows(self):
+        """As tall as its rows (a table packed without expand – the server regions): no empty box below the last
+        row, the page scrolls instead."""
+        self._fit = True
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+    def _fit_height(self):
+        if not self._fit:
+            return
+        n = sum(1 for _i in self._items())
+        row = self.sizeHintForRow(0) if n else 0
+        self.setFixedHeight(self.header().sizeHint().height() + n * max(row, 1) + 2 * self.frameWidth() + 10)
 
     def _items(self):
         it = self.invisibleRootItem()
@@ -709,6 +766,7 @@ class Table(QTreeWidget):
                 if item.text(i) != value:
                     item.setText(i, value)
                 item.setData(i, Qt.ForegroundRole, QColor(fg) if fg else None)
+            _check(item, tags)
 
     def _select(self, st):
         sel = set(st.get("selection", []))
@@ -1101,6 +1159,7 @@ class DashboardView(QWidget):
             cl = QVBoxLayout(card)
             cl.setContentsMargins(14, 12, 14, 12)
             box = FactBox(bar=True)
+            box.sub.setWordWrap(True)                 # "no killer rounds with stats data": wraps in a narrow window
             cl.addWidget(box)
             self.grid.addWidget(card, 0, i)
             self.tiles.append((card, box))
@@ -1148,7 +1207,13 @@ class DashboardView(QWidget):
 
 def _grows(node) -> bool:
     """A table, chart or the log below this node: it may take the free height of the page."""
-    return node.get("kind") in ("table", "chart", "log", "dashboard") or any(_grows(c) for c in node.get("children", ()))
+    return (node.get("kind") in ("table", "chart", "log") and not node.get("fit")) or \
+        any(_grows(c) for c in node.get("children", ()))
+
+
+def _fills(node) -> bool:
+    """A notebook below this node fills the page (packed with expand): the page does not scroll as a whole."""
+    return (node.get("kind") == "tabs" and bool(node.get("fill"))) or any(_fills(c) for c in node.get("children", ()))
 
 
 class AutoPage(QWidget):
@@ -1161,13 +1226,15 @@ class AutoPage(QWidget):
         self.controls = {}                 # key -> (kind, widget, extra)
         self._tabs = []                    # (QTabWidget, [keys of each page])
         self._all = []
-        page, lay = _scroll_page(title)
+        fill = _fills(node) if node else False
+        page, lay = _scroll_page(title, scroll=not fill)
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(page)
         if node:
             self._build(node, lay, self._all, top=True)
-        lay.addStretch()
+        if not fill:
+            lay.addStretch()
 
     def _build(self, n, lay, keys, top=False):
         kind, key = n["kind"], n["key"]
@@ -1201,33 +1268,44 @@ class AutoPage(QWidget):
             first = [c for c in kids if c.get("side") != "right"]
             last = list(reversed([c for c in kids if c.get("side") == "right"]))
             for c in first:
-                self._build(c, inner, keys)
+                self._build(c, inner, keys, top=top and inner is v)    # a table further down still gets the height
             if n.get("row"):
                 inner.addStretch()
             for c in last:
-                self._build(c, inner, keys)
+                self._build(c, inner, keys, top=top and inner is v)
             lay.addWidget(holder, 1 if top and _grows(n) else 0)
             self.controls[key] = (kind, holder, None)
             return
         if kind == "tabs":
             tw = QTabWidget()
+            fill = bool(n.get("fill"))
             pages = []
             for c in n.get("children", []):
                 pw = QWidget()
                 pl = QVBoxLayout(pw)
                 pl.setContentsMargins(8, 8, 8, 8)
                 ks = []
-                self._build(c, pl, ks)
+                self._build(c, pl, ks, top=fill)       # filling tabs: a table takes the height of its page
                 pl.addStretch()
-                tw.addTab(pw, "")
+                if fill:                               # each page scrolls on its own, the filters stay on top
+                    pw.setObjectName("page")
+                    sa = QScrollArea()
+                    sa.setWidgetResizable(True)
+                    sa.setFrameShape(QFrame.NoFrame)
+                    sa.setWidget(pw)
+                    tw.addTab(sa, "")
+                else:
+                    tw.addTab(pw, "")
                 pages.append(ks)
                 keys.extend(ks)
             tw.currentChanged.connect(lambda i, k=key: self._post("act", (k, i)))
-            lay.addWidget(tw)
+            lay.addWidget(tw, 1 if fill else 0)
             self._tabs.append((key, tw, pages))
             self.controls[key] = ("tabs", tw, None)
             return
         w, extra = make_control(kind, key, self._post)
+        if kind == "table" and n.get("fit"):
+            w.fit_rows()
         grow = kind in ("table", "chart", "log") or (kind == "hint" and isinstance(lay, QHBoxLayout))
         if kind in ("button", "combo") and not isinstance(lay, QHBoxLayout):
             lay.addWidget(w, 0, Qt.AlignLeft)             # a button on a line of its own keeps its size
@@ -1269,12 +1347,16 @@ class AutoPage(QWidget):
 
 
 class MapsPage(QWidget):
-    """Search + list of maps (grouped by realm); double click / Enter shows a map."""
+    """Search + list of maps (grouped by realm) and a preview of the selected one (1.58.1); double click / Enter /
+    "Anzeigen" shows a map."""
 
     def __init__(self, post):
         super().__init__()
         self._post = post
-        page, lay = _scroll_page("Maps")
+        self._preview_key = None
+        self._preview_src = None
+        self._shown_current = None
+        page, lay = _scroll_page("Maps", scroll=False)
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(page)
@@ -1286,13 +1368,37 @@ class MapsPage(QWidget):
         self.search.returnPressed.connect(self._pick_first)
         row.addWidget(self.search, 1)
         lay.addLayout(row)
+        body = QHBoxLayout()
+        body.setSpacing(12)
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
-        self.tree.setMinimumHeight(360)
+        self.tree.setMinimumWidth(220)
         self.tree.itemActivated.connect(self._picked)
-        lay.addWidget(self.tree, 1)
-        lay.addWidget(_label(_("Doppelklick zeigt die Map. Die Erkennung übernimmt beim nächsten Match wieder."),
-                             "dim", wrap=True))
+        self.tree.currentItemChanged.connect(self._selected)
+        body.addWidget(self.tree, 2)
+        card = _card()
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(14, 12, 14, 12)
+        cl.setSpacing(6)
+        self.p_name = _label(cls="map", wrap=True)
+        self.p_realm = _label(cls="dim", wrap=True)
+        self.p_pic = QLabel()
+        self.p_pic.setObjectName("thumb")
+        self.p_pic.setAlignment(Qt.AlignCenter)
+        self.p_pic.setMinimumSize(160, 160)
+        self.p_pic.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)   # scales with the card, not the image
+        self.p_show = QPushButton(_("Anzeigen"))
+        self.p_show.setObjectName("primary")
+        self.p_show.setToolTip(_tip("Anzeigen"))
+        self.p_show.clicked.connect(self._show_selected)
+        cl.addWidget(self.p_name)
+        cl.addWidget(self.p_realm)
+        cl.addWidget(self.p_pic, 1)
+        cl.addWidget(self.p_show, 0, Qt.AlignLeft)
+        body.addWidget(card, 3)
+        lay.addLayout(body, 1)
+        lay.addWidget(_label(_("Doppelklick oder „Anzeigen“ zeigt die Map. Die Erkennung übernimmt beim nächsten "
+                               "Match wieder."), "dim", wrap=True))
         prow = QHBoxLayout()
         b = QPushButton(_("Kartenbild hinzufügen …"))
         b.setToolTip(_tip("Kartenbild hinzufügen …"))
@@ -1302,6 +1408,40 @@ class MapsPage(QWidget):
         prow.addStretch()
         lay.addLayout(prow)
         self._items = None
+        self.show_preview(None)
+
+    def _selected(self, item, _prev=None):
+        data = item.data(0, Qt.UserRole) if item is not None else None
+        if data:
+            self._post("map_preview", tuple(data))
+
+    def _show_selected(self):
+        if self._preview_key:
+            self._post("show_map", tuple(self._preview_key))
+
+    def show_preview(self, p):
+        """p = (map_id, variant, name, realm, PIL picture or None) or None (nothing selected)."""
+        key = tuple(p[:2]) if p else None
+        if p is not None and key == self._preview_key and p[4] is self._preview_src:
+            return
+        self._preview_key, self._preview_src = key, (p[4] if p else None)
+        _set(self.p_name, p[2] if p else _("Keine Map gewählt"))
+        _set(self.p_realm, p[3] if p else _("Links eine Map wählen – hier erscheint ihre Karte."))
+        self.p_show.setEnabled(p is not None)
+        self._scale_preview()
+
+    def _scale_preview(self):
+        src = self._preview_src
+        if src is None:
+            self.p_pic.clear()
+            return
+        w, h = max(1, self.p_pic.width() - 12), max(1, self.p_pic.height() - 12)
+        fit_h = max(1, min(h, round(w * src.height / src.width)))
+        self.p_pic.setPixmap(pixmap_from_pil(src, fit_h, self.devicePixelRatioF()))
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self._scale_preview()
 
     def _picked(self, item, _col=0):
         data = item.data(0, Qt.UserRole)
@@ -1315,7 +1455,9 @@ class MapsPage(QWidget):
     def show_maps(self, items, current):
         if items != self._items:
             self._items = list(items)
+            self.tree.blockSignals(True)
             self.tree.clear()
+            self.tree.blockSignals(False)
             groups = {}
             for realm, label, mid, v in items:
                 if realm not in groups:
@@ -1335,6 +1477,13 @@ class MapsPage(QWidget):
                 if font.bold() != on:
                     font.setBold(on)
                     c.setFont(0, font)
+                if on and current != self._shown_current:     # a new map is shown: open its realm, mark it
+                    g.setExpanded(True)
+                    self.tree.blockSignals(True)
+                    self.tree.setCurrentItem(c)
+                    self.tree.blockSignals(False)
+                    self.tree.scrollToItem(c)
+        self._shown_current = current
 
 
 class DialogWindow(QDialog):
@@ -1556,8 +1705,9 @@ class MainWindow(QMainWindow):
             self.question_text.setText(f"<b>{html.escape(q[0])}</b><br>" + html.escape(q[1]).replace("\n", "<br>"))
             self.question_cancel.setVisible(bool(q[2]))
 
-    def show_maps(self, items, current):
+    def show_maps(self, items, current, preview=None):
         self.maps.show_maps(items, current)
+        self.maps.show_preview(preview)
 
     def show_page(self, key, search=None):
         """Go to a page (e.g. the maps with a search: a scan found only the realm)."""

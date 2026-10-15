@@ -147,6 +147,33 @@ def test_tab_structure_state_and_clicks():
     assert ui_state(nb) == {"visible": True, "tabs": ["Statistik"], "index": 0}
 
 
+def test_how_tables_and_notebooks_are_packed_reaches_the_window():
+    """A notebook packed to fill (statistics) takes the page's height; a table packed without expand (server
+    regions) is as tall as its rows; the stretching column is the model's, not always the first."""
+    pytest.importorskip("PySide6")
+    from dbdmapscout.app_qt import ui_layout, ui_state
+    root = ui.Root()
+    tab = ui.Frame(root)
+    nb = ui.Notebook(tab)
+    nb.pack(fill="both", expand=True)
+    page = ui.Frame(nb)
+    nb.add(page, text="Letzte Runden")
+    t = ui.Treeview(page, columns=("when", "map"), show="headings")
+    t.column("when", width=120)
+    t.column("map", width=130, stretch=True)
+    t.pack(fill="both", expand=True)
+    fit = ui.Treeview(tab, columns=("ping",), show="tree headings")
+    fit.pack(fill="x")
+    fit.insert("", "end", iid="r:fra", text="Frankfurt", tags=("p_good", ui.CHECK_ON))
+    node = ui_layout(tab, {})
+    tabs, small = node["children"]
+    assert tabs["kind"] == "tabs" and tabs["fill"]
+    assert tabs["children"][0]["children"][0]["fit"] is False and small["fit"] is True
+    st = ui_state(t)
+    assert st["stretch"] == 1 and st["widths"] == [120, 130]
+    assert list(ui_state(fit)["rows"][0][4]) == ["p_good", ui.CHECK_ON]
+
+
 def test_dialog_structure():
     pytest.importorskip("PySide6")
     from dbdmapscout.app_qt import ui_act, ui_layout, ui_shown, ui_state

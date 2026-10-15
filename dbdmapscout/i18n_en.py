@@ -66,8 +66,6 @@ EN = {
 
     # ------------------------------------------------------------------ tab maps
     "Suche": "Search",
-    "Doppelklick zeigt die Map. Die Erkennung übernimmt beim nächsten Match wieder.":
-        "Double-click shows the map. Detection takes over again at the next match.",
     "Kartenbild hinzufügen …": "Add map picture …",
     "eigenes Bild für eine Map (Hintergrund wird entfernt)": "your own picture for a map (background is removed)",
     "Eigene Bilder": "Own pictures",
@@ -161,7 +159,7 @@ EN = {
     "Lobby startet gleich": "Lobby starts soon",
     "Noch {n} s – READY ist noch nicht gedrückt.": "{n} s left – READY is not pressed yet.",
     "Lobby-Countdown läuft ab, READY ist noch nicht gedrückt.": "Lobby countdown is running out, READY is not pressed.",
-    "Ø Ping": "Ø ping",
+    "Ø Ping": "Avg. ping",
     "Spielt einen Hinweiston und zeigt eine Windows-Meldung, sobald DBD eine Lobby gefunden hat – praktisch, wenn "
     "du während der Suche etwas anderes machst.":
         "Plays a sound and shows a Windows notification as soon as DBD has found a lobby – handy if you do something "
@@ -179,13 +177,13 @@ EN = {
     "Diese Runde als Custom Game zählen – sie fliesst dann nicht in die Wartezeit ein.":
         "Count this round as a custom game – it is then left out of the waiting time.",
     "Ø {avg} · Median {median} · kürzeste {min} · längste {max} ({n} Runden)":
-        "Ø {avg} · median {median} · shortest {min} · longest {max} ({n} rounds)",
+        "Avg. {avg} · median {median} · shortest {min} · longest {max} ({n} rounds)",
     "Noch keine Wartezeiten in dieser Auswahl.": "No waiting times in this selection yet.",
     "nach Wochentag": "by weekday",
     "nach Uhrzeit": "by time of day",
     "nach Region": "by region",
     "Wann/Wo": "When/where",
-    "Ø Wartezeit": "Ø wait",
+    "Ø Wartezeit": "Avg. wait",
     "Kürzeste": "Shortest",
     "Warten": "Wait",
     "Uhr": "h",
@@ -851,11 +849,7 @@ EN = {
         "game with the hotkey (default Ctrl+Alt+X).",
     "Die Map stimmt – Hinweis „unsicher“ ausblenden.": "The map is right – hide the “unsure” note.",
     "als falsch verworfen": "thrown away as wrong",
-    "Heute: noch keine Runde.": "Today: no round yet.",
-    "Heute: {n} Runden ({time})": "Today: {n} rounds ({time})",
     "{k} Killer / {s} Survivor": "{k} killer / {s} survivor",
-    "Ø Wartezeit {time}": "avg. wait {time}",
-    "meist {killer}": "mostly {killer}",
     "Ping {ms} ms": "ping {ms} ms",
     # official match data (stats.deadbydaylight.com)
     "Ø Kills": "Avg. kills",
@@ -976,19 +970,17 @@ EN = {
     "GPU: {name}": "GPU: {name}",
     "GPU: keine NVIDIA-Karte gefunden": "GPU: no NVIDIA card found",
     "CPU-Temperatur: aus HWiNFO": "CPU temperature: from HWiNFO",
-    "CPU-Temperatur: nur mit HWiNFO („Shared Memory Support“ an)":
-        "CPU temperature: only with HWiNFO (\"Shared Memory Support\" on)",
     "Systemwerte (CPU/GPU-Temperatur, Auslastung, VRAM, RAM)": "System values (CPU/GPU temperature, load, VRAM, RAM)",
     # statistics: system values (app_stats)
     "System": "System",
     "nach Map": "by map",
     "nach Killer": "by killer",
-    "GPU Ø °C": "GPU avg °C",
+    "GPU Ø °C": "GPU avg. °C",
     "GPU max": "GPU max",
-    "CPU Ø °C": "CPU avg °C",
+    "CPU Ø °C": "CPU avg. °C",
     "CPU max": "CPU max",
-    "GPU Ø Last": "GPU avg load",
-    "Ø Watt": "Avg watts",
+    "GPU Ø Last": "GPU avg. load",
+    "Ø Watt": "Avg. watts",
     "GPU {v} °C": "GPU {v} °C",
     "CPU {v} °C": "CPU {v} °C",
     "GPU {v} W": "GPU {v} W",
@@ -1013,7 +1005,7 @@ EN = {
         "⚠ GPU throttled in {n} of {total} rounds, {time} in total.",
     "GPU-Temperatur – Ø {per}": "GPU temperature – average {per}",
     "Noch keine GPU-Temperaturen in dieser Auswahl.": "No GPU temperatures in this selection yet.",
-    "{when}: Ø {avg} °C · max {max} °C · {n} Runden": "{when}: avg {avg} °C · max {max} °C · {n} rounds",
+    "{when}: Ø {avg} °C · max {max} °C · {n} Runden": "{when}: avg. {avg} °C · max {max} °C · {n} rounds",
     "Werte der Systemwerte-Anzeige (Tab Overlay) während der Runden – nur Runden, in denen sie eingeschaltet war. "
     "CPU-Temperatur nur mit HWiNFO. „Wann/Wo“ zeigt, auf welchen Maps oder zu welcher Tageszeit der PC am heißesten "
     "läuft. „Gedrosselt“: Sekunden, in denen die GPU wegen Temperatur oder Hardware langsamer lief (nur NVIDIA).":
@@ -1049,15 +1041,24 @@ EN = {
     "Erscheinen, sobald DBD läuft.": "Appear as soon as DBD is running.",
     "OK": "OK",
     '4 Kills · leer = weniger als {n} Runden': '4 kills · empty = fewer than {n} rounds',
-    'Killer × Map – Ø Kills laut Stats-Seite': 'Killer × map – avg kills from the stats page',
+    'Killer × Map – Ø Kills laut Stats-Seite': 'Killer × map – avg. kills from the stats page',
     'Maps – am häufigsten gespielt': 'Maps – most played',
     'Median {time}': 'median {time}',
     'Noch keine Killer-Runden mit Ergebnis von der Stats-Seite (Einstellungen → Mehr → Offizielle Match-Daten).': 'No killer rounds with a result from the stats page yet (Settings → More → Official match data).',
     'keine Killer-Runden mit Stats-Daten': 'no killer rounds with stats data',
     'keine Survivor-Runden mit Stats-Daten': 'no survivor rounds with stats data',
-    '{map} · {killer}: Ø {kills} Kills ({n} Runden)': '{map} · {killer}: avg {kills} kills ({n} rounds)',
+    '{map} · {killer}: Ø {kills} Kills ({n} Runden)': '{map} · {killer}: avg. {kills} kills ({n} rounds)',
     '{n} Matches': '{n} matches',
     '{time} gespielt': '{time} played',
-    'Ø Bloodpoints': 'Avg bloodpoints',
-    'Ø Rundendauer': 'Avg round length',
+    'Ø Bloodpoints': 'Avg. bloodpoints',
+    'Ø Rundendauer': 'Avg. round length',
+    # 1.58.1: maps page with preview
+    'Anzeigen': 'Show',
+    'Doppelklick oder „Anzeigen“ zeigt die Map. Die Erkennung übernimmt beim nächsten Match wieder.':
+        'Double-click or "Show" shows the map. Detection takes over again at the next match.',
+    'Kartenbild nicht lesbar: {error}': 'Map picture not readable: {error}',
+    'Keine Map gewählt': 'No map selected',
+    'Blendet die gewählte Map jetzt als Overlay ein – die Erkennung übernimmt beim nächsten Match wieder.':
+        'Shows the selected map in the overlay now – detection takes over again at the next match.',
+    'Links eine Map wählen – hier erscheint ihre Karte.': 'Pick a map on the left – its picture appears here.',
 }

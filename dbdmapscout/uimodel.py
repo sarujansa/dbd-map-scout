@@ -409,6 +409,11 @@ class Notebook(Widget):
         return {"text": entry[1]}
 
 
+# tags of a Treeview row that the window draws as a tick box in the first column (a click on the row goes to the
+# model as usual, the model decides what it toggles) – the server tab's regions
+CHECK_ON, CHECK_OFF, CHECK_PART = "check:on", "check:off", "check:part"
+
+
 class Treeview(Widget):
     """Table (``show`` "headings") or tree ("tree"/"tree headings") with rows by iid, tags with colours,
     selection and heading commands (sorting)."""
