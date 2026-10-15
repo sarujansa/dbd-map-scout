@@ -45,7 +45,8 @@ def _side(w) -> str:
 
 KINDS = ((ui.Treeview, "table"), (ui.Checkbutton, "check"), (ui.Button, "button"), (ui.Combobox, "combo"),
          (ui.Scale, "slider"), (ui.Entry, "entry"), (ui.Radiobutton, "radio"), (ui.Log, "log"),
-         (ui.Chart, "chart"), (ui.Dashboard, "dashboard"), (ui.Tiles, "tiles"))
+         (ui.Chart, "chart"), (ui.Dashboard, "dashboard"), (ui.Tiles, "tiles"),
+         (ui.Preview, "preview"))
 
 
 def ui_layout(w, reg: dict):
@@ -101,6 +102,9 @@ def ui_state(w) -> dict:
     if lines is not None:                         # the log: its entries (ts, category, text), filtered
         entries, dark = lines()
         st.update(lines=entries, dark=dark, rev=getattr(w, "_dbdms_rev", 0))
+        return st
+    if isinstance(w, ui.Preview):
+        st.update(data=w.source())
         return st
     if isinstance(w, ui.Tiles):
         st.update(data=w.data)
@@ -176,6 +180,9 @@ def ui_act(w, value=None):
         if not w.instate(["disabled"]) and w.get() != str(value):
             w.delete(0, "end")
             w.insert(0, str(value))
+    elif isinstance(w, ui.Preview):
+        if w.command is not None:
+            w.command(value)
     elif isinstance(w, ui.Scale):
         w.set(float(value))                       # runs the slider's command (label + setting)
     elif isinstance(w, ui.Notebook):

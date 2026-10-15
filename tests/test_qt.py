@@ -722,3 +722,22 @@ def test_tiles_view_shows_the_system_averages(qapp, keep):
     assert shown == ["76 °C", "75 %", "2 von 17"]
     view.show_state({"data": [], "visible": True})
     assert view.isHidden()
+
+
+def test_preview_draws_the_screen_and_posts_a_click(qapp, keep):
+    from PIL import Image
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtTest import QTest
+    from dbdmapscout import qt_window
+    posted = queue.Queue()
+    view = keep(qt_window.PreviewView("ov.preview", lambda a, arg=None: posted.put((a, arg))))
+    view.resize(688, 288)
+    data = {"screen": (3440, 1440), "bar": 440, "rect": (26, 17, 388, 603, 518),
+            "pic": Image.new("RGBA", (300, 400), "blue"), "lines": ["03:27"], "opacity": 0.85, "transparent": True}
+    view.show_state({"data": data, "visible": True})
+    assert view.heightForWidth(688) == 240                     # 3440:1440 would be 288 – capped
+    view.grab()                                               # paints without errors
+    ox, oy, s = view._frame()
+    QTest.mouseClick(view, Qt.LeftButton, Qt.NoModifier, QPoint(round(ox + 3000 * s), round(oy + 900 * s)))
+    action, (key, (what, x, y)) = posted.get_nowait()
+    assert action == "act" and key == "ov.preview" and what == "move" and abs(x - 3000) < 8 and abs(y - 900) < 8

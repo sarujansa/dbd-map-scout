@@ -1090,4 +1090,10 @@ EN = {
     'Ø GPU-Leistung': 'Avg. GPU power',
     'Ø GPU-Temperatur': 'Avg. GPU temperature',
     'über {n} Runden': 'over {n} rounds',
+    # 1.61: overlay preview
+    'FRANKFURT · PING 31 MS': 'FRANKFURT · PING 31 MS',
+    'Klicken oder ziehen: Die Karte kommt an diese Stelle (eigene Position).':
+        'Click or drag: the map goes to this place (own position).',
+    'Spielbild': 'Game picture',
+    'Ø 2,8 KILLS · 12 RUNDEN': 'AVG. 2.8 KILLS · 12 ROUNDS',
 }

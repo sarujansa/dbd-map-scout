@@ -242,3 +242,24 @@ def test_leaving_a_lobby_drops_it():
     assert ("left",) in run(q2, [(0, V("custom")), (1, V("custom")), (5, V("play")), (6, V("play"))])
     q3 = QueueTracker()                                                      # plain PLAY screen: nothing to leave
     assert run(q3, [(0, V("play")), (1, V("play"))]) == []
+
+
+def test_killer_name_read_with_a_slip_is_still_found():
+    """1.61 (user, small window): "HILLILLY" – "THE" and one letter lost, the lexicon fit below KILLER_OK. A name
+    very close to one listed name counts for it; a different (new) name stays as read."""
+    r = lobby.LobbyReader.__new__(lobby.LobbyReader)
+    r._names = list(lobby.KILLERS) + list(lobby.SKINS)
+    assert r.fuzzy_killer("HILLILLY") == "The Hillbilly"
+    assert r.fuzzy_killer("THE HILLBILY") == "The Hillbilly"
+    assert r.fuzzy_killer("TRAPPER") == "The Trapper"
+    assert r.fuzzy_killer("THE HUNTER") is None             # a new killer is not taken for the Huntress
+    assert r.fuzzy_killer("THE NEW ONE") is None and r.fuzzy_killer("NURS") is None
+
+
+def test_old_rounds_read_with_a_slip_count_for_the_killer():
+    """rounds.jsonl keeps the name as read: "Hillilly" (before 1.61) shows as the Hillbilly; an own assignment
+    still wins, a new killer stays as it is."""
+    assert lobby.resolve_killer("Hillilly", {}) == "The Hillbilly"
+    assert lobby.resolve_killer("Hillilly", {"HILLILLY": "The Nurse"}) == "The Nurse"
+    assert lobby.resolve_killer("The Hunter", {}) == "The Hunter"
+    assert lobby.resolve_killer("", {}) == ""
