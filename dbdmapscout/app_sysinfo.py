@@ -45,7 +45,15 @@ MEDIA_SCALE = (60, 200)                     # slider of the music card, percent
 HUD_SCALE = (60, 200)                       # size of the system values / "today", percent (1.64.9)
 MAP_SCALE = (15, 90)                        # size of the map, percent of the game height
 # 1.64.9 (user: one size for what was picked instead of three sliders): the elements of the preview
-SELECTABLE = (("map", N_("Karte")), ("hud", N_("Systemwerte · Heute")), ("music", N_("Musik")))
+SELECTABLE = (("map", N_("Karte")), ("text", N_("Schrift der Karte (Name, Timer, Infos)")),
+              ("hud", N_("Systemwerte · Heute")), ("music", N_("Musik")))
+TEXT_SCALE = (50, 200)                      # size of the map's name/timer/info lines, percent (1.65)
+TEXT_BASE = 0.36                            # … of the text at the standard map size (share of the game height)
+
+
+def text_scale(o: dict) -> float:
+    """Size factor of the map's name, timer and info lines (setting overlay.text_scale, 1.65)."""
+    return min(TEXT_SCALE[1], max(TEXT_SCALE[0], float(o.get("text_scale", 1.0)) * 100)) / 100
 
 
 def hud_scale(o: dict) -> float:
@@ -185,6 +193,7 @@ class SysInfo:
 
     def _hud_dragged(self, x, y):
         """System values dropped somewhere: remember the place relative to the DBD window (like the map)."""
+        self._layout_mark()
         gx, gy, gw, gh = self._game_rect()
         steady = getattr(self, "_hud_steady", None)
         w, h = max(self.hud.size[0], steady[1] if steady else 0), self.hud.size[1]
@@ -258,6 +267,7 @@ class SysInfo:
 
     def _media_dragged(self, x, y):
         """Music card dropped somewhere (edit mode): from now on its own place there."""
+        self._layout_mark()
         gx, gy, gw, gh = self._game_rect()
         w, h = self.media_win.size
         o = self.settings["overlay"]
@@ -291,6 +301,7 @@ class SysInfo:
         self._tick_overlay(reschedule=False)
 
     def _media_spot_changed(self):
+        self._layout_mark()
         key = dict((_(label), k) for k, label in MEDIA_SPOTS).get(self.media_pos_var.get(), "below")
         self.settings["overlay"]["media_pos"] = key
         self._save_soon()
@@ -303,6 +314,7 @@ class SysInfo:
         self._tick_overlay(reschedule=False)
 
     def _media_size_changed(self):
+        self._layout_mark()
         self.settings["overlay"]["media_scale"] = round(float(self.media_size_var.get()) / 100, 2)
         self._save_soon()
         self._sel_sync()
@@ -314,6 +326,8 @@ class SysInfo:
         o = self.settings["overlay"]
         if name == "hud":
             return HUD_SCALE + (hud_scale(o) * 100,)
+        if name == "text":
+            return TEXT_SCALE + (text_scale(o) * 100,)
         if name == "music":
             return MEDIA_SCALE + (min(MEDIA_SCALE[1], max(MEDIA_SCALE[0], o.get("media_scale", 1.0) * 100)),)
         return MAP_SCALE + (self._map_height() * 100,)
@@ -346,11 +360,14 @@ class SysInfo:
     def _set_size(self, name, percent):
         """Size of one element in percent (slider, corner in the preview, wheel). The map: its own size when the
         map on display has one (hotkeys), else the size of all maps – the one you see is the one that changes."""
+        self._layout_mark()
         lo, hi, _v = self._sel_range(name)
         percent = min(hi, max(lo, percent))
         o = self.settings["overlay"]
         if name == "hud":
             o["hud_scale"] = round(percent / 100, 2)
+        elif name == "text":
+            o["text_scale"] = round(percent / 100, 2)
         elif name == "music":
             o["media_scale"] = round(percent / 100, 2)
             self.media_size_var.set(round(percent))
@@ -381,6 +398,7 @@ class SysInfo:
         self._set_size(name, value * height / sizes[name])
 
     def _sysinfo_changed(self):
+        self._layout_mark()
         key = dict((_(label), k) for k, label in HUD_SIDES).get(self.sysinfo_var.get(), "off")
         self.settings.set("sysinfo", key)
         self._save_soon()

@@ -45,6 +45,7 @@ DEFAULTS = {
         "media_style": "big",           # music card: big = cover on top (1.64.7) / compact = cover left (1.64)
         "media_scale": 1.0,             # size of the music card (slider 60–200 %)
         "media_cover": True,            # album cover left of title and artist
+        "text_scale": 1.0,              # name/timer/info lines of the map, independent of its size (1.65)
         "hud_scale": 1.0,               # size of the system values / "today" (60–200 %, 1.64.9)
         "show_today": True,             # block "today" with the system values at the top of a black bar (1.62)
     },
@@ -68,7 +69,10 @@ DEFAULTS = {
     "oled_black": False,                # control window: true black instead of the dark greys (qt_theme.OLED)
     "ui_zoom": 1.0,                     # control window: font size factor (qt_theme.ZOOMS)
     "qt_geometry": "",                  # control window: QWidget.saveGeometry() as base64
-    "card_order": {},                   # control window: own order of the cards {page: {run: [card ids]}}
+    "card_order": {},
+    "layout_per_size": True,            # overlay: place and size of every element per DBD window size (1.65)
+    "layouts": {},                      # {"3440x1440": layoutmem.snapshot(...)}
+    "layout_key": "",                   # the window size the current layout belongs to                   # control window: own order of the cards {page: {run: [card ids]}}
     "log_categories": ["Erkennung", "Overlay", "System", "Fehler"],
     "ocr_threads": 2,
     "save_debug_images": False,
@@ -110,7 +114,7 @@ def export_settings(data: dict, path: str) -> None:
 
 
 # per-PC values that must not come along from a backup (other folder / other machine)
-LOCAL_KEYS = ("setup_version", "setup_root", "qt_geometry", "official_dir")
+LOCAL_KEYS = ("setup_version", "setup_root", "qt_geometry", "official_dir", "layouts", "layout_key")
 
 
 def read_backup(path: str, current: dict) -> dict:

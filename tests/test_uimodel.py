@@ -390,3 +390,58 @@ def test_moving_without_a_map_shows_a_test_map(app_root):
         assert app.current[0] == mid and app.user_visible     # … stays after "Fertig"
     finally:
         app.quit()
+
+
+def test_undo_arrow_keys_and_a_layout_per_window_size(app_root, monkeypatch):
+    """1.65 (user: fine-tune, undo, one layout per window size)."""
+    from types import SimpleNamespace
+    from dbdmapscout import app_layout, layoutmem
+    from dbdmapscout.app import App
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    clock = [100.0]
+    monkeypatch.setattr(app_layout.time, "monotonic", lambda: clock[0])
+    try:
+        o = app.settings["overlay"]
+        app._select("map")
+        app._set_size("map", 50)                              # one step …
+        clock[0] += 5
+        app.toggle_edit()
+        app._preview_pick(("place", "map", 0, 0))             # … and another one
+        assert o["anchor"] == "custom" and o["height"] == 0.5 and app.undo_btn.instate(["!disabled"])
+        x0 = o["pos_x"]
+        clock[0] += 5
+        app._preview_pick(("nudge", 10, 0))                   # arrow key with Shift: 10 px to the right
+        assert o["pos_x"] > x0
+        app.undo_layout()                                     # back before the arrow key
+        assert o["pos_x"] == x0
+        app.undo_layout()
+        app.undo_layout()                                     # back to the start
+        assert o["anchor"] == "auto" and o["height"] == 0.36 and app.size_var.get() == 36
+        assert app.undo_btn.instate(["disabled"])
+        app.toggle_edit()
+
+        # one layout per DBD window size: the first size takes the layout in use
+        app.game = SimpleNamespace(width=3440, height=1440, minimized=False)
+        app._layout_size_tick()                               # a new size must settle first …
+        clock[0] += app_layout.SIZE_SETTLE + 0.1
+        app._layout_size_tick()
+        assert app.settings["layout_key"] == "3440x1440"
+        app._set_size("map", 60)
+        app._layout_size_tick()                               # changes go to that size
+        assert app.settings["layouts"]["3440x1440"]["overlay"]["height"] == 0.6
+        app.game = SimpleNamespace(width=1920, height=1080, minimized=False)
+        app._layout_size_tick()
+        clock[0] += app_layout.SIZE_SETTLE + 0.1
+        app._layout_size_tick()                               # a new size: starts with the layout in use
+        app._set_size("map", 30)
+        app._layout_size_tick()
+        app.game = SimpleNamespace(width=3440, height=1440, minimized=False)
+        app._layout_size_tick()
+        clock[0] += app_layout.SIZE_SETTLE + 0.1
+        app._layout_size_tick()                               # back: its own layout again
+        assert o["height"] == 0.6 and app.size_var.get() == 60
+        assert app.settings["layouts"]["1920x1080"]["overlay"]["height"] == 0.3
+        assert "3440×1440" in app.per_size_text.get()
+        assert layoutmem.snapshot(app.settings.data) == app.settings["layouts"]["3440x1440"]
+    finally:
+        app.quit()

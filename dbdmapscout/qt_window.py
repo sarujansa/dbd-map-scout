@@ -49,8 +49,8 @@ SPECS = {
             ("row", (("label", "ov.sel.label"), ("combo", "ov.sel"), ("stretch",))), ("slider", "ov.sel_size"),
             ("row", (("label", "ov.anchor.label"), ("combo", "ov.anchor"), ("stretch",), ("button", "ov.reset"))),
             ("slider", "ov.posx"), ("slider", "ov.posy"),
-            ("row", (("button", "ov.edit"), ("button", "ov.test"), ("stretch",))),
-            ("hint", "ov.pos_hint"), ("check", "ov.keep_bar"))),
+            ("row", (("button", "ov.edit"), ("button", "ov.test"), ("button", "ov.undo"), ("stretch",))),
+            ("hint", "ov.pos_hint"), ("check", "ov.keep_bar"), ("check", "ov.per_size"), ("hint", "ov.per_size_hint"))),
         ("card", "ov.look", (
             ("row", (("hint", "ov.map_size"), ("stretch",), ("button", "ov.map_size_reset"))),
             ("slider", "ov.opacity"),
@@ -1480,6 +1480,8 @@ class PreviewView(QWidget):
         self._grab = None                      # (layer name, dx, dy) while an element is dragged
         self._hover = None                     # layer under the mouse while moving (1.64.7)
         self._sizing = None                    # (layer name, x, y, w, h) while its corner is dragged (1.64.9)
+        self._snapped = (None, None)           # lines the dragged element snapped to (1.65), drawn as guides
+        self.setFocusPolicy(Qt.ClickFocus)     # arrow keys after a click (1.65)
         self.setMouseTracking(True)            # open hand over an element
         sp = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         sp.setHeightForWidth(True)
@@ -1576,7 +1578,7 @@ class PreviewView(QWidget):
             p.setFont(nf)
             p.setPen(accent)
             p.drawText(game.adjusted(0, 6, 0, 0), Qt.AlignHCenter | Qt.AlignTop,
-                       _("Verschieben aktiv – ziehen = verschieben, Ecke oder Mausrad = Grösse, dann „Fertig“"))
+                       _("Verschieben aktiv – ziehen (rastet ein, Alt = frei), Pfeiltasten = fein, Ecke/Mausrad = Grösse"))
         if d.get("editing"):                       # every element named; the one under the mouse in accent colour
             accent = QColor(qt_theme.colours(True)["accent"])
             held = self._grab[0] if self._grab else self._hover
@@ -1597,6 +1599,12 @@ class PreviewView(QWidget):
                 p.fillRect(tr, accent if on else QColor(30, 30, 34, 220))
                 p.setPen(QColor(20, 16, 4) if on else QColor(235, 235, 235))
                 p.drawText(tr, Qt.AlignCenter, tag)
+            lx, ly = self._snapped if self._grab else (None, None)
+            p.setPen(QPen(accent, 1.5))
+            if lx is not None:                     # the line the dragged element snapped to (1.65)
+                p.drawLine(QPointF(ox + lx * s, screen.top()), QPointF(ox + lx * s, screen.bottom()))
+            if ly is not None:
+                p.drawLine(QPointF(screen.left(), oy + ly * s), QPointF(screen.right(), oy + ly * s))
             sel = self._layer(d.get("selected"))
             if sel:                                # the picked element: its corner sizes it (1.64.9)
                 hr = self._handle_rect(sel, ox, oy, s)
@@ -1671,7 +1679,16 @@ class PreviewView(QWidget):
             return
         if self._grab:                     # an element held at the place it was grabbed: its corner follows
             name, dx, dy = self._grab
-            self._post("act", (self._key, ("place", name, pt[0] - dx, pt[1] - dy)))
+            x, y = pt[0] - dx, pt[1] - dy
+            lay = self._layer(name)
+            self._snapped = (None, None)
+            if lay and not e.modifiers() & Qt.AltModifier:        # 1.65: snaps to centre, bars, other elements
+                from .layoutmem import SNAP_PX, snap_lines, snap_rect
+                xs, ys = snap_lines(self._data["screen"], self._data.get("bar", 0), self._data.get("layers") or (),
+                                    name)
+                x, y, lx, ly = snap_rect(x, y, lay[3], lay[4], xs, ys, SNAP_PX / max(1e-6, self._frame()[2]))
+                self._snapped = (lx, ly)
+            self._post("act", (self._key, ("place", name, x, y)))
         else:                              # empty place: the map's centre goes there
             self._post("act", (self._key, ("move", pt[0], pt[1])))
 
@@ -1722,6 +1739,19 @@ class PreviewView(QWidget):
     def mouseReleaseEvent(self, _e):
         self._dragging = False
         self._grab = self._sizing = None
+        if self._snapped != (None, None):
+            self._snapped = (None, None)
+            self.update()
+
+    def keyPressEvent(self, e):
+        """Arrow keys (moving mode): the picked element by 1 px, with Shift by 10 px (1.65)."""
+        step = {Qt.Key_Left: (-1, 0), Qt.Key_Right: (1, 0), Qt.Key_Up: (0, -1), Qt.Key_Down: (0, 1)}.get(e.key())
+        if step is None or not self._data.get("editing") or not self._data.get("selected"):
+            super().keyPressEvent(e)
+            return
+        n = 10 if e.modifiers() & Qt.ShiftModifier else 1
+        self._post("act", (self._key, ("nudge", step[0] * n, step[1] * n)))
+        e.accept()
         self.setCursor(Qt.PointingHandCursor)
 
 
@@ -2353,6 +2383,8 @@ class MainWindow(QMainWindow):
         self.search.returnPressed.connect(self._search_first)
         from PySide6.QtGui import QKeySequence, QShortcut
         QShortcut(QKeySequence.Find, self, activated=self.focus_search)
+        # 1.65: undo of place/size on the overlay page (a text field keeps its own Ctrl+Z)
+        QShortcut(QKeySequence.Undo, self, activated=lambda: self.current_key() == "overlay" and self._post("undo"))
         lay.addWidget(side)
         right = QVBoxLayout()
         right.setContentsMargins(0, 0, 0, 0)
