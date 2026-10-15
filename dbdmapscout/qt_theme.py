@@ -38,24 +38,28 @@ THEMES = {
     "violet": (N_("Lila"), {
         True: {"accent": "#b48cf0", "accent_hover": "#c3a2f4", "on_accent": "#12081f", "select": "#4e2f86"},
         False: {"accent": "#6b3fb3", "accent_hover": "#7c50c4", "on_accent": "#ffffff", "select": "#4e2f86"}}),
-    "oled": (N_("OLED-Schwarz"), {
-        True: {"bg": "#000000", "panel": "#0d0d0f", "field": "#0a0a0b", "card": "#0d0d0f", "nav": "#0d0d0f",
-               "nav_sel": "#000000", "btn": "#1a1b1e", "btn_hover": "#26282c", "hover": "#1a1b1e",
-               "press": "#26282c", "border": "#26282a", "bar": "#141416", "btn_dis": "#0d0d0f"},
-        False: {}}),
 }
-_theme = "gold"
+# OLED black (1.62.1, user: "mit OLED mehr Farbkombis"): a switch of its own, true black instead of the dark greys
+# – with every accent; the light mode stays as it is
+OLED = {"bg": "#000000", "panel": "#0d0d0f", "field": "#0a0a0b", "card": "#0d0d0f", "nav": "#0d0d0f",
+        "nav_sel": "#000000", "btn": "#1a1b1e", "btn_hover": "#26282c", "hover": "#1a1b1e", "press": "#26282c",
+        "border": "#26282a", "bar": "#141416", "btn_dis": "#0d0d0f"}
+_theme, _oled = "gold", False
 
 
-def set_theme(key: str):
-    """The colour theme the window uses from now on (setting colour_theme; unknown = gold)."""
-    global _theme
+def set_theme(key: str, oled: bool = False):
+    """The colour theme the window uses from now on (settings color_theme, oled_black; unknown = gold)."""
+    global _theme, _oled
     _theme = key if key in THEMES else "gold"
+    _oled = bool(oled)
 
 
 def colours(dark: bool) -> dict:
-    """The palette of the current theme: PALETTE with the theme's colours over it."""
-    return dict(PALETTE[bool(dark)], **THEMES[_theme][1][bool(dark)])
+    """The palette of the current theme: PALETTE with the theme's accent over it, OLED black when dark."""
+    c = dict(PALETTE[bool(dark)], **THEMES[_theme][1][bool(dark)])
+    if dark and _oled:
+        c.update(OLED)
+    return c
 
 
 def hex_colour(c) -> str:
