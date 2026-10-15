@@ -74,3 +74,54 @@ def test_music_card_places():
     assert layout.media_xy("custom", game, size, m, own=(0.5, 0.0)) == (1585.0, 0.0)
     assert layout.media_xy("custom", game, size, m) == (3170.0, 1350.0)             # never dragged: bottom right
 
+
+
+def test_progress_runs_on_from_the_last_report():
+    """1.64.7: players report the position only now and then – it runs on while the song plays, never past the
+    end, stands still while paused; no length = no bar."""
+    playing = media.NowPlaying("S", "A", True, 100.0, position=70.0, duration=176.0, at=100.0)
+    assert media.progress(playing, 110.0) == (80.0, 176.0)
+    assert media.progress(playing, 1000.0) == (176.0, 176.0)
+    paused = media.NowPlaying("S", "A", False, 100.0, position=70.0, duration=176.0, at=100.0)
+    assert media.progress(paused, 500.0) == (70.0, 176.0)
+    assert media.progress(media.NowPlaying("S", "A", True, 100.0), 110.0) is None
+    assert media.clock(70) == "1:10" and media.clock(3725) == "1:02:05"
+
+
+def test_music_card_styles_and_progress_strip():
+    from PIL import Image
+    from dbdmapscout.overlay_win32 import render_music
+    rows = [[("Blinding Lights", (255, 255, 255, 255))], [("The Weeknd", (150, 156, 170, 255))]]
+    cover = Image.new("RGBA", (160, 160), (200, 30, 60, 255))
+    big = render_music(rows, cover, 1440, "big")
+    compact = render_music(rows, cover, 1440, "compact")
+    assert big.height > big.width > 1440 // 6                  # cover on top: taller than wide
+    assert compact.width > compact.height                      # cover left: a row
+    with_bar = render_music(rows, cover, 1440, "big", (70, 176))
+    assert with_bar.height > big.height and with_bar.width == big.width
+    assert render_music(rows, None, 1440, "big").height < big.height     # no cover: only the text
+
+
+def test_hud_values_stand_in_one_column():
+    """1.64.7 (user: "alles schön untereinander"): the values of all labelled rows start at the same x."""
+    from dbdmapscout import sysinfo
+    from dbdmapscout.overlay_win32 import render_hud
+    W = sysinfo.WHITE
+
+    def first_value_x(label):
+        pic = render_hud([[(label, sysinfo.DIM), ("88", W)], [("Ø KILLS ", sysinfo.DIM), ("2.9", W)]], 1440)
+        row = pic.crop((0, 0, pic.width, pic.height // 2)).convert("RGB")
+        px = row.load()
+        return next(x for x in range(row.width) for y in range(row.height) if px[x, y] == (255, 255, 255))
+    assert abs(first_value_x("CPU ") - first_value_x("VRAM ")) <= 1
+
+
+def test_old_settings_move_the_music_card_out_of_the_system_values(tmp_path):
+    """1.64.7: "below the system values" was the old default – once moved to bottom right; chosen later, it stays."""
+    import json
+    from dbdmapscout.config import Settings
+    p = tmp_path / "settings.json"
+    p.write_text(json.dumps({"settings_version": 3, "overlay": {"media_pos": "below"}, "hotkeys": {}}))
+    assert Settings(str(p))["overlay"]["media_pos"] == "bottom_right"
+    p.write_text(json.dumps({"settings_version": 4, "overlay": {"media_pos": "below"}, "hotkeys": {}}))
+    assert Settings(str(p))["overlay"]["media_pos"] == "below"

@@ -5,7 +5,7 @@ import copy
 import json
 import os
 
-SETTINGS_VERSION = 3
+SETTINGS_VERSION = 4
 
 DEFAULTS = {
     "settings_version": SETTINGS_VERSION,
@@ -39,8 +39,10 @@ DEFAULTS = {
         "show_record": True,            # own record on the map below the timer (official match data)
         "show_map": True,               # off: overlay shows only timer, server and ping
         "show_media": True,             # "Läuft gerade": music of the Windows media controls (1.64)
-        "media_pos": "below",           # its own window: below / bottom_right / bottom_left / custom
+        "media_pos": "bottom_right",    # its own window: below / bottom_right / bottom_left / custom (1.64.7)
         "media_xy": [1.0, 1.0],         # custom: share of the free room in the DBD window (dragged in edit mode)
+        "media_progress": True,         # music card: how far the song is (bar + times, 1.64.7)
+        "media_style": "big",           # music card: big = cover on top (1.64.7) / compact = cover left (1.64)
         "media_scale": 1.0,             # size of the music card (slider 60–200 %)
         "media_cover": True,            # album cover left of title and artist
         "show_today": True,             # block "today" with the system values at the top of a black bar (1.62)
@@ -147,6 +149,8 @@ class Settings:
                 if raw.get("settings_version", 1) < 3:                # 1.2: position sliders
                     ov["pos_x"] = min(1.0, max(0.0, float(ov.pop("custom_x", 0.0))))
                     ov["pos_y"] = min(1.0, max(0.0, float(ov.pop("custom_y", 0.0))))
+                if raw.get("settings_version", 1) < 4 and ov.get("media_pos") == "below":
+                    ov["media_pos"] = "bottom_right"  # 1.64.7: the music card stands on its own (user's wish)
                 if self.data.get("color_theme") == "oled":            # 1.62.0: OLED was a theme of its own
                     self.data["color_theme"], self.data["oled_black"] = "gold", True
                 self.data["settings_version"] = SETTINGS_VERSION
