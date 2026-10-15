@@ -360,13 +360,38 @@ def render_hud(rows, height: int) -> Image.Image:
     return pic
 
 
-class HudWindow:
-    """Small click-through layered window for the system values at the top of a black bar. In edit mode (the
-    overlay's "Mit der Maus verschieben") it can be dragged like the map: ``on_moved(x, y)`` after the drop."""
+def render_music(rows, cover, height: int) -> Image.Image:
+    """"Läuft gerade" (1.64): the cover (if any) left of the title/artist rows, the rows like the system values;
+    the cover as tall as the two text lines, slightly rounded, with the same soft shadow."""
+    text = render_hud(rows, height)
+    if cover is None:
+        return text
+    size = max(13, height // 60)
+    blur = max(2, height // 300)
+    pad = 3 * blur
+    side = max(16, text.height - 2 * pad)
+    art = cover.convert("RGBA").resize((side, side), Image.LANCZOS)
+    mask = Image.new("L", (side, side), 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, side - 1, side - 1), radius=max(2, size // 4), fill=255)
+    art.putalpha(mask)
+    gap = max(6, size // 2)
+    pic = Image.new("RGBA", (pad + side + gap + text.width - pad, max(text.height, side + 2 * pad)), (0, 0, 0, 0))
+    shadow = Image.new("RGBA", pic.size, (0, 0, 0, 0))
+    shadow.paste((0, 0, 0, 200), (pad, pad), mask)
+    pic.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(blur)))
+    pic.alpha_composite(art, (pad, pad))
+    pic.alpha_composite(text, (pad + side + gap - pad, 0))
+    return pic
 
-    def __init__(self):
+
+class HudWindow:
+    """Small click-through layered window for the system values at the top of a black bar (and, 1.64, the
+    music card). In edit mode (the overlay's "Mit der Maus verschieben") it can be dragged like the map:
+    ``on_moved(x, y)`` after the drop."""
+
+    def __init__(self, title: str = "DbD Map Scout Systemwerte"):
         ex = WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
-        self._hwnd = _u.CreateWindowExW(ex, "Static", "DbD Map Scout Systemwerte", WS_POPUP, 0, 0, 16, 16,
+        self._hwnd = _u.CreateWindowExW(ex, "Static", title, WS_POPUP, 0, 0, 16, 16,
                                         None, None, _k.GetModuleHandleW(None), None)
         if not self._hwnd:
             raise OSError(f"CreateWindowExW fehlgeschlagen (Fehler {ctypes.get_last_error()})")
@@ -411,15 +436,15 @@ class HudWindow:
                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED)
         self._key = None                                  # re-render with/without border
 
-    def render(self, rows, height: int):
-        """Prepare the picture; returns its size (0, 0 without rows)."""
-        key = (tuple(tuple(r) for r in rows), int(height), self.editing)
+    def render(self, rows, height: int, cover=None):
+        """Prepare the picture; returns its size (0, 0 without rows). ``cover``: the music card's picture."""
+        key = (tuple(tuple(r) for r in rows), int(height), self.editing, id(cover))
         if key != self._key:
             self._key = key
             if not rows:
                 self._data, self.size = None, (0, 0)
             else:
-                pic = render_hud(rows, height)
+                pic = render_hud(rows, height) if cover is None else render_music(rows, cover, height)
                 if self.editing:
                     pic = add_border(pic)
                 self._data, self.size = premultiplied_bgra(pic), pic.size

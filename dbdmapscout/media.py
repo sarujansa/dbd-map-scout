@@ -3,15 +3,17 @@
 Read from the Windows media controls (GlobalSystemMediaTransportControlsSessionManager – the same list the volume
 flyout of Windows shows: Spotify, a browser tab, …) through the pywinrt packages (MIT, pinned in
 requirements.txt; checked like windows-capture: they import no OpenProcess, hooks or input functions). Only the
-title, artist and whether it plays are read – nothing is controlled, nothing is logged, DBD is not touched.
+title, artist, whether it plays and (1.64, user's wish) the cover picture are read – nothing is controlled,
+nothing is saved or logged, DBD is not touched. The cover is read once per title and kept small in memory.
 """
 from __future__ import annotations
 
 import logging
 import sys
 import threading
+import io
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 log = logging.getLogger(__name__)
 
@@ -20,6 +22,8 @@ POLL_EVERY = 2.0            # seconds between two looks
 STALE_AFTER = 6.0           # a reading older than this is not shown (thread stuck / stopped)
 MAX_CHARS = 22              # longer titles are cut with "…" (no wider than the system value rows)
 PLAYING = 4                 # GlobalSystemMediaTransportControlsSessionPlaybackStatus.PLAYING
+COVER_PX = 160              # cover kept at most this big (the card shows it at ~70 px on 1440p)
+MAX_COVER_BYTES = 4_000_000     # a bigger "thumbnail" is not read
 
 
 @dataclass(frozen=True)
@@ -28,6 +32,27 @@ class NowPlaying:
     artist: str = ""
     playing: bool = False
     t: float = 0.0          # time.time() of the reading
+    cover: object = field(default=None, compare=False)      # PIL RGBA ≤ COVER_PX or None
+
+
+def decode_cover(data: bytes):
+    """The cover as a small PIL RGBA picture, None for no / broken / too big data (pure)."""
+    if not data or len(data) > MAX_COVER_BYTES:
+        return None
+    try:
+        from PIL import Image
+        img = Image.open(io.BytesIO(data))
+        img.draft("RGB", (COVER_PX, COVER_PX))          # JPEG: decode at a fraction of the size
+        img = img.convert("RGBA")
+        img.thumbnail((COVER_PX, COVER_PX))
+        return img
+    except Exception:
+        return None
+
+
+def playing(now: NowPlaying, wall: float) -> bool:
+    """Something plays and the reading is fresh (pure)."""
+    return bool(now.playing and now.title and wall - now.t <= STALE_AFTER)
 
 
 def clip(text: str, limit: int = MAX_CHARS) -> str:
@@ -44,9 +69,9 @@ def clip(text: str, limit: int = MAX_CHARS) -> str:
 
 def rows(now: NowPlaying, wall: float, label: str, dim, white) -> list:
     """HUD rows (pure): nothing unless something plays and the reading is fresh."""
-    if not now.playing or not now.title or wall - now.t > STALE_AFTER:
+    if not playing(now, wall):
         return []
-    out = [[(label, dim), (clip(now.title), white)]]
+    out = [[(label, dim), (clip(now.title), white)] if label else [(clip(now.title), white)]]
     if now.artist:
         out.append([(clip(now.artist), dim)])
     return out
@@ -58,8 +83,9 @@ class _Reader:
     def __init__(self):
         from winrt.windows.media.control import GlobalSystemMediaTransportControlsSessionManager as Manager
         self._manager = Manager.request_async().get()
+        self._cover_key, self._cover = None, None
 
-    def read(self) -> NowPlaying:
+    def read(self, want_cover: bool = True) -> NowPlaying:
         session = self._manager.get_current_session()
         if session is None:
             return NowPlaying(t=time.time())
@@ -67,8 +93,34 @@ class _Reader:
         props = session.try_get_media_properties_async().get()
         if props is None:
             return NowPlaying(t=time.time())
-        return NowPlaying(title=str(props.title or ""), artist=str(props.artist or ""),
-                          playing=int(status) == PLAYING, t=time.time())
+        title, artist = str(props.title or ""), str(props.artist or "")
+        cover = None
+        if want_cover and title:
+            key = (title, artist)
+            if key != self._cover_key:            # once per title: the picture does not change while it plays
+                try:
+                    data = self._cover_bytes(props.thumbnail)
+                except Exception:                 # no picture is fine: title and artist still show
+                    data = b""
+                self._cover_key, self._cover = key, decode_cover(data)
+            cover = self._cover
+        return NowPlaying(title=title, artist=artist, playing=int(status) == PLAYING, t=time.time(), cover=cover)
+
+    @staticmethod
+    def _cover_bytes(ref) -> bytes:
+        """The bytes of the media's thumbnail (in memory only); b"" when there is none."""
+        if ref is None:
+            return b""
+        from winrt.windows.storage.streams import Buffer, InputStreamOptions
+        stream = ref.open_read_async().get()
+        try:
+            n = int(stream.size)
+            if not 0 < n <= MAX_COVER_BYTES:
+                return b""
+            buf = stream.read_async(Buffer(n), n, InputStreamOptions.READ_AHEAD).get()
+            return bytes(memoryview(buf))
+        finally:
+            stream.close()
 
 
 class MediaWatcher:
@@ -77,6 +129,7 @@ class MediaWatcher:
 
     def __init__(self, reader=None):
         self.active = False
+        self.want_cover = False                   # set by the app (cover card: not wired up yet)
         self.now = NowPlaying()
         self.error = ""
         self._reader = reader
@@ -105,7 +158,7 @@ class MediaWatcher:
         try:
             if self._reader is None:
                 self._reader = _Reader()
-            self.now = self._reader.read()
+            self.now = self._reader.read(self.want_cover)
             self.error = ""
         except Exception as e:                    # no media controls, package missing, … – never kill the thread
             if not self.error:
