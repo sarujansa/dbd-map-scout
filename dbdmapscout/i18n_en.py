@@ -1123,9 +1123,19 @@ EN = {
     'Beliebige Farbe wählen – das Programm passt die Helligkeit an, bis alles lesbar ist.':
         'Pick any colour – the program adjusts its brightness until everything is readable.',
     # 1.64: music in the black bar
-    'MUSIK ': 'MUSIC ',
-    'Darunter „Läuft gerade“: Titel und Interpret der Musik (Spotify, Browser … – nur während sie spielt)':
-        'Below it "Now playing": title and artist of the music (Spotify, browser … – only while it plays)',
+    '„Läuft gerade“: Titel, Interpret und Cover der Musik (Spotify, Browser … – nur während sie spielt)':
+        '"Now playing": title, artist and cover of the music (Spotify, browser … – only while it plays)',
     'Liest Titel und Interpret aus der Windows-Mediensteuerung (dieselbe Liste wie beim Lautstärkeregler von Windows) – nur Anzeige, das Programm steuert nichts und speichert nichts.':
         'Reads title and artist from the Windows media controls (the same list as the Windows volume flyout) – display only, the program controls nothing and stores nothing.',
+    # 1.64: music card of its own
+    'Unter den Systemwerten': 'Below the system values',
+    'Rechts unten im Balken': 'Bottom right in the bar',
+    'Links unten im Balken': 'Bottom left in the bar',
+    'Musik': 'Music',
+    'MUSIK': 'MUSIC',
+    'läuft gerade': 'now playing',
+    'Größe Musik': 'Music size',
+    'Albumcover zeigen': 'Show the album cover',
+    'Das Bild zum Lied links neben Titel und Interpret – Windows liefert es mit; es bleibt nur im Speicher.':
+        'The picture of the song left of title and artist – Windows supplies it; it stays in memory only.',
 }

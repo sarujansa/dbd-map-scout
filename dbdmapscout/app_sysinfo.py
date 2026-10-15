@@ -37,13 +37,19 @@ def today_rows(j, now: float) -> list:
     return rows
 
 
-def make_hud():
+MEDIA_SPOTS = [("below", N_("Unter den Systemwerten")), ("bottom_right", N_("Rechts unten im Balken")),
+               ("bottom_left", N_("Links unten im Balken")),
+               ("custom", N_("Eigene Position (mit der Maus verschieben)"))]
+MEDIA_SCALE = (60, 200)                     # slider of the music card, percent
+
+
+def make_hud(title: str = "DbD Map Scout Systemwerte"):
     """Native HUD window, or None (not Windows / window could not be made)."""
     if not IS_WIN:
         return None
     try:
         from .overlay_win32 import HudWindow
-        return HudWindow()
+        return HudWindow(title)
     except Exception as e:
         log.warning("Systemwerte-Fenster nicht verfügbar: %s", e)
         return None
@@ -58,6 +64,10 @@ class SysInfo:
         self.hud = make_hud()
         if self.hud is not None:
             self.hud.on_moved = lambda x, y: self.events.put(("call", self._hud_dragged, (x, y)))   # see app.py
+        self.media_win = make_hud("DbD Map Scout Musik")     # 1.64: the music card, a window of its own
+        if self.media_win is not None:
+            self.media_win.on_moved = lambda x, y: self.events.put(("call", self._media_dragged, (x, y)))
+        self._media_ctx = None             # (gx, gy, gw, gh, show) of the last placement
         self._hud_reserved = None          # (side, height) taken at the top of a bar, for the map below
         self._hud_pending = ""             # "above"/"beside": rendered, placed once the map's place is known
         self._sysrec = None                # readings of the open round (tab Statistik → System)
@@ -67,12 +77,11 @@ class SysInfo:
         side = self.settings.get("sysinfo", "off")
         sys_on = side in HUD_SHOWN
         today = bool(self.settings["overlay"].get("show_today", True))
-        music = bool(self.settings["overlay"].get("show_media", True))
-        if not sys_on and (today or music):
-            side = "right"                                  # only "today"/music: at the top of the right bar
-        on = (sys_on or today or music) and self.hud is not None
+        self._media_ctx = (gx, gy, gw, gh, show)            # the music card is placed after the map
+        if not sys_on and today:
+            side = "right"                                  # only "today": at the top of the right bar
+        on = (sys_on or today) and self.hud is not None
         self.sysmon.active = sys_on and self.hud is not None and self.game is not None
-        self.media.active = music and self.hud is not None and self.game is not None
         bar = layout.bar_width(gw, gh)
         snap = self.sysmon.snapshot
         if self._hist is not None and self._sysrec is not None and sys_on and time.time() - snap.t < 3:
@@ -80,10 +89,6 @@ class SysInfo:
         rows = sysinfo.hud_rows(snap) if sys_on and self.hud is not None else []
         if on and today:
             rows = rows + ([[(" ", sysinfo.DIM)]] if rows else []) + self._today_rows(time.time())
-        playing = media.rows(self.media.now, time.time(), _("MUSIK "), sysinfo.DIM, sysinfo.WHITE) \
-            if on and music else []
-        if playing:
-            rows = rows + ([[(" ", sysinfo.DIM)]] if rows else []) + playing
         editing = on and side == "custom" and self.overlay.editing
         if self.hud is not None:
             self.hud.set_editing(editing)
@@ -168,6 +173,68 @@ class SysInfo:
         self.settings.set("sysinfo_pos", [round(min(1.0, max(0.0, (x - gx) / max(1, gw - w))), 4),
                                           round(min(1.0, max(0.0, (y - gy) / max(1, gh - h))), 4)])
         self._save_soon()
+
+    def _media_place(self):
+        """The music card (1.64, user: own place, cover, size slider): below the system values (default), bottom
+        right / left in the black bar, or an own place dragged in the map's edit mode. Shown with the map."""
+        o = self.settings["overlay"]
+        win = self.media_win
+        music = bool(o.get("show_media", True)) and win is not None
+        self.media.active = music and self.game is not None
+        self.media.want_cover = bool(o.get("media_cover", True))
+        ctx = self._media_ctx
+        if win is None:
+            return
+        editing = music and self.overlay.editing
+        win.set_editing(editing)
+        now = self.media.now
+        rows = media.rows(now, time.time(), "", sysinfo.DIM, sysinfo.WHITE) if music else []
+        if editing and not rows:
+            rows = [[(_("MUSIK"), sysinfo.DIM)], [(_("läuft gerade"), sysinfo.DIM)]]   # something to drag
+        spot = o.get("media_pos", "below")
+        gx, gy, gw, gh, show = ctx or (0, 0, 0, 0, False)
+        bar = layout.bar_width(gw, gh) if gh else 0
+        if not (ctx and rows and (show or editing) and (self.game is not None or editing)
+                and (bar >= layout.MIN_BAR or spot == "custom" or editing)):
+            win.hide()
+            self.worker.media_rect = None
+            return
+        margin = int(gh * o["margin"])
+        win.opacity = o["opacity"]
+        cover = now.cover if o.get("media_cover", True) and not (editing and not media.playing(now, time.time())) \
+            else None
+        height = int(gh * max(MEDIA_SCALE[0], min(MEDIA_SCALE[1], o.get("media_scale", 1.0) * 100)) / 100)
+        w, h = win.render(rows, height, cover)
+        avail = layout.max_width(bar, margin) if bar >= layout.MIN_BAR and spot != "custom" else gw / 3
+        if w > avail:                                       # never wider than the black bar
+            w, h = win.render(rows, max(200, int(height * avail / w)), cover)
+        hud = self.worker.hud_rect if self.hud is not None and self.hud.shown else None
+        x, y = layout.media_xy(spot, (gx, gy, gw, gh), (w, h), margin, hud, o.get("media_xy"))
+        win.show_at(int(x), int(y))
+        self.worker.media_rect = (int(x), int(y), w, h)
+
+    def _media_dragged(self, x, y):
+        """Music card dropped somewhere (edit mode): from now on its own place there."""
+        gx, gy, gw, gh = self._game_rect()
+        w, h = self.media_win.size
+        o = self.settings["overlay"]
+        o["media_xy"] = [round(min(1.0, max(0.0, (x - gx) / max(1, gw - w))), 4),
+                         round(min(1.0, max(0.0, (y - gy) / max(1, gh - h))), 4)]
+        o["media_pos"] = "custom"
+        if hasattr(self, "media_pos_var"):
+            self.media_pos_var.set(_(dict(MEDIA_SPOTS)["custom"]))
+        self._save_soon()
+
+    def _media_spot_changed(self):
+        key = dict((_(label), k) for k, label in MEDIA_SPOTS).get(self.media_pos_var.get(), "below")
+        self.settings["overlay"]["media_pos"] = key
+        self._save_soon()
+        self._tick_overlay(reschedule=False)
+
+    def _media_size_changed(self):
+        self.settings["overlay"]["media_scale"] = round(float(self.media_size_var.get()) / 100, 2)
+        self._save_soon()
+        self._tick_overlay(reschedule=False)
 
     def _sysinfo_changed(self):
         key = dict((_(label), k) for k, label in HUD_SIDES).get(self.sysinfo_var.get(), "off")

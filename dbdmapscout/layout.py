@@ -152,3 +152,22 @@ def pos_from_point(gw: int, gh: int, w: int, h: int, cx: float, cy: float):
     fx = (cx - w / 2) / max(1, gw - w)
     fy = (cy - h / 2) / max(1, gh - h)
     return min(1.0, max(0.0, fx)), min(1.0, max(0.0, fy))
+
+
+def media_xy(spot: str, game, size, margin: int, hud=None, own=None):
+    """Top-left corner of the music card (1.64): "below" the system values (left-aligned with them; without
+    them at the top of the right bar), "bottom_right" / "bottom_left" in the black bar, "custom" = ``own``
+    (share of the free room in the game window, like the system values' own place)."""
+    gx, gy, gw, gh = game
+    w, h = size
+    if spot == "custom":
+        fx, fy = own or (1.0, 1.0)
+        return gx + fx * max(0, gw - w), gy + fy * max(0, gh - h)
+    if spot == "bottom_left":
+        return gx + margin, gy + gh - margin - h
+    if spot == "bottom_right":
+        return gx + gw - margin - w, gy + gh - margin - h
+    if hud:
+        return min(hud[0], gx + gw - margin - w), hud[1] + hud[3] + max(2, margin // 2)
+    return gx + gw - margin - w, gy + margin
+

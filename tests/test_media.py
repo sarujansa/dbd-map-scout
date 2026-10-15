@@ -31,7 +31,7 @@ class _Reader:
     def __init__(self, results):
         self.results = list(results)
 
-    def read(self):
+    def read(self, want_cover=False):
         r = self.results.pop(0)
         if isinstance(r, Exception):
             raise r
@@ -50,3 +50,27 @@ def test_watcher_reads_only_while_active_and_survives_errors():
     w.look()                                                              # the reader fails
     assert w.now == media.NowPlaying() and "OSError" in w.error
     assert w._reader is None                                              # a fresh one next time
+
+
+def test_cover_is_decoded_small_and_broken_data_is_none():
+    import io
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (640, 640), (200, 30, 60)).save(buf, "JPEG")
+    img = media.decode_cover(buf.getvalue())
+    assert img is not None and img.mode == "RGBA" and max(img.size) <= media.COVER_PX
+    assert media.decode_cover(b"") is None and media.decode_cover(b"not a picture") is None
+    assert media.decode_cover(b"x" * (media.MAX_COVER_BYTES + 1)) is None
+
+
+def test_music_card_places():
+    from dbdmapscout import layout
+    game, size, m = (0, 0, 3440, 1440), (270, 90), 17
+    assert layout.media_xy("below", game, size, m, hud=(3130, 17, 290, 300)) == (3130, 17 + 300 + 8)
+    assert layout.media_xy("below", game, size, m) == (3440 - 17 - 270, 17)          # no system values shown
+    assert layout.media_xy("below", game, size, m, hud=(3300, 17, 120, 50))[0] == 3440 - 17 - 270   # stays inside
+    assert layout.media_xy("bottom_right", game, size, m) == (3153, 1440 - 17 - 90)
+    assert layout.media_xy("bottom_left", game, size, m) == (17, 1333)
+    assert layout.media_xy("custom", game, size, m, own=(0.5, 0.0)) == (1585.0, 0.0)
+    assert layout.media_xy("custom", game, size, m) == (3170.0, 1350.0)             # never dragged: bottom right
+
