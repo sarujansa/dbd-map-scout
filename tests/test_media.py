@@ -125,3 +125,16 @@ def test_old_settings_move_the_music_card_out_of_the_system_values(tmp_path):
     assert Settings(str(p))["overlay"]["media_pos"] == "bottom_right"
     p.write_text(json.dumps({"settings_version": 4, "overlay": {"media_pos": "below"}, "hotkeys": {}}))
     assert Settings(str(p))["overlay"]["media_pos"] == "below"
+
+
+def test_the_whole_title_wraps_instead_of_being_cut():
+    """1.65 (user: "der ganze Titel soll angezeigt werden")."""
+    title = "Somebody That I Used To Know (feat. Kimbra)"
+    lines = media.wrap(title)
+    assert " ".join(lines) == title and all(len(line) <= media.MAX_CHARS for line in lines)
+    assert media.wrap("x" * 50) == ["x" * 22, "x" * 22, "x" * 6]          # one long word is cut, not lost
+    long = media.wrap("word " * 40)
+    assert len(long) == media.TITLE_LINES and long[-1].endswith("…")       # only far too long ends with "…"
+    now = media.NowPlaying(title, "Gotye", True, 100.0)
+    rows = media.rows(now, 101.0, "", "dim", "white")
+    assert [r[0][0] for r in rows] == lines + ["Gotye"] and rows[-1][0][1] == "dim"

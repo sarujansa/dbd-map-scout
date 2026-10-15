@@ -28,6 +28,11 @@ TIPS = {
                                    "nicht dazu.",
     "Einstellungen importieren …": "Lädt eine exportierte Einstellungsdatei und startet das Programm neu. Fehlende "
                                    "Werte (ältere Sicherung) bekommen ihren Standard.",
+    "Rückgängig": "Nimmt die letzte Änderung an Position oder Grösse zurück (Karte, Systemwerte, Musik) – auch "
+                  "mit Strg+Z auf dieser Seite. Ein ganzes Ziehen zählt als ein Schritt.",
+    "Position und Grösse je DBD-Fenstergrösse merken":
+        "Merkt Position und Grösse aller Elemente getrennt für jede Grösse des DBD-Fensters (z. B. Vollbild "
+        "3440×1440 und ein kleineres Fenster) und lädt sie automatisch, sobald DBD in dieser Grösse läuft.",
     "Meldung testen": "Zeigt die Meldung und spielt den Ton – so siehst du, wo sie erscheint.",
     "Killer": "Diese Runde als Killer-Runde zählen (falls die Erkennung falsch lag).",
     "Zuordnen": "Der markierte Name (Skin oder neuer Killer) zählt ab jetzt als der gewählte Killer – auch in allen "

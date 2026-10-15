@@ -20,7 +20,8 @@ log = logging.getLogger(__name__)
 IS_WIN = sys.platform == "win32"
 POLL_EVERY = 2.0            # seconds between two looks
 STALE_AFTER = 6.0           # a reading older than this is not shown (thread stuck / stopped)
-MAX_CHARS = 22              # longer titles are cut with "…" (no wider than the system value rows)
+MAX_CHARS = 22              # characters per line: longer titles wrap (1.65, user: "der ganze Titel") …
+TITLE_LINES, ARTIST_LINES = 4, 2    # … onto this many lines – only beyond that "…"
 PLAYING = 4                 # GlobalSystemMediaTransportControlsSessionPlaybackStatus.PLAYING
 COVER_PX = 160              # cover kept at most this big (the card shows it at ~70 px on 1440p)
 MAX_COVER_BYTES = 4_000_000     # a bigger "thumbnail" is not read
@@ -84,13 +85,38 @@ def clip(text: str, limit: int = MAX_CHARS) -> str:
     return cut.rstrip(" -–·,") + "…"
 
 
+def wrap(text: str, limit: int = MAX_CHARS, lines: int = TITLE_LINES) -> list:
+    """The whole text on lines of at most ``limit`` characters, broken between words (a longer word is cut);
+    only what does not fit on ``lines`` lines ends with "…" (pure, 1.65)."""
+    words, out, cur = " ".join(str(text or "").split()).split(" "), [], ""
+    for word in words:
+        while len(word) > limit:                   # one word longer than a line
+            if cur:
+                out.append(cur)
+                cur = ""
+            out.append(word[:limit])
+            word = word[limit:]
+        cur = f"{cur} {word}" if cur and word else (cur or word)
+        if len(cur) > limit:
+            out.append(cur[:len(cur) - len(word) - 1])
+            cur = word
+    if cur:
+        out.append(cur)
+    if len(out) > lines:
+        out = out[:lines - 1] + [clip(" ".join(out[lines - 1:]), limit)]
+    return out
+
+
 def rows(now: NowPlaying, wall: float, label: str, dim, white) -> list:
-    """HUD rows (pure): nothing unless something plays and the reading is fresh."""
+    """HUD rows (pure): nothing unless something plays and the reading is fresh. Title and artist are shown
+    whole, wrapped onto several lines."""
     if not playing(now, wall):
         return []
-    out = [[(label, dim), (clip(now.title), white)] if label else [(clip(now.title), white)]]
+    title = wrap(now.title, MAX_CHARS, TITLE_LINES)
+    out = [[(label, dim), (title[0], white)] if label else [(title[0], white)]]
+    out += [[(line, white)] for line in title[1:]]
     if now.artist:
-        out.append([(clip(now.artist), dim)])
+        out += [[(line, dim)] for line in wrap(now.artist, MAX_CHARS, ARTIST_LINES)]
     return out
 
 
