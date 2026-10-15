@@ -236,6 +236,28 @@ def test_maps_page_lists_by_realm_and_posts_the_pick(qapp, keep):
                                                         ("show_map", ("coal", 1))]
 
 
+def test_maps_page_previews_the_selected_map(qapp, keep):
+    from PIL import Image
+    from dbdmapscout import qt_window
+    posted = queue.Queue()
+    page = keep(qt_window.MapsPage(lambda a, arg=None: posted.put((a, arg))))
+    page.resize(900, 700)
+    items = [("MacMillan", "Coal Tower", "coal", 1), ("MacMillan", "Suffocation Pit", "pit", 1),
+             ("Autohaven", "Azarov's Resting Place", "azarov", 1)]
+    assert not page.p_show.isEnabled()                        # nothing selected yet: a hint, no button
+    page.show_maps(items, ("pit", 1))
+    pit = page.tree.topLevelItem(0).child(1)
+    assert page.tree.topLevelItem(0).isExpanded() and page.tree.currentItem() is pit   # the shown map, opened
+    assert posted.empty()                                     # marking it is no click
+    page.tree.setCurrentItem(page.tree.topLevelItem(0).child(0))
+    assert posted.get_nowait() == ("map_preview", ("coal", 1))
+    page.show_preview(("coal", 1, "Coal Tower", "The MacMillan Estate", Image.new("RGBA", (200, 400), "red")))
+    assert page.p_name.text() == "Coal Tower" and page.p_show.isEnabled()
+    assert page.p_pic.pixmap() is not None and not page.p_pic.pixmap().isNull()
+    page.p_show.click()
+    assert posted.get_nowait() == ("show_map", ("coal", 1))
+
+
 # ------------------------------------------------------------------ pages built from a tab of the UI model
 NODE = {"kind": "box", "key": ".t", "side": "top", "row": False, "children": [
     {"kind": "big", "key": ".t.sum", "side": "top"},
@@ -277,6 +299,33 @@ def test_auto_page_shows_a_tab(qapp, keep):
                                                         ("act", (".t.nb.a.tree", ("sort", "ping"))),
                                                         ("act", (".t.nb", 1))]
     assert ".t.nb.b.chart" in page.visible_keys()
+
+
+def test_filling_tabs_take_the_page_and_tick_boxes_show(qapp, keep):
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QScrollArea
+    from dbdmapscout import qt_window
+    node = {"kind": "box", "key": ".s", "side": "top", "row": False, "children": [
+        {"kind": "tabs", "key": ".s.nb", "side": "top", "fill": True, "children": [
+            {"kind": "box", "key": ".s.nb.a", "side": "top", "row": False, "children": [
+                {"kind": "table", "key": ".s.nb.a.tree", "side": "top", "fit": False}]}]},
+        {"kind": "table", "key": ".s.regions", "side": "top", "fit": True}]}
+    page = keep(qt_window.AutoPage(lambda a, arg=None: None, "Statistik", node))
+    tw = page.controls[".s.nb"][1]
+    assert isinstance(tw.widget(0), QScrollArea)               # the tab's page scrolls, the filters stay
+    assert not any(sa.isAncestorOf(tw) for sa in page.findChildren(QScrollArea))   # the page itself does not
+    regions = page.controls[".s.regions"][1]
+    page.show_states({".s.regions": {"visible": True, "selectable": True, "selection": [], "colours": {},
+                                     "columns": [("#0", "Region", "w"), ("ping", "Ping", "e")], "stretch": 0,
+                                     "widths": [215, 78],
+                                     "rows": [("g:eu", 0, "Europa", [], ["group", "check:part"], True),
+                                              ("r:fra", 1, "Frankfurt", ["31 ms"], ["check:on"], False),
+                                              ("r:dub", 1, "Irland", ["40 ms"], ["check:off"], False)]}})
+    eu = regions.topLevelItem(0)
+    assert [eu.checkState(0), eu.child(0).checkState(0), eu.child(1).checkState(0)] == \
+        [Qt.PartiallyChecked, Qt.Checked, Qt.Unchecked]
+    assert regions.maximumHeight() < 300                      # as tall as its three rows, no empty box
+    assert regions.columnWidth(1) >= 78                       # the model's width: room for "31 ms"
 
 
 def test_chart_draws_columns_and_a_line(qapp, keep):

@@ -26,13 +26,13 @@ class ServerTab:
                                "Administratorrechte)."), style="Dim.TLabel", wraplength=540).pack(anchor="w")
 
         reg = ui.LabelFrame(f, text=_("Serverregionen"), padding=8)
-        reg.pack(fill="both", expand=True, pady=(8, 0))
+        reg.pack(fill="x", pady=(8, 0))
         ui.Label(reg, text=_("DBD sucht Matches nur in den angehakten Regionen (über die Windows-hosts-Datei, "
                               "das Spiel wird nicht verändert). Nach „Auswahl anwenden“ DBD neu starten."),
                   style="Dim.TLabel", wraplength=430).pack(anchor="w")
         f_outer, f = f, reg
         tf = ui.Frame(f)
-        tf.pack(fill="both", expand=True, pady=(6, 0))
+        tf.pack(fill="x", pady=(6, 0))
         t = ui.Treeview(tf, columns=("ping", "state"), show="tree headings", height=11, selectmode="browse")
         t.heading("#0", text=_("Region"), anchor="w")
         t.heading("ping", text="Ping", anchor="e")
@@ -40,7 +40,7 @@ class ServerTab:
         t.column("#0", width=215, stretch=True)
         t.column("ping", width=78, anchor="e", stretch=False)
         t.column("state", width=120, anchor="w", stretch=False)
-        t.pack(side="left", fill="both", expand=True)
+        t.pack(side="left", fill="x")             # as tall as its rows, no empty box below (1.58.1)
         self.srv_tree = t
         t._dbdms_click = self._srv_toggle         # a click toggles the region (also from the Qt window)
         saved = self.settings.get("regions_selected")
@@ -173,15 +173,15 @@ class ServerTab:
         for g in regions.GROUPS:
             codes = [c for c, _, grp in regions.REGIONS if grp == g]
             n = sum(c in self.srv_sel for c in codes)
-            box = "☑" if n == len(codes) else "☐" if n == 0 else "◪"
-            t.item(f"g:{g}", text=f"{box}  {_(g)}")
+            box = ui.CHECK_ON if n == len(codes) else ui.CHECK_OFF if n == 0 else ui.CHECK_PART
+            t.item(f"g:{g}", text=_(g), tags=("group", box))
             for c in codes:
                 p = self.srv_ping.get(c)
                 ms = p.get("ms") if p else None
                 ping = "…" if self._srv_busy and p is None else ("–" if ms is None else f"{ms:.0f} ms")
                 tag = ("p_na" if ms is None else "p_good" if ms < 80 else "p_mid" if ms < 130 else "p_bad")
-                t.item(f"r:{c}", text=f"{'☑' if c in self.srv_sel else '☐'}  {_(regions.NAMES[c])}",
-                       values=(ping, _(states.get(c, "?"))), tags=(tag,))
+                t.item(f"r:{c}", text=_(regions.NAMES[c]), values=(ping, _(states.get(c, "?"))),
+                       tags=(tag, ui.CHECK_ON if c in self.srv_sel else ui.CHECK_OFF))
 
     def _srv_refresh(self, log_summary=False):
         """Read the hosts file (no administrator rights needed)."""

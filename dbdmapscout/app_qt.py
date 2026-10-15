@@ -12,6 +12,8 @@ import os
 import time
 import traceback
 
+from PIL import Image
+
 from . import __version__, overview, tooltip
 from . import uimodel as ui
 from .capture import IS_WIN
@@ -22,6 +24,7 @@ log = logging.getLogger("dbdmapscout")
 
 GEOMETRY_DELAY = 1.0          # s after the last move/resize before the size is saved
 QT_HOTKEYS = {"scan": "scan_now", "reject": "reject_map"}
+PREVIEW_PX = 900              # map preview on the maps page: picture scaled to fit this box first
 
 
 def ui_shown(w) -> bool:
@@ -52,7 +55,12 @@ def ui_layout(w, reg: dict):
     if isinstance(w, ui.Notebook):
         reg[key] = w
         pages = [w.nametowidget(t) for t in w.tabs()]
-        return {"kind": "tabs", "key": key, "children": [n for n in (ui_layout(p, reg) for p in pages) if n]}
+        try:                                    # packed to fill: the tabs take the page's height (statistics)
+            fill = bool(w.pack_info().get("expand"))
+        except ui.UIError:
+            fill = False
+        return {"kind": "tabs", "key": key, "fill": fill,
+                "children": [n for n in (ui_layout(p, reg) for p in pages) if n]}
     kind = next((k for cls, k in KINDS if isinstance(w, cls)), None)
     if kind is None and isinstance(w, ui.Label):
         style = str(w.cget("style"))
@@ -60,7 +68,13 @@ def ui_layout(w, reg: dict):
                 else "hint" if style == "Dim.TLabel" else "label")
     if kind is not None:
         reg[key] = w
-        return {"kind": kind, "key": key, "side": _side(w)}
+        node = {"kind": kind, "key": key, "side": _side(w)}
+        if isinstance(w, ui.Treeview):           # packed without expand: as tall as its rows (server regions)
+            try:
+                node["fit"] = not w.pack_info().get("expand")
+            except ui.UIError:
+                node["fit"] = False
+        return node
     nodes = []
     grid = False
     for c in w.winfo_children():
@@ -109,7 +123,10 @@ def ui_state(w) -> dict:
             fg = str(w.tag_configure(tag, "foreground") or "")
             if fg:
                 colours[tag] = fg
-        st.update(columns=cols, rows=rows, selection=list(w.selection()), colours=colours,
+        stretch = next((i for i, c in enumerate(cols) if w.column(c[0], "stretch")), 0)   # e.g. the map name
+        widths = [int(w.column(c[0], "width") or 0) for c in cols]
+        st.update(columns=cols, rows=rows, selection=list(w.selection()), colours=colours, stretch=stretch,
+                  widths=widths,
                   selectable=str(w.cget("selectmode")) != "none" or hasattr(w, "_dbdms_click"))
         return st
     if isinstance(w, ui.Scale):
@@ -313,6 +330,9 @@ class QtShell:
             self._qt_search = str(arg or "")
             self._qt_maps_rev = getattr(self, "_qt_maps_rev", 0) + 1
             self._fill_list()
+        elif action == "map_preview":
+            mid, v = arg
+            self._qt_preview_sel = (mid, int(v))
         elif action == "show_map":
             mid, v = arg
             if mid in self.catalog.maps:
@@ -371,10 +391,11 @@ class QtShell:
         else:
             q.show_log_alert(bool(getattr(self, "_log_alert", False)))
         if page == "maps":
-            rev = (getattr(self, "_qt_maps_rev", 0), id(self.catalog), self.current)
+            sel = getattr(self, "_qt_preview_sel", None) or self.current
+            rev = (getattr(self, "_qt_maps_rev", 0), id(self.catalog), self.current, sel)
             if force or rev != getattr(self, "_qt_maps_shown", None):
                 self._qt_maps_shown = rev
-                q.show_maps(self._qt_map_items(), self.current)
+                q.show_maps(self._qt_map_items(), self.current, self._qt_preview(sel))
         reg = self.__dict__.get("_qt_reg", {})
         keys = self._qt_mod.page_keys(page)
         if keys:
@@ -384,6 +405,31 @@ class QtShell:
         self._qt_dialog_tick()
         qq = self._qt_question
         q.show_question(None if qq is None else (qq[0], qq[1], qq[2] is not None))
+
+    def _qt_preview(self, sel):
+        """(map_id, variant, name, realm, picture) of the map selected on the maps page (the shown map before a
+        click), the picture as a small PIL image – only the first frame (Midwich: the bottom floor)."""
+        if not sel or sel[0] not in self.catalog.maps:
+            return None
+        mid, v = sel[0], int(sel[1])
+        cached = getattr(self, "_qt_preview_cache", None)
+        if cached is not None and cached[0] == (mid, v, id(self.catalog)):
+            return cached[1]
+        m = self.catalog.maps[mid]
+        path, shown = self.catalog.image_path(mid, v)
+        pic = None
+        if path:
+            try:
+                with Image.open(path) as im:
+                    im.seek(0)
+                    pic = im.convert("RGBA")
+                pic.thumbnail((PREVIEW_PX, PREVIEW_PX))
+            except (OSError, ValueError) as e:
+                self._log(_("Kartenbild nicht lesbar: {error}", error=e), "Fehler")
+        realm = self.catalog.realm_display(m) or _("Eigene Bilder")
+        out = (mid, shown, m.label(shown), realm, pic)
+        self._qt_preview_cache = ((mid, v, id(self.catalog)), out)
+        return out
 
     def _qt_map_items(self):
         """[(realm, label, map_id, variant)] (search with the catalog's own matching)."""
