@@ -56,7 +56,11 @@ QListWidget#nav::item:selected {{ background: {c['nav_sel']}; color: {c['accent'
 QListWidget#nav::item:hover:!selected {{ background: {c['hover']}; color: {c['fg']}; }}
 QFrame[class="card"] {{ background: {c['card']}; border: 1px solid {c['border']}; border-radius: 10px; }}
 QFrame[class="card"] QLabel {{ background: transparent; }}
-QFrame[class="card"][dragging="true"] {{ border: 1px solid {c['accent']}; }}  /* held at its grip */
+QFrame[class="card"][dragging="true"], QFrame[class="card"][found="true"] {{ border: 1px solid {c['accent']}; }}
+QWidget#navside {{ background: {c['nav']}; }}
+QLineEdit#navsearch {{ margin: 12px 10px 2px 10px; background: {c['field']}; }}
+QPushButton#navsearchbtn {{ background: transparent; border: none; margin-top: 10px; padding: 8px; }}
+QPushButton#navsearchbtn:hover {{ background: {c['hover']}; }}
 QLabel[class="dim"] {{ color: {c['dim']}; font-size: {px(12)}; }}
 QLabel[class="h1"] {{ font-size: {px(24)}; font-weight: 700; color: {c['head']}; }}
 QLabel[class="map"] {{ font-family: 'Fira Sans ExtraBold', 'Segoe UI'; font-size: {px(26)}; color: {c['head']}; }}
@@ -83,7 +87,8 @@ QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }}
 QScrollBar::handle:vertical {{ background: {c['hover']}; border-radius: 4px; min-height: 30px; }}
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
 QTreeWidget {{ border: 1px solid {c['border']}; border-radius: 8px; padding: 4px; }}
-QTreeWidget::item {{ padding: 3px 2px; }}
+QTreeWidget::item {{ padding: 3px 6px; }}
+QHeaderView::section {{ padding: 3px 6px; }}
 QTreeWidget::item:selected {{ background: {c['select']}; color: #ffffff; }}
 QLineEdit {{ border: 1px solid {c['border']}; border-radius: 6px; padding: 5px 8px; }}
 QLineEdit:focus {{ border-color: {c['accent']}; }}

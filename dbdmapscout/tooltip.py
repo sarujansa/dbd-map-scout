@@ -43,7 +43,8 @@ TIPS = {
     "Eigene Bilanz auf der Map unter dem Timer (Stats-Seite)":
         "Zeigt unter dem Rundentimer, wie es dir auf dieser Map bisher ging: als Killer Ø Kills, als Survivor den "
         "Anteil Escapes – aus den Runden mit Daten der Stats-Seite, ab 3 Runden.",
-    "Verstanden": "Hinweis schliessen – er erscheint nicht wieder.",
+    "Einrichtung starten": "Öffnet noch einmal die Einrichtung vom ersten Start: Spielsprache, Overlay-Position "
+                           "und die wichtigsten Tasten.",
     "Anordnung zurücksetzen": "Stellt die Kästen auf allen Seiten wieder in die ursprüngliche Reihenfolge.",
     "Anzeigen": "Blendet die gewählte Map jetzt als Overlay ein – die Erkennung übernimmt beim nächsten Match "
                 "wieder.",

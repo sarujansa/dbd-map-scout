@@ -9,7 +9,6 @@ from dataclasses import dataclass, field
 
 from . import history, official, sysinfo
 from .connwatch import UNKNOWN, region_name
-from .hotkeys import pretty
 from .i18n import _
 from .lobby import killer_label
 from .overlay_win32 import ping_colour
@@ -46,7 +45,6 @@ class Overview:
     system: list = field(default_factory=list)         # [(label, text, frac | None, colour | None)]
     system_note: str = ""
     rounds: list = field(default_factory=list)         # [(map, right-hand text)]
-    welcome: str = ""
     log_alert: bool = False
 
 
@@ -208,11 +206,5 @@ def overview_model(app, now: float, is_win: bool) -> Overview:
         cache = app._ov_cache = (j, int(now // 60), today(app, now), last_rounds(app))
     (o.today, o.today_note), o.rounds = cache[2], cache[3]
     o.system, o.system_note = system(app, now, is_win)
-    if getattr(app, "_qt_welcome", False) and not app.settings.get("welcome_seen"):
-        hk = app.settings.get("hotkeys") or {}
-        o.welcome = _("So geht's: DBD starten und spielen – die Karte erscheint beim Match-Start von selbst und "
-                      "verschwindet nach der Runde. Hotkeys: {toggle} ein/aus, {rotate} drehen, {edit} "
-                      "verschieben (ändern unter Einstellungen).", toggle=pretty(hk.get("toggle_overlay") or "–"),
-                      rotate=pretty(hk.get("rotate_map") or "–"), edit=pretty(hk.get("edit_position") or "–"))
     o.log_alert = bool(getattr(app, "_log_alert", False))
     return o

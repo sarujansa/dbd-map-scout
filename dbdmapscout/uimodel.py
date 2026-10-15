@@ -573,6 +573,14 @@ class Dashboard(Widget):
         self.dark = True
 
 
+class Tiles(Widget):
+    """A row of key figure tiles (dashboard.Tile list in ``data``) – fewer columns in a narrow window."""
+
+    def __init__(self, master=None, **kw):
+        super().__init__(master, **kw)
+        self.data = []
+
+
 class Toplevel(Widget):
     """A dialog: shown by the Qt window as a non-modal window built from its content (App._dialog)."""
 
