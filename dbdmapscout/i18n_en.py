@@ -575,7 +575,8 @@ EN = {
         "Diagnostics copied to the clipboard (also saved as diagnose.txt).",
     "Karte, Systemwerte und Musik mit der Maus ziehen (im Spiel oder in der Vorschau), Mausrad = Grösse. Danach „Fertig“ oder Hotkey.":
         "Drag the map, the system values and the music with the mouse (in the game or in the preview), mouse wheel = size. Then “Done” or the hotkey.",
-    "Verschieben aktiv – Elemente ziehen, dann „Fertig“": "Moving is on – drag the elements, then “Done”",
+    "Verschieben aktiv – ziehen = verschieben, Ecke oder Mausrad = Grösse, dann „Fertig“":
+        "Moving is on – drag = move, corner or mouse wheel = size, then “Done”",
     "Position zurückgesetzt (automatisch).": "Position reset (automatic).",
     "keine Map": "no map",
     "ausgeblendet": "hidden",
@@ -1092,8 +1093,10 @@ EN = {
     'über {n} Runden': 'over {n} rounds',
     # 1.61: overlay preview
     'Bilanz: Ø 2,8 Kills · 12 Runden': 'Record: avg. 2.8 kills · 12 rounds',
-    'Erst „Mit der Maus verschieben“ drücken, dann Karte, Systemwerte oder Musik anfassen und ziehen – oder auf eine freie Stelle klicken: Die Karte kommt dorthin. Ende mit „Fertig“.':
-        'First press “Move with the mouse”, then grab and drag the map, the system values or the music – or click an empty spot: the map goes there. End with “Done”.',
+    'Klick auf Karte, Systemwerte oder Musik wählt das Element für den Regler „Grösse“. Mit „Mit der Maus verschieben“: Element ziehen = verschieben, an der Ecke ziehen oder Mausrad = Grösse, Klick auf eine freie Stelle setzt die Karte dorthin. Ende mit „Fertig“.':
+        'A click on the map, the system values or the music picks the element for the “Size” slider. With “Move with the mouse”: drag an element = move it, drag its corner or the mouse wheel = size, a click on an empty spot puts the map there. End with “Done”.',
+    "Element": "Element",
+    "Systemwerte · Heute": "System values · today",
     'Spielbild': 'Game picture',
     'Map-Name': 'Map name',
     # 1.62: colour themes
