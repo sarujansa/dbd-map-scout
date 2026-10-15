@@ -10,7 +10,7 @@ OVERLAY_KEYS = ("anchor", "pos_x", "pos_y", "height", "map_heights", "text_scale
 TOP_KEYS = ("sysinfo", "sysinfo_pos", "today_side")
 UNDO_KEPT = 50
 GESTURE_GAP = 0.8      # s: changes closer together than this are one step (a drag, a row of arrow keys)
-SNAP_PX = 8            # px in the preview: this close to a line, an element snaps to it
+SNAP_PX = 6            # px in the preview: this close to a line, an element snaps to it (1.65.2: was 8)
 
 
 def snapshot(data: dict) -> dict:
@@ -89,7 +89,7 @@ def snap_lines(screen, bar, layers, moving):
     sw, sh = screen
     xs, ys = [0, sw / 2, sw], [0, sh / 2, sh]
     if bar:
-        xs += [bar, sw - bar]
+        xs += [bar, sw - bar, bar / 2, sw - bar / 2]          # bar edges and bar middles (1.65.2)
     for name, lx, ly, lw, lh in layers:
         if name != moving:
             xs += [lx, lx + lw]

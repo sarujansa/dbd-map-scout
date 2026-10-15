@@ -144,9 +144,11 @@ class SysInfo:
             fx, fy = self.settings.get("sysinfo_pos") or (1.0, 0.0)
             x, y = gx + fx * max(0, gw - sw), gy + fy * max(0, gh - h)
         else:                                               # own place in the narrow window: the bar above
-            x, y = layout.hud_x("left" if side == "left" else "right", gx, gw, margin, sw), gy + margin
+            x, y = layout.hud_x("left" if side == "left" else "right", gx, gw, margin, sw, 0 if vb else bar), \
+                gy + margin
         self.hud.show_at(int(x), int(y))
         self.worker.hud_rect = (int(x), int(y), w, h)
+        self._hud_box = (int(x), int(y), sw, h)             # steady box: the music card centres below it
         return None if vb or own else (side, h)   # only at the top of a side bar does the map move below it
 
     def _today_rows(self, now: float) -> list:
@@ -237,6 +239,9 @@ class SysInfo:
         if w > avail:                                       # never wider than the black bar
             w, h = win.render(rows, max(200, int(height * avail / w)), cover, o.get("media_style", "big"), prog)
         hud = self.worker.hud_rect if self.hud is not None and self.hud.shown else None
+        box = getattr(self, "_hud_box", None)
+        if hud and box and box[:2] == hud[:2]:
+            hud = box                                       # by its widest width: no wobble when values change
         x, y = layout.media_xy(spot, (gx, gy, gw, gh), (w, h), margin, hud, o.get("media_xy"))
         win.show_at(int(x), int(y))
         self.worker.media_rect = (int(x), int(y), w, h)

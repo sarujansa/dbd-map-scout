@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from . import layoutmem
+from . import layout, layoutmem
 from .i18n import _
 
 SIZE_SETTLE = 2.0          # s a new window size must stay before its layout is loaded (no switch while resizing)
@@ -72,6 +72,7 @@ class LayoutMemory:
         SIZE_SETTLE) loads its own layout, a size seen for the first time starts with the one in use."""
         if not hasattr(self, "anchor_var"):
             return
+        self._size_cap_tick()
         text = self._layout_size_text()
         if text != self.per_size_text.get():
             self.per_size_text.set(text)
@@ -114,6 +115,32 @@ class LayoutMemory:
             return ""
         n = len(self.settings.get("layouts") or {})
         return _("Aktuell: Layout für {size} · {n} Grössen gemerkt", size=key.replace("x", "×"), n=n)
+
+    # ---------------------------------------------------------------- the bar limits the map
+    def _size_cap_tick(self):
+        """1.65.2 (user: "die Map wird nicht grösser"): in a black bar the map can only be as wide as the bar – on
+        3440×1440 about 31 % of the height. Say so under the size slider when that is what holds it back."""
+        if not hasattr(self, "size_cap_var"):
+            return
+        text = ""
+        if getattr(self, "_sel", "map") == "map":
+            data = self._preview_data()
+            gw, gh = data["screen"]
+            bar = data.get("bar", 0)
+            lay = next((lay for lay in data["layers"] if lay[0] == "map"), None)
+            o = self.settings["overlay"]
+            in_bar = o["anchor"] == "auto" or o.get("keep_in_bar", True)
+            iw, ih = self.overlay.map_size() if self.overlay.has_map() else (0, 0)
+            if not ih:
+                pic = self._preview_sample()
+                iw, ih = pic.size if pic is not None else (4, 5)
+            if lay and in_bar and bar >= layout.MIN_BAR and (lay[1] < bar or lay[1] + lay[3] > gw - bar):
+                avail = layout.max_width(bar, int(gh * o["margin"]))
+                if self._map_height() * gh * iw / ih > avail + 2:     # the map itself wider than the bar
+                    text = _("Die Karte ist so breit wie der schwarze Balken – grösser geht hier nicht. Grösser "
+                             "nur mit ausgeschaltetem „Im schwarzen Balken halten“ (ragt dann ins Spielbild).")
+        if text != self.size_cap_var.get():
+            self.size_cap_var.set(text)
 
     # ---------------------------------------------------------------- arrow keys in the preview
     def _nudge(self, dx, dy):

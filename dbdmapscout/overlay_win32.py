@@ -431,9 +431,53 @@ def _below(pic: Image.Image, strip: Image.Image, centred: bool) -> Image.Image:
     return out
 
 
+FIT_MIN = 0.6               # a long title is set down to this share of its size before it wraps (1.65.2)
+
+
+def fit_lines(rows, height: int, scales=None):
+    """Each row as a picture no wider than a line of media.MAX_CHARS characters (1.65.2, user: "lieber die
+    Schrift kleiner statt Zeilenumbruch"): a longer row gets smaller text, down to FIT_MIN; only what is still
+    too long wraps (media.wrap) at that size. ``scales``: size factor per row (the title is a bit larger)."""
+    from .media import ARTIST_LINES, MAX_CHARS, TITLE_LINES, wrap
+    out = []
+    for i, row in enumerate(rows):
+        scale = scales[i] if scales else 1.0
+        h = int(height * scale)
+        im = render_hud([row], h)
+        colour = row[-1][1] if row else (255, 255, 255, 255)
+        max_w = render_hud([[("n" * MAX_CHARS, colour)]], h).width
+        if im.width <= max_w or len(row) != 1:
+            out.append(im)
+            continue
+        f = max(FIT_MIN, max_w / im.width)
+        small = render_hud([row], max(1, int(h * f)))
+        if small.width <= max_w * 1.02:
+            out.append(small)
+            continue
+        text = row[0][0]                                 # still too long: wrap at the smallest size
+        chars = max(8, int(len(text) * max_w / small.width))
+        lines = wrap(text, chars, TITLE_LINES if i == 0 else ARTIST_LINES)
+        out += [render_hud([[(line, colour)]], max(1, int(h * f))) for line in lines]
+    return out
+
+
+def _stack(lines, pad: int, centred: bool) -> Image.Image:
+    """Line pictures of render_hud one below the other; ``pad``: their shadow margin (it overlaps)."""
+    if not lines:
+        return Image.new("RGBA", (1, 1), (0, 0, 0, 0))
+    w = max(im.width for im in lines)
+    h = sum(im.height - pad for im in lines) + pad
+    pic = Image.new("RGBA", (w, max(1, h)), (0, 0, 0, 0))
+    y = 0
+    for im in lines:
+        pic.alpha_composite(im, ((w - im.width) // 2 if centred else 0, y))
+        y += im.height - pad
+    return pic
+
+
 def render_music_compact(rows, cover, height: int) -> Image.Image:
     """Music card "Kompakt" (1.64): the cover left of the title/artist rows, as tall as the two lines."""
-    text = render_hud(rows, height)
+    text = _stack(fit_lines(rows, height), 3 * max(2, height // 300), False)
     if cover is None:
         return text
     size = max(13, height // 60)
@@ -466,9 +510,7 @@ def render_music(rows, cover, height: int, style: str = "big", progress=None) ->
         return pic
     blur = max(2, height // 300)
     pad = 3 * blur
-    first = rows[0][0][1] if rows and rows[0] else None     # the title's colour: a wrapped title has several rows
-    n_title = next((i for i, row in enumerate(rows) if not row or row[0][1] != first), len(rows))
-    lines = [render_hud([row], int(height * (TITLE_SCALE if i < n_title else 1.0))) for i, row in enumerate(rows)]
+    lines = fit_lines(rows, height, [TITLE_SCALE if i == 0 else 1.0 for i in range(len(rows))])
     side = max(32, height // 6) if cover is not None else 0
     gap = max(4, height // 120) if cover is not None else 0
     text_w = max((im.width for im in lines), default=0)
