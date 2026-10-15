@@ -30,7 +30,7 @@ from .app_stats import StatsTab
 from .app_lobby import LobbyInfo
 from .app_hotkeys import Hotkeys
 from .app_settings import SettingsTab
-from .app_sysinfo import HUD_SIDES, MEDIA_SCALE, MEDIA_SPOTS, SysInfo
+from .app_sysinfo import HUD_SHOWN, HUD_SIDES, MEDIA_SCALE, MEDIA_SPOTS, SysInfo
 from .app_qt import QtShell
 
 LANGS = [("en", "EN"), ("de", "DE"), ("fr", "FR"), ("es", "ES"), ("es-MX", "ES-MX"), ("it", "IT"),
@@ -1268,30 +1268,51 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         self._tick_overlay(reschedule=False)
 
     def _preview_data(self) -> dict:
-        """What the overlay tab's preview draws: the screen DBD runs on (full screen), the map where
-        _place_overlay would put it (layout.preview_rect), as big and transparent as set, the lines below it."""
+        """What the overlay tab's preview draws (1.64: every element, rendered like in the game): the screen DBD
+        runs on (full screen) with the map + timer/record/server, the system values with "today" and the music
+        card where the game would show them (preview.layers). Rendered again only when something changed."""
+        from . import preview, sysinfo
         o = self.settings["overlay"]
         _gx, _gy, gw, gh = self._game_rect()
         pic = None
         if o.get("show_map", True):
             pic = getattr(self, "_thumb_src", None) if self.current else None
             pic = pic or self._preview_sample()
-        lines = []
-        if o.get("show_timer", True):
-            lines.append("03:27")
-        if o.get("show_server", True) and self.settings.get("show_connection"):
-            lines.append(_("FRANKFURT · PING 31 MS"))
-        if o.get("show_record", True):
-            lines.append(_("Ø 2,8 KILLS · 12 RUNDEN"))
-        aspect = pic.width / pic.height if pic is not None else 0.8
-        rows = (len(lines) + 1) if lines and o.get("show_timer", True) else len(lines)
-        x, y, w, h, mh = layout.preview_rect(gw, gh, o["anchor"], o.get("pos_x", 0.0), o.get("pos_y", 0.0),
-                                             self._map_height(), o["margin"], o.get("keep_in_bar", True),
-                                             aspect, rows)
-        if pic is None:
-            mh = 0
-        return {"screen": (gw, gh), "bar": layout.bar_width(gw, gh), "rect": (x, y, w, h, mh), "pic": pic,
-                "lines": lines, "opacity": o["opacity"], "transparent": o.get("transparent", True)}
+        caption = ""
+        if o.get("show_caption", True) and pic is not None:
+            m = self.catalog.maps.get(self.current[0]) if self.current else None
+            caption = m.label(self.current[1]) if m else _("Map-Name")
+        info = {"timer": "3:27" if o.get("show_timer", True) else "",
+                "server": _("Frankfurt") if o.get("show_server", True) and self.settings.get("show_connection") else "",
+                "ping": 31.0,
+                "record": _("Bilanz: Ø 2,8 Kills · 12 Runden") if o.get("show_record", True) else ""}
+        side = self.settings.get("sysinfo", "off")
+        sys_on, today = side in HUD_SHOWN, bool(o.get("show_today", True))
+        now = time.time()
+        rows = []
+        if sys_on:
+            snap = self.sysmon.snapshot
+            rows = sysinfo.hud_rows(snap if now - snap.t < 3 else preview.sample_snapshot())
+        if today:
+            rows = rows + ([[(" ", sysinfo.DIM)]] if rows else []) + self._today_rows(now)
+        hud_side = side if sys_on else ("right" if today else "")
+        music = preview.music_rows(self.media.now, now) if o.get("show_media", True) else None
+        key = (gw, gh, repr(sorted((k, v) for k, v in o.items() if not isinstance(v, dict))), hud_side,
+               repr(rows), repr(self.settings.get("sysinfo_pos")), id(pic), caption, repr(info),
+               self._map_height(), repr(music[0]) if music else None, id(music[1]) if music else None)
+        cached = getattr(self, "_preview_cache", None)
+        if cached is None or cached[0] != key:
+            # rendered at a smaller game height (everything scales with it) and drawn back at screen size
+            f = min(1.0, preview.RENDER_H / max(1, gh))
+            layers, rect = preview.layers(round(gw * f), round(gh * f), o, hud_side, rows,
+                                          self.settings.get("sysinfo_pos"), pic, caption, info, self._map_height(),
+                                          music)
+            self._preview_cache = cached = (key, layers, tuple(round(v / f) for v in rect), f)
+        _key, layers, (x, y, w, h), f = cached
+        return {"screen": (gw, gh), "bar": layout.bar_width(gw, gh), "rect": (x, y, w, h, h),
+                "layers": [(name, round(lx / f), round(ly / f), round(img.width / f), round(img.height / f))
+                           for name, img, lx, ly in layers],
+                "pics": {name: img for name, img, _lx, _ly in layers}, "opacity": o["opacity"]}
 
     def _preview_sample(self):
         """A map picture for the preview while none is on display (the first one of the catalog), loaded once."""

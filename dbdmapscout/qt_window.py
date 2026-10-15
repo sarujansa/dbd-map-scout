@@ -1440,7 +1440,7 @@ class PreviewView(QWidget):
     and the map on it where and as big as it will be, with its opacity and the lines below it. A click or a drag
     puts the map there: post("act", (key, ("move", x, y))) in screen pixels – the App makes it the own position."""
 
-    MAX_H = 240
+    MAX_H = 380
 
     def __init__(self, key, post):
         super().__init__()
@@ -1467,9 +1467,10 @@ class PreviewView(QWidget):
 
     def show_state(self, st):
         data = st.get("data") or {}
-        key = {k: v for k, v in data.items() if k != "pic"}
-        old = {k: v for k, v in self._data.items() if k != "pic"}
-        if key == old and data.get("pic") is self._data.get("pic"):
+        key = {k: v for k, v in data.items() if k != "pics"}
+        old = {k: v for k, v in self._data.items() if k != "pics"}
+        pics, old_pics = data.get("pics") or {}, self._data.get("pics") or {}
+        if key == old and pics.keys() == old_pics.keys() and all(pics[k] is old_pics[k] for k in pics):
             return
         shape = data.get("screen") != self._data.get("screen")
         self._data = data
@@ -1508,32 +1509,26 @@ class PreviewView(QWidget):
         f.setPointSizeF(max(7.0, f.pointSizeF() * 0.9))
         p.setFont(f)
         p.drawText(game, Qt.AlignCenter, _("Spielbild"))
-        x, y, w, h, mh = d.get("rect") or (0, 0, 0, 0, 0)
+        # every element as the game shows it (1.64): map + lines, system values, music card – real pictures
+        pics = d.get("pics") or {}
+        ratio = self.devicePixelRatioF()
+        cache = self._pix if isinstance(self._pix, dict) else {}
+        fresh = {}
+        p.setOpacity(float(d.get("opacity", 1.0)))
+        for name, lx, ly, lw, lh in d.get("layers") or ():
+            img = pics.get(name)
+            if img is None:
+                continue
+            th = max(1, round(lh * s))
+            hit = cache.get(name)
+            pix = hit[2] if hit and hit[0] is img and hit[1] == th else pixmap_from_pil(img, th, ratio)
+            fresh[name] = (img, th, pix)
+            p.drawPixmap(round(ox + lx * s), round(oy + ly * s), pix)
+        self._pix = fresh
+        p.setOpacity(1.0)
+        x, y, w, h, _mh = d.get("rect") or (0, 0, 0, 0, 0)
         if w and h:
             rx, ry = ox + x * s, oy + y * s
-            p.setOpacity(float(d.get("opacity", 1.0)))
-            if not d.get("transparent", True):
-                p.setPen(Qt.NoPen)
-                p.setBrush(QColor(20, 20, 24, 200))
-                p.drawRect(QRectF(rx, ry, w * s, h * s))
-            pic = d.get("pic")
-            if pic is not None and mh:
-                tw, th = max(1, round(w * s)), max(1, round(mh * s))
-                if self._pix is None or self._pix[0] is not pic or self._pix[1] != (tw, th):
-                    self._pix = (pic, (tw, th), pixmap_from_pil(pic, th, self.devicePixelRatioF()))
-                p.drawPixmap(round(rx + (w * s - self._pix[2].width() / self.devicePixelRatioF()) / 2),
-                             round(ry), self._pix[2])
-            ly = ry + mh * s + 2
-            for i, line in enumerate(d.get("lines", [])):
-                lf = QFont(self.font())
-                lf.setBold(True)
-                lf.setPixelSize(max(6, round(mh * s * (0.085 if i == 0 else 0.036))))
-                p.setFont(lf)
-                p.setPen(QColor("#f2f2f2") if i == 0 else QColor("#c9c9c9"))
-                lh = lf.pixelSize() * 1.25
-                p.drawText(QRectF(rx, ly, w * s, lh), Qt.AlignHCenter | Qt.AlignVCenter, line)
-                ly += lh
-            p.setOpacity(1.0)
             pen = QPen(QColor(qt_theme.colours(True)["accent"]), 1.5, Qt.DashLine)
             p.setPen(pen)
             p.setBrush(Qt.NoBrush)

@@ -765,12 +765,17 @@ def test_preview_draws_the_screen_and_posts_a_click(qapp, keep):
     from dbdmapscout import qt_window
     posted = queue.Queue()
     view = keep(qt_window.PreviewView("ov.preview", lambda a, arg=None: posted.put((a, arg))))
-    view.resize(688, 288)
-    data = {"screen": (3440, 1440), "bar": 440, "rect": (26, 17, 388, 603, 518),
-            "pic": Image.new("RGBA", (300, 400), "blue"), "lines": ["03:27"], "opacity": 0.85, "transparent": True}
+    view.resize(1000, 419)
+    pic, hud = Image.new("RGBA", (300, 400), "blue"), Image.new("RGBA", (200, 100), "white")
+    data = {"screen": (3440, 1440), "bar": 440, "rect": (26, 17, 388, 603, 603),
+            "layers": [("map", 26, 17, 300, 400), ("hud", 3200, 17, 200, 100)], "pics": {"map": pic, "hud": hud},
+            "opacity": 0.85}
     view.show_state({"data": data, "visible": True})
-    assert view.heightForWidth(688) == 240                     # 3440:1440 would be 288 – capped
-    view.grab()                                               # paints without errors
+    assert view.heightForWidth(1000) == view.MAX_H             # 3440:1440 would be 419 – capped
+    shot = view.grab().toImage()                              # paints every layer (1.64: real pictures)
+    ox, oy, s = view._frame()
+    assert shot.pixelColor(round(ox + 3300 * s), round(oy + 60 * s)).lightness() > 150     # the white "hud" layer
+    assert set(view._pix) == {"map", "hud"}
     ox, oy, s = view._frame()
     QTest.mouseClick(view, Qt.LeftButton, Qt.NoModifier, QPoint(round(ox + 3000 * s), round(oy + 900 * s)))
     action, (key, (what, x, y)) = posted.get_nowait()
