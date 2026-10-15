@@ -5,6 +5,7 @@ hyphens and other punctuation disappear, accents are stripped and case is
 ignored, so "Azarov’s Resting Place", "AZAROVS RESTING PLACE" and
 "Azarov's Resting-Place" all fold to the same key.
 """
+import functools
 import re
 import unicodedata
 
@@ -19,8 +20,10 @@ _SPECIAL = {
 _ROMAN = {1: "I", 2: "II", 3: "III", 4: "IV", 5: "V", 6: "VI", 7: "VII", 8: "VIII"}
 
 
+@functools.lru_cache(maxsize=8192)
 def fold(text: str) -> str:
-    """Uppercase A-Z0-9 only; accents stripped, everything else removed."""
+    """Uppercase A-Z0-9 only; accents stripped, everything else removed. Cached: the statistics fold the same
+    killer and map names thousands of times per view."""
     out = []
     for ch in unicodedata.normalize("NFKC", text or ""):
         if ch in _SPECIAL:

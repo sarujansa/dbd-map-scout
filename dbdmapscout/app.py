@@ -44,6 +44,14 @@ ANCHORS = [("auto", N_("automatisch")), ("top-left", N_("oben links")), ("top-ri
 CATS = [N_("Erkennung"), N_("Overlay"), N_("System"), N_("Fehler")]   # log categories (keys; shown translated)
 
 
+def _event_name(ev) -> str:
+    """Short name of an event for the lag list of the diagnosis ("ui page stats", "detected" …)."""
+    if isinstance(ev, tuple):
+        parts = [str(x) for x in ev[:3] if isinstance(x, str)]
+        return " ".join(parts)[:60]
+    return str(getattr(ev, "kind", type(ev).__name__))
+
+
 def anchor_label(key: str) -> str:
     return _(dict(ANCHORS).get(key, "automatisch"))
 
@@ -727,10 +735,14 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
                 ev = self.events.get_nowait()
             except queue.Empty:
                 break
+            t0 = time.perf_counter()
             try:
                 self._dispatch(ev)
             except Exception:
                 self._report_once("Ereignis", traceback.format_exc())
+            took = (time.perf_counter() - t0) * 1000
+            if took >= 30:
+                self.root.note("Ereignis " + _event_name(ev), took)
         if not self._quitting:
             self.root.after(50, self._poll)
 
@@ -1477,9 +1489,11 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
     def _log_filter_changed(self):
         self.settings.set("log_categories", [c for c in CATS if self.cat_vars[c].get()])
         self._save_soon()
+        self.log_text._dbdms_rev = getattr(self.log_text, "_dbdms_rev", 0) + 1     # the window shows it anew
 
     def _clear_log(self):
         self._log_entries.clear()
+        self.log_text._dbdms_rev = getattr(self.log_text, "_dbdms_rev", 0) + 1
 
     def _tab_changed(self):
         if self.nb.select() == str(self.tab_stats):

@@ -83,13 +83,13 @@ def collect(app) -> str:
     lines.append(f"Overlay: {_win_info(oh)}")
     lines.append(f"  Art: {type(ov).__name__}  letzter Fehler: {getattr(ov, 'last_error', '') or '—'}")
     win = getattr(ov, "win", None)
-    if win is not None:
+    if win is not None:                         # the Qt overlay (fallback)
         try:
-            lines.append(f"  tk: mapped={win.winfo_ismapped()} geometry={win.wm_geometry()} "
-                         f"root=({win.winfo_rootx()},{win.winfo_rooty()}) req={win.winfo_reqwidth()}×{win.winfo_reqheight()} "
-                         f"attrs={win.attributes()}")
+            g = win.geometry()
+            lines.append(f"  qt: sichtbar={win.isVisible()} geometrie=({g.x()},{g.y()} {g.width()}×{g.height()}) "
+                         f"dpr={win.devicePixelRatioF()}")
         except Exception as e:
-            lines.append(f"  tk: {e}")
+            lines.append(f"  qt: {e}")
     lines.append(f"  shown={ov.shown} pos={ov._pos} hat_map={ov.has_map()} transparent={ov.transparent} "
                  f"über_spiel_gehoben={ov.raised_over_game}×")
     if game and oh:
@@ -135,4 +135,17 @@ def collect(app) -> str:
         lines.append(f"Offizielle Daten: {e}")
     errs = getattr(app, "_errors_seen", set())
     lines.append(f"Fehler seit Start: {sorted(errs) if errs else 'keine'}")
+    lines.extend(lag_lines(getattr(getattr(app, "root", None), "slow", ())))
     return "\n".join(lines)
+
+
+def lag_lines(slow) -> list:
+    """Fenster-Hänger: Timer/Ereignisse ≥ 30 ms oder ≥ 60 ms zu spät (mainloop.MainLoop.note), neueste zuerst."""
+    slow = list(slow)
+    if not slow:
+        return ["Fenster-Hänger (≥ 30 ms): keine"]
+    out = [f"Fenster-Hänger (≥ 30 ms, letzte {len(slow)}; dauerte / zu spät):"]
+    for t, what, took, late in reversed(slow):
+        out.append(f"  {time.strftime('%H:%M:%S', time.localtime(t))}  {what}  {took:.0f} ms"
+                   + (f" / {late:.0f} ms" if late >= 1 else ""))
+    return out

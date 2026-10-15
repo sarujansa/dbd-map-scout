@@ -189,6 +189,7 @@ Die synthetischen Tests ersetzen keinen Praxistest. Wenn eine Map in echten Rund
 - **Fehlermeldungen sehen:** `start_debug.bat` startet mit Konsole. Ausserdem gibt es die Protokolldatei `dbdmapscout.log`.
 - **„Aufnahme ist schwarz“:** DBD auf „Fenster-Vollbild“ stellen. Bei aktiviertem Windows-HDR kann die Aufnahme ebenfalls Probleme machen.
 - **Hotkey geht nicht:** Das Log meldet, wenn ein anderes Programm die Kombination belegt. In `settings.json` eine andere wählen.
+- **Fenster ruckelt / reagiert verzögert:** Direkt danach „Diagnose kopieren“ drücken. Am Ende stehen die „Fenster-Hänger“: jeder Takt oder Klick, der 30 ms oder länger dauerte oder sich verspätete, mit Uhrzeit und Namen. Daran lässt sich die Ursache finden.
 
 ## Regeln / Fair Play
 
