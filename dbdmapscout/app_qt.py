@@ -29,7 +29,7 @@ QT_HOTKEYS = {"scan": "scan_now", "reject": "reject_map"}
 
 def tk_shown(w) -> bool:
     """The widget and all its frames up to the tab are placed (a row hidden with pack_forget is not)."""
-    while w is not None and not isinstance(w, ttk.Notebook):
+    while w is not None and not isinstance(w, (ttk.Notebook, tk.Toplevel)):   # up to the tab or the dialog
         try:
             if not w.winfo_manager():
                 return False
@@ -66,10 +66,11 @@ def tk_layout(w, reg: dict):
         pages = [w.nametowidget(t) for t in w.tabs()]
         return {"kind": "tabs", "key": key, "children": [n for n in (tk_layout(p, reg) for p in pages) if n]}
     kind = {ttk.Treeview: "table", ttk.Checkbutton: "check", ttk.Button: "button", ttk.Combobox: "combo",
-            ttk.Scale: "slider", ttk.Entry: "entry"}.get(type(w))
+            ttk.Scale: "slider", ttk.Entry: "entry", ttk.Radiobutton: "radio"}.get(type(w))
     if kind is None and isinstance(w, ttk.Label):
         style = str(w.cget("style"))
-        kind = "big" if style == "Big.TLabel" else "hint" if style == "Dim.TLabel" else "label"
+        kind = ("image" if hasattr(w, "_dbdms_pil") else "big" if style == "Big.TLabel"
+                else "hint" if style == "Dim.TLabel" else "label")
     if kind is not None:
         reg[key] = w
         return {"kind": kind, "key": key, "side": _side(w)}
@@ -141,19 +142,22 @@ def tk_state(w) -> dict:
         st.update(value=value, lo=float(w.cget("from")), hi=float(w.cget("to")),
                   label=getattr(w, "_dbdms_label", ""), text=getattr(w, "_dbdms_fmt", "{:.0f}").format(value))
         return st
-    if isinstance(w, (ttk.LabelFrame, ttk.Label, ttk.Button, ttk.Checkbutton)):
+    if isinstance(w, (ttk.LabelFrame, ttk.Label, ttk.Button, ttk.Checkbutton, ttk.Radiobutton)):
         st["text"] = str(w.cget("text"))
-    if isinstance(w, (ttk.Button, ttk.Checkbutton, ttk.Combobox, ttk.Entry)):
+    if hasattr(w, "_dbdms_pil"):                  # a picture (dialog previews): the PIL image itself
+        st["pil"] = w._dbdms_pil
+    if isinstance(w, (ttk.Button, ttk.Checkbutton, ttk.Radiobutton, ttk.Combobox, ttk.Entry)):
         st["enabled"] = not w.instate(["disabled"])
         tip = getattr(w, "_dbdms_tip", None)
         st["tip"] = tip._text() if tip is not None else ""
     rec = getattr(w, "_dbdms_recording", None)
     if rec is not None:
         st["recording"] = bool(rec())
-    if isinstance(w, ttk.Checkbutton):
+    if isinstance(w, (ttk.Checkbutton, ttk.Radiobutton)):
         st["value"] = w.instate(["selected"])
     elif isinstance(w, ttk.Combobox):
-        st.update(value=w.get(), values=[str(v) for v in w.cget("values")])
+        st.update(value=w.get(), values=[str(v) for v in w.cget("values")],
+                  editable=str(w.cget("state")) == "normal")
     elif isinstance(w, ttk.Entry):
         st["value"] = w.get()
     return st
@@ -164,12 +168,18 @@ def tk_act(w, value=None):
     if isinstance(w, ttk.Checkbutton):
         if value is None or bool(value) != w.instate(["selected"]):
             w.invoke()
-    elif isinstance(w, ttk.Button):
+    elif isinstance(w, (ttk.Button, ttk.Radiobutton)):
         w.invoke()
     elif isinstance(w, ttk.Combobox):
         if value in [str(v) for v in w.cget("values")]:
             w.set(value)
             w.event_generate("<<ComboboxSelected>>")
+        elif str(w.cget("state")) == "normal":    # typed into an editable choice (e.g. a new realm)
+            w.set(str(value))
+    elif isinstance(w, ttk.Entry):
+        if not w.instate(["disabled"]) and w.get() != str(value):
+            w.delete(0, "end")
+            w.insert(0, str(value))
     elif isinstance(w, ttk.Scale):
         w.set(float(value))                       # runs the scale's command (label + setting)
     elif isinstance(w, ttk.Notebook):
@@ -207,6 +217,7 @@ class QtShell:
         self._qt_failed = ""
         self._qt_geo_due = 0.0
         self._qt_auto = {}                  # Tk path name -> widget of the pages built from Tk tabs
+        self._qt_dialogs = {}               # Tk dialog path -> (Toplevel, its keys): shown as Qt dialogs
         self._qt_question = None            # (title, text, retry | None) shown as a bar in the Qt window
         if self.settings.get("ui_toolkit", "tk") != "qt":
             return
@@ -253,7 +264,7 @@ class QtShell:
     def _tk_shown(self) -> bool:
         return self.root.state() in ("normal", "zoomed")
 
-    def _ask(self, title, text, retry) -> bool:
+    def _ask(self, title, text, retry, parent=None) -> bool:
         """OK/Cancel before something that cannot be undone. In the Tk window: a dialog. From the Qt window (Tk
         window hidden): a bar there instead – no dialog over a hidden window; OK runs ``retry`` again, which
         then gets True here."""
@@ -261,7 +272,7 @@ class QtShell:
             self._confirmed = False
             return True
         if getattr(self, "qt", None) is None or self._tk_shown():
-            return messagebox.askokcancel(title, text, parent=self.root)
+            return messagebox.askokcancel(title, text, parent=parent or self.root)
         self._qt_question = (title, text, retry)
         self.qt.bring_to_front()
         self._qt_refresh(force=True)
@@ -274,13 +285,43 @@ class QtShell:
         self._qt_question = (title, text, None)
         self._qt_refresh(force=True)
 
-    def _qt_file(self, mode, title, initial, callback) -> bool:
+    def _dialog(self, dlg):
+        """End of building a Tk dialog: in the Tk window it grabs as before. In Qt mode (Tk window hidden) the
+        Tk dialog stays hidden and the Qt window shows a non-modal copy built from it – its widgets still do
+        the work (App._qt_auto); closing either closes both."""
+        if getattr(self, "qt", None) is None or self._tk_shown():
+            dlg.grab_set()
+            return
+        dlg.withdraw()
+        reg = {}
+        kids = [n for n in (tk_layout(c, reg) for c in dlg.winfo_children()) if n]
+        node = {"kind": "box", "key": str(dlg), "children": kids, "row": False, "grid": False, "side": "top"}
+        self._qt_auto.update(reg)
+        self._qt_dialogs[str(dlg)] = (dlg, list(reg))
+        self.qt.open_dialog(str(dlg), str(dlg.title()), node)
+        self._qt_refresh(force=True)
+
+    def _qt_dialog_tick(self):
+        for key, (dlg, keys) in list(self._qt_dialogs.items()):
+            try:
+                alive = bool(dlg.winfo_exists())
+            except tk.TclError:
+                alive = False
+            if not alive:                                 # closed on the Tk side (saved, cancelled, Esc)
+                del self._qt_dialogs[key]
+                for k in keys:
+                    self._qt_auto.pop(k, None)
+                self.qt.close_dialog(key)
+                continue
+            self.qt.show_dialog_states(key, {k: tk_state(self._qt_auto[k]) for k in keys if k in self._qt_auto})
+
+    def _qt_file(self, mode, title, initial, callback, pattern="JSON (*.json)") -> bool:
         """Qt mode with the Tk window hidden: the Qt window asks for a file (no dialog over a hidden window)
         and ``callback(path)`` runs once one is chosen. False = ask the Tk way."""
         if getattr(self, "qt", None) is None or self._tk_shown():
             return False
         self._qt_file_cb = callback
-        self.qt.choose_file(mode, title, initial)
+        self.qt.choose_file(mode, title, initial, pattern)
         return True
 
     def _qt_answer(self, ok: bool):
@@ -321,6 +362,13 @@ class QtShell:
         elif action == "hk_cancel":
             if self._hk_rec == arg.split(".", 2)[2]:
                 self._hk_stop(save=False)
+        elif action == "dlg_close":
+            entry = self._qt_dialogs.get(arg)
+            if entry is not None:
+                try:
+                    entry[0].destroy()
+                except tk.TclError:
+                    pass
         elif action == "file":
             cb, self._qt_file_cb = getattr(self, "_qt_file_cb", None), None
             if cb is not None and arg:
@@ -337,16 +385,13 @@ class QtShell:
             if mid in self.catalog.maps:
                 self.show_map(mid, int(v), "manual")
         elif action == "add_picture":
-            self._show_window()                  # a Tk dialog (hidden window: invisible)
             self.add_picture()
         elif action == "tab":
             self._open_tab(arg)
-        elif action in ("assign", "picture"):
-            self._show_window()                  # its dialogs belong to the Tk window (hidden: invisible)
-            if action == "assign":
-                self.assign_unknown()
-            else:
-                self.add_picture(from_unknown=True)
+        elif action == "assign":
+            self.assign_unknown()                    # a Tk dialog, shown by the Qt window (App._dialog)
+        elif action == "picture":
+            self.add_picture(from_unknown=True)
         else:
             {"scan": self.scan_now, "rotate": self.rotate_map, "toggle": self.toggle_overlay,
              "reject": self.reject_detection, "confirm": self._confirm_unsure, "layout": self.next_variant,
@@ -432,6 +477,7 @@ class QtShell:
             q.show_states(page, {k: tk_state(reg[k]) for k in keys if k in reg})
         elif page in self._qt_mod.AUTO_PAGES:
             q.show_states(page, {k: tk_state(self._qt_auto[k]) for k in q.visible_keys(page) if k in self._qt_auto})
+        self._qt_dialog_tick()
         qq = self._qt_question
         q.show_question(None if qq is None else (qq[0], qq[1], qq[2] is not None))
 

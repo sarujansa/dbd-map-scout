@@ -16,9 +16,9 @@ import sys
 from PIL import Image
 from PySide6.QtCore import QByteArray, QEvent, Qt
 from PySide6.QtGui import QColor, QFontDatabase, QIcon, QImage, QPalette, QPixmap
-from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel,
+from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel,
                                QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QPlainTextEdit, QProgressBar,
-                               QPushButton,
+                               QPushButton, QRadioButton,
                                QScrollArea, QSizePolicy, QSlider, QStackedWidget, QTabWidget, QTreeWidget,
                                QTreeWidgetItem, QVBoxLayout, QWidget)
 
@@ -455,6 +455,7 @@ def make_control(kind, key, post):
         w.setMinimumWidth(140)
         w.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         w.activated.connect(lambda i: post("act", (key, w.itemText(i))))
+        w.editTextChanged.connect(lambda text: w.isEditable() and w.hasFocus() and post("act", (key, text)))
     elif kind == "slider":
         w = QWidget()
         r = QHBoxLayout(w)
@@ -475,6 +476,18 @@ def make_control(kind, key, post):
         w = Chart()
     elif kind == "log":
         w = LogView()
+    elif kind == "radio":
+        w = QRadioButton()
+        w.setAutoExclusive(False)                 # the Tk side decides which one is on
+        w.clicked.connect(lambda _c=False: post("act", (key, None)))
+    elif kind == "entry":
+        w = QLineEdit()
+        w.setMinimumWidth(220)
+        w.textEdited.connect(lambda text: post("act", (key, text)))
+    elif kind == "image":
+        w = QLabel()
+        w.setAlignment(Qt.AlignCenter)
+        w.setMinimumSize(200, 120)
     elif kind == "hotkey":
         w = HotkeyButton(key, post)
     elif kind in ("hint", "plain"):
@@ -500,20 +513,39 @@ def show_control(kind, w, extra, st):
         w.setEnabled(st["enabled"])
     if st.get("tip") is not None and w.toolTip() != st["tip"]:
         w.setToolTip(st["tip"])
-    if kind == "check":
+    if kind in ("check", "radio"):
         _set(w, st.get("text", ""))
         if w.isChecked() != bool(st.get("value")):
             w.setChecked(bool(st.get("value")))                 # setChecked does not emit clicked
+    elif kind == "entry":
+        if not w.hasFocus() and w.text() != st.get("value", ""):     # never overwrite while typing
+            w.setText(st.get("value", ""))
+    elif kind == "image":
+        pil = st.get("pil")
+        if pil is not getattr(w, "_pil", None):
+            w._pil = pil
+            if pil is None:
+                w.setText(st.get("text", ""))
+            else:
+                w.setPixmap(pixmap_from_pil(pil, pil.height, w.devicePixelRatioF()))
     elif kind == "combo":
+        if w.isEditable() != bool(st.get("editable")):
+            w.setEditable(bool(st.get("editable")))
         values = st.get("values", [])
         if [w.itemText(i) for i in range(w.count())] != values:
             w.blockSignals(True)
             w.clear()
             w.addItems(values)
             w.blockSignals(False)
-        if w.currentText() != st.get("value"):
+        if w.currentText() != st.get("value") and not (w.isEditable() and w.hasFocus()):
             w.blockSignals(True)
-            w.setCurrentIndex(max(0, w.findText(st.get("value", ""))))
+            i = w.findText(st.get("value", ""))
+            if i >= 0:
+                w.setCurrentIndex(i)
+            elif w.isEditable():
+                w.setEditText(st.get("value", ""))
+            else:
+                w.setCurrentIndex(-1)
             w.blockSignals(False)
     elif kind == "slider":
         name, s, value = extra
@@ -1054,6 +1086,28 @@ class MapsPage(QWidget):
                     c.setFont(0, font)
 
 
+class DialogWindow(QDialog):
+    """A Tk dialog (Zuordnen, Kartenbild hinzufügen) shown by the Qt window: built like AutoPage, not modal
+    (Tk's timers keep running); closing it closes the Tk dialog too."""
+
+    def __init__(self, parent, post, key, title, node):
+        super().__init__(parent)
+        self._post, self._key = post, key
+        self.closing_from_app = False
+        self.setWindowTitle(title)
+        self.setModal(False)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        self.page = AutoPage(post, title, node)
+        lay.addWidget(self.page)
+        self.resize(640, 560)
+
+    def done(self, r):                            # Esc / X: the Tk dialog goes too
+        if not self.closing_from_app:
+            self._post("dlg_close", self._key)
+        super().done(r)
+
+
 class LaterPage(QWidget):
     """A page that is not in Qt yet: says so and opens the Tk window there."""
 
@@ -1132,6 +1186,7 @@ class MainWindow(QMainWindow):
         self.resize(1100, 760)
         self.setMinimumSize(760, 520)
         self._log_alert = False
+        self.dialogs = {}                 # Tk dialog path -> DialogWindow
 
     def _page_changed(self, row):
         self.stack.setCurrentIndex(row)
@@ -1149,11 +1204,31 @@ class MainWindow(QMainWindow):
         f = self.forms.get(page)
         return f.visible_keys() if isinstance(f, AutoPage) else set()
 
-    def choose_file(self, mode, title, initial):
+    def open_dialog(self, key, title, node):
+        self.close_dialog(key)
+        dlg = DialogWindow(self, self._post, key, title, node)
+        dlg.setStyleSheet(self.styleSheet())
+        self.dialogs[key] = dlg
+        dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
+
+    def close_dialog(self, key):
+        dlg = self.dialogs.pop(key, None)
+        if dlg is not None:
+            dlg.closing_from_app = True
+            dlg.close()
+
+    def show_dialog_states(self, key, states):
+        dlg = self.dialogs.get(key)
+        if dlg is not None:
+            dlg.page.show_states(states)
+
+    def choose_file(self, mode, title, initial, pattern="JSON (*.json)"):
         """Non-modal file dialog (Qt's own, not the system one: no second message loop); the result goes out as
         post("file", path or None)."""
         from PySide6.QtWidgets import QFileDialog
-        dlg = QFileDialog(self, title, initial, "JSON (*.json);;* (*.*)")
+        dlg = QFileDialog(self, title, initial, f"{pattern};;* (*.*)")
         dlg.setOption(QFileDialog.DontUseNativeDialog, True)
         dlg.setAcceptMode(QFileDialog.AcceptSave if mode == "save" else QFileDialog.AcceptOpen)
         dlg.setFileMode(QFileDialog.AnyFile if mode == "save" else QFileDialog.ExistingFile)
