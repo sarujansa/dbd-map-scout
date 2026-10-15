@@ -10,7 +10,7 @@ import threading
 import time
 import traceback
 
-from . import i18n, layout, mapimage, regions, tooltip
+from . import i18n, layout, mapimage, regions, restart, tooltip
 from . import uimodel as ui
 from .capture import IS_WIN, describe_window, find_game_window, foreground_root, is_game_window
 from .catalog import Catalog
@@ -40,6 +40,7 @@ LANGS = [("en", "EN"), ("de", "DE"), ("fr", "FR"), ("es", "ES"), ("es-MX", "ES-M
 REJECT_HOLD = 60.0        # s: a rejected map is not shown again by the same banner
 UNSURE_DELAY = 2.5        # s: a doubtful read is shown only if the banner did not read cleanly meanwhile
 SMALL_PICTURE = 1080      # 16:9 picture lines below which detection gets less reliable (log hint)
+QUIT_WATCHDOG_S = 15     # s: quitting takes longer than this -> the process ends anyway (1.65.1)
 MAX_HEIGHT = 0.9          # overlay at most this share of the game height (room for the timer below)
 ANCHORS = [("auto", N_("automatisch")), ("top-left", N_("oben links")), ("top-right", N_("oben rechts")),
            ("bottom-left", N_("unten links")), ("bottom-right", N_("unten rechts")), ("custom", N_("eigene Position"))]
@@ -150,6 +151,9 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         if IS_WIN and self.settings.get("tray", True):
             self._tray_start()
         self._qt_build(start_in_tray)
+        # 1.65.1: a second start (shortcut while this one sits in the tray) asks for the window instead of
+        # only saying "läuft bereits"
+        self._show_event = restart.show_event_create() if IS_WIN else None
         threading.Thread(target=self._setup_then_read_autostart, daemon=True, name="autostart").start()
 
     # ================================================================== UI
@@ -1046,6 +1050,11 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         except Exception:
             self._report_once("offizielle Daten", traceback.format_exc())
         try:
+            if restart.show_requested(getattr(self, "_show_event", None)):
+                self._show_main()
+        except Exception:
+            self._report_once("show", traceback.format_exc())
+        try:
             self._hotkeys_tick()
         except Exception:
             self._report_once("hotkeys", traceback.format_exc())
@@ -1762,6 +1771,10 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         if self._quitting:                       # e.g. tray "Beenden" and the window's X in the same poll
             return
         self._quitting = True
+        if getattr(self, "exit_watchdog", False):  # 1.65.1: a step below that hangs must not keep the process
+            t = threading.Timer(QUIT_WATCHDOG_S, lambda: os._exit(0))
+            t.daemon = True
+            t.start()
         try:
             self._qt_close()
             self.settings.save()

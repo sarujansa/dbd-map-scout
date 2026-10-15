@@ -6,7 +6,10 @@ text in the code is here and that the placeholders match.
 
 EN = {
     # ------------------------------------------------------------------ start
-    "DbD Map Scout läuft bereits.": "DbD Map Scout is already running.",
+    "DbD Map Scout läuft bereits, reagiert aber nicht (oder ist gerade beim Beenden).\n\nKurz warten und nochmal starten. Hilft das nicht: im Task-Manager unter „Details“ „pythonw.exe“ (DbD Map Scout) beenden.":
+        "DbD Map Scout is already running but does not answer (or is just closing).\n\nWait a moment and start it again. If that does not help: end “pythonw.exe” (DbD Map Scout) in Task Manager under “Details”.",
+    "DbD Map Scout konnte nicht neu gestartet werden: Die alte Kopie läuft noch im Hintergrund.\n\nIm Task-Manager unter „Details“ „pythonw.exe“ (DbD Map Scout) beenden und das Programm neu starten.":
+        "DbD Map Scout could not restart: the old copy is still running in the background.\n\nEnd “pythonw.exe” (DbD Map Scout) in Task Manager under “Details” and start the program again.",
     "Start fehlgeschlagen:": "Start failed:",
     "Kein Windows: Fenstersuche, Hotkeys und Click-Through sind nur unter Windows aktiv.":
         "Not Windows: window search, hotkeys and click-through only work on Windows.",
