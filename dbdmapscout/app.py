@@ -10,7 +10,7 @@ import threading
 import time
 import traceback
 
-from . import i18n, layout, mapimage, regions, restart, tooltip
+from . import i18n, layout, mapimage, mapstyle, regions, restart, tooltip
 from . import uimodel as ui
 from .capture import IS_WIN, describe_window, find_game_window, foreground_root, is_game_window
 from .catalog import Catalog
@@ -44,6 +44,9 @@ QUIT_WATCHDOG_S = 15     # s: quitting takes longer than this -> the process end
 MAX_HEIGHT = 0.9          # overlay at most this share of the game height (room for the timer below)
 ANCHORS = [("auto", N_("automatisch")), ("top-left", N_("oben links")), ("top-right", N_("oben rechts")),
            ("bottom-left", N_("unten links")), ("bottom-right", N_("unten rechts")), ("custom", N_("eigene Position"))]
+MAP_STYLES = [("classic", N_("Original (lila Boden)")),
+              ("dark", N_("Dunkel – wie Fallen Refuge (durchsichtiger Boden)"))]    # 1.66, mapstyle.py
+STYLE_CACHE = os.path.join("cache", "maps_dark")      # below the program folder, made from maps/ (gitignored)
 CATS = [N_("Erkennung"), N_("Overlay"), N_("System"), N_("Fehler")]   # log categories (keys; shown translated)
 
 
@@ -130,6 +133,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
 
         self._build_ui()
         self._apply_overlay_settings()
+        self._style_warm()
 
         self.worker = DetectionWorker(root_dir, self.settings, self.catalog, self.events, simulate=simulate)
         self.worker.start()
@@ -282,6 +286,15 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self._size_row_after = self.size_label.master
         self.opacity_var = ui.DoubleVar(value=o["opacity"] * 100)
         self._slider(look, _("Deckkraft"), self.opacity_var, 25, 100, self._opacity_changed, key="ov.opacity")
+        sr = ui.Frame(look)
+        sr.pack(fill="x", pady=(4, 0))
+        self._reg("ov.map_style.label", ui.Label(sr, text=_("Kartenstil"), width=12)).pack(side="left")
+        styles = dict(MAP_STYLES)
+        self.map_style_var = ui.StringVar(value=_(styles.get(o.get("map_style", "classic"), styles["classic"])))
+        mscb = self._reg("ov.map_style", ui.Combobox(sr, textvariable=self.map_style_var, state="readonly", width=38,
+                                                      values=[_(t) for _k, t in MAP_STYLES]))
+        mscb.pack(side="left", padx=6)
+        mscb.bind("<<ComboboxSelected>>", lambda e: self._map_style_changed())
         self.focus_var = ui.BooleanVar(value=o["only_when_game_focused"])
         self.caption_var = ui.BooleanVar(value=o["show_caption"])
         self.transp_var = ui.BooleanVar(value=o.get("transparent", True))
@@ -494,7 +507,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         m = self.catalog.maps.get(map_id)
         if m is None:
             return
-        path, shown = self.catalog.image_path(map_id, variant)
+        path, shown = self._map_file(map_id, variant)
         if path is None:
             self._log(_("Für „{map}“ gibt es kein Bild.", map=m.label(variant)), "Overlay")
             return
@@ -798,12 +811,48 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self._show_map_size()
         self._save_soon()
 
+    # ------------------------------------------------------------ map style (1.66)
+    def _map_file(self, map_id, variant=1):
+        """(picture path, variant shown) – in the dark style the converted picture from the cache (made now if the
+        warm-up has not got there yet, ~0.5 s); own pictures (user_maps/) always as they are."""
+        path, shown = self.catalog.image_path(map_id, variant)
+        if path and self.settings["overlay"].get("map_style", "classic") == "dark" \
+                and not self.catalog.is_own(map_id, variant):
+            path = mapstyle.styled_path(path, os.path.join(self.root_dir, STYLE_CACHE))
+        return path, shown
+
+    def _style_warm(self):
+        """Dark style on: make all pictures ahead in a thread (~30 s once, then cached)."""
+        if self.settings["overlay"].get("map_style", "classic") != "dark":
+            return
+        paths = sorted({p for m in self.catalog.maps.values() for v in m.variants
+                        if not self.catalog.is_own(m.id, v) for p in [self.catalog.image_path(m.id, v)[0]] if p})
+        cache = os.path.join(self.root_dir, STYLE_CACHE)
+        stop = lambda: self.settings["overlay"].get("map_style", "classic") != "dark"   # noqa: E731
+        threading.Thread(target=mapstyle.warm, args=(paths, cache, stop), daemon=True, name="mapstyle").start()
+
+    def _map_style_changed(self):
+        key = dict((_(label), k) for k, label in MAP_STYLES).get(self.map_style_var.get(), "classic")
+        o = self.settings["overlay"]
+        if o.get("map_style", "classic") == key:
+            return
+        o["map_style"] = key
+        self._save_soon()
+        self._preview_pic = None                 # the preview's sample and the maps page picture anew
+        self._qt_preview_cache = None
+        self._style_warm()
+        self._log(_("Kartenstil: {style}.", style=_(dict(MAP_STYLES)[key])), "Overlay")
+        if self.current and self._map_on():
+            self._reload_picture()
+        else:
+            self._tick_overlay(reschedule=False)
+
     def _reload_picture(self):
         """Load the map on display again (rotation/caption changed) without touching visibility or timer."""
         if not self.current:
             return
         m = self.catalog.maps[self.current[0]]
-        path, _v = self.catalog.image_path(*self.current)
+        path, _v = self._map_file(*self.current)
         if path is None:
             return
         rotation = self._map_rotation()
@@ -1432,7 +1481,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         if getattr(self, "_preview_pic", None) is None:
             from PIL import Image
             for mid in self.catalog.maps:
-                path, _v = self.catalog.image_path(mid, 1)
+                path, _v = self._map_file(mid, 1)
                 if path:
                     try:
                         with Image.open(path) as im:
