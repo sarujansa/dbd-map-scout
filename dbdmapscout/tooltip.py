@@ -51,6 +51,8 @@ TIPS = {
     "„Läuft gerade“: Titel, Interpret und Cover der Musik (Spotify, Browser … – nur während sie spielt)":
         "Liest Titel und Interpret aus der Windows-Mediensteuerung (dieselbe Liste wie beim Lautstärkeregler von "
         "Windows) – nur Anzeige, das Programm steuert nichts und speichert nichts.",
+    "Fortschritt des Lieds zeigen (Zeit und Balken)":
+        "Unter Titel und Künstler: wie weit das Lied ist, mit Balken und Länge – wie in Spotify.",
     "Albumcover zeigen":
         "Das Bild zum Lied links neben Titel und Interpret – Windows liefert es mit; es bleibt nur im Speicher.",
     "OLED-Schwarz (echtes Schwarz statt Grau im Dark Mode)":

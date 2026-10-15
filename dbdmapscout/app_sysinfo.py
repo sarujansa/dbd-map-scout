@@ -40,6 +40,7 @@ def today_rows(j, now: float) -> list:
 MEDIA_SPOTS = [("below", N_("Unter den Systemwerten")), ("bottom_right", N_("Rechts unten im Balken")),
                ("bottom_left", N_("Links unten im Balken")),
                ("custom", N_("Eigene Position (mit der Maus verschieben)"))]
+MEDIA_STYLES = [("big", N_("Groß – Cover oben, Titel darunter")), ("compact", N_("Kompakt – Cover links"))]
 MEDIA_SCALE = (60, 200)                     # slider of the music card, percent
 
 
@@ -64,9 +65,11 @@ class SysInfo:
         self.hud = make_hud()
         if self.hud is not None:
             self.hud.on_moved = lambda x, y: self.events.put(("call", self._hud_dragged, (x, y)))   # see app.py
+            self.hud.edit_label = _("SYSTEMWERTE · HEUTE")
         self.media_win = make_hud("DbD Map Scout Musik")     # 1.64: the music card, a window of its own
         if self.media_win is not None:
             self.media_win.on_moved = lambda x, y: self.events.put(("call", self._media_dragged, (x, y)))
+            self.media_win.edit_label = _("MUSIK")
         self._media_ctx = None             # (gx, gy, gw, gh, show) of the last placement
         self._hud_reserved = None          # (side, height) taken at the top of a bar, for the map below
         self._hud_pending = ""             # "above"/"beside": rendered, placed once the map's place is known
@@ -114,14 +117,16 @@ class SysInfo:
         f = layout.fit_scale(w, h, avail_w, avail_h)
         if f < 1:                                           # narrow bar / low bar: smaller text
             w, h = self.hud.render(rows, max(200, int(gh * f)))
+        labels = tuple(r[0][0] for r in rows if r)
+        self._hud_steady, sw = layout.steady_width(getattr(self, "_hud_steady", None), (side, gh, labels), w)
         if follow or beside:                                # shown by _hud_follow_map() after the map
             self._hud_pending = "beside" if beside else "above"
             return ("above", h) if follow else None
         if own:
             fx, fy = self.settings.get("sysinfo_pos") or (1.0, 0.0)
-            x, y = gx + fx * max(0, gw - w), gy + fy * max(0, gh - h)
+            x, y = gx + fx * max(0, gw - sw), gy + fy * max(0, gh - h)
         else:                                               # own place in the narrow window: the bar above
-            x, y = layout.hud_x("left" if side == "left" else "right", gx, gw, margin, w), gy + margin
+            x, y = layout.hud_x("left" if side == "left" else "right", gx, gw, margin, sw), gy + margin
         self.hud.show_at(int(x), int(y))
         self.worker.hud_rect = (int(x), int(y), w, h)
         return None if vb or own else (side, h)   # only at the top of a side bar does the map move below it
@@ -148,6 +153,8 @@ class SysInfo:
             return
         x, y, w, h = rect
         hw, hh = self.hud.size
+        steady = getattr(self, "_hud_steady", None)
+        hw = max(hw, steady[1]) if steady else hw            # centred by its widest width: no wobble
         gap = max(2, margin // 2)
         if mode == "beside":
             hx, hy = min(x + w + 3 * gap, gx + gw - gap - hw), y + max(0, (h - hh) // 2)
@@ -169,7 +176,8 @@ class SysInfo:
     def _hud_dragged(self, x, y):
         """System values dropped somewhere: remember the place relative to the DBD window (like the map)."""
         gx, gy, gw, gh = self._game_rect()
-        w, h = self.hud.size
+        steady = getattr(self, "_hud_steady", None)
+        w, h = max(self.hud.size[0], steady[1] if steady else 0), self.hud.size[1]
         self._hud_own_place(round(min(1.0, max(0.0, (x - gx) / max(1, gw - w))), 4),
                             round(min(1.0, max(0.0, (y - gy) / max(1, gh - h))), 4))
 
@@ -203,10 +211,12 @@ class SysInfo:
         cover = now.cover if o.get("media_cover", True) and not (editing and not media.playing(now, time.time())) \
             else None
         height = int(gh * max(MEDIA_SCALE[0], min(MEDIA_SCALE[1], o.get("media_scale", 1.0) * 100)) / 100)
-        w, h = win.render(rows, height, cover)
+        prog = media.progress(now, time.time()) if o.get("media_progress", True) and media.playing(now, time.time()) \
+            else None
+        w, h = win.render(rows, height, cover, o.get("media_style", "big"), prog)
         avail = layout.max_width(bar, margin) if bar >= layout.MIN_BAR and spot != "custom" else gw / 3
         if w > avail:                                       # never wider than the black bar
-            w, h = win.render(rows, max(200, int(height * avail / w)), cover)
+            w, h = win.render(rows, max(200, int(height * avail / w)), cover, o.get("media_style", "big"), prog)
         hud = self.worker.hud_rect if self.hud is not None and self.hud.shown else None
         x, y = layout.media_xy(spot, (gx, gy, gw, gh), (w, h), margin, hud, o.get("media_xy"))
         win.show_at(int(x), int(y))
@@ -273,6 +283,12 @@ class SysInfo:
     def _media_spot_changed(self):
         key = dict((_(label), k) for k, label in MEDIA_SPOTS).get(self.media_pos_var.get(), "below")
         self.settings["overlay"]["media_pos"] = key
+        self._save_soon()
+        self._tick_overlay(reschedule=False)
+
+    def _media_style_changed(self):
+        key = dict((_(label), k) for k, label in MEDIA_STYLES).get(self.media_style_var.get(), "big")
+        self.settings["overlay"]["media_style"] = key
         self._save_soon()
         self._tick_overlay(reschedule=False)
 

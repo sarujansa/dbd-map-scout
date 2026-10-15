@@ -1138,4 +1138,18 @@ EN = {
     'Albumcover zeigen': 'Show the album cover',
     'Das Bild zum Lied links neben Titel und Interpret – Windows liefert es mit; es bleibt nur im Speicher.':
         'The picture of the song left of title and artist – Windows supplies it; it stays in memory only.',
+    # 1.64.7: music card styles
+    'Stil': 'Style',
+    'Groß – Cover oben, Titel darunter': 'Large – cover on top, title below',
+    'Kompakt – Cover links': 'Compact – cover left',
+    'Fortschritt des Lieds zeigen (Zeit und Balken)': "Show the song's progress (time and bar)",
+    'Unter Titel und Künstler: wie weit das Lied ist, mit Balken und Länge – wie in Spotify.':
+        'Below title and artist: how far the song is, with a bar and its length – like in Spotify.',
+    # 1.64.7: names while moving
+    'KARTE · Mausrad = Grösse': 'MAP · mouse wheel = size',
+    'SYSTEMWERTE · HEUTE': 'SYSTEM VALUES · TODAY',
+    'Karte': 'Map',
+    'Systemwerte': 'System values',
+    'Ziehst: {name}': 'Dragging: {name}',
+    'Unter der Maus: {name}': 'Under the mouse: {name}',
 }

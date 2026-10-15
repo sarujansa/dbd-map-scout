@@ -3,7 +3,7 @@
 Read from the Windows media controls (GlobalSystemMediaTransportControlsSessionManager – the same list the volume
 flyout of Windows shows: Spotify, a browser tab, …) through the pywinrt packages (MIT, pinned in
 requirements.txt; checked like windows-capture: they import no OpenProcess, hooks or input functions). Only the
-title, artist, whether it plays and (1.64, user's wish) the cover picture are read – nothing is controlled,
+title, artist, whether it plays, (1.64, user's wish) the cover picture and (1.64.7) the song's position are read – nothing is controlled,
 nothing is saved or logged, DBD is not touched. The cover is read once per title and kept small in memory.
 """
 from __future__ import annotations
@@ -33,6 +33,23 @@ class NowPlaying:
     playing: bool = False
     t: float = 0.0          # time.time() of the reading
     cover: object = field(default=None, compare=False)      # PIL RGBA ≤ COVER_PX or None
+    position: float | None = None   # seconds into the song when Windows last reported it (1.64.7)
+    duration: float | None = None   # length of the song in seconds
+    at: float = 0.0                 # time.time() of that report – the position runs on from there while it plays
+
+
+def progress(now: NowPlaying, wall: float):
+    """(elapsed, total) in seconds for the progress bar, or None (pure). Players report the position only now and
+    then (Spotify: on play, pause, seek), so it runs on from the report while the song plays."""
+    if now.position is None or not now.duration or now.duration <= 0:
+        return None
+    el = now.position + (max(0.0, wall - now.at) if now.playing else 0.0)
+    return min(max(0.0, el), now.duration), now.duration
+
+
+def clock(seconds: float) -> str:
+    s = int(max(0, seconds))
+    return f"{s // 3600}:{s // 60 % 60:02d}:{s % 60:02d}" if s >= 3600 else f"{s // 60}:{s % 60:02d}"
 
 
 def decode_cover(data: bytes):
@@ -104,7 +121,21 @@ class _Reader:
                     data = b""
                 self._cover_key, self._cover = key, decode_cover(data)
             cover = self._cover
-        return NowPlaying(title=title, artist=artist, playing=int(status) == PLAYING, t=time.time(), cover=cover)
+        pos = dur = None
+        at = time.time()
+        try:                                      # the song's progress (read only, like the rest)
+            tl = session.get_timeline_properties()
+            start = tl.start_time.total_seconds()
+            end = tl.end_time.total_seconds()
+            if end > start:
+                dur, pos = end - start, tl.position.total_seconds() - start
+                updated = tl.last_updated_time.timestamp()
+                if 0 < at - updated < 24 * 3600:
+                    at = updated                  # the position belongs to this moment, not to now
+        except Exception:
+            pos = dur = None
+        return NowPlaying(title=title, artist=artist, playing=int(status) == PLAYING, t=time.time(), cover=cover,
+                          position=pos, duration=dur, at=at)
 
     @staticmethod
     def _cover_bytes(ref) -> bytes:

@@ -30,7 +30,7 @@ from .app_stats import StatsTab
 from .app_lobby import LobbyInfo
 from .app_hotkeys import Hotkeys
 from .app_settings import SettingsTab
-from .app_sysinfo import HUD_SHOWN, HUD_SIDES, MEDIA_SCALE, MEDIA_SPOTS, SysInfo
+from .app_sysinfo import HUD_SHOWN, HUD_SIDES, MEDIA_SCALE, MEDIA_SPOTS, MEDIA_STYLES, SysInfo
 from .app_qt import QtShell
 
 LANGS = [("en", "EN"), ("de", "DE"), ("fr", "FR"), ("es", "ES"), ("es-MX", "ES-MX"), ("it", "IT"),
@@ -117,6 +117,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         self._conn_idle = IdlePause()    # capture paused while DBD is not running
 
         self.overlay = make_overlay(self.root, prefer_native=self.settings["overlay"].get("native_window", True))
+        self.overlay.edit_label = _("KARTE · Mausrad = Grösse")       # names on the edit frames (1.64.7)
         self.overlay.game_hwnd = lambda: self.game.hwnd if self.game else None
         # window procedures: hand over to _poll (one place, in order with the other events)
         self.overlay.on_moved = lambda x, y: self.events.put(("call", self._overlay_dragged, (x, y)))
@@ -313,18 +314,32 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
                                                      values=[_(t) for _k, t in MEDIA_SPOTS]))
         mcb.pack(side="left", padx=6)
         mcb.bind("<<ComboboxSelected>>", lambda e: self._media_spot_changed())
+        sr = ui.Frame(sysf)
+        sr.pack(fill="x", pady=(4, 0))
+        self._reg("ov.media_style.label", ui.Label(sr, text=_("Stil"), width=12)).pack(side="left")
+        styles = dict(MEDIA_STYLES)
+        self.media_style_var = ui.StringVar(value=_(styles.get(o.get("media_style", "big"), styles["big"])))
+        scb = self._reg("ov.media_style", ui.Combobox(sr, textvariable=self.media_style_var, state="readonly",
+                                                       width=38, values=[_(t) for _k, t in MEDIA_STYLES]))
+        scb.pack(side="left", padx=6)
+        scb.bind("<<ComboboxSelected>>", lambda e: self._media_style_changed())
         self.media_size_var = ui.DoubleVar(value=round(float(o.get("media_scale", 1.0)) * 100))
         self._slider(sysf, _("Größe Musik"), self.media_size_var, *MEDIA_SCALE, self._media_size_changed,
                      key="ov.media_size")
         self.media_cover_var = ui.BooleanVar(value=o.get("media_cover", True))
         self._reg("ov.media_cover", ui.Checkbutton(sysf, text=_("Albumcover zeigen"), variable=self.media_cover_var,
                                                    command=self._today_flag_changed)).pack(anchor="w", pady=(2, 0))
+        self.media_progress_var = ui.BooleanVar(value=o.get("media_progress", True))
+        self._reg("ov.media_progress", ui.Checkbutton(sysf, text=_("Fortschritt des Lieds zeigen (Zeit und Balken)"),
+                                                      variable=self.media_progress_var,
+                                                      command=self._today_flag_changed)).pack(anchor="w", pady=(2, 0))
         return outer
 
     def _today_flag_changed(self):
         self.settings["overlay"]["show_today"] = bool(self.today_var.get())
         self.settings["overlay"]["show_media"] = bool(self.media_var.get())
         self.settings["overlay"]["media_cover"] = bool(self.media_cover_var.get())
+        self.settings["overlay"]["media_progress"] = bool(self.media_progress_var.get())
         self._save_soon()
         self._tick_overlay(reschedule=False)
 

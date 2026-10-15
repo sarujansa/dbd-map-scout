@@ -60,7 +60,8 @@ SPECS = {
             ("row", (("label", "ov.sysinfo.label"), ("combo", "ov.sysinfo"), ("stretch",))),
             ("hint", "ov.sys_text"), ("hint", "ov.sys_hint"), ("check", "ov.today"),
             ("check", "ov.media"), ("row", (("label", "ov.media_pos.label"), ("combo", "ov.media_pos"), ("stretch",))),
-            ("slider", "ov.media_size"), ("check", "ov.media_cover"))),
+            ("row", (("label", "ov.media_style.label"), ("combo", "ov.media_style"), ("stretch",))),
+            ("slider", "ov.media_size"), ("check", "ov.media_cover"), ("check", "ov.media_progress"))),
     ),
     "settings": (
         ("card", "st.look", (
@@ -1435,6 +1436,9 @@ class SwatchView(QWidget):
         self._dialog = dlg                       # keep it alive while it is open
 
 
+PREVIEW_NAMES = {"map": N_("Karte"), "hud": N_("Systemwerte"), "music": N_("Musik")}
+
+
 class PreviewView(QWidget):
     """The overlay tab's screen (since 1.61): the monitor in its shape, the 16:9 game picture with its black bars
     and the map on it where and as big as it will be, with its opacity and the lines below it. A click or a drag
@@ -1449,6 +1453,7 @@ class PreviewView(QWidget):
         self._pix = None                       # (picture object, size) -> QPixmap
         self._dragging = False
         self._grab = None                      # (layer name, dx, dy) while an element is dragged
+        self._hover = None                     # layer under the mouse while moving (1.64.7)
         self.setMouseTracking(True)            # open hand over an element
         sp = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         sp.setHeightForWidth(True)
@@ -1546,8 +1551,34 @@ class PreviewView(QWidget):
             p.setPen(accent)
             p.drawText(game.adjusted(0, 6, 0, 0), Qt.AlignHCenter | Qt.AlignTop,
                        _("Verschieben aktiv – Elemente ziehen, dann „Fertig“"))
+        if d.get("editing"):                       # every element named; the one under the mouse in accent colour
+            accent = QColor(qt_theme.colours(True)["accent"])
+            held = self._grab[0] if self._grab else self._hover
+            tf = QFont(self.font())
+            tf.setBold(True)
+            tf.setPixelSize(11)
+            p.setFont(tf)
+            for name, lx, ly, lw, lh in d.get("layers") or ():
+                r = QRectF(ox + lx * s, oy + ly * s, lw * s, lh * s)
+                on = name == held
+                p.setPen(QPen(accent if on else QColor(255, 255, 255, 140), 2 if on else 1,
+                              Qt.SolidLine if on else Qt.DashLine))
+                p.setBrush(Qt.NoBrush)
+                p.drawRect(r)
+                tag = _(PREVIEW_NAMES.get(name, name))
+                tw = p.fontMetrics().horizontalAdvance(tag) + 8
+                tr = QRectF(max(screen.left(), min(r.left(), screen.right() - tw)), max(oy, r.top() - 15), tw, 15)
+                p.fillRect(tr, accent if on else QColor(30, 30, 34, 220))
+                p.setPen(QColor(20, 16, 4) if on else QColor(235, 235, 235))
+                p.drawText(tr, Qt.AlignCenter, tag)
+            if held:
+                p.setPen(accent)
+                p.setFont(tf)
+                what = _("Ziehst: {name}", name=_(PREVIEW_NAMES.get(held, held))) if self._grab else \
+                    _("Unter der Maus: {name}", name=_(PREVIEW_NAMES.get(held, held)))
+                p.drawText(game.adjusted(0, 0, 0, -6), Qt.AlignHCenter | Qt.AlignBottom, what)
         x, y, w, h, _mh = d.get("rect") or (0, 0, 0, 0, 0)
-        if w and h:
+        if w and h and not d.get("editing"):
             rx, ry = ox + x * s, oy + y * s
             pen = QPen(QColor(qt_theme.colours(True)["accent"]), 1.5, Qt.DashLine)
             p.setPen(pen)
@@ -1593,7 +1624,16 @@ class PreviewView(QWidget):
             self.setCursor(Qt.ArrowCursor)
         else:
             pt = self._screen_pos(e)
-            self.setCursor(Qt.OpenHandCursor if pt and self.layer_at(*pt) else Qt.PointingHandCursor)
+            hit = self.layer_at(*pt) if pt else None
+            self.setCursor(Qt.OpenHandCursor if hit else Qt.PointingHandCursor)
+            if (hit[0] if hit else None) != self._hover:
+                self._hover = hit[0] if hit else None
+                self.update()
+
+    def leaveEvent(self, _e):
+        if self._hover:
+            self._hover = None
+            self.update()
 
     def mouseReleaseEvent(self, _e):
         self._dragging = False
