@@ -102,6 +102,12 @@ class SettingsTab:
                                                 state="readonly", width=8))
         zcb.pack(side="left", padx=8)
         zcb.bind("<<ComboboxSelected>>", lambda e: self._zoom_changed())
+        ar = ui.Frame(look)
+        ar.pack(fill="x", pady=(6, 0))
+        self._reg("st.card_reset", ui.Button(ar, text=_("Anordnung zurücksetzen"),
+                                              command=self._card_order_reset)).pack(side="left")
+        self._reg("st.card_hint", ui.Label(ar, text=_("Die Kästen der Seiten lassen sich am Griff rechts im Titel "
+                                                       "verschieben."), style="Dim.TLabel")).pack(side="left", padx=8)
 
         upd = self._reg("st.updates", ui.LabelFrame(f, text=_("Updates"), padding=8))
         upd.pack(fill="x", pady=(8, 0))
@@ -228,6 +234,13 @@ class SettingsTab:
             self.quit()
         else:
             self._inform(_("Einstellungen importieren"), _("Bitte das Programm jetzt neu starten."))
+
+    def _card_order_reset(self):
+        """The cards of all pages back in their built-in order."""
+        self.settings.set("card_order", {})
+        self._save_soon()
+        if self.qt is not None:
+            self.qt.set_card_order({})
 
     def _zoom_changed(self):
         zoom = next((z for z, lbl in self._zooms if lbl == self.zoom_var.get()), 1.0)
