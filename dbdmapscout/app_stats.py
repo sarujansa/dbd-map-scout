@@ -292,7 +292,7 @@ class StatsTab:
                                phantoms=phantoms)
 
     def _stats_render(self):
-        j = self._official_join()
+        j = self._joined()
         all_rounds, off, rescued = j.rounds, j.off, j.rescued
         self._off_rescued = {repr(r.t) for r in rescued}   # rows in "Letzte Runden" not in rounds.jsonl
         # region filter: the regions that occur (kept selected even if the list changes)
@@ -662,7 +662,7 @@ class StatsTab:
                     for p in (self._hist_path(), self._official_path()))
         key += (repr(sorted((self.settings.get("killer_aliases") or {}).items())),)
         if getattr(self, "_record_key", None) != key:
-            j = self._official_join()
+            j = self._joined()
             pairs = [(r, j.off[id(r)]) for r in j.rounds if id(r) in j.off and not r.custom]
             self._record_cache, self._record_key = official.results(pairs, lambda r: r.map_id), key
         return self._record_cache
@@ -787,7 +787,7 @@ class StatsTab:
 
     def _official_check_render(self):
         """Tab Erkennung, "Abgleich mit der Stats-Seite": how well the program's rounds fit the page (all data)."""
-        j = self._official_join()
+        j = self._joined()
         if not j.matches:
             self.off_check_var.set(_("Noch keine offiziellen Daten. Einrichten: Einstellungen → Mehr → Offizielle "
                                      "Match-Daten."))
