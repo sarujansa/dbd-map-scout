@@ -123,4 +123,4 @@ Vom Nutzer verworfen: Zuschauermodus erkennen (Wartekarte „ZUSCHAUER“; Merkm
 - Nutzer: Saru, antwortet auf Deutsch, will direkte, kritische, technisch präzise Antworten.
 - Vor größeren Umbauten kurz Plan nennen; nach Änderungen Tests laufen lassen und bei UI-Änderungen das Programm einmal starten.
 - Versionsnummer in `dbdmapscout/__init__.py` erhöhen und README anpassen, wenn sich Verhalten ändert.
-- Nach dem Push **immer direkt einen PR aufmachen, ohne nachzufragen** (Wunsch des Nutzers); gemergt wird erst bei grünem Haken.
+- Nach dem Push **immer direkt einen PR aufmachen, ohne nachzufragen** (Wunsch des Nutzers); gemergt wird erst bei grünem Haken – und zwar **von Claude selbst** (Wunsch des Nutzers, seit 1.64.9: sobald Linux- und Windows-Prüfung grün sind, ohne Rückfrage mergen; danach Zweig auf `main` zurücksetzen).
