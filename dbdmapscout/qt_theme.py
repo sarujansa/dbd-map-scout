@@ -50,7 +50,8 @@ def stylesheet(dark: bool, zoom: float = 1.0) -> str:
 * {{ font-family: 'Segoe UI Variable Text', 'Segoe UI', 'Inter', sans-serif; font-size: {px(13)}; color: {c['fg']}; }}
 QMainWindow, QWidget#page, QStackedWidget, QScrollArea, QScrollArea > QWidget > QWidget {{ background: {c['bg']}; }}
 QListWidget#nav {{ background: {c['nav']}; border: none; padding: 10px 6px; outline: 0; font-size: {px(14)}; }}
-QListWidget#nav::item {{ padding: 8px 12px; border-radius: 6px; margin: 1px 0; color: {c['dim']}; }}
+QListWidget#nav::item {{ padding: 8px 12px; border-radius: 6px; margin: 1px 0; color: {c['dim']};
+    border-left: 3px solid transparent; }}  /* same place selected or not */
 QListWidget#nav::item:selected {{ background: {c['nav_sel']}; color: {c['accent']}; border-left: 3px solid {c['accent']}; }}
 QListWidget#nav::item:hover:!selected {{ background: {c['hover']}; color: {c['fg']}; }}
 QFrame[class="card"] {{ background: {c['card']}; border: 1px solid {c['border']}; border-radius: 10px; }}
