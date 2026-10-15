@@ -524,6 +524,26 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
             self._log(_("Map gewählt: {map}", map=m.label(shown)), "Overlay")
         self._tick_overlay(reschedule=False)
 
+    def _unload_test_map(self):
+        """The test map (Overlay testen / moving without a map) is gone completely afterwards – as if none had
+        been shown (1.65.2, user: after the test "Warte auf Map" no longer came in the game: the hidden test map
+        counted as a map the user hid on purpose, and the detector still watched it as a map on screen)."""
+        self._test_map = False
+        self.overlay.set_map(None)
+        self.overlay.hide()
+        self.current = self.source = None
+        self.user_visible = True
+        self.hidden_after_match = self.menu_paused = False
+        self.round.clear()                       # no timer, no "Letzte Runde" from the test
+        self._watch_gen += 1                     # late menu/match_end events of the test are ignored
+        self.worker.watch_gen = None
+        self.worker.map_on_screen = False
+        self._detail = ""
+        self._thumb_src = None
+        self._thumb_rev = getattr(self, "_thumb_rev", 0) + 1
+        self.tray.set_title("DbD Map Scout")
+        self._show_map_size()
+
     def _set_thumb(self, img):
         src = img.copy()                          # for the overview page
         src.thumbnail((480, 480))
@@ -702,9 +722,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
                 self._test_map = True            # loaded only for moving: hidden again by "Fertig"
         self.overlay.set_editing(on)
         if not on and getattr(self, "_test_map", False) and time.time() >= getattr(self, "_force_until", 0):
-            self._test_map = False               # still the test map (no map chosen meanwhile): away again
-            self.user_visible = False
-            self._round_ended(time.time())
+            self._unload_test_map()              # still the test map (no map chosen meanwhile): away again
         self.edit_btn.configure(text=_("Fertig") if on else _("Mit der Maus verschieben"))
         if on:                     # 1.64.1: also without a map – the preview (tab Overlay) shows everything
             self._log(_("Karte, Systemwerte und Musik mit der Maus ziehen (im Spiel oder in der Vorschau), "
@@ -1099,9 +1117,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         elif getattr(self, "_pos_forced", False):
             self._pos_forced = False
             if getattr(self, "_test_map", False):
-                self._test_map = False
-                self.user_visible = False
-                self._round_ended(time.time())
+                self._unload_test_map()
             self._log(_("Test beendet."), "Overlay")
         if (time.time() >= getattr(self, "_force_until", 0) and hasattr(self, "test_btn")
                 and self.test_btn.cget("text") != _("Overlay testen")):
