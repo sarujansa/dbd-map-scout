@@ -294,7 +294,17 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         self.sysinfo_hint_var = ui.StringVar(value="")
         self._reg("ov.sys_hint", ui.Label(sysf, textvariable=self.sysinfo_hint_var, style="Dim.TLabel",
                                            wraplength=520)).pack(anchor="w")
+        self.today_var = ui.BooleanVar(value=o.get("show_today", True))
+        self._reg("ov.today", ui.Checkbutton(sysf, text=_("Darunter „Heute“: Runden, Spielzeit, Ø Kills/Entkommen, "
+                                                           "Uhrzeit (auch wenn die Systemwerte aus sind: rechts oben)"),
+                                             variable=self.today_var, command=self._today_flag_changed)
+                  ).pack(anchor="w", pady=(6, 0))
         return outer
+
+    def _today_flag_changed(self):
+        self.settings["overlay"]["show_today"] = bool(self.today_var.get())
+        self._save_soon()
+        self._tick_overlay(reschedule=False)
 
     # ------------------------------------------------------- tab: detection
     def _tab_detect(self):

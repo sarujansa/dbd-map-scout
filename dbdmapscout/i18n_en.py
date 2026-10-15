@@ -1096,4 +1096,22 @@ EN = {
         'Click or drag: the map goes to this place (own position).',
     'Spielbild': 'Game picture',
     'Ø 2,8 KILLS · 12 RUNDEN': 'AVG. 2.8 KILLS · 12 ROUNDS',
+    # 1.62: colour themes
+    'Farbthema': 'Colour theme',
+    'Gold (Standard)': 'Gold (default)',
+    'Blutrot': 'Blood red',
+    'Eisblau': 'Ice blue',
+    'Giftgrün': 'Toxic green',
+    'Lila': 'Purple',
+    'OLED-Schwarz': 'OLED black',
+    # 1.62: block "today" in the black bar
+    'Darunter „Heute“: Runden, Spielzeit, Ø Kills/Entkommen, Uhrzeit (auch wenn die Systemwerte aus sind: rechts oben)':
+        'Below them "Today": rounds, play time, avg. kills/escaped, clock (also with the system values off: top right)',
+    'Zeigt im schwarzen Balken, solange eine Karte im Match zu sehen ist, wie viele Runden du heute gespielt hast, wie lange, Ø Kills bzw. Entkommen laut Stats-Seite und die Uhrzeit.':
+        'Shows in the black bar, while a map is on screen in a match, how many rounds you played today, for how long, avg. kills or escaped from the stats page and the time of day.',
+    'ENTKOMMEN ': 'ESCAPED ',
+    'HEUTE ': 'TODAY ',
+    'UHR ': 'TIME ',
+    '{n} RUNDEN · {time}': '{n} ROUNDS · {time}',
+    'Ø KILLS ': 'AVG. KILLS ',
 }

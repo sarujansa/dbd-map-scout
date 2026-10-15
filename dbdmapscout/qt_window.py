@@ -58,12 +58,13 @@ SPECS = {
             ("check", "ov.transparent"))),
         ("card", "ov.sys", (
             ("row", (("label", "ov.sysinfo.label"), ("combo", "ov.sysinfo"), ("stretch",))),
-            ("hint", "ov.sys_text"), ("hint", "ov.sys_hint"))),
+            ("hint", "ov.sys_text"), ("hint", "ov.sys_hint"), ("check", "ov.today"))),
     ),
     "settings": (
         ("card", "st.look", (
             ("row", (("label", "st.lang.label"), ("combo", "st.lang"), ("stretch",))), ("hint", "st.lang_note"),
             ("check", "st.dark"),
+            ("row", (("label", "st.theme.label"), ("combo", "st.theme"), ("stretch",))),
             ("row", (("label", "st.zoom.label"), ("combo", "st.zoom"), ("stretch",))),
             ("row", (("button", "st.card_reset"), ("hint", "st.card_hint"))))),
         ("card", "st.notify", (
@@ -1232,7 +1233,7 @@ class MapBars(QWidget):
 
     def paintEvent(self, _e):
         from PySide6.QtGui import QPainter
-        c = qt_theme.PALETTE[self._dark]
+        c = qt_theme.colours(self._dark)
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         w = self.width()
@@ -1280,7 +1281,7 @@ class Heatmap(QWidget):
         self._hits = []
         if not d or not d.rows:
             return
-        c = qt_theme.PALETTE[self._dark]
+        c = qt_theme.colours(self._dark)
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         fm = p.fontMetrics()
@@ -1439,7 +1440,7 @@ class PreviewView(QWidget):
                 p.drawText(QRectF(rx, ly, w * s, lh), Qt.AlignHCenter | Qt.AlignVCenter, line)
                 ly += lh
             p.setOpacity(1.0)
-            pen = QPen(QColor(qt_theme.PALETTE[True]["accent"]), 1.5, Qt.DashLine)
+            pen = QPen(QColor(qt_theme.colours(True)["accent"]), 1.5, Qt.DashLine)
             p.setPen(pen)
             p.setBrush(Qt.NoBrush)
             p.drawRect(QRectF(rx, ry, w * s, h * s))
@@ -2295,8 +2296,8 @@ class MainWindow(QMainWindow):
         pal = QPalette()
         for role, colour in qt_theme.palette_roles(dark).items():
             pal.setColor(getattr(QPalette.ColorRole, role), QColor(colour))
-        pal.setColor(QPalette.Disabled, QPalette.Text, QColor(qt_theme.PALETTE[bool(dark)]["fg_dis"]))
-        pal.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(qt_theme.PALETTE[bool(dark)]["fg_dis"]))
+        pal.setColor(QPalette.Disabled, QPalette.Text, QColor(qt_theme.colours(dark)["fg_dis"]))
+        pal.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(qt_theme.colours(dark)["fg_dis"]))
         QApplication.setPalette(pal)
         self.setStyleSheet(qt_theme.stylesheet(dark, zoom))
         self._dark = bool(dark)
@@ -2319,7 +2320,7 @@ class MainWindow(QMainWindow):
 
     def _nav_icons(self):
         """The navigation's icons in the colours of the theme: grey, the page on display in the accent colour."""
-        c = qt_theme.PALETTE[self._dark]
+        c = qt_theme.colours(self._dark)
         ratio = self.devicePixelRatioF() or 1.0
         for row, (key, _label) in enumerate(PAGES):
             alert = key == "log" and self._log_alert
@@ -2387,7 +2388,7 @@ class MainWindow(QMainWindow):
         self.search.setVisible(not on)
         self.search_btn.setVisible(on)
         if on:
-            self.search_btn.setIcon(QIcon(nav_icon("search", qt_theme.PALETTE[self._dark]["dim"],
+            self.search_btn.setIcon(QIcon(nav_icon("search", qt_theme.colours(self._dark)["dim"],
                                                    self.devicePixelRatioF() or 1.0)))
         self.nav.setFixedWidth(NAV_COMPACT_W if on else NAV_W)
         self.search.setFixedWidth(NAV_W)
