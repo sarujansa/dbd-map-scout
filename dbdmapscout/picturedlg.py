@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 import sys
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, ttk
 
 from PIL import Image, ImageTk
 
@@ -116,8 +116,10 @@ class PictureDialog:
         pv = ttk.Frame(body)
         pv.pack(fill="x", pady=(8, 0))
         self.before = ttk.Label(pv, text=_("Original"), anchor="center", width=30)
+        self.before._dbdms_pil = None            # the previews as PIL images, for the Qt window
         self.before.pack(side="left", padx=(0, 6))
         self.after = ttk.Label(pv, text=_("Ergebnis"), anchor="center", width=30)
+        self.after._dbdms_pil = None
         self.after.pack(side="left")
 
         self.msg = tk.StringVar(value="")
@@ -133,7 +135,7 @@ class PictureDialog:
         d.bind("<Escape>", lambda e: d.destroy())
         self._mode_changed()
         tooltip.attach_all(d)
-        d.grab_set()
+        app._dialog(d)                           # grab here, or the Qt window shows it
 
     # ---------------------------------------------------------------- helpers
     def _realm_guess(self, text: str) -> str:
@@ -159,10 +161,14 @@ class PictureDialog:
         self.del_btn.configure(state="normal" if own else "disabled")
         self.save_btn.configure(state="normal" if self.src else "disabled")
 
-    def choose(self):
-        types = [(_("Bilder"), "*.png *.jpg *.jpeg *.webp *.gif *.bmp"), (_("Alle Dateien"), "*.*")]
-        path = filedialog.askopenfilename(parent=self.dlg, title=_("Kartenbild wählen"), filetypes=types)
-        if not path:
+    def choose(self, path=None):
+        if path is None and self.app._qt_file("open", _("Kartenbild wählen"), "", self.choose,
+                                              _("Bilder") + " (*.png *.jpg *.jpeg *.webp *.gif *.bmp)"):
+            return                                  # the Qt window asks for the file, then calls again
+        if path is None:
+            types = [(_("Bilder"), "*.png *.jpg *.jpeg *.webp *.gif *.bmp"), (_("Alle Dateien"), "*.*")]
+            path = filedialog.askopenfilename(parent=self.dlg, title=_("Kartenbild wählen"), filetypes=types)
+        if not path or not self.dlg.winfo_exists():
             return
         try:
             with Image.open(path) as im:
@@ -206,6 +212,7 @@ class PictureDialog:
             self.msg.set(_("Bild konnte nicht verarbeitet werden: {error}", error=e))
             return
         self._photos = [ImageTk.PhotoImage(before), ImageTk.PhotoImage(preview(result))]
+        self.before._dbdms_pil, self.after._dbdms_pil = before, preview(result)
         self.before.configure(image=self._photos[0], compound="top")
         self.after.configure(image=self._photos[1], compound="top")
         self.msg.set(note)
@@ -260,8 +267,8 @@ class PictureDialog:
             return
         path, _v = cat.image_path(*sel)
         label = cat.maps[sel[0]].label(sel[1])
-        if not messagebox.askokcancel(_("Eigenes Bild löschen"), _("Eigenes Bild für „{map}“ löschen?", map=label) + f"\n\n{path}",
-                                      parent=self.dlg):
+        if not self.app._ask(_("Eigenes Bild löschen"), _("Eigenes Bild für „{map}“ löschen?", map=label) + f"\n\n{path}",
+                             self.delete, parent=self.dlg):
             return
         try:
             os.remove(path)

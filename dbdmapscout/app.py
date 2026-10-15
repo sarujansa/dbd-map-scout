@@ -1689,7 +1689,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         dlg.bind("<Escape>", lambda e: dlg.destroy())
         tooltip.attach_all(dlg)
         cb.focus_set()
-        dlg.grab_set()
+        self._dialog(dlg)                       # grab here, or the Qt window shows it
 
     def add_picture(self, from_unknown: bool = False):
         """Dialog: own picture for a known map, or a new map (prefilled from an unknown banner)."""
