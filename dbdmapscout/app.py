@@ -587,6 +587,9 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
                                 highlightthickness=0, borderwidth=0, padx=6, pady=4)
         sb = ttk.Scrollbar(tf, orient="vertical", command=self.log_text.yview)
         self.log_text.configure(yscrollcommand=sb.set)
+        # the Qt window shows the same entries itself (coloured like here): (entries, dark mode)
+        self.log_text._dbdms_lines = lambda: ([e for e in self._log_entries if self.cat_vars[e[1]].get()][-400:],
+                                              bool(self.settings.get("dark_mode", True)))
         self.log_text.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
         bottom = ttk.Frame(f)
@@ -1735,8 +1738,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
     def _clear_aliases(self):
         if not self.settings.get("user_aliases"):
             return
-        if not messagebox.askokcancel(_("Eigene Zuordnungen"), _("Alle eigenen Map-Zuordnungen löschen?"),
-                                      parent=self.root):
+        if not self._ask(_("Eigene Zuordnungen"), _("Alle eigenen Map-Zuordnungen löschen?"), self._clear_aliases):
             return
         self.settings.set("user_aliases", {})
         self._save_soon()
