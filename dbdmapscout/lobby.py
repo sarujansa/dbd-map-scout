@@ -8,7 +8,8 @@ the top (y) of the window in units of the 16:9 picture width.
     CANCEL, below "0:06   EST. 4:39"       searching (DBD shows the time already waited)
     READY,  below "00:59"                  lobby found (countdown)
     CANCEL, below "00:34" (no EST.)        lobby, ready pressed
-    READY,  nothing below                  custom game (no queue, no countdown)
+    READY,  nothing below                  custom game (no queue, no countdown) – unless it comes right after a
+                                           search or in a lobby: a public lobby before its countdown starts
 
 Killers see their killer's name left below the button (searching and lobby), survivors never do. The
 name is matched against KILLERS (lexicon fit, like the button word); a name not on the list (a new
@@ -290,6 +291,10 @@ class QueueTracker:
         before is gone (left, dodged, or the match is over) and must not stick to anything."""
         events = []
         kind = view.kind if view is not None else None
+        if kind == "custom" and self.state in ("search", "lobby"):
+            # 1.64.4 (user: "Custom Game" in a normal match): a public lobby shows READY with nothing below until
+            # its countdown starts, and again when someone leaves – a custom game never comes from a search
+            kind = "lobby"
         if kind is None:
             if self.state == "search" and self.search_start is not None and t - self.search_start > self.MAX_SEARCH:
                 self._reset()
