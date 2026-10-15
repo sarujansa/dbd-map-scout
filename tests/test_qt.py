@@ -757,7 +757,17 @@ def _contrast(a, b):
 def test_colour_themes_stay_readable(key):
     """1.62: every theme in dark and light – accent text on cards and text on accent buttons >= 4.5:1, text on
     the background >= 7:1; unknown themes fall back to gold."""
-    qt_theme.set_theme(key)
+    for oled in (False, True):
+        _check_theme(key, oled)
+    qt_theme.set_theme("nope")
+    assert qt_theme.colours(True)["accent"] == theme.DARK["accent"]
+    qt_theme.set_theme("blue", oled=True)
+    assert qt_theme.colours(True)["bg"] == "#000000" and qt_theme.colours(False)["bg"] != "#000000"
+    qt_theme.set_theme("gold")
+
+
+def _check_theme(key, oled):
+    qt_theme.set_theme(key, oled)
     try:
         for dark in (True, False):
             c = qt_theme.colours(dark)
@@ -767,8 +777,6 @@ def test_colour_themes_stay_readable(key):
             assert c["accent"] in qt_theme.stylesheet(dark)
     finally:
         qt_theme.set_theme("gold")
-    qt_theme.set_theme("nope")
-    assert qt_theme.colours(True)["accent"] == theme.DARK["accent"]
 
 
 def test_today_rows_for_the_black_bar():
@@ -780,3 +788,13 @@ def test_today_rows_for_the_black_bar():
     rows = today_rows(SimpleNamespace(rounds=rounds, off={}), now)
     text = ["".join(t for t, _c in row) for row in rows]
     assert text == ["HEUTE 1 RUNDEN · 10:00"]                 # yesterday's round does not count
+
+
+def test_old_oled_theme_becomes_the_switch(tmp_path):
+    """1.62.0 had OLED as a theme: it becomes gold + the OLED switch (1.62.1)."""
+    import json
+    from dbdmapscout.config import Settings
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({"settings_version": 3, "color_theme": "oled"}), encoding="utf-8")
+    s = Settings(str(path))
+    assert s["color_theme"] == "gold" and s["oled_black"] is True

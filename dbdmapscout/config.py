@@ -55,7 +55,8 @@ DEFAULTS = {
     },
     "ui_language": "auto",            # auto (Windows language) | de | en
     "dark_mode": True,
-    "color_theme": "gold",              # control window: qt_theme.THEMES (accent colour, OLED black)
+    "color_theme": "gold",              # control window: qt_theme.THEMES (accent colour)
+    "oled_black": False,                # control window: true black instead of the dark greys (qt_theme.OLED)
     "ui_zoom": 1.0,                     # control window: font size factor (qt_theme.ZOOMS)
     "qt_geometry": "",                  # control window: QWidget.saveGeometry() as base64
     "card_order": {},                   # control window: own order of the cards {page: {run: [card ids]}}
@@ -139,6 +140,8 @@ class Settings:
                 if raw.get("settings_version", 1) < 3:                # 1.2: position sliders
                     ov["pos_x"] = min(1.0, max(0.0, float(ov.pop("custom_x", 0.0))))
                     ov["pos_y"] = min(1.0, max(0.0, float(ov.pop("custom_y", 0.0))))
+                if self.data.get("color_theme") == "oled":            # 1.62.0: OLED was a theme of its own
+                    self.data["color_theme"], self.data["oled_black"] = "gold", True
                 self.data["settings_version"] = SETTINGS_VERSION
             except (OSError, ValueError, AttributeError):
                 pass  # broken file -> defaults, will be rewritten on save

@@ -48,6 +48,9 @@ TIPS = {
     "Darunter „Heute“: Runden, Spielzeit, Ø Kills/Entkommen, Uhrzeit (auch wenn die Systemwerte aus sind: rechts oben)":
         "Zeigt im schwarzen Balken, solange eine Karte im Match zu sehen ist, wie viele Runden du heute gespielt "
         "hast, wie lange, Ø Kills bzw. Entkommen laut Stats-Seite und die Uhrzeit.",
+    "OLED-Schwarz (echtes Schwarz statt Grau im Dark Mode)":
+        "Hintergründe in echtem Schwarz statt Dunkelgrau – passt zu OLED-Bildschirmen und geht mit jeder "
+        "Akzentfarbe. Im hellen Modus ohne Wirkung.",
     "Anordnung zurücksetzen": "Stellt die Kästen auf allen Seiten wieder in die ursprüngliche Reihenfolge.",
     "Anzeigen": "Blendet die gewählte Map jetzt als Overlay ein – die Erkennung übernimmt beim nächsten Match "
                 "wieder.",

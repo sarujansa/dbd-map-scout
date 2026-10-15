@@ -105,6 +105,10 @@ class SettingsTab:
                                                  values=[lbl for _k, lbl in self._themes]))
         tcb.pack(side="left", padx=8)
         tcb.bind("<<ComboboxSelected>>", lambda e: self._theme_changed())
+        self.oled_var = ui.BooleanVar(value=bool(self.settings.get("oled_black", False)))
+        self._reg("st.oled", ui.Checkbutton(look, text=_("OLED-Schwarz (echtes Schwarz statt Grau im Dark Mode)"),
+                                            variable=self.oled_var, command=self._theme_changed)
+                  ).pack(anchor="w", pady=(4, 0))
         zr = ui.Frame(look)
         zr.pack(fill="x", pady=(6, 0))
         self._reg("st.zoom.label", ui.Label(zr, text=_("Schriftgröße"))).pack(side="left")
@@ -251,6 +255,7 @@ class SettingsTab:
     def _theme_changed(self):
         key = next((k for k, lbl in self._themes if lbl == self.theme_var.get()), "gold")
         self.settings.set("color_theme", key)
+        self.settings.set("oled_black", bool(self.oled_var.get()))
         self._save_soon()
         self._apply_theme()
 
