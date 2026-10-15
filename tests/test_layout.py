@@ -57,3 +57,19 @@ def test_window_mode_slot_beside_the_window():
     assert L.slot_x(slot, 400, 17) == -1727 - 17 - 400                         # right next to the window
     assert L.slot_x(slot, 1800, 17) == -3440 + 17                              # never past the monitor edge
     assert L.slot_x(("right", 1734, 1706), 400, 17) == 1734 + 17
+
+
+def test_preview_puts_the_map_where_the_overlay_goes():
+    """1.61: the overlay tab's preview – automatic = centred in the left bar (3440×1440: 440 px), corners with
+    the margin, own position over the free space; kept inside the bar when asked."""
+    x, y, w, h, mh = L.preview_rect(3440, 1440, "auto", 0, 0, 0.36, 0.012, True, 0.75, 3)
+    assert x + w <= 440 and x == (440 - w) // 2 and y == 17 and mh == 518 and h > mh
+    x, y, w, h, mh = L.preview_rect(3440, 1440, "bottom-right", 0, 0, 0.36, 0.012, True, 0.75, 0)
+    assert x >= 3440 - 440 and x + w == 3440 - 17 and y + h == 1440 - 17
+    x, y, w, h, mh = L.preview_rect(3440, 1440, "custom", 0.5, 0.5, 0.36, 0.012, False, 0.75, 0)
+    assert abs(x + w / 2 - 1720) <= 1 and abs(y + h / 2 - 720) <= 1          # over the game picture when allowed
+    x, y, w, h, mh = L.preview_rect(1920, 1080, "auto", 0, 0, 0.36, 0.012, True, 0.75, 0)
+    assert (x, y) == (12, 12)                                                  # 16:9: no bar, top left
+    assert L.pos_from_point(3440, 1440, 400, 600, 3440, 0) == (1.0, 0.0)
+    fx, fy = L.pos_from_point(3440, 1440, 400, 600, 1720, 720)
+    assert abs(fx - 0.5) < 1e-6 and abs(fy - 0.5) < 1e-6

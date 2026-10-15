@@ -109,3 +109,46 @@ def fit_scale(w: float, h: float, avail_w: float, avail_h: float) -> float:
     if w <= 0 or h <= 0:
         return 1.0
     return min(1.0, avail_w / w, avail_h / h)
+
+
+def preview_rect(gw: int, gh: int, anchor: str, pos_x: float, pos_y: float, height_frac: float,
+                 margin_frac: float, keep_in_bar: bool, aspect: float, info_rows: int = 0):
+    """Where the overlay sits on a full-screen DBD of gw × gh (the overlay tab's preview, since 1.61): (x, y, w,
+    h, map_h) – the same rules as App._place_overlay for the common case (no window mode, no system values above
+    the map, no bars above/below). ``aspect`` = map width / height, ``info_rows`` = lines below the map (timer
+    counts double)."""
+    margin = int(gh * margin_frac)
+    height = int(gh * min(0.9, max(0.05, height_frac)))
+    height = min(height, gh - 2 * margin)
+    bar = bar_width(gw, gh)
+
+    def size(hm):
+        info = 0 if not info_rows else round(hm * (0.11 + 0.055 * max(0, info_rows - 2)))
+        return max(1, round(hm * aspect)), hm + info
+
+    def place(w, h):
+        if anchor == "auto":
+            return max(margin, (bar - w) / 2), margin
+        if anchor == "custom":
+            return pos_x * max(0, gw - w), pos_y * max(0, gh - h)
+        return (margin if anchor.endswith("left") else gw - w - margin,
+                margin if anchor.startswith("top") else gh - h - margin)
+
+    w, h = size(height)
+    side = bar_side(anchor, place(w, h)[0], w, 0, gw, bar) if (anchor == "auto" or keep_in_bar) else None
+    if side:
+        avail = max_width(bar, margin)
+        if w > avail:
+            height = max(40, int(height * avail / w))
+            w, h = size(height)
+    x, y = place(w, h)
+    if side:
+        x = clamp_x(side, x, w, 0, gw, bar, margin)
+    return int(x), int(y), w, h, height
+
+
+def pos_from_point(gw: int, gh: int, w: int, h: int, cx: float, cy: float):
+    """Own position (pos_x, pos_y as in the settings) that puts an overlay of w × h with its centre at (cx, cy)."""
+    fx = (cx - w / 2) / max(1, gw - w)
+    fy = (cy - h / 2) / max(1, gh - h)
+    return min(1.0, max(0.0, fx)), min(1.0, max(0.0, fy))

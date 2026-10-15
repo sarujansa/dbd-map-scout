@@ -21,6 +21,8 @@ Only screen pixels, like the rest of the detection. ``QueueTracker`` is pure log
 """
 from __future__ import annotations
 
+import difflib
+import functools
 import re
 from dataclasses import dataclass, field
 
@@ -43,6 +45,7 @@ SKINS = {"Murderous Grizzly": "The Oni", "The Minotaur": "The Oni", "Ferryman of
          "Naughty Bear": "The Trapper", "Frank Stone": "The Trapper", "Were-Elk": "The Huntress",
          "Hunk": "The Legion", "William Afton": "The Animatronic"}
 KILLER_OK = -3.0          # listed killers fit about +1, a killer missing from the list -22 and worse
+FUZZY_OK, FUZZY_GAP = 0.88, 0.12   # text as read vs a listed name (without "The"): this alike, and clearly the best
 KILLER_CATEGORIES = ("BRUTALITY", "DEVIOUSNESS", "HUNTER", "SACRIFICE")
 SURVIVOR_CATEGORIES = ("OBJECTIVES", "SURVIVAL", "ALTRUISM", "BOLDNESS")
 
@@ -76,10 +79,38 @@ def killer_label(name: str) -> str:
     return name[4:] if name.startswith("The ") else name
 
 
+def _core(name: str) -> str:
+    s = fold(name)
+    return s[3:] if s.startswith("THE") and len(s) > 6 else s
+
+
+@functools.lru_cache(maxsize=512)
+def fuzzy_killer(text: str, names: tuple | None = None) -> str | None:
+    """A listed name the text as read is very close to (user 1.61: "HILLILLY" in a small window – "THE" and a
+    letter lost, the lexicon fit too low). Only when one name is clearly the best: a new killer stays as read."""
+    names = names or tuple(KILLERS) + tuple(SKINS)
+    key = _core(text or "")
+    if len(key) < 5:
+        return None
+    scored = sorted(((difflib.SequenceMatcher(None, key, _core(n)).ratio(), n) for n in names), reverse=True)
+    best = scored[0]
+    second = scored[1][0] if len(scored) > 1 else 0.0
+    return best[1] if best[0] >= FUZZY_OK and best[0] - second >= FUZZY_GAP else None
+
+
 def resolve_killer(name: str, aliases: dict) -> str:
     """The killer behind a name as read (skin / unknown name) – user assignments keyed by fold(name),
-    so "MURDEROUSGRIZZLY" and "Murderous Grizzly" are the same."""
-    return (aliases or {}).get(fold(name), name) if name else name
+    so "MURDEROUSGRIZZLY" and "Murderous Grizzly" are the same; else a name read with a slip that is very close
+    to a listed killer ("Hillilly" from before 1.61) counts for it."""
+    if not name:
+        return name
+    own = (aliases or {}).get(fold(name))
+    if own:
+        return own
+    if name in KILLERS:
+        return name
+    hit = fuzzy_killer(name)
+    return SKINS.get(hit, hit) if hit else name
 
 
 def corner_box(W: int, H: int):
@@ -200,7 +231,11 @@ class LobbyReader:
             name = self.killers.strings[int(s.argmax())]
             hit = next(n for n in self._names if fold(n) == name)
             return SKINS.get(hit, hit)                   # an outfit counts for its killer
-        return plain_name(text)
+        hit = self.fuzzy_killer(text)
+        return SKINS.get(hit, hit) if hit else plain_name(text)
+
+    def fuzzy_killer(self, text: str) -> str | None:
+        return fuzzy_killer(text, tuple(self._names))
 
     def result_role(self, img) -> str | None:
         """Role from the category headers of the result screen (picture of result_box)."""

@@ -273,12 +273,14 @@ def test_the_program_starts_shows_every_page_and_quits(app_root):
             app._qt_post("add_picture")                       # dialog "Kartenbild hinzufügen"
             app._qt_post("act", ("ov.caption", False))        # a click on the overlay page
             app._qt_post("search_open")                       # the search fills every page
+            app._qt_post("act", ("ov.preview", ("move", 300, 300)))   # a click on the overlay preview
             app._qt_post("setup_done")
             settings = app.qt.forms["settings"].columns[0]
             app._qt_post("card_order", ("settings", 0, list(reversed(settings.ids()))))   # a card dragged
         elif i == len(keys) + 1:
             assert len(app.qt.dialogs) == 2
             assert app.settings["welcome_seen"] and any("Overlay" in e for e in app.qt._found)
+            assert app.settings["overlay"]["anchor"] == "custom"
             order = app.settings["card_order"]["settings"]["0"]
             assert order[0] == "st.updates"
             app._card_order_reset()                            # "Anordnung zurücksetzen"

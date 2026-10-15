@@ -44,6 +44,7 @@ SLIDER_MAX = 420                  # px (logical): longest slider (overlay positi
 SPECS = {
     "overlay": (
         ("card", "ov.pos", (
+            ("preview", "ov.preview"),
             ("row", (("label", "ov.anchor.label"), ("combo", "ov.anchor"), ("stretch",), ("button", "ov.reset"))),
             ("slider", "ov.posx"), ("slider", "ov.posy"),
             ("row", (("button", "ov.edit"), ("button", "ov.test"), ("stretch",))),
@@ -127,7 +128,7 @@ def _spec_keys(items):
             yield from _spec_keys(it[1])
         elif kind == "grid":
             yield from _spec_keys(it[2])
-        elif kind in ("check", "button", "combo", "slider", "label", "hint", "value", "plain", "hotkey"):
+        elif kind in ("check", "button", "combo", "slider", "label", "hint", "value", "plain", "hotkey", "preview"):
             yield it[1]
 
 
@@ -503,6 +504,8 @@ def make_control(kind, key, post):
         w = DashboardView()
     elif kind == "tiles":
         w = TilesView()
+    elif kind == "preview":
+        w = PreviewView(key, post)
     elif kind == "log":
         w = LogView()
     elif kind == "radio":
@@ -585,7 +588,7 @@ def show_control(kind, w, extra, st):
             s.setRange(round(st.get("lo", 0)), round(st.get("hi", 100)))
             s.setValue(round(st.get("value", 0)))
             s.blockSignals(False)
-    elif kind in ("table", "chart", "log", "dashboard", "tiles"):
+    elif kind in ("table", "chart", "log", "dashboard", "tiles", "preview"):
         w.show_state(st)
     elif kind == "hotkey":
         w.show_text(st.get("text", ""))
@@ -1335,6 +1338,133 @@ class Heatmap(QWidget):
             QToolTip.showText(e.globalPosition().toPoint(), hit, self)
         else:
             QToolTip.hideText()
+
+
+class PreviewView(QWidget):
+    """The overlay tab's screen (since 1.61): the monitor in its shape, the 16:9 game picture with its black bars
+    and the map on it where and as big as it will be, with its opacity and the lines below it. A click or a drag
+    puts the map there: post("act", (key, ("move", x, y))) in screen pixels – the App makes it the own position."""
+
+    MAX_H = 240
+
+    def __init__(self, key, post):
+        super().__init__()
+        self._key, self._post = key, post
+        self._data = {}
+        self._pix = None                       # (picture object, size) -> QPixmap
+        self._dragging = False
+        sp = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        sp.setHeightForWidth(True)
+        self.setSizePolicy(sp)
+        self.setMinimumHeight(120)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setToolTip(_("Klicken oder ziehen: Die Karte kommt an diese Stelle (eigene Position)."))
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, w):
+        sw, sh = self._data.get("screen") or (16, 9)
+        return min(self.MAX_H, max(120, round(w * sh / max(1, sw))))
+
+    def sizeHint(self):
+        return QSize(560, self.heightForWidth(560))
+
+    def show_state(self, st):
+        data = st.get("data") or {}
+        key = {k: v for k, v in data.items() if k != "pic"}
+        old = {k: v for k, v in self._data.items() if k != "pic"}
+        if key == old and data.get("pic") is self._data.get("pic"):
+            return
+        shape = data.get("screen") != self._data.get("screen")
+        self._data = data
+        if shape:
+            self.updateGeometry()
+        self.update()
+
+    def _frame(self):
+        """(left, top, scale): where the screen is drawn in the widget, screen px -> widget px."""
+        sw, sh = self._data.get("screen") or (16, 9)
+        s = min(self.width() / max(1, sw), self.height() / max(1, sh))
+        return (self.width() - sw * s) / 2, (self.height() - sh * s) / 2, s
+
+    def paintEvent(self, _e):
+        from PySide6.QtCore import QRectF
+        from PySide6.QtGui import QFont, QPainter, QPen
+        d = self._data
+        if not d.get("screen"):
+            return
+        sw, sh = d["screen"]
+        ox, oy, s = self._frame()
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setRenderHint(QPainter.SmoothPixmapTransform)
+        screen = QRectF(ox, oy, sw * s, sh * s)
+        p.setPen(QPen(QColor("#4a4d55"), 1))
+        p.setBrush(QColor("#050506"))
+        p.drawRoundedRect(screen.adjusted(-1, -1, 1, 1), 4, 4)
+        bar = d.get("bar", 0) * s
+        game = QRectF(ox + bar, oy, sw * s - 2 * bar, sh * s)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor("#2b3036"))
+        p.drawRect(game)
+        p.setPen(QColor("#5c636d"))
+        f = QFont(self.font())
+        f.setPointSizeF(max(7.0, f.pointSizeF() * 0.9))
+        p.setFont(f)
+        p.drawText(game, Qt.AlignCenter, _("Spielbild"))
+        x, y, w, h, mh = d.get("rect") or (0, 0, 0, 0, 0)
+        if w and h:
+            rx, ry = ox + x * s, oy + y * s
+            p.setOpacity(float(d.get("opacity", 1.0)))
+            if not d.get("transparent", True):
+                p.setPen(Qt.NoPen)
+                p.setBrush(QColor(20, 20, 24, 200))
+                p.drawRect(QRectF(rx, ry, w * s, h * s))
+            pic = d.get("pic")
+            if pic is not None and mh:
+                tw, th = max(1, round(w * s)), max(1, round(mh * s))
+                if self._pix is None or self._pix[0] is not pic or self._pix[1] != (tw, th):
+                    self._pix = (pic, (tw, th), pixmap_from_pil(pic, th, self.devicePixelRatioF()))
+                p.drawPixmap(round(rx + (w * s - self._pix[2].width() / self.devicePixelRatioF()) / 2),
+                             round(ry), self._pix[2])
+            ly = ry + mh * s + 2
+            for i, line in enumerate(d.get("lines", [])):
+                lf = QFont(self.font())
+                lf.setBold(True)
+                lf.setPixelSize(max(6, round(mh * s * (0.085 if i == 0 else 0.036))))
+                p.setFont(lf)
+                p.setPen(QColor("#f2f2f2") if i == 0 else QColor("#c9c9c9"))
+                lh = lf.pixelSize() * 1.25
+                p.drawText(QRectF(rx, ly, w * s, lh), Qt.AlignHCenter | Qt.AlignVCenter, line)
+                ly += lh
+            p.setOpacity(1.0)
+            pen = QPen(QColor(qt_theme.PALETTE[True]["accent"]), 1.5, Qt.DashLine)
+            p.setPen(pen)
+            p.setBrush(Qt.NoBrush)
+            p.drawRect(QRectF(rx, ry, w * s, h * s))
+        p.end()
+
+    def _move(self, e):
+        ox, oy, s = self._frame()
+        if s <= 0:
+            return
+        pos = e.position()
+        self._post("act", (self._key, ("move", (pos.x() - ox) / s, (pos.y() - oy) / s)))
+
+    def mousePressEvent(self, e):
+        if e.button() == Qt.LeftButton:
+            self._dragging = True
+            self.setCursor(Qt.ClosedHandCursor)
+            self._move(e)
+
+    def mouseMoveEvent(self, e):
+        if self._dragging:
+            self._move(e)
+
+    def mouseReleaseEvent(self, _e):
+        self._dragging = False
+        self.setCursor(Qt.PointingHandCursor)
 
 
 class TilesView(QWidget):
