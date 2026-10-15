@@ -1021,6 +1021,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
             self._place_overlay_map()
         finally:
             self._media_place()                     # the music card goes where the map and system values are
+            self._guides_place()                    # centre cross while moving (1.64.5)
 
     def _place_overlay_map(self):
         o = self.settings["overlay"]
@@ -1701,6 +1702,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
                 self.hud.destroy()
             if self.media_win is not None:
                 self.media_win.destroy()
+            for g in getattr(self, "_guides", ()):
+                g.destroy()
             self.toast.close()
         finally:
             self.root.quit()
