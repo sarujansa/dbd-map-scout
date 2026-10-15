@@ -32,14 +32,16 @@ class SettingsTab:
         for i, (key, label) in enumerate(HOTKEY_LABELS):
             self._reg(f"st.hk.{key}.label", ttk.Label(grid, text=_(label))).grid(row=i, column=0, sticky="w", pady=1)
             b = self._reg(f"st.hk.{key}", ttk.Button(grid, width=22, command=lambda k=key: self._hk_record(k)))
+            b._dbdms_recording = lambda k=key: self._hk_rec == k        # for the Qt window
             b.grid(row=i, column=1, sticky="w", padx=(10, 0), pady=1)
             self.hk_buttons[key] = b
         self._hk_show_all()
         r = ttk.Frame(hk)
         r.pack(fill="x", pady=(6, 0))
-        ttk.Button(r, text=_("Standard"), command=self._hk_defaults).pack(side="left")
+        self._reg("st.hk_defaults", ttk.Button(r, text=_("Standard"), command=self._hk_defaults)).pack(side="left")
         self.hk_status = tk.StringVar(value=_("Zum Ändern anklicken und die neue Tastenkombination drücken."))
-        ttk.Label(r, textvariable=self.hk_status, style="Dim.TLabel", wraplength=300).pack(side="left", padx=8)
+        self._reg("st.hk_status", ttk.Label(r, textvariable=self.hk_status, style="Dim.TLabel",
+                                            wraplength=300)).pack(side="left", padx=8)
 
         nt = self._reg("st.notify", ttk.LabelFrame(f, text=_("Benachrichtigungen"), padding=8))
         nt.pack(fill="x", pady=(8, 0))
@@ -142,42 +144,50 @@ class SettingsTab:
                                              justify="left")).pack(anchor="w", pady=(4, 0))
 
         # rarely needed: folded away (like "Erweitert" in the detection tab)
-        self.more_btn = ttk.Button(f, command=self._toggle_more)
+        self.more_btn = self._reg("st.more_btn", ttk.Button(f, command=self._toggle_more))
         self.more_btn.pack(anchor="w", pady=(10, 0))
         more = self.more_frame = ttk.Frame(f)
-        own = ttk.LabelFrame(more, text=_("Eigene Map-Zuordnungen"), padding=8)
+        own = self._reg("st.more.own", ttk.LabelFrame(more, text=_("Eigene Map-Zuordnungen"), padding=8))
         own.pack(fill="x")
         self.alias_var = tk.StringVar(value="")
-        ttk.Label(own, textvariable=self.alias_var, style="Dim.TLabel", wraplength=300).pack(side="left", fill="x")
-        ttk.Button(own, text=_("Alle löschen"), command=self._clear_aliases).pack(side="right")
+        self._reg("st.more.aliases", ttk.Label(own, textvariable=self.alias_var, style="Dim.TLabel",
+                                               wraplength=300)).pack(side="left", fill="x")
+        self._reg("st.more.aliases_clear", ttk.Button(own, text=_("Alle löschen"),
+                                                      command=self._clear_aliases)).pack(side="right")
         self._show_aliases()
 
-        om = ttk.LabelFrame(more, text=_("Offizielle Match-Daten"), padding=8)
+        om = self._reg("st.more.official", ttk.LabelFrame(more, text=_("Offizielle Match-Daten"), padding=8))
         om.pack(fill="x", pady=(8, 0))
         self.off_open_var = tk.BooleanVar(value=self.settings.get("official_open_after_dbd", False))
-        ttk.Checkbutton(om, text=_("Stats-Seite öffnen, wenn DBD beendet wird"), variable=self.off_open_var,
-                        command=self._official_setting).pack(anchor="w")
+        self._reg("st.more.off_open", ttk.Checkbutton(om, text=_("Stats-Seite öffnen, wenn DBD beendet wird"),
+                                                      variable=self.off_open_var,
+                                                      command=self._official_setting)).pack(anchor="w")
         self.off_notify_var = tk.BooleanVar(value=self.settings.get("official_notify", True))
-        ttk.Checkbutton(om, text=_("Meldung, wenn Match-Daten eingelesen und gelöscht wurden"),
-                        variable=self.off_notify_var, command=self._official_setting).pack(anchor="w")
-        ttk.Button(om, text=_("Userscript kopieren"), command=self._official_copy_script).pack(anchor="w", pady=(6, 0))
-        ttk.Label(om, text=_("Einmal einrichten: Tampermonkey im Browser installieren, „Userscript kopieren“ und dort "
+        self._reg("st.more.off_notify", ttk.Checkbutton(
+            om, text=_("Meldung, wenn Match-Daten eingelesen und gelöscht wurden"), variable=self.off_notify_var,
+            command=self._official_setting)).pack(anchor="w")
+        self._reg("st.more.script", ttk.Button(om, text=_("Userscript kopieren"),
+                                               command=self._official_copy_script)).pack(anchor="w", pady=(6, 0))
+        self._reg("st.more.off_text", ttk.Label(om, text=_("Einmal einrichten: Tampermonkey im Browser installieren, „Userscript kopieren“ und dort "
                              "als neues Skript einfügen, auf stats.deadbydaylight.com anmelden. Beim Öffnen der Seite "
                              "speichert das Skript die letzten 30 Matches im Download-Ordner; das Programm liest die "
                              "Datei und löscht sie. Es geht dafür selbst nicht ins Internet."),
-                  style="Dim.TLabel", wraplength=420).pack(anchor="w", pady=(4, 0))
+                  style="Dim.TLabel", wraplength=420)).pack(anchor="w", pady=(4, 0))
 
-        bk = ttk.LabelFrame(more, text=_("Sicherung"), padding=8)
+        bk = self._reg("st.more.backup", ttk.LabelFrame(more, text=_("Sicherung"), padding=8))
         bk.pack(fill="x", pady=(8, 0))
-        ttk.Button(bk, text=_("Einstellungen exportieren …"), command=self._export_settings).pack(side="left")
-        ttk.Button(bk, text=_("Einstellungen importieren …"), command=self._import_settings).pack(side="left",
-                                                                                                 padx=6)
+        self._reg("st.more.export", ttk.Button(bk, text=_("Einstellungen exportieren …"),
+                                               command=self._export_settings)).pack(side="left")
+        self._reg("st.more.import", ttk.Button(bk, text=_("Einstellungen importieren …"),
+                                               command=self._import_settings)).pack(side="left", padx=6)
 
-        folders = ttk.LabelFrame(more, text=_("Ordner"), padding=8)
+        folders = self._reg("st.more.folders", ttk.LabelFrame(more, text=_("Ordner"), padding=8))
         folders.pack(fill="x", pady=(8, 0))
-        ttk.Button(folders, text=_("Programmordner öffnen"), command=lambda: self._open(self.root_dir)).pack(side="left")
-        ttk.Button(folders, text=_("Karten-Ordner öffnen"),
-                   command=lambda: self._open(os.path.join(self.root_dir, "maps"))).pack(side="left", padx=6)
+        self._reg("st.more.dir", ttk.Button(folders, text=_("Programmordner öffnen"),
+                                            command=lambda: self._open(self.root_dir))).pack(side="left")
+        self._reg("st.more.maps_dir", ttk.Button(folders, text=_("Karten-Ordner öffnen"),
+                                                 command=lambda: self._open(os.path.join(self.root_dir, "maps")))).pack(
+            side="left", padx=6)
         self.version_label = self._reg("st.version", ttk.Label(f, text=f"DbD Map Scout {__version__} · " + _("liest nur Bildschirmpixel, sendet keine Eingaben ans Spiel."),
                   style="Dim.TLabel", wraplength=430))
         self.version_label.pack(anchor="w", pady=(10, 0))
@@ -197,10 +207,15 @@ class SettingsTab:
         else:
             self.more_frame.pack_forget()
 
-    def _export_settings(self):
-        path = filedialog.asksaveasfilename(parent=self.root, title=_("Einstellungen exportieren"),
-                                            defaultextension=".json", initialfile="dbdmapscout-einstellungen.json",
-                                            filetypes=[(_("Einstellungen"), "*.json")])
+    def _export_settings(self, path=None):
+        if path is None and self._qt_file("save", _("Einstellungen exportieren"), "dbdmapscout-einstellungen.json",
+                                          self._export_settings):
+            return                                  # the Qt window asks for the file and calls again
+        if path is None:
+            path = filedialog.asksaveasfilename(parent=self.root, title=_("Einstellungen exportieren"),
+                                                defaultextension=".json",
+                                                initialfile="dbdmapscout-einstellungen.json",
+                                                filetypes=[(_("Einstellungen"), "*.json")])
         if not path:
             return
         from .config import export_settings
@@ -211,22 +226,24 @@ class SettingsTab:
             return
         self._log(_("Einstellungen gesichert: {path}", path=path), "System")
 
-    def _import_settings(self):
-        path = filedialog.askopenfilename(parent=self.root, title=_("Einstellungen importieren"),
-                                          filetypes=[(_("Einstellungen"), "*.json"), (_("Alle Dateien"), "*.*")])
+    def _import_settings(self, path=None):
+        if path is None and self._qt_file("open", _("Einstellungen importieren"), "", self._import_settings):
+            return
+        if path is None:
+            path = filedialog.askopenfilename(parent=self.root, title=_("Einstellungen importieren"),
+                                              filetypes=[(_("Einstellungen"), "*.json"), (_("Alle Dateien"), "*.*")])
         if not path:
             return
         from .config import read_backup
         try:
             data = read_backup(path, self.settings.data)
         except ValueError as e:
-            messagebox.showerror(_("Einstellungen importieren"),
-                                 _("Das ist keine Einstellungsdatei von DbD Map Scout ({error}).", error=e),
-                                 parent=self.root)
+            self._inform(_("Einstellungen importieren"),
+                         _("Das ist keine Einstellungsdatei von DbD Map Scout ({error}).", error=e))
             return
-        if not messagebox.askokcancel(_("Einstellungen importieren"),
-                                      _("Alle Einstellungen durch die aus der Datei ersetzen? Das Programm startet "
-                                        "danach neu."), parent=self.root):
+        if not self._ask(_("Einstellungen importieren"),
+                         _("Alle Einstellungen durch die aus der Datei ersetzen? Das Programm startet danach neu."),
+                         lambda: self._import_settings(path)):
             return
         self.settings.data = data
         self.settings.save()
@@ -240,8 +257,7 @@ class SettingsTab:
         if ok:
             self.quit()
         else:
-            messagebox.showinfo(_("Einstellungen importieren"), _("Bitte das Programm jetzt neu starten."),
-                                parent=self.root)
+            self._inform(_("Einstellungen importieren"), _("Bitte das Programm jetzt neu starten."))
 
     def _toolkit_changed(self):
         """Tk or Qt control window: takes effect at the next start – offered right away."""

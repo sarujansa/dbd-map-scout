@@ -3,6 +3,8 @@
 Mixin of App (app.py) – the methods use App's attributes; split out of app.py unchanged."""
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from .capture import IS_WIN, foreground_root, is_game_window
 from .i18n import N_, _
 from .hotkeys import HotkeyThread, combo_from_keys, game_only, modifier_name, pretty
@@ -50,17 +52,28 @@ class Hotkeys:
             combo = self.settings["hotkeys"].get(key, "")
             b.configure(text=pretty(combo) if combo else _("– aus –"))
 
-    def _hk_record(self, key):
+    def _hk_begin(self, key):
+        """Start recording ``key`` (Tk button or the Qt window's HotkeyButton)."""
         if self._hk_rec:
             self._hk_stop(save=False)
         self._hk_rec, self._hk_mods = key, set()
-        b = self.hk_buttons[key]
-        b.configure(text=_("Tasten drücken …"))
-        b.focus_set()
+        self.hk_buttons[key].configure(text=_("Tasten drücken …"))
         # registered global hotkeys never reach this window: release them while recording
         self.hotkeys.stop()
         self.hotkeys.join(timeout=1.5)
         self.hk_status.set(_("Neue Kombination drücken – Esc bricht ab, Entf schaltet den Hotkey aus."))
+
+    def _hk_qt_key(self, key, mods, keysym, keycode):
+        """A key pressed in the Qt window while ``key`` records – checked exactly like a Tk key press."""
+        if self._hk_rec != key:
+            return
+        self._hk_mods = set(mods)
+        self._hk_key(SimpleNamespace(keysym=keysym or "", keycode=keycode))
+
+    def _hk_record(self, key):
+        self._hk_begin(key)
+        b = self.hk_buttons[key]
+        b.focus_set()
         b.bind("<KeyPress>", self._hk_key)
         b.bind("<KeyRelease>", self._hk_key_up)
         b.bind("<FocusOut>", lambda e: self._hk_stop(save=False))

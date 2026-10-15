@@ -56,6 +56,11 @@ def tk_layout(w, reg: dict):
             return None
         reg[key] = w
         return {"kind": "chart", "key": key}
+    if isinstance(w, tk.Text):
+        if getattr(w, "_dbdms_lines", None) is None:
+            return None
+        reg[key] = w
+        return {"kind": "log", "key": key}
     if isinstance(w, ttk.Notebook):
         reg[key] = w
         pages = [w.nametowidget(t) for t in w.tabs()]
@@ -74,17 +79,22 @@ def tk_layout(w, reg: dict):
     if inner is not None:
         return tk_layout(inner, reg)
     nodes = []
+    grid = False
     for c in kids:
         n = tk_layout(c, reg)
         if n is not None:
             n["side"] = _side(c)                    # how this child sits in this frame (a scroll tab: its content)
+            if c.winfo_manager() == "grid":         # e.g. the game languages: a grid of check boxes
+                info = c.grid_info()
+                n["cell"] = (int(info.get("row", 0)), int(info.get("column", 0)))
+                grid = True
             nodes.append(n)
     if not nodes:
         return None
     reg[key] = w
     kind = "card" if isinstance(w, ttk.LabelFrame) else "box"
-    return {"kind": kind, "key": key, "side": _side(w), "children": nodes,
-            "row": any(n["side"] in ("left", "right") for n in nodes)}
+    return {"kind": kind, "key": key, "side": _side(w), "children": nodes, "grid": grid,
+            "row": not grid and any(n["side"] in ("left", "right") for n in nodes)}
 
 
 def _tree_rows(t, parent="", depth=0):
@@ -100,6 +110,11 @@ def _tree_rows(t, parent="", depth=0):
 def tk_state(w) -> dict:
     """What a Qt control needs to mirror a Tk widget (text, value, enabled, shown). Tk context only."""
     st = {"visible": tk_shown(w)}
+    lines = getattr(w, "_dbdms_lines", None)
+    if lines is not None:                         # the log: its entries (ts, category, text), filtered
+        entries, dark = lines()
+        st.update(lines=entries, dark=dark)
+        return st
     chart = getattr(w, "_dbdms_chart", None)
     if chart is not None:
         st.update(data=chart.data, dark=chart.dark, panels=chart.panels)
@@ -132,6 +147,9 @@ def tk_state(w) -> dict:
         st["enabled"] = not w.instate(["disabled"])
         tip = getattr(w, "_dbdms_tip", None)
         st["tip"] = tip._text() if tip is not None else ""
+    rec = getattr(w, "_dbdms_recording", None)
+    if rec is not None:
+        st["recording"] = bool(rec())
     if isinstance(w, ttk.Checkbutton):
         st["value"] = w.instate(["selected"])
     elif isinstance(w, ttk.Combobox):
@@ -256,6 +274,15 @@ class QtShell:
         self._qt_question = (title, text, None)
         self._qt_refresh(force=True)
 
+    def _qt_file(self, mode, title, initial, callback) -> bool:
+        """Qt mode with the Tk window hidden: the Qt window asks for a file (no dialog over a hidden window)
+        and ``callback(path)`` runs once one is chosen. False = ask the Tk way."""
+        if getattr(self, "qt", None) is None or self._tk_shown():
+            return False
+        self._qt_file_cb = callback
+        self.qt.choose_file(mode, title, initial)
+        return True
+
     def _qt_answer(self, ok: bool):
         q, self._qt_question = getattr(self, "_qt_question", None), None
         if q is not None and ok and q[2] is not None:
@@ -286,6 +313,18 @@ class QtShell:
                 tk_act(w, value)
         elif action == "answer":
             self._qt_answer(bool(arg))
+        elif action == "hk_record":
+            self._hk_begin(arg.split(".", 2)[2])         # "st.hk.<name>"
+        elif action == "hk_key":
+            key, mods, keysym, keycode = arg
+            self._hk_qt_key(key.split(".", 2)[2], mods, keysym, keycode)
+        elif action == "hk_cancel":
+            if self._hk_rec == arg.split(".", 2)[2]:
+                self._hk_stop(save=False)
+        elif action == "file":
+            cb, self._qt_file_cb = getattr(self, "_qt_file_cb", None), None
+            if cb is not None and arg:
+                cb(arg)
         elif action == "page":
             tab = getattr(self, f"tab_{arg}", None)
             if tab is not None and self.nb.select() != str(tab):
