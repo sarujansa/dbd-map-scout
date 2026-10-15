@@ -22,6 +22,7 @@ import math
 import os
 import re
 from dataclasses import asdict, dataclass, field
+from functools import lru_cache
 
 from .textnorm import fold
 
@@ -307,6 +308,7 @@ def take_downloads(folder: str, store: str, now=None) -> Taken:
 
 
 # ------------------------------------------------------------------ evaluation
+@lru_cache(maxsize=1024)          # pure; the statistics ask ~90 000 times for a handful of names (5000 rounds)
 def classify(status: str, img: str = "") -> str | None:
     """"escaped" | "dead" | "abandoned" | "gone" (left the match) | None (unknown) for a status
     name and the name of its picture."""

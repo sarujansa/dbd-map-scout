@@ -84,6 +84,8 @@ def _lost_lines(path: str) -> list:
     try:
         with open(path, encoding="utf-8") as fh:
             for line in fh:
+                if '"lost"' not in line:           # quick skip: parsing all 5000 rounds took ~50 ms
+                    continue
                 try:
                     d = json.loads(line)
                     if isinstance(d, dict) and d.get("lost"):
