@@ -342,6 +342,8 @@ class QtShell:
                 self.nb.select(tab)                  # its "opened" work runs (statistics computed, pings …)
             if arg == "log":
                 self._log_alert = False
+        elif action == "undo":                       # Ctrl+Z on the overlay page (1.65)
+            self.undo_layout()
         elif action == "search":
             self._qt_search = str(arg or "")
             self._qt_maps_rev = getattr(self, "_qt_maps_rev", 0) + 1

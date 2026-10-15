@@ -98,3 +98,13 @@ def test_edit_frame_names_the_element_without_changing_its_size():
     pic = add_border(Image.new("RGBA", (300, 200), (0, 0, 0, 0)), "MUSIK")
     assert pic.size == (300, 200)                              # no jump after "Fertig"
     assert pic.getpixel((2, 2)) == BORDER and pic.getpixel((150, 199)) == BORDER
+
+
+def test_the_map_grows_but_its_text_keeps_its_size():
+    """1.65 (user: "nur die Map grösser machen und die Schrift gleich behalten")."""
+    from PIL import Image
+    from dbdmapscout.preview import overlay_picture
+    pic = Image.new("RGBA", (300, 400), (90, 90, 140, 255))
+    small = overlay_picture(pic, 400, "", True, "3:27", "", None, "", text_h=500)
+    big = overlay_picture(pic, 800, "", True, "3:27", "", None, "", text_h=500)
+    assert big.height - 800 == small.height - 400          # the block below the map: the same height

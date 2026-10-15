@@ -992,3 +992,39 @@ def test_the_mouse_wheel_scrolls_the_page_not_a_setting(qapp):
     assert combo.currentIndex() == 0 and slider.value() == 50
     assert sa.verticalScrollBar().value() > 0                         # the page scrolled instead
     sa.close()
+
+
+def test_preview_snaps_while_dragging_and_moves_by_arrow_keys(qapp, keep):
+    """1.65: a dragged element snaps to the centre line (Alt: free); arrow keys move the picked one."""
+    from PIL import Image
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtTest import QTest
+    from dbdmapscout import qt_window
+    posted = queue.Queue()
+    view = keep(qt_window.PreviewView("ov.preview", lambda a, arg=None: posted.put((a, arg))))
+    view.resize(1000, 419)
+    pics = {n: Image.new("RGBA", (200, 100), "white") for n in ("map", "music")}
+    data = {"screen": (3440, 1440), "bar": 440, "rect": (20, 20, 300, 400, 400), "opacity": 1.0, "pics": pics,
+            "layers": [("map", 20, 20, 300, 400), ("music", 3100, 300, 300, 100)], "editing": True,
+            "selected": "music"}
+    view.show_state({"data": data, "visible": True})
+    view.show()
+    ox, oy, s = view._frame()
+
+    def at(x, y):
+        return QPoint(round(ox + x * s), round(oy + y * s))
+    QTest.mousePress(view, Qt.LeftButton, Qt.NoModifier, at(3150, 320))      # grab the music card at (50, 20)
+    QTest.mouseMove(view, at(1625, 800))                                       # its centre near the middle line
+    _a, (_k, (what, name, x, y)) = posted.queue[-1]
+    assert (what, name) == ("place", "music") and abs(x + 150 - 1720) < 1     # centre exactly on 1720
+    view.grab()                                                                # draws the guide line
+    QTest.mouseRelease(view, Qt.LeftButton, Qt.NoModifier, at(1625, 800))
+    while not posted.empty():
+        posted.get_nowait()
+    view.setFocus()
+    QTest.keyClick(view, Qt.Key_Left)
+    QTest.keyClick(view, Qt.Key_Down, Qt.ShiftModifier)
+    assert [posted.get_nowait()[1][1] for _i in range(2)] == [("nudge", -1, 0), ("nudge", 0, 10)]
+    view.show_state({"data": dict(data, editing=False), "visible": True})
+    QTest.keyClick(view, Qt.Key_Left)
+    assert posted.empty()                                     # not moving: arrow keys do nothing

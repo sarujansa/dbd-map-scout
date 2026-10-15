@@ -575,8 +575,20 @@ EN = {
         "Diagnostics copied to the clipboard (also saved as diagnose.txt).",
     "Karte, Systemwerte und Musik mit der Maus ziehen (im Spiel oder in der Vorschau), Mausrad = Grösse. Danach „Fertig“ oder Hotkey.":
         "Drag the map, the system values and the music with the mouse (in the game or in the preview), mouse wheel = size. Then “Done” or the hotkey.",
-    "Verschieben aktiv – ziehen = verschieben, Ecke oder Mausrad = Grösse, dann „Fertig“":
-        "Moving is on – drag = move, corner or mouse wheel = size, then “Done”",
+    "Verschieben aktiv – ziehen (rastet ein, Alt = frei), Pfeiltasten = fein, Ecke/Mausrad = Grösse":
+        "Moving is on – drag (snaps, Alt = free), arrow keys = fine, corner/mouse wheel = size",
+    "Rückgängig": "Undo",
+    "Nimmt die letzte Änderung an Position oder Grösse zurück (Karte, Systemwerte, Musik) – auch mit Strg+Z auf dieser Seite. Ein ganzes Ziehen zählt als ein Schritt.":
+        "Takes back the last change of place or size (map, system values, music) – also with Ctrl+Z on this page. A whole drag counts as one step.",
+    "Merkt Position und Grösse aller Elemente getrennt für jede Grösse des DBD-Fensters (z. B. Vollbild 3440×1440 und ein kleineres Fenster) und lädt sie automatisch, sobald DBD in dieser Grösse läuft.":
+        "Remembers place and size of every element separately for each size of the DBD window (e.g. full screen 3440×1440 and a smaller window) and loads them by itself as soon as DBD runs at that size.",
+    "Nichts rückgängig zu machen.": "Nothing to undo.",
+    "Position/Grösse rückgängig gemacht.": "Place/size undone.",
+    "Position und Grösse je DBD-Fenstergrösse merken": "Remember place and size per DBD window size",
+    "DBD-Fenster {size}: Layout für diese Grösse geladen.": "DBD window {size}: layout of this size loaded.",
+    "DBD-Fenster {size}: neue Grösse – Layout wird ab jetzt dafür gemerkt.":
+        "DBD window {size}: new size – the layout is remembered for it from now on.",
+    "Aktuell: Layout für {size} · {n} Grössen gemerkt": "Now: layout for {size} · {n} sizes remembered",
     "Position zurückgesetzt (automatisch).": "Position reset (automatic).",
     "keine Map": "no map",
     "ausgeblendet": "hidden",
@@ -1097,6 +1109,7 @@ EN = {
         'A click on the map, the system values or the music picks the element for the “Size” slider. With “Move with the mouse”: drag an element = move it, drag its corner or the mouse wheel = size, a click on an empty spot puts the map there. End with “Done”.',
     "Element": "Element",
     "Systemwerte · Heute": "System values · today",
+    "Schrift der Karte (Name, Timer, Infos)": "Map text (name, timer, info)",
     'Spielbild': 'Game picture',
     'Map-Name': 'Map name',
     # 1.62: colour themes

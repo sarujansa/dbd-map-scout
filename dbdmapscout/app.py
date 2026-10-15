@@ -30,6 +30,8 @@ from .app_stats import StatsTab
 from .app_lobby import LobbyInfo
 from .app_hotkeys import Hotkeys
 from .app_settings import SettingsTab
+from .app_layout import LayoutMemory
+from .app_sysinfo import TEXT_BASE, text_scale
 from .app_sysinfo import HUD_SHOWN, HUD_SIDES, MAP_SCALE, MEDIA_SCALE, MEDIA_SPOTS, MEDIA_STYLES, SELECTABLE, SysInfo
 from .app_qt import QtShell
 
@@ -58,7 +60,7 @@ def anchor_label(key: str) -> str:
 log = logging.getLogger("dbdmapscout")
 
 
-class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell):
+class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutMemory, QtShell):
     def __init__(self, root_dir: str, simulate: str | None = None, start_in_tray: bool = False):
         self.root_dir = root_dir
         self.simulate = simulate
@@ -122,6 +124,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         # window procedures: hand over to _poll (one place, in order with the other events)
         self.overlay.on_moved = lambda x, y: self.events.put(("call", self._overlay_dragged, (x, y)))
         self.overlay.on_wheel = lambda d: self.events.put(("call", self._resize, (0.02 * d,)))
+        self._layout_init()              # undo + one layout per DBD window size (1.65)
         self._hud_init()                 # system values at the top of a black bar (CPU/GPU temperature …)
 
         self._build_ui()
@@ -244,6 +247,15 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         self.edit_btn.pack(side="left")
         self.test_btn = self._reg("ov.test", ui.Button(r2, text=_("Overlay testen"), command=self.test_overlay))
         self.test_btn.pack(side="left", padx=(6, 0))
+        self.undo_btn = self._reg("ov.undo", ui.Button(r2, text=_("Rückgängig"), command=self.undo_layout))
+        self.undo_btn.pack(side="left", padx=(6, 0))
+        self.undo_btn.state(["disabled"])
+        self.per_size_var = ui.BooleanVar(value=self.settings.get("layout_per_size", True))
+        self._reg("ov.per_size", ui.Checkbutton(pos, text=_("Position und Grösse je DBD-Fenstergrösse merken"),
+                                                variable=self.per_size_var, command=self._per_size_changed)
+                  ).pack(anchor="w", pady=(4, 0))
+        self.per_size_text = ui.StringVar(value="")
+        self._reg("ov.per_size_hint", ui.Label(pos, textvariable=self.per_size_text, style="Dim.TLabel"))
         self.pos_hint_var = ui.StringVar(value="")
         self._reg("ov.pos_hint", ui.Label(pos, textvariable=self.pos_hint_var, style="Dim.TLabel",
                                            wraplength=520)).pack(anchor="w", pady=(4, 0))
@@ -694,6 +706,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         self._tick_overlay(reschedule=False)
 
     def _overlay_dragged(self, x, y):
+        self._layout_mark()
         gx, gy, gw, gh = self._game_rect()
         w, h = (self._last_place or (0, 0, 1, 1))[2:]
         o = self.settings["overlay"]
@@ -704,6 +717,11 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         self._set_pos_sliders(o["pos_x"], o["pos_y"])
         self._save_soon()
 
+    def _text_height(self, gh):
+        """Size of the map's name and the lines below it (1.65, user: "nur die Map grösser, die Schrift gleich"):
+        as at the standard map size, times its own factor – no longer tied to the map's size."""
+        return max(40, int(gh * TEXT_BASE * text_scale(self.settings["overlay"])))
+
     def _map_height(self):
         """Overlay size: the map's own size if one was set (hotkeys / mouse wheel), else the slider's."""
         o = self.settings["overlay"]
@@ -712,6 +730,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
 
     def _resize(self, delta):
         """Hotkeys and mouse wheel: size of the map on display (remembered for that map)."""
+        self._layout_mark()
         o = self.settings["overlay"]
         new = round(min(MAX_HEIGHT, max(0.15, self._map_height() + delta)), 3)
         if self.current:
@@ -1015,6 +1034,10 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         except Exception:
             self._report_once("overlay", traceback.format_exc())
         try:
+            self._layout_size_tick()
+        except Exception:
+            self._report_once("layout", traceback.format_exc())
+        try:
             self._conn_tick()
         except Exception:
             self._report_once("verbindung", traceback.format_exc())
@@ -1142,8 +1165,11 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
             side, avail = "slot", layout.max_width(slot[2], margin)
         if side:
             height = layout.fit_height(height, avail, iw, ih)
+        text_h = self._text_height(gh)
+        self.overlay.text_height = text_h
         w, h = self.overlay.render(height)
         if side and w > avail:                  # info block below is wider than the map (rare)
+            self.overlay.text_height = max(40, int(text_h * avail / w))
             w, h = self.overlay.render(max(80, int(height * avail / w)))
         x, y = place(w, h)
         if side and side != "slot":
@@ -1159,12 +1185,14 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         """Map (+ timer, server) in the black bar below the picture, left, as big as the bar allows."""
         avail_w, avail_h = gw - 2 * margin, bottom - 2 * margin
         height = min(height, avail_h)
+        self.overlay.text_height = min(self._text_height(gh), height)
         w, h = self.overlay.render(height)
         for _try in range(3):                    # the info block below the map needs room too (not quite linear)
             f = layout.fit_scale(w, h, avail_w, avail_h)
             if f >= 1 or height <= 40:
                 break
             height = max(40, int(height * f))
+            self.overlay.text_height = max(40, int(self.overlay.text_height * f))
             w, h = self.overlay.render(height)
         x, y = gx + margin, gy + gh - bottom + margin
         self.overlay.show_at(int(x), int(y))
@@ -1268,7 +1296,11 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
             text = _("Regler bewegen = eigene Position.")
         self.pos_hint_var.set(text)
 
+    def _anchor_text(self, key):
+        return anchor_label(key)
+
     def _anchor_changed(self):
+        self._layout_mark()
         rev = {_(v): k for k, v in ANCHORS}
         self.settings["overlay"]["anchor"] = rev.get(self.anchor_var.get(), "auto")
         self._pos_hint()
@@ -1296,6 +1328,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
     def _pos_changed(self):
         if self._syncing:
             return
+        self._layout_mark()
         o = self.settings["overlay"]
         if o["anchor"] != "custom":
             o["anchor"] = "custom"
@@ -1382,12 +1415,16 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         if value[0] == "resize":                  # corner of the picked element / wheel over it
             self._resize_to(value[1], value[2])
             return
+        if value[0] == "nudge":                   # arrow keys (1.65)
+            self._nudge(value[1], value[2])
+            return
         self._preview_pick_now(value)
 
     def _preview_pick_now(self, value):
         """A click or drag on the preview: an element dragged by the mouse goes where it was dropped ("place",
         1.64.1 – map, system values/"today" or music card, each to its own place); a click on an empty spot puts
         the map's centre there ("move"). Always an own position, like dragging in the game."""
+        self._layout_mark()
         data = self._preview_data()
         _gx, _gy, gw, gh = self._game_rect()
         if value[0] == "place":
@@ -1424,6 +1461,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, QtShell
         self._pos_changed()
 
     def _size_changed(self):
+        self._layout_mark()
         self.settings["overlay"]["height"] = round(self.size_var.get() / 100, 3)
         self._sel_sync()
         self._save_soon()

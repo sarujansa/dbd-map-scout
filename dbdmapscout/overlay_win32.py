@@ -466,7 +466,9 @@ def render_music(rows, cover, height: int, style: str = "big", progress=None) ->
         return pic
     blur = max(2, height // 300)
     pad = 3 * blur
-    lines = [render_hud([row], int(height * (TITLE_SCALE if i == 0 else 1.0))) for i, row in enumerate(rows)]
+    first = rows[0][0][1] if rows and rows[0] else None     # the title's colour: a wrapped title has several rows
+    n_title = next((i for i, row in enumerate(rows) if not row or row[0][1] != first), len(rows))
+    lines = [render_hud([row], int(height * (TITLE_SCALE if i < n_title else 1.0))) for i, row in enumerate(rows)]
     side = max(32, height // 6) if cover is not None else 0
     gap = max(4, height // 120) if cover is not None else 0
     text_w = max((im.width for im in lines), default=0)
@@ -640,6 +642,7 @@ class PictureOverlay:
         self.show_map = True            # off: only timer, server and ping ("nur Infos")
         self.edit_label = ""            # name on the edit frame (1.64.7: "KARTE · Mausrad = Grösse")
         self.info_beside = False        # timer/server right of the map (low bar above/below the picture)
+        self.text_height = 0            # px the timer/name/info are sized for (1.65: not the map's size); 0 = map
         self.on_moved = None
         self.on_wheel = None
         self.game_hwnd = None
@@ -741,16 +744,17 @@ class PictureOverlay:
     def render(self, height: int):
         """Prepare pictures for this height; returns (w, h) of the overlay."""
         if self._waiting:
-            return self._render_waiting(max(40, int(height)))
+            return self._render_waiting(max(40, int(self.text_height) or int(height)))
         if not self._frames:
             return 0, 0
         height = max(40, int(height))
         if not self.show_map and not self.has_info():
             return 0, 0                   # nothing to show without the map
-        base_key = (height, self._caption if self.show_caption else "", self.transparent, self.show_map)
+        # text below/above the map is sized for one floor: stacked floors would double it; since 1.65 the App
+        # gives it its own size (user: a bigger map, the same text)
+        text_h = max(40, int(self.text_height) or height // self.stacked())
+        base_key = (height, self._caption if self.show_caption else "", self.transparent, self.show_map, text_h)
         new_base = base_key != self._base_key
-        # text below/above the map is sized for one floor: stacked floors would double it
-        text_h = max(40, height // self.stacked())
         if new_base:                      # scaling is the slow part: done once per size, not per timer tick
             if self.show_map:
                 self._base = [(compose(img, height, base_key[1], self.transparent, False, text_h), dur)
