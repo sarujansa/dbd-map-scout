@@ -5,6 +5,9 @@ The palette is the original one of the program (theme.DARK, user's wish 1.51: "F
 """
 from __future__ import annotations
 
+import colorsys
+from functools import lru_cache
+
 from .i18n import N_
 from .theme import DARK, DOT
 
@@ -38,28 +41,104 @@ THEMES = {
     "violet": (N_("Lila"), {
         True: {"accent": "#b48cf0", "accent_hover": "#c3a2f4", "on_accent": "#12081f", "select": "#4e2f86"},
         False: {"accent": "#6b3fb3", "accent_hover": "#7c50c4", "on_accent": "#ffffff", "select": "#4e2f86"}}),
+    "custom": (N_("Eigene Farbe"), None),         # 1.63: settings accent_custom, made readable by derive_accent
 }
+# The palette below the theme list (1.63, user's wish): one click = this colour as own accent (theme "custom").
+# Base colours; derive_accent makes each one readable in dark, light and OLED.
+SWATCHES = ("#c9a227", "#e08a1e", "#e8692a", "#d93a32", "#b0203a", "#e0508f", "#c040c0", "#8a5cf0",
+            "#4f5fe0", "#2f8fe0", "#1fb5c9", "#17a38a", "#3cae4f", "#8cbf26")
+CUSTOM_DEFAULT = "#2f8fe0"
+MIN_CONTRAST = 4.5
 # OLED black (1.62.1, user: "mit OLED mehr Farbkombis"): a switch of its own, true black instead of the dark greys
 # – with every accent; the light mode stays as it is
 OLED = {"bg": "#000000", "panel": "#0d0d0f", "field": "#0a0a0b", "card": "#0d0d0f", "nav": "#0d0d0f",
         "nav_sel": "#000000", "btn": "#1a1b1e", "btn_hover": "#26282c", "hover": "#1a1b1e", "press": "#26282c",
         "border": "#26282a", "bar": "#141416", "btn_dis": "#0d0d0f"}
-_theme, _oled = "gold", False
+_theme, _oled, _custom = "gold", False, CUSTOM_DEFAULT
 
 
-def set_theme(key: str, oled: bool = False):
-    """The colour theme the window uses from now on (settings color_theme, oled_black; unknown = gold)."""
-    global _theme, _oled
+def set_theme(key: str, oled: bool = False, custom: str | None = None):
+    """The colour theme the window uses from now on (settings color_theme, oled_black, accent_custom; unknown =
+    gold, a broken own colour = CUSTOM_DEFAULT)."""
+    global _theme, _oled, _custom
     _theme = key if key in THEMES else "gold"
     _oled = bool(oled)
+    _custom = norm_hex(custom) or CUSTOM_DEFAULT
 
 
 def colours(dark: bool) -> dict:
     """The palette of the current theme: PALETTE with the theme's accent over it, OLED black when dark."""
-    c = dict(PALETTE[bool(dark)], **THEMES[_theme][1][bool(dark)])
+    c = dict(PALETTE[bool(dark)])
     if dark and _oled:
         c.update(OLED)
+    if _theme == "custom":
+        c.update(derive_accent(_custom, bool(dark), c["card"], c["bg"], c["nav"]))
+    else:
+        c.update(THEMES[_theme][1][bool(dark)])
     return c
+
+
+def norm_hex(text) -> str | None:
+    """'#rrggbb' (lower case) or None for anything else ('#abc' is widened)."""
+    t = str(text or "").strip().lower().lstrip("#")
+    if len(t) == 3:
+        t = "".join(ch * 2 for ch in t)
+    if len(t) != 6 or any(ch not in "0123456789abcdef" for ch in t):
+        return None
+    return "#" + t
+
+
+def luminance(colour: str) -> float:
+    """Relative luminance (WCAG 2)."""
+    c = hex_colour(colour).lstrip("#")
+    out = []
+    for i in (0, 2, 4):
+        v = int(c[i:i + 2], 16) / 255
+        out.append(v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4)
+    return 0.2126 * out[0] + 0.7152 * out[1] + 0.0722 * out[2]
+
+
+def contrast(a: str, b: str) -> float:
+    la, lb = sorted((luminance(a), luminance(b)), reverse=True)
+    return (la + 0.05) / (lb + 0.05)
+
+
+def _hls_hex(h, lum, s) -> str:
+    r, g, b = colorsys.hls_to_rgb(h, min(1.0, max(0.0, lum)), s)
+    return "#{:02x}{:02x}{:02x}".format(round(r * 255), round(g * 255), round(b * 255))
+
+
+@lru_cache(maxsize=64)
+def derive_accent(base: str, dark: bool, *backgrounds: str) -> dict:
+    """accent / accent_hover / on_accent / select from any colour (1.63, own colour + palette): same hue, the
+    lightness moved just as far as needed – accent on every background >= 4.5:1, text on the accent button (and
+    its hover) >= 4.5:1, white on the selection >= 4.5:1. A colour that is readable already stays as it is."""
+    c = norm_hex(base) or CUSTOM_DEFAULT
+    r, g, b = (int(c[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    h, lum, s = colorsys.rgb_to_hls(r, g, b)
+    ink = "#000000" if dark else "#ffffff"           # text on the accent button
+
+    def ok(colour):
+        return (all(contrast(colour, bg) >= MIN_CONTRAST for bg in backgrounds)
+                and contrast(ink, colour) >= MIN_CONTRAST)
+
+    step = 0.01 if dark else -0.01                   # dark: lighter; light: darker – both end at white / black
+    accent = _hls_hex(h, lum, s)
+    for _n in range(101):
+        if ok(accent):
+            break
+        lum = min(1.0, max(0.0, lum + step))
+        accent = _hls_hex(h, lum, s)
+    hover_l = lum + 0.07 if dark else lum - 0.06     # hover away from the background: stays readable
+    hover = _hls_hex(h, hover_l, s)
+    if contrast(ink, hover) < MIN_CONTRAST:
+        hover = accent
+    sel_l = 0.30
+    select = _hls_hex(h, sel_l, min(s, 0.6))
+    while contrast("#ffffff", select) < MIN_CONTRAST and sel_l > 0:
+        sel_l -= 0.02
+        select = _hls_hex(h, sel_l, min(s, 0.6))
+    return {"accent": accent, "accent_hover": hover, "on_accent": ink, "select": select}
 
 
 def hex_colour(c) -> str:

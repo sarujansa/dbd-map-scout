@@ -1117,4 +1117,9 @@ EN = {
     'OLED-Schwarz (echtes Schwarz statt Grau im Dark Mode)': 'OLED black (true black instead of grey in dark mode)',
     'Hintergründe in echtem Schwarz statt Dunkelgrau – passt zu OLED-Bildschirmen und geht mit jeder Akzentfarbe. Im hellen Modus ohne Wirkung.':
         'Backgrounds in true black instead of dark grey – suits OLED screens and goes with every accent colour. No effect in light mode.',
+    # 1.63: colour palette + own colour
+    'Eigene Farbe': 'Own colour',
+    'Eigene Farbe …': 'Own colour …',
+    'Beliebige Farbe wählen – das Programm passt die Helligkeit an, bis alles lesbar ist.':
+        'Pick any colour – the program adjusts its brightness until everything is readable.',
 }
