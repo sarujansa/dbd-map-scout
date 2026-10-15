@@ -56,6 +56,7 @@ QListWidget#nav::item:selected {{ background: {c['nav_sel']}; color: {c['accent'
 QListWidget#nav::item:hover:!selected {{ background: {c['hover']}; color: {c['fg']}; }}
 QFrame[class="card"] {{ background: {c['card']}; border: 1px solid {c['border']}; border-radius: 10px; }}
 QFrame[class="card"] QLabel {{ background: transparent; }}
+QFrame[class="card"][dragging="true"] {{ border: 1px solid {c['accent']}; }}  /* held at its grip */
 QLabel[class="dim"] {{ color: {c['dim']}; font-size: {px(12)}; }}
 QLabel[class="h1"] {{ font-size: {px(24)}; font-weight: 700; color: {c['head']}; }}
 QLabel[class="map"] {{ font-family: 'Fira Sans ExtraBold', 'Segoe UI'; font-size: {px(26)}; color: {c['head']}; }}

@@ -56,6 +56,7 @@ DEFAULTS = {
     "dark_mode": True,
     "ui_zoom": 1.0,                     # control window: font size factor (qt_theme.ZOOMS)
     "qt_geometry": "",                  # control window: QWidget.saveGeometry() as base64
+    "card_order": {},                   # control window: own order of the cards {page: {run: [card ids]}}
     "log_categories": ["Erkennung", "Overlay", "System", "Fehler"],
     "ocr_threads": 2,
     "save_debug_images": False,
