@@ -64,7 +64,7 @@ SPECS = {
         ("card", "st.look", (
             ("row", (("label", "st.lang.label"), ("combo", "st.lang"), ("stretch",))), ("hint", "st.lang_note"),
             ("check", "st.dark"),
-            ("row", (("label", "st.theme.label"), ("combo", "st.theme"), ("stretch",))),
+            ("row", (("label", "st.theme.label"), ("combo", "st.theme"), ("stretch",))), ("check", "st.oled"),
             ("row", (("label", "st.zoom.label"), ("combo", "st.zoom"), ("stretch",))),
             ("row", (("button", "st.card_reset"), ("hint", "st.card_hint"))))),
         ("card", "st.notify", (
