@@ -58,7 +58,8 @@ SPECS = {
         ("card", "st.look", (
             ("row", (("label", "st.lang.label"), ("combo", "st.lang"), ("stretch",))), ("hint", "st.lang_note"),
             ("check", "st.dark"),
-            ("row", (("label", "st.zoom.label"), ("combo", "st.zoom"), ("stretch",))))),
+            ("row", (("label", "st.zoom.label"), ("combo", "st.zoom"), ("stretch",))),
+            ("row", (("button", "st.card_reset"), ("hint", "st.card_hint"))))),
         ("card", "st.notify", (
             ("check", "st.lobby_notify"), ("check", "st.lobby_remind"), ("check", "st.notify_background_only"),
             ("hint", "st.notify_text"), ("row", (("button", "st.notify_test"), ("stretch",))))),
@@ -576,30 +577,194 @@ def show_control(kind, w, extra, st):
         _set(w, text.upper() if kind == "title" else text)
 
 
-class FormPage(QWidget):
+class Grip(QWidget):
+    """The handle at the right of a card's title: six dots; dragging it moves the card (CardColumn)."""
+
+    def __init__(self, column, card):
+        super().__init__()
+        self._column, self._card = column, card
+        self.setFixedSize(16, 18)
+        self.setCursor(Qt.OpenHandCursor)
+        self.setToolTip(_("Ziehen, um den Kasten zu verschieben"))
+
+    def paintEvent(self, _e):
+        from PySide6.QtGui import QPainter
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setPen(Qt.NoPen)
+        p.setBrush(self.palette().color(QPalette.PlaceholderText))
+        for x in (5, 11):
+            for y in (4, 9, 14):
+                p.drawEllipse(x - 1.5, y - 1.5, 3, 3)
+        p.end()
+
+    def mousePressEvent(self, e):
+        if e.button() == Qt.LeftButton:
+            self.setCursor(Qt.ClosedHandCursor)
+            self._column.begin(self._card)
+
+    def mouseMoveEvent(self, e):
+        self._column.drag_to(e.globalPosition().toPoint())
+
+    def mouseReleaseEvent(self, _e):
+        self.setCursor(Qt.OpenHandCursor)
+        self._column.end()
+
+
+class CardColumn(QWidget):
+    """Cards below each other that the user can put in their own order (1.59, user's wish: "Updates nach oben
+    schieben"): drag a card at its grip, the others make room as it passes them; the page scrolls at its edges.
+    No QDrag – that runs a second event loop. ``on_order(ids)`` gets the new order (saved by the App)."""
+
+    def __init__(self, on_order=None):
+        super().__init__()
+        self._lay = QVBoxLayout(self)
+        self._lay.setContentsMargins(0, 0, 0, 0)
+        self._lay.setSpacing(12)
+        self.cards = []                   # [(id, card)] in the order shown
+        self._default = []
+        self._drag = None
+        self._before = None
+        self.on_order = on_order
+        self._scroll = None
+        from PySide6.QtCore import QTimer
+        self._timer = QTimer(self)        # scrolls the page while the card is held at its top/bottom edge
+        self._timer.setInterval(30)
+        self._timer.timeout.connect(self._autoscroll)
+
+    def add(self, card_id, card, head_row):
+        """``head_row``: the card's title layout – the grip goes to its right end."""
+        head_row.addWidget(Grip(self, card), 0, Qt.AlignVCenter)
+        self.cards.append((card_id, card))
+        self._default.append(card_id)
+        self._lay.addWidget(card)
+
+    def ids(self) -> list:
+        return [i for i, _c in self.cards]
+
+    def apply(self, ids):
+        """Show the cards in this order; ids it does not know, or a missing card (another version), = default."""
+        if not ids or sorted(ids) != sorted(self._default):
+            ids = self._default
+        if ids == self.ids():
+            return
+        by_id = dict(self.cards)
+        for _i, card in self.cards:
+            self._lay.removeWidget(card)
+        self.cards = [(i, by_id[i]) for i in ids]
+        for _i, card in self.cards:
+            self._lay.addWidget(card)
+
+    def begin(self, card):
+        self._drag = card
+        self._before = self.ids()
+        card.setProperty("dragging", True)
+        card.style().unpolish(card)
+        card.style().polish(card)
+        w = self.parentWidget()
+        while w is not None and not isinstance(w, QScrollArea):
+            w = w.parentWidget()
+        self._scroll = w
+        self._timer.start()
+
+    def drag_to(self, global_pos):
+        card = self._drag
+        if card is None:
+            return
+        y = self.mapFromGlobal(global_pos).y()
+        others = [(i, c) for i, c in self.cards if c is not card]
+        pos = len(others)
+        for n, (_i, c) in enumerate(others):
+            if c.isVisible() and y < c.geometry().center().y():
+                pos = n
+                break
+        me = next(e for e in self.cards if e[1] is card)
+        if self.cards.index(me) != pos:
+            others.insert(pos, me)
+            self.cards = others
+            self._lay.removeWidget(card)
+            self._lay.insertWidget(pos, card)
+
+    def _autoscroll(self):
+        from PySide6.QtGui import QCursor
+        sa = self._scroll
+        if self._drag is None or sa is None:
+            return
+        y = sa.viewport().mapFromGlobal(QCursor.pos()).y()
+        h = sa.viewport().height()
+        step = -18 if y < 40 else 18 if y > h - 40 else 0
+        if step:
+            bar = sa.verticalScrollBar()
+            bar.setValue(bar.value() + step)
+            self.drag_to(QCursor.pos())
+
+    def end(self):
+        card, self._drag = self._drag, None
+        self._timer.stop()
+        if card is None:
+            return
+        card.setProperty("dragging", False)
+        card.style().unpolish(card)
+        card.style().polish(card)
+        if self.ids() != self._before and self.on_order is not None:
+            self.on_order(self.ids())
+
+
+def _card_head(card_layout):
+    """Title row of a card: (title label, row) – CardColumn puts its grip at the end of the row."""
+    row = QHBoxLayout()
+    row.setContentsMargins(0, 0, 0, 0)
+    head = _label(cls="h2")
+    row.addWidget(head, 1)
+    card_layout.addLayout(row)
+    return head, row
+
+
+class _Arranged:
+    """Pages whose cards the user can put in order: one CardColumn per run of cards (a run ends at anything
+    else, e.g. Settings' "Mehr" button). ``post("card_order", (page, run, ids))`` saves; ``apply_order``."""
+
+    def _column(self, page_key):
+        n = len(self.columns)
+        col = CardColumn(lambda ids, n=n: self._post("card_order", (page_key, n, ids)))
+        self.columns.append(col)
+        return col
+
+    def apply_order(self, saved: dict):
+        for n, col in enumerate(self.columns):
+            col.apply((saved or {}).get(str(n)))
+
+
+class FormPage(QWidget, _Arranged):
     """A hand-made page (SPECS): one control per widget of the UI model, which does the work."""
 
-    def __init__(self, post, title, spec):
+    def __init__(self, post, title, spec, page_key=""):
         super().__init__()
         self._post = post
         self.controls = {}                 # key -> (kind, widget, extra)
+        self.columns = []
         page, lay = _scroll_page(title)
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(page)
+        col = None
         for item in spec:
             kind = item[0]
+            if kind != "card":
+                col = None
             if kind == "card":
+                if col is None:
+                    col = self._column(page_key)
+                    lay.addWidget(col)
                 card = _card()
                 cl = QVBoxLayout(card)
                 cl.setContentsMargins(14, 12, 14, 12)
                 cl.setSpacing(6)
-                head = _label(cls="h2")
-                cl.addWidget(head)
+                head, hrow = _card_head(cl)
                 self.controls[item[1]] = ("title", head, None)
                 for row in item[2]:
                     self._add(row, cl)
-                lay.addWidget(card)
+                col.add(item[1], card, hrow)
             elif kind == "links":
                 row = QHBoxLayout()
                 for c in item[1]:
@@ -1216,16 +1381,18 @@ def _fills(node) -> bool:
     return (node.get("kind") == "tabs" and bool(node.get("fill"))) or any(_fills(c) for c in node.get("children", ()))
 
 
-class AutoPage(QWidget):
+class AutoPage(QWidget, _Arranged):
     """A page built from the structure of a tab of the UI model (app_qt.ui_layout): frames → cards/rows,
     notebooks → tabs, tables, charts and controls like FormPage (Statistik, Server, Erkennung, Log, dialogs)."""
 
-    def __init__(self, post, title, node):
+    def __init__(self, post, title, node, page_key=""):
         super().__init__()
         self._post = post
+        self._page_key = page_key
         self.controls = {}                 # key -> (kind, widget, extra)
         self._tabs = []                    # (QTabWidget, [keys of each page])
         self._all = []
+        self.columns = []
         fill = _fills(node) if node else False
         page, lay = _scroll_page(title, scroll=not fill)
         outer = QVBoxLayout(self)
@@ -1236,7 +1403,7 @@ class AutoPage(QWidget):
         if not fill:
             lay.addStretch()
 
-    def _build(self, n, lay, keys, top=False):
+    def _build(self, n, lay, keys, top=False, column=None):
         kind, key = n["kind"], n["key"]
         keys.append(key)
         if kind in ("box", "card"):
@@ -1245,8 +1412,7 @@ class AutoPage(QWidget):
             v.setContentsMargins(*((14, 12, 14, 12) if kind == "card" else (0, 0, 0, 0)))
             v.setSpacing(6)
             if kind == "card":
-                head = _label(cls="h2")
-                v.addWidget(head)
+                head, hrow = _card_head(v)
                 self.controls[key + "#title"] = ("title", head, None)
             kids = n.get("children", [])
             if n.get("grid"):                         # e.g. the game languages
@@ -1258,7 +1424,10 @@ class AutoPage(QWidget):
                     g.addLayout(cell, *c.get("cell", (0, 0)))
                 g.setColumnStretch(g.columnCount(), 1)
                 v.addLayout(g)
-                lay.addWidget(holder, 1 if top and _grows(n) else 0)
+                if column is not None:
+                    column[0].add(column[1], holder, hrow)
+                else:
+                    lay.addWidget(holder, 1 if top and _grows(n) else 0)
                 self.controls[key] = (kind, holder, None)
                 return
             inner = QHBoxLayout() if n.get("row") else v
@@ -1267,13 +1436,26 @@ class AutoPage(QWidget):
                 v.addLayout(inner)
             first = [c for c in kids if c.get("side") != "right"]
             last = list(reversed([c for c in kids if c.get("side") == "right"]))
+            arrange = bool(self._page_key) and top and kind == "box" and inner is v and not _grows(n)  # own order
+            col, run = None, 0
             for c in first:
+                if arrange and c["kind"] == "card":
+                    if col is None:
+                        col, run = self._column(self._page_key), 0
+                        v.addWidget(col)
+                    self._build(c, v, keys, column=(col, f"#{run}"))
+                    run += 1
+                    continue
+                col = None
                 self._build(c, inner, keys, top=top and inner is v)    # a table further down still gets the height
             if n.get("row"):
                 inner.addStretch()
             for c in last:
                 self._build(c, inner, keys, top=top and inner is v)
-            lay.addWidget(holder, 1 if top and _grows(n) else 0)
+            if column is not None:
+                column[0].add(column[1], holder, hrow)
+            else:
+                lay.addWidget(holder, 1 if top and _grows(n) else 0)
             self.controls[key] = (kind, holder, None)
             return
         if kind == "tabs":
@@ -1601,10 +1783,10 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         self.overview = OverviewPage(post)
         self.maps = MapsPage(post)
-        self.forms = {key: FormPage(post, _(label), SPECS[key]) for key, label in PAGES if key in SPECS}
+        self.forms = {key: FormPage(post, _(label), SPECS[key], key) for key, label in PAGES if key in SPECS}
         for key, label in PAGES:
             if key in AUTO_PAGES and (layouts or {}).get(key):
-                self.forms[key] = AutoPage(post, _(label), layouts[key])
+                self.forms[key] = AutoPage(post, _(label), layouts[key], key)
         self.nav.setIconSize(QSize(NAV_ICON, NAV_ICON))
         for key, label in PAGES:
             item = QListWidgetItem(_(label))
@@ -1704,6 +1886,11 @@ class MainWindow(QMainWindow):
         if q is not None:
             self.question_text.setText(f"<b>{html.escape(q[0])}</b><br>" + html.escape(q[1]).replace("\n", "<br>"))
             self.question_cancel.setVisible(bool(q[2]))
+
+    def set_card_order(self, orders: dict):
+        """The user's order of the cards ({page: {run: [ids]}}, setting card_order); {} = as built."""
+        for key, page in self.forms.items():
+            page.apply_order((orders or {}).get(key, {}))
 
     def show_maps(self, items, current, preview=None):
         self.maps.show_maps(items, current)

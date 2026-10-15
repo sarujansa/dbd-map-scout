@@ -223,6 +223,7 @@ class QtShell:
         # first start: the hint what to do (gone with "Verstanden" or from the next start)
         self._qt_welcome = not self.settings.get("welcome_seen") and not self.settings.get("qt_geometry")
         self.qt.restore_b64(self.settings.get("qt_geometry") or "")
+        self.qt.set_card_order(self.settings.get("card_order") or {})
         self._qt_refresh(force=True)
         if not start_in_tray:
             self.qt.show()
@@ -330,6 +331,12 @@ class QtShell:
             self._qt_search = str(arg or "")
             self._qt_maps_rev = getattr(self, "_qt_maps_rev", 0) + 1
             self._fill_list()
+        elif action == "card_order":                 # a card dragged to another place: remember the order
+            page, run, ids = arg
+            orders = dict(self.settings.get("card_order") or {})
+            orders[str(page)] = dict(orders.get(str(page)) or {}, **{str(run): [str(i) for i in ids]})
+            self.settings.set("card_order", orders)
+            self._save_soon()
         elif action == "map_preview":
             mid, v = arg
             self._qt_preview_sel = (mid, int(v))
