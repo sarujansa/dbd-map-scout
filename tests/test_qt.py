@@ -143,7 +143,7 @@ def test_window_shows_the_model_and_posts_clicks(qapp, keep):
     assert text and win.restore_b64(text) and not win.restore_b64("kein base64")
     o.log_alert = True
     win.show_model(o)
-    assert win.nav.item(len(qt_window.PAGES) - 1).text().endswith("⚠")
+    assert win._log_alert and win.nav.item(len(qt_window.PAGES) - 1).text() == "Log"   # amber dot in the icon
     win.allow_close = True
     win.close()
 
@@ -471,3 +471,21 @@ def test_dialog_window_mirrors_and_closes_both_ways(qapp, keep):
     win.open_dialog(".d", "x", node)
     win.dialogs[".d"].reject()                                # Esc / X: the model's dialog goes too
     assert posted.get_nowait() == ("dlg_close", ".d")
+
+
+def test_navigation_icons_are_drawn_alike(qapp, keep):
+    """Own line icons (not font characters, which came out in different sizes): every page one, same box, and the
+    log's gets an amber dot while there is an unseen error."""
+    from dbdmapscout import qt_window
+    for key, _label in qt_window.PAGES:
+        img = qt_window.nav_icon(key, "#c9a227", 2.0).toImage()
+        assert (img.width(), img.height()) == (2 * qt_window.NAV_ICON, 2 * qt_window.NAV_ICON)
+        assert any(img.pixelColor(x, y).alpha() > 0 for x in range(0, img.width(), 2) for y in range(0, img.height(), 2))
+    plain = qt_window.nav_icon("log", "#9ba1a9").toImage()
+    alert = qt_window.nav_icon("log", "#9ba1a9", alert=True).toImage()
+    assert plain != alert
+    win = keep(qt_window.MainWindow(lambda a, arg=None: None))
+    assert all(not win.nav.item(i).icon().isNull() for i in range(win.nav.count()))
+    assert [win.nav.item(i).text() for i in range(win.nav.count())][-1] == "Log"
+    win.show_log_alert(True)
+    assert win.nav.item(win.nav.count() - 1).text() == "Log"           # the dot is in the icon, not in the text
