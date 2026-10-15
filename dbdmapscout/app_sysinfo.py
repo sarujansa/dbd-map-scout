@@ -142,8 +142,8 @@ class SysInfo:
         s = m.snapshot
         parts = [_("GPU: {name}", name=s.gpu_name) if s.gpu_name else
                  _("GPU: keine NVIDIA-Karte gefunden") if m.nvml_error else ""]
-        parts.append(_("CPU-Temperatur: aus HWiNFO") if s.hwinfo else
-                     _("CPU-Temperatur: nur mit HWiNFO („Shared Memory Support“ an)"))
+        if s.hwinfo:                         # without it the text above already says what to do
+            parts.append(_("CPU-Temperatur: aus HWiNFO"))
         if self.settings.get("sysinfo", "off") == "off":
             parts = []
         text = " · ".join(p for p in parts if p)

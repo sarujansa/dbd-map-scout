@@ -73,7 +73,7 @@ QLabel#pill {{ border-radius: 10px; padding: 3px 12px; font-size: {px(12)}; font
 QPushButton {{ background: {c['btn']}; border: 1px solid {c['border']}; border-radius: 6px; padding: 6px 14px; }}
 QPushButton:hover {{ background: {c['btn_hover']}; }}
 QPushButton:pressed {{ background: {c['press']}; }}
-QPushButton:disabled {{ background: {c['btn_dis']}; color: {c['fg_dis']}; border-color: {c['btn_dis']}; }}
+QPushButton:disabled {{ background: transparent; color: {c['fg_dis']}; border-color: {c['border']}; }}  /* keeps its shape */
 QPushButton#primary {{ background: {c['accent']}; color: {c['on_accent']}; border: none; font-weight: 700; }}
 QPushButton#primary:hover {{ background: {c['accent_hover']}; }}
 QProgressBar {{ background: {c['bar']}; border: none; border-radius: 3px; max-height: 6px; min-height: 6px; }}
