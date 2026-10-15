@@ -311,8 +311,9 @@ def test_window_gets_real_clicks_while_the_timers_run(root):
         if n < 40:
             root.after(25, lambda: tick(n + 1))
         else:
-            root.qapp.quit()
+            root.quit()
     root.after(25, tick)
+    root.after(15000, root.quit)                     # watchdog: a broken tick fails the test instead of hanging
     root.mainloop()
     assert len(ticks) == 41 and posted == ["scan"]
     win.allow_close = True

@@ -91,7 +91,9 @@ class MainLoop:
         return self.qapp.exec()
 
     def quit(self):
+        """End the loop now. Not QApplication.quit(): in Qt 6 that first asks every window to close, and the control
+        window refuses (its X means "quit through the App") – the loop would never end."""
         for t in list(self._jobs):
             t.stop()
         self._jobs.clear()
-        self.qapp.quit()
+        self.qapp.exit(0)
