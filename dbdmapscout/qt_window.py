@@ -470,6 +470,8 @@ def make_control(kind, key, post):
         w = Table(key, post)
     elif kind == "chart":
         w = Chart()
+    elif kind == "dashboard":
+        w = DashboardView()
     elif kind == "log":
         w = LogView()
     elif kind == "radio":
@@ -552,7 +554,7 @@ def show_control(kind, w, extra, st):
             s.setRange(round(st.get("lo", 0)), round(st.get("hi", 100)))
             s.setValue(round(st.get("value", 0)))
             s.blockSignals(False)
-    elif kind in ("table", "chart", "log"):
+    elif kind in ("table", "chart", "log", "dashboard"):
         w.show_state(st)
     elif kind == "hotkey":
         w.show_text(st.get("text", ""))
@@ -932,9 +934,221 @@ class Chart(QWidget):
             QToolTip.hideText()
 
 
+# Heatmap (average kills 0–4): the sequential blue ramp of the dataviz palette (validated, same blue as "Killer" in
+# the trend chart). Light surface: more = darker; dark surface: more = lighter (near zero recedes to the surface).
+HEAT_RAMP = ("#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#2a78d6", "#256abf", "#1c5cab", "#184f95", "#104281")
+BAR_NEUTRAL = {True: "#6b7079", False: "#a3a8b0"}     # map bars: a plain count, no identity – neutral grey
+
+
+def heat_colour(value: float, dark: bool, top: float = 4.0) -> QColor:
+    """Colour of a heatmap cell: ``value`` 0..top along the ramp."""
+    ramp = HEAT_RAMP[::-1] if dark else HEAT_RAMP
+    f = min(1.0, max(0.0, value / top)) * (len(ramp) - 1)
+    i = min(len(ramp) - 2, int(f))
+    a, b, t = QColor(ramp[i]), QColor(ramp[i + 1]), f - i
+    return QColor(round(a.red() + (b.red() - a.red()) * t), round(a.green() + (b.green() - a.green()) * t),
+                  round(a.blue() + (b.blue() - a.blue()) * t))
+
+
+def ink_on(colour: QColor) -> QColor:
+    """Text colour on a filled cell: dark ink on light cells, light ink on dark ones."""
+    lum = 0.2126 * colour.redF() + 0.7152 * colour.greenF() + 0.0722 * colour.blueF()
+    return QColor("#111214") if lum > 0.45 else QColor("#f0efec")
+
+
+class MapBars(QWidget):
+    """Most played maps: one row each – name, a bar for the rounds, the count and the results (stats page)."""
+    ROW = 26
+
+    def __init__(self):
+        super().__init__()
+        self._rows, self._max, self._dark = [], 1, True
+        self.setMinimumHeight(self.ROW)
+
+    def set_rows(self, rows, top, dark):
+        self._rows, self._max, self._dark = list(rows), max(1, top), dark
+        self.setMinimumHeight(max(self.ROW, len(self._rows) * self.ROW))
+        self.update()
+
+    def paintEvent(self, _e):
+        from PySide6.QtGui import QPainter
+        c = qt_theme.PALETTE[self._dark]
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        w = self.width()
+        name_w = min(190, max(110, w // 4))
+        info_w = min(230, max(120, w // 3))
+        bar_x, bar_w = name_w + 8, max(40, w - name_w - info_w - 60)
+        fm = p.fontMetrics()
+        for i, (name, n, info) in enumerate(self._rows):
+            y = i * self.ROW
+            mid = y + self.ROW / 2
+            p.setPen(QColor(c["fg"]))
+            p.drawText(0, y, name_w, self.ROW, Qt.AlignLeft | Qt.AlignVCenter, fm.elidedText(name, Qt.ElideRight, name_w))
+            length = max(3.0, bar_w * n / self._max)
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(BAR_NEUTRAL[self._dark]))
+            p.drawRoundedRect(bar_x, round(mid - 5), round(length), 10, 4, 4)
+            p.setPen(QColor(c["fg"]))
+            p.drawText(round(bar_x + length + 6), y, 40, self.ROW, Qt.AlignLeft | Qt.AlignVCenter, str(n))
+            p.setPen(QColor(c["dim"]))
+            p.drawText(w - info_w, y, info_w, self.ROW, Qt.AlignRight | Qt.AlignVCenter,
+                       fm.elidedText(info, Qt.ElideRight, info_w))
+        p.end()
+
+
+class Heatmap(QWidget):
+    """Map × killer, average kills: rows = maps, columns = killers, cell colour = Ø kills (0–4) with the value
+    written in it; empty cells = too few rounds. Hover: the cell's text with its number of rounds."""
+    HEAD, ROW, LEGEND = 28, 26, 30
+
+    def __init__(self):
+        super().__init__()
+        self._d, self._dark, self._hits = None, True, []
+        self.setMouseTracking(True)
+
+    def set_data(self, d, dark):
+        self._d, self._dark = d, dark
+        rows = len(d.rows) if d else 0
+        self.setMinimumHeight(self.HEAD + rows * self.ROW + self.LEGEND if rows else 0)
+        self.update()
+
+    def paintEvent(self, _e):
+        from PySide6.QtCore import QRectF
+        from PySide6.QtGui import QLinearGradient, QPainter
+        d = self._d
+        self._hits = []
+        if not d or not d.rows:
+            return
+        c = qt_theme.PALETTE[self._dark]
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        fm = p.fontMetrics()
+        name_w = min(190, max(110, self.width() // 4))
+        cols = max(1, len(d.columns))
+        cell_w = max(36, min(96, (self.width() - name_w) / cols))
+        from .dashboard import MATRIX_MIN, short_killer
+        p.setPen(QColor(c["dim"]))
+        for j, k in enumerate(d.columns):
+            x = name_w + j * cell_w
+            p.drawText(QRectF(x, 0, cell_w, self.HEAD), Qt.AlignHCenter | Qt.AlignVCenter,
+                       fm.elidedText(short_killer(k), Qt.ElideRight, round(cell_w) - 4))
+        for i, m in enumerate(d.rows):
+            y = self.HEAD + i * self.ROW
+            p.setPen(QColor(c["fg"]))
+            p.drawText(QRectF(0, y, name_w - 8, self.ROW), Qt.AlignLeft | Qt.AlignVCenter,
+                       fm.elidedText(m, Qt.ElideRight, name_w - 8))
+            for j, k in enumerate(d.columns):
+                rect = QRectF(name_w + j * cell_w + 1, y + 1, cell_w - 2, self.ROW - 2)     # 2 px surface gap
+                cell = d.cells.get((m, k))
+                if cell is None:
+                    p.setPen(Qt.NoPen)
+                    p.setBrush(QColor(c["hover"]))
+                    p.drawRoundedRect(rect.adjusted(cell_w / 2 - 2, self.ROW / 2 - 3, -(cell_w / 2 - 2),
+                                                    -(self.ROW / 2 - 3)), 2, 2)
+                    continue
+                avg, n = cell
+                fill = heat_colour(avg, self._dark)
+                p.setPen(Qt.NoPen)
+                p.setBrush(fill)
+                p.drawRoundedRect(rect, 4, 4)
+                p.setPen(ink_on(fill))
+                p.drawText(rect, Qt.AlignCenter, f"{avg:.1f}")
+                self._hits.append((rect, _("{map} · {killer}: Ø {kills} Kills ({n} Runden)", map=m, killer=k,
+                                           kills=f"{avg:.1f}", n=n)))
+        # legend: the ramp from 0 to 4 kills
+        ly = self.HEAD + len(d.rows) * self.ROW + 10
+        grad = QLinearGradient(name_w, 0, name_w + 160, 0)
+        for t in range(5):
+            grad.setColorAt(t / 4, heat_colour(t, self._dark))
+        p.setPen(Qt.NoPen)
+        p.setBrush(grad)
+        p.drawRoundedRect(QRectF(name_w, ly, 160, 8), 4, 4)
+        p.setPen(QColor(c["dim"]))
+        p.drawText(QRectF(name_w - 30, ly - 5, 24, 18), Qt.AlignRight | Qt.AlignVCenter, "0")
+        p.drawText(QRectF(name_w + 166, ly - 5, 260, 18), Qt.AlignLeft | Qt.AlignVCenter,
+                   _("4 Kills · leer = weniger als {n} Runden", n=MATRIX_MIN))
+        p.end()
+
+    def mouseMoveEvent(self, e):
+        from PySide6.QtWidgets import QToolTip
+        pos = e.position()
+        hit = next((t for r, t in self._hits if r.contains(pos)), None)
+        if hit:
+            QToolTip.showText(e.globalPosition().toPoint(), hit, self)
+        else:
+            QToolTip.hideText()
+
+
+class DashboardView(QWidget):
+    """The statistics dashboard (dashboard.Dashboard): key figure tiles, the most played maps, killer × map."""
+
+    def __init__(self):
+        super().__init__()
+        self._shown = None
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(12)
+        self.empty = _label(cls="dim")
+        lay.addWidget(self.empty)
+        self.tiles_box = QWidget()
+        self.grid = QGridLayout(self.tiles_box)
+        self.grid.setContentsMargins(0, 0, 0, 0)
+        self.grid.setSpacing(12)
+        self.tiles = []
+        for i in range(6):
+            card = _card()
+            cl = QVBoxLayout(card)
+            cl.setContentsMargins(14, 12, 14, 12)
+            box = FactBox(bar=True)
+            cl.addWidget(box)
+            self.grid.addWidget(card, 0, i)
+            self.tiles.append((card, box))
+        lay.addWidget(self.tiles_box)
+        self.maps_card, self.maps = self._chart_card(lay, _("Maps – am häufigsten gespielt"), MapBars())
+        self.heat_card, self.heat = self._chart_card(lay, _("Killer × Map – Ø Kills laut Stats-Seite"), Heatmap())
+        self.heat_note = _label(cls="dim", wrap=True)
+        self.heat_card.layout().addWidget(self.heat_note)
+
+    @staticmethod
+    def _chart_card(lay, title, widget):
+        card = _card()
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(14, 12, 14, 12)
+        cl.setSpacing(8)
+        cl.addWidget(_label(title.upper(), "h2"))
+        cl.addWidget(widget)
+        lay.addWidget(card)
+        return card, widget
+
+    def show_state(self, st):
+        d, dark = st.get("data"), bool(st.get("dark", True))
+        key = (id(d), dark)
+        if key == self._shown:
+            return
+        self._shown = key
+        has = d is not None and not d.empty
+        self.empty.setVisible(d is not None and bool(d.empty))
+        _set(self.empty, d.empty if d is not None else "")
+        for w in (self.tiles_box, self.maps_card, self.heat_card):
+            w.setVisible(has)
+        if not has:
+            return
+        for i, (card, box) in enumerate(self.tiles):
+            card.setVisible(i < len(d.tiles))
+            if i < len(d.tiles):
+                box.show_fact(d.tiles[i])
+        self.maps.set_rows(d.maps, d.maps_max, dark)
+        self.heat.set_data(d, dark)
+        self.heat.setVisible(bool(d.rows))
+        _set(self.heat_note, "" if d.rows else _("Noch keine Killer-Runden mit Ergebnis von der Stats-Seite "
+                                                 "(Einstellungen → Mehr → Offizielle Match-Daten)."))
+        self.heat_note.setVisible(not d.rows)
+
+
 def _grows(node) -> bool:
     """A table, chart or the log below this node: it may take the free height of the page."""
-    return node.get("kind") in ("table", "chart", "log") or any(_grows(c) for c in node.get("children", ()))
+    return node.get("kind") in ("table", "chart", "log", "dashboard") or any(_grows(c) for c in node.get("children", ()))
 
 
 class AutoPage(QWidget):
