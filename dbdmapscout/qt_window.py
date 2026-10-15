@@ -12,7 +12,7 @@ import html
 import sys
 
 from PIL import Image
-from PySide6.QtCore import QByteArray, QEvent, Qt
+from PySide6.QtCore import QByteArray, QEvent, QSize, Qt
 from PySide6.QtGui import QColor, QFontDatabase, QIcon, QImage, QPalette, QPixmap
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel,
                                QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QPlainTextEdit, QProgressBar,
@@ -24,10 +24,10 @@ from . import qt_theme
 from .i18n import N_, _
 from .mapimage import FONT as FIRA
 
-# key, label, symbol
-PAGES = (("overview", N_("Übersicht"), "◉"), ("maps", "Maps", "▦"), ("overlay", N_("Overlay"), "◧"),
-         ("stats", N_("Statistik"), "▤"), ("server", N_("Server"), "◎"), ("settings", N_("Einstellungen"), "⚙"),
-         ("detect", N_("Erkennung"), "✦"), ("log", "Log", "☰"))
+# key, label (the navigation's icons are drawn by nav_icon: same size and place for all)
+PAGES = (("overview", N_("Übersicht")), ("maps", "Maps"), ("overlay", N_("Overlay")), ("stats", N_("Statistik")),
+         ("server", N_("Server")), ("settings", N_("Einstellungen")), ("detect", N_("Erkennung")), ("log", "Log"))
+NAV_ICON = 18                     # px (logical): every icon of the navigation in the same box
 AUTO_PAGES = ("stats", "server", "detect", "log")   # built from the tab's structure (app_qt.ui_layout)
 THUMB_H = 170                     # px (logical) of the map picture on the overview
 
@@ -1145,6 +1145,79 @@ class DialogWindow(QDialog):
         super().done(r)
 
 
+def nav_icon(key: str, colour: str, ratio: float = 1.0, alert: bool = False) -> QPixmap:
+    """One icon of the navigation, drawn as lines (not a font character: symbols from different fonts came out
+    in different sizes and places). All in a NAV_ICON box, 1.6 px lines; ``alert`` = amber dot (log)."""
+    from PySide6.QtCore import QPointF, QRectF
+    from PySide6.QtGui import QPainter, QPen
+    size = NAV_ICON
+    pm = QPixmap(round(size * ratio), round(size * ratio))
+    pm.setDevicePixelRatio(ratio)
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.Antialiasing)
+    col = QColor(colour)
+    pen = QPen(col, 1.6)
+    pen.setCapStyle(Qt.RoundCap)
+    pen.setJoinStyle(Qt.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.NoBrush)
+    m, c = 2.5, size / 2                       # margin, centre
+    full = QRectF(m, m, size - 2 * m, size - 2 * m)
+    if key == "overview":                      # target: ring + dot
+        p.drawEllipse(QPointF(c, c), 6.5, 6.5)
+        p.setBrush(col)
+        p.drawEllipse(QPointF(c, c), 2.4, 2.4)
+    elif key == "maps":                        # four tiles
+        g = (size - 2 * m - 2) / 2
+        for x in (m, m + g + 2):
+            for y in (m, m + g + 2):
+                p.drawRoundedRect(QRectF(x, y, g, g), 1.5, 1.5)
+    elif key == "overlay":                     # a screen with a picture in its left part
+        p.drawRoundedRect(full, 2, 2)
+        p.setBrush(col)
+        p.drawRoundedRect(QRectF(m + 2.5, m + 2.5, (size - 2 * m) * 0.4, size - 2 * m - 5), 1, 1)
+    elif key == "stats":                       # three columns on a base line
+        base = size - m
+        for i, h in enumerate((5, 11, 8)):
+            x = m + 1.5 + i * 4.6
+            p.drawLine(QPointF(x, base - 1.5), QPointF(x, base - 1.5 - h))
+        p.drawLine(QPointF(m, base), QPointF(size - m, base))
+    elif key == "server":                      # globe
+        p.drawEllipse(QPointF(c, c), 6.5, 6.5)
+        p.drawEllipse(QPointF(c, c), 2.8, 6.5)
+        p.drawLine(QPointF(c - 6.5, c), QPointF(c + 6.5, c))
+    elif key == "settings":                    # gear: ring + eight teeth
+        import math
+        p.drawEllipse(QPointF(c, c), 4.6, 4.6)
+        p.drawEllipse(QPointF(c, c), 1.7, 1.7)
+        tooth = QPen(col, 2.6)
+        tooth.setCapStyle(Qt.FlatCap)
+        p.setPen(tooth)
+        for i in range(8):
+            a = i * math.pi / 4 + math.pi / 8
+            p.drawLine(QPointF(c + 5.2 * math.cos(a), c + 5.2 * math.sin(a)),
+                       QPointF(c + 7.4 * math.cos(a), c + 7.4 * math.sin(a)))
+    elif key == "detect":                      # scan frame: four corners + a dot
+        k = 4.0
+        for (x, y, dx, dy) in ((m, m, 1, 1), (size - m, m, -1, 1), (m, size - m, 1, -1), (size - m, size - m, -1, -1)):
+            p.drawLine(QPointF(x, y), QPointF(x + dx * k, y))
+            p.drawLine(QPointF(x, y), QPointF(x, y + dy * k))
+        p.setBrush(col)
+        p.drawEllipse(QPointF(c, c), 2.2, 2.2)
+    elif key == "log":                         # lines of text
+        for i, w in enumerate((1.0, 0.75, 0.9)):
+            y = m + 2 + i * 5
+            p.drawLine(QPointF(m, y), QPointF(m + (size - 2 * m) * w, y))
+    if alert:
+        from .theme import DOT
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(DOT["warn"]))
+        p.drawEllipse(QPointF(size - 3.5, size - 3.5), 3.5, 3.5)
+    p.end()
+    return pm
+
+
 class MainWindow(QMainWindow):
     def __init__(self, post, icon_path: str | None = None, layouts: dict | None = None):
         super().__init__()
@@ -1165,12 +1238,13 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         self.overview = OverviewPage(post)
         self.maps = MapsPage(post)
-        self.forms = {key: FormPage(post, _(label), SPECS[key]) for key, label, _s in PAGES if key in SPECS}
-        for key, label, _s in PAGES:
+        self.forms = {key: FormPage(post, _(label), SPECS[key]) for key, label in PAGES if key in SPECS}
+        for key, label in PAGES:
             if key in AUTO_PAGES and (layouts or {}).get(key):
                 self.forms[key] = AutoPage(post, _(label), layouts[key])
-        for key, label, symbol in PAGES:
-            item = QListWidgetItem(f"{symbol}   {_(label)}")
+        self.nav.setIconSize(QSize(NAV_ICON, NAV_ICON))
+        for key, label in PAGES:
+            item = QListWidgetItem(_(label))
             item.setData(Qt.UserRole, key)
             self.nav.addItem(item)
             page = {"overview": self.overview, "maps": self.maps}.get(key) or self.forms.get(key) or QWidget()
@@ -1204,6 +1278,8 @@ class MainWindow(QMainWindow):
         self.resize(1100, 760)
         self.setMinimumSize(760, 520)
         self._log_alert = False
+        self._dark = True
+        self._nav_icons()
         self.dialogs = {}                 # dialog path (UI model) -> DialogWindow
 
     def _page_changed(self, row):
@@ -1275,7 +1351,7 @@ class MainWindow(QMainWindow):
             self.maps.search.blockSignals(True)
             self.maps.search.setText(search)
             self.maps.search.blockSignals(False)
-        keys = [k for k, _l, _s in PAGES]
+        keys = [k for k, _l in PAGES]
         if key in keys:
             self.nav.setCurrentRow(keys.index(key))
 
@@ -1287,6 +1363,8 @@ class MainWindow(QMainWindow):
         pal.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(qt_theme.PALETTE[bool(dark)]["fg_dis"]))
         QApplication.setPalette(pal)
         self.setStyleSheet(qt_theme.stylesheet(dark, zoom))
+        self._dark = bool(dark)
+        self._nav_icons()
         try:
             hints = QApplication.styleHints()
             hints.setColorScheme(Qt.ColorScheme.Dark if dark else Qt.ColorScheme.Light)   # title bar (Qt 6.8+)
@@ -1298,10 +1376,22 @@ class MainWindow(QMainWindow):
         self.show_log_alert(o.log_alert)
 
     def show_log_alert(self, on: bool):
-        """"Log ⚠" in the navigation while there is an error the user has not looked at."""
+        """An amber dot on the log's icon while there is an error the user has not looked at."""
         if on != self._log_alert:
             self._log_alert = on
-            self.nav.item(len(PAGES) - 1).setText(f"{PAGES[-1][2]}   Log" + (" ⚠" if on else ""))
+            self._nav_icons()
+
+    def _nav_icons(self):
+        """The navigation's icons in the colours of the theme: grey, the page on display in the accent colour."""
+        c = qt_theme.PALETTE[self._dark]
+        ratio = self.devicePixelRatioF() or 1.0
+        for row, (key, _label) in enumerate(PAGES):
+            alert = key == "log" and self._log_alert
+            icon = QIcon()
+            icon.addPixmap(nav_icon(key, c["dim"], ratio, alert), QIcon.Normal)
+            icon.addPixmap(nav_icon(key, c["accent"], ratio, alert), QIcon.Selected)
+            icon.addPixmap(nav_icon(key, c["fg"], ratio, alert), QIcon.Active)
+            self.nav.item(row).setIcon(icon)
 
     def geometry_b64(self) -> str:
         return base64.b64encode(bytes(self.saveGeometry())).decode("ascii")
