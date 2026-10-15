@@ -38,6 +38,7 @@ DEFAULTS = {
         "floor_auto": True,             # maps with floors (Midwich): all one below the other (False: bottom only)
         "show_record": True,            # own record on the map below the timer (official match data)
         "show_map": True,               # off: overlay shows only timer, server and ping
+        "show_today": True,             # block "today" with the system values at the top of a black bar (1.62)
     },
     "hotkeys": {
         "toggle_overlay": "ctrl+alt+m",
@@ -54,6 +55,7 @@ DEFAULTS = {
     },
     "ui_language": "auto",            # auto (Windows language) | de | en
     "dark_mode": True,
+    "color_theme": "gold",              # control window: qt_theme.THEMES (accent colour, OLED black)
     "ui_zoom": 1.0,                     # control window: font size factor (qt_theme.ZOOMS)
     "qt_geometry": "",                  # control window: QWidget.saveGeometry() as base64
     "card_order": {},                   # control window: own order of the cards {page: {run: [card ids]}}
