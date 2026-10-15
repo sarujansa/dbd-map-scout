@@ -145,9 +145,9 @@ def test_window_shows_the_model_and_posts_clicks(qapp, keep):
     assert page.thumb.pixmap() is not None and not page.thumb.pixmap().isNull()
     assert page.buttons["layout"].isHidden() and page.buttons["scan"].toolTip() == "tip scan"
     page.buttons["rotate"].click()
-    win.nav.setCurrentRow(6)                                         # a page still in Tk: opens it there
+    win.nav.setCurrentRow(6)                                         # another page: the App fills it
     win.close()                                                      # closing = quitting, through the App
-    assert [posted.get_nowait() for _i in range(3)] == [("rotate", None), ("tab", "detect"), ("quit", None)]
+    assert [posted.get_nowait() for _i in range(3)] == [("rotate", None), ("page", "detect"), ("quit", None)]
     text = win.geometry_b64()
     assert text and win.restore_b64(text) and not win.restore_b64("kein base64")
     o.log_alert = True
@@ -344,3 +344,72 @@ def test_ask_runs_the_action_again_after_ok():
     s.clear()
     s._qt_answer(True)
     assert calls == ["cleared"] and s._qt_question is None
+
+
+# ------------------------------------------------------------------ stage 4a: detection, log, hotkeys, files
+def test_log_view_colours_and_escapes(qapp, keep):
+    from dbdmapscout import qt_window
+    log = keep(qt_window.LogView())
+    log.show_state({"dark": True, "lines": [("12:00:01", "Fehler", "<kaputt>"), ("12:00:02", "System", "Bereit.")]})
+    text = log.toPlainText()
+    assert "<kaputt>" in text and "Bereit." in text and text.index("kaputt") < text.index("Bereit")
+    log.show_state({"dark": True, "lines": [("12:00:01", "Fehler", "<kaputt>"), ("12:00:02", "System", "Bereit.")]})
+
+
+def test_hotkey_button_sends_the_keys_while_recording(qapp, keep):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from dbdmapscout import qt_window
+    posted = queue.Queue()
+    b = keep(qt_window.HotkeyButton("st.hk.rotate_map", lambda a, arg=None: posted.put((a, arg))))
+    QTest.keyClick(b, Qt.Key_K, Qt.ControlModifier)                 # not recording: nothing
+    assert posted.empty()
+    b.click()
+    QTest.keyClick(b, Qt.Key_Control)                               # a modifier alone: still waiting
+    QTest.keyClick(b, Qt.Key_K, Qt.ControlModifier | Qt.AltModifier)
+    QTest.keyClick(b, Qt.Key_F5)
+    assert [posted.get_nowait() for _i in range(3)] == [
+        ("hk_record", "st.hk.rotate_map"), ("hk_key", ("st.hk.rotate_map", ["ctrl", "alt"], "k", None)),
+        ("hk_key", ("st.hk.rotate_map", [], "F5", None))]
+    b.show_recording(True)
+    b.show_recording(False)                                         # the App saved it: stop sending keys
+    QTest.keyClick(b, Qt.Key_M, Qt.ControlModifier | Qt.AltModifier)
+    assert posted.empty()
+
+
+def test_auto_page_lays_out_a_grid(qapp, keep):
+    from dbdmapscout import qt_window
+    node = {"kind": "card", "key": ".l", "row": False, "grid": True, "children": [
+        {"kind": "check", "key": f".l.c{i}", "cell": (i // 5, i % 5)} for i in range(9)]}
+    page = keep(qt_window.AutoPage(lambda a, arg=None: None, "Erkennung", node))
+    page.show_states({f".l.c{i}": {"text": f"L{i}", "value": i < 2, "enabled": True, "visible": True}
+                      for i in range(9)})
+    checks = [page.controls[f".l.c{i}"][1] for i in range(9)]
+    assert [c.isChecked() for c in checks[:3]] == [True, True, False] and checks[8].text() == "L8"
+
+
+def test_file_choice_is_not_modal(qapp, keep):
+    from dbdmapscout import qt_window
+    posted = queue.Queue()
+    win = keep(qt_window.MainWindow(lambda a, arg=None: posted.put((a, arg))))
+    win.choose_file("save", "Einstellungen exportieren", "x.json")
+    dlg = win._file_dialog
+    assert not dlg.isModal() or dlg.windowModality() != 2               # never application-modal
+    dlg.reject()
+    assert posted.get_nowait() == ("file", None)
+
+
+def test_hotkey_from_qt_is_checked_like_a_tk_key():
+    from dbdmapscout.app_hotkeys import Hotkeys
+    seen = []
+
+    class H(Hotkeys):
+        _hk_rec, _hk_mods = "rotate_map", set()
+
+        def _hk_key(self, e):
+            seen.append((set(self._hk_mods), e.keysym, e.keycode))
+
+    h = H()
+    h._hk_qt_key("rotate_map", ["ctrl", "alt"], "k", None)
+    h._hk_qt_key("scan_now", ["ctrl"], "s", None)                    # not the one recording: ignored
+    assert seen == [({"ctrl", "alt"}, "k", None)]

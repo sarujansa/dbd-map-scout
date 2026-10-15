@@ -17,7 +17,8 @@ from PIL import Image
 from PySide6.QtCore import QByteArray, QEvent, Qt
 from PySide6.QtGui import QColor, QFontDatabase, QIcon, QImage, QPalette, QPixmap
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel,
-                               QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QProgressBar, QPushButton,
+                               QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QPlainTextEdit, QProgressBar,
+                               QPushButton,
                                QScrollArea, QSizePolicy, QSlider, QStackedWidget, QTabWidget, QTreeWidget,
                                QTreeWidgetItem, QVBoxLayout, QWidget)
 
@@ -29,8 +30,8 @@ from .mapimage import FONT as FIRA
 PAGES = (("overview", N_("Übersicht"), "◉"), ("maps", "Maps", "▦"), ("overlay", N_("Overlay"), "◧"),
          ("stats", N_("Statistik"), "▤"), ("server", N_("Server"), "◎"), ("settings", N_("Einstellungen"), "⚙"),
          ("detect", N_("Erkennung"), "✦"), ("log", "Log", "☰"))
-QT_PAGES = ("overview", "maps", "overlay", "settings", "stats", "server")
-AUTO_PAGES = ("stats", "server")          # built from the Tk tab's structure (app_qt.tk_layout), since 1.53
+QT_PAGES = ("overview", "maps", "overlay", "settings", "stats", "server", "detect", "log")
+AUTO_PAGES = ("stats", "server", "detect", "log")   # built from the Tk tab's structure (app_qt.tk_layout), 1.53/1.54
 THUMB_H = 170                     # px (logical) of the map picture on the overview
 
 # Pages that mirror a Tk tab (since 1.52): every key names a Tk widget registered with App._reg; texts, values,
@@ -67,15 +68,20 @@ SPECS = {
             ("check", "st.lobby_notify"), ("check", "st.lobby_remind"), ("check", "st.notify_background_only"),
             ("hint", "st.notify_text"), ("row", (("button", "st.notify_test"), ("stretch",))))),
         ("card", "st.start", (("check", "st.tray"), ("check", "st.autostart"), ("hint", "st.autostart_info"))),
-        ("card", "st.hotkeys", tuple(("row", (("label", f"st.hk.{k}.label"), ("stretch",), ("value", f"st.hk.{k}")))
+        ("card", "st.hotkeys", tuple(("row", (("label", f"st.hk.{k}.label"), ("stretch",), ("hotkey", f"st.hk.{k}")))
                                      for k in ("toggle_overlay", "next_variant", "scan_now", "prev_map", "next_map",
                                                "bigger", "smaller", "edit_position", "rotate_map", "next_floor",
                                                "reject_map"))
-         + (("row", (("link", N_("Hotkeys ändern …"), "settings"), ("stretch",))),)),
+         + (("row", (("button", "st.hk_defaults"), ("hint", "st.hk_status"))),)),
         ("card", "st.updates", (
             ("check", "st.update"), ("hint", "st.update_note"),
             ("row", (("button", "st.upd_btn"), ("button", "st.upd_apply"), ("stretch",))), ("hint", "st.upd_status"))),
-        ("links", (("link", N_("Mehr (Map-Zuordnungen, Match-Daten, Sicherung, Ordner) …"), "settings_more"),)),
+        ("row", (("button", "st.more_btn"), ("stretch",))),
+        ("card", "st.more.own", (("row", (("hint", "st.more.aliases"), ("button", "st.more.aliases_clear"))),)),
+        ("card", "st.more.official", (("check", "st.more.off_open"), ("check", "st.more.off_notify"),
+                                      ("row", (("button", "st.more.script"), ("stretch",))), ("hint", "st.more.off_text"))),
+        ("card", "st.more.backup", (("row", (("button", "st.more.export"), ("button", "st.more.import"), ("stretch",))),)),
+        ("card", "st.more.folders", (("row", (("button", "st.more.dir"), ("button", "st.more.maps_dir"), ("stretch",))),)),
         ("plain", "st.version"),
     ),
 }
@@ -89,7 +95,7 @@ def _spec_keys(items):
             yield from _spec_keys(it[2])
         elif kind == "row":
             yield from _spec_keys(it[1])
-        elif kind in ("check", "button", "combo", "slider", "label", "hint", "value", "plain"):
+        elif kind in ("check", "button", "combo", "slider", "label", "hint", "value", "plain", "hotkey"):
             yield it[1]
 
 
@@ -467,6 +473,10 @@ def make_control(kind, key, post):
         w = Table(key, post)
     elif kind == "chart":
         w = Chart()
+    elif kind == "log":
+        w = LogView()
+    elif kind == "hotkey":
+        w = HotkeyButton(key, post)
     elif kind in ("hint", "plain"):
         w = _label(cls="dim", wrap=True)
     elif kind == "big":
@@ -514,8 +524,11 @@ def show_control(kind, w, extra, st):
             s.setRange(round(st.get("lo", 0)), round(st.get("hi", 100)))
             s.setValue(round(st.get("value", 0)))
             s.blockSignals(False)
-    elif kind in ("table", "chart"):
+    elif kind in ("table", "chart", "log"):
         w.show_state(st)
+    elif kind == "hotkey":
+        w.show_text(st.get("text", ""))
+        w.show_recording(bool(st.get("recording")))
     elif kind in ("box", "card"):
         pass
     else:                                                         # button, label, hint, value, title, big
@@ -576,7 +589,7 @@ class FormPage(QWidget):
             lay.addWidget(b)
             return
         w, extra = make_control(kind, item[1], self._post)
-        lay.addWidget(w)
+        lay.addWidget(w, 1 if kind == "hint" and isinstance(lay, QHBoxLayout) else 0)   # text beside: takes the room
         self.controls[item[1]] = (kind, w, extra)
 
     def show_states(self, states):
@@ -658,6 +671,88 @@ class Table(QTreeWidget):
                 item.setSelected(on)
             stack += [item.child(i) for i in range(item.childCount())]
         self.blockSignals(False)
+
+
+class LogView(QPlainTextEdit):
+    """The log (App._log_entries, filtered like the Tk tab) – coloured by category, follows new lines."""
+
+    def __init__(self):
+        super().__init__()
+        self.setReadOnly(True)
+        self.setMinimumHeight(360)
+        self._shown = None
+
+    def show_state(self, st):
+        from .theme import LOG_COLORS
+        lines = tuple(tuple(e) for e in st.get("lines", ()))
+        key = (lines, st.get("dark"))
+        if key == self._shown:
+            return
+        self._shown = key
+        col = LOG_COLORS[bool(st.get("dark", True))]
+        bar = self.verticalScrollBar()
+        at_end = bar.value() >= bar.maximum() - 4
+        rows = []
+        for ts, cat, text in lines:
+            msg = col["Fehler"] if cat == "Fehler" else col["text"]
+            rows.append(f'<span style="color:{col["ts"]}">{html.escape(ts)}</span>&nbsp;&nbsp;'
+                        f'<span style="color:{col.get(cat, col["text"])}">{html.escape(_(cat))}</span>&nbsp;&nbsp;'
+                        f'<span style="color:{msg}">{html.escape(text)}</span>')
+        self.document().setHtml("<br>".join(rows))
+        if at_end:
+            bar.setValue(bar.maximum())
+
+
+class HotkeyButton(QPushButton):
+    """A hotkey in the settings: click, then press the new combination (Esc cancels, Del switches it off).
+    The key presses go to the App, which checks them like the Tk window (hotkeys.combo_from_keys)."""
+
+    def __init__(self, key, post):
+        super().__init__()
+        self._key, self._post = key, post
+        self._recording = False
+        self.setMinimumWidth(170)
+        self.clicked.connect(self._start)
+
+    def _start(self):
+        self._recording = True
+        self.setFocus()
+        self._post("hk_record", self._key)
+
+    def show_text(self, text):
+        _set(self, text)
+
+    def keyPressEvent(self, e):
+        if not self._recording:
+            return super().keyPressEvent(e)
+        k = e.key()
+        if k in (Qt.Key_Control, Qt.Key_Alt, Qt.Key_Shift, Qt.Key_Meta, Qt.Key_AltGr):
+            return                                            # still holding modifiers
+        mods = [name for name, flag in (("ctrl", Qt.ControlModifier), ("alt", Qt.AltModifier),
+                                        ("shift", Qt.ShiftModifier)) if e.modifiers() & flag]
+        if Qt.Key_A <= k <= Qt.Key_Z:
+            sym = chr(k).lower()
+        elif Qt.Key_0 <= k <= Qt.Key_9 and not (e.modifiers() & Qt.KeypadModifier):
+            sym = chr(k)
+        elif Qt.Key_F1 <= k <= Qt.Key_F24:
+            sym = f"F{k - Qt.Key_F1 + 1}"
+        else:
+            sym = {Qt.Key_Escape: "Escape", Qt.Key_Delete: "Delete", Qt.Key_Backspace: "BackSpace"}.get(k, "")
+        vk = (e.nativeVirtualKey() or None) if sys.platform == "win32" else None
+        self._post("hk_key", (self._key, mods, sym, vk))
+
+    def focusOutEvent(self, e):
+        if self._recording:
+            self._recording = False
+            self._post("hk_cancel", self._key)
+        super().focusOutEvent(e)
+
+    def show_recording(self, on: bool):
+        """The App's view: once it has recorded (or cancelled), stop sending keys."""
+        if on:
+            self._seen = True
+        elif getattr(self, "_seen", False):
+            self._seen = self._recording = False
 
 
 class Chart(QWidget):
@@ -768,6 +863,11 @@ class Chart(QWidget):
             QToolTip.hideText()
 
 
+def _grows(node) -> bool:
+    """A table, chart or the log below this node: it may take the free height of the page."""
+    return node.get("kind") in ("table", "chart", "log") or any(_grows(c) for c in node.get("children", ()))
+
+
 class AutoPage(QWidget):
     """A page built from the structure of a Tk tab (app_qt.tk_layout): frames → cards/rows, notebooks → tabs,
     tables, charts and controls mirrored like FormPage (Statistik, Server)."""
@@ -798,11 +898,23 @@ class AutoPage(QWidget):
                 head = _label(cls="h2")
                 v.addWidget(head)
                 self.controls[key + "#title"] = ("title", head, None)
+            kids = n.get("children", [])
+            if n.get("grid"):                         # e.g. the game languages
+                g = QGridLayout()
+                g.setHorizontalSpacing(14)
+                for c in kids:
+                    cell = QVBoxLayout()
+                    self._build(c, cell, keys)
+                    g.addLayout(cell, *c.get("cell", (0, 0)))
+                g.setColumnStretch(g.columnCount(), 1)
+                v.addLayout(g)
+                lay.addWidget(holder, 1 if top and _grows(n) else 0)
+                self.controls[key] = (kind, holder, None)
+                return
             inner = QHBoxLayout() if n.get("row") else v
             if inner is not v:
                 inner.setSpacing(8)
                 v.addLayout(inner)
-            kids = n.get("children", [])
             first = [c for c in kids if c.get("side") != "right"]
             last = list(reversed([c for c in kids if c.get("side") == "right"]))
             for c in first:
@@ -811,7 +923,7 @@ class AutoPage(QWidget):
                 inner.addStretch()
             for c in last:
                 self._build(c, inner, keys)
-            lay.addWidget(holder, 1 if top else 0)
+            lay.addWidget(holder, 1 if top and _grows(n) else 0)
             self.controls[key] = (kind, holder, None)
             return
         if kind == "tabs":
@@ -833,7 +945,11 @@ class AutoPage(QWidget):
             self.controls[key] = ("tabs", tw, None)
             return
         w, extra = make_control(kind, key, self._post)
-        lay.addWidget(w, 1 if kind in ("table", "chart") else 0)
+        grow = kind in ("table", "chart", "log") or (kind == "hint" and isinstance(lay, QHBoxLayout))
+        if kind in ("button", "combo") and not isinstance(lay, QHBoxLayout):
+            lay.addWidget(w, 0, Qt.AlignLeft)             # a button on a line of its own keeps its size
+        else:
+            lay.addWidget(w, 1 if grow else 0)
         self.controls[key] = (kind, w, extra)
 
     def visible_keys(self) -> set:
@@ -1032,6 +1148,21 @@ class MainWindow(QMainWindow):
     def visible_keys(self, page) -> set:
         f = self.forms.get(page)
         return f.visible_keys() if isinstance(f, AutoPage) else set()
+
+    def choose_file(self, mode, title, initial):
+        """Non-modal file dialog (Qt's own, not the system one: no second message loop); the result goes out as
+        post("file", path or None)."""
+        from PySide6.QtWidgets import QFileDialog
+        dlg = QFileDialog(self, title, initial, "JSON (*.json);;* (*.*)")
+        dlg.setOption(QFileDialog.DontUseNativeDialog, True)
+        dlg.setAcceptMode(QFileDialog.AcceptSave if mode == "save" else QFileDialog.AcceptOpen)
+        dlg.setFileMode(QFileDialog.AnyFile if mode == "save" else QFileDialog.ExistingFile)
+        if mode == "save":
+            dlg.setDefaultSuffix("json")
+        dlg.fileSelected.connect(lambda path: self._post("file", path))
+        dlg.rejected.connect(lambda: self._post("file", None))
+        dlg.open()
+        self._file_dialog = dlg                       # keep it alive while it is open
 
     def show_question(self, q):
         """q = (title, text, ask) or None; ask False = only a note with OK."""
