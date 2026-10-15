@@ -581,6 +581,18 @@ class Tiles(Widget):
         self.data = []
 
 
+class Swatches(Widget):
+    """A row of colour squares (``values`` = [(\"#rrggbb\", tip)], ``current`` = the chosen one or None) and a
+    button for any other colour; a click goes to ``command(\"#rrggbb\")``. The colour palette (since 1.63)."""
+
+    def __init__(self, master=None, values=(), command=None, **kw):
+        super().__init__(master, **kw)
+        self.values = list(values)
+        self.current = None
+        self.dark = True
+        self.command = command
+
+
 class Preview(Widget):
     """A picture the window draws from ``source()`` (a dict, read on every refresh) – clicks and drags on it go
     to ``command(value)``. The overlay tab's screen with the map on it (since 1.61)."""

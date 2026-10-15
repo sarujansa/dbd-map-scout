@@ -64,7 +64,8 @@ SPECS = {
         ("card", "st.look", (
             ("row", (("label", "st.lang.label"), ("combo", "st.lang"), ("stretch",))), ("hint", "st.lang_note"),
             ("check", "st.dark"),
-            ("row", (("label", "st.theme.label"), ("combo", "st.theme"), ("stretch",))), ("check", "st.oled"),
+            ("row", (("label", "st.theme.label"), ("combo", "st.theme"), ("stretch",))), ("swatches", "st.swatches"),
+            ("check", "st.oled"),
             ("row", (("label", "st.zoom.label"), ("combo", "st.zoom"), ("stretch",))),
             ("row", (("button", "st.card_reset"), ("hint", "st.card_hint"))))),
         ("card", "st.notify", (
@@ -129,7 +130,8 @@ def _spec_keys(items):
             yield from _spec_keys(it[1])
         elif kind == "grid":
             yield from _spec_keys(it[2])
-        elif kind in ("check", "button", "combo", "slider", "label", "hint", "value", "plain", "hotkey", "preview"):
+        elif kind in ("check", "button", "combo", "slider", "label", "hint", "value", "plain", "hotkey", "preview",
+                      "swatches"):
             yield it[1]
 
 
@@ -474,6 +476,9 @@ def make_control(kind, key, post):
         w.clicked.connect(lambda checked: post("act", (key, checked)))
     elif kind == "button":
         w = QPushButton()
+        # Tab only, no focus by click (1.62.2): a button that disables itself on click passed its focus on and
+        # the page scrolled to whatever came next in the tab order
+        w.setFocusPolicy(Qt.TabFocus)
         w.clicked.connect(lambda _c=False: post("act", (key, None)))
     elif kind == "combo":
         w = QComboBox()
@@ -507,6 +512,8 @@ def make_control(kind, key, post):
         w = TilesView()
     elif kind == "preview":
         w = PreviewView(key, post)
+    elif kind == "swatches":
+        w = SwatchView(key, post)
     elif kind == "log":
         w = LogView()
     elif kind == "radio":
@@ -589,7 +596,7 @@ def show_control(kind, w, extra, st):
             s.setRange(round(st.get("lo", 0)), round(st.get("hi", 100)))
             s.setValue(round(st.get("value", 0)))
             s.blockSignals(False)
-    elif kind in ("table", "chart", "log", "dashboard", "tiles", "preview"):
+    elif kind in ("table", "chart", "log", "dashboard", "tiles", "preview", "swatches"):
         w.show_state(st)
     elif kind == "hotkey":
         w.show_text(st.get("text", ""))
@@ -677,6 +684,26 @@ class CardColumn(QWidget):
         self.cards = [(i, by_id[i]) for i in ids]
         for _i, card in self.cards:
             self._lay.addWidget(card)
+        self._tab_order()
+
+    def _tab_order(self):
+        """Tab order = the order shown (1.62.2): Qt keeps the order the widgets were made in. A button that
+        disables itself on click ("Jetzt nach Updates suchen") hands its focus to the next one in that chain –
+        a card that now sits far below – and the page scrolled down to it."""
+        def focusable(card):
+            return [w for w in card.findChildren(QWidget) if w.focusPolicy() & Qt.TabFocus]
+        widgets = [w for _i, card in self.cards for w in focusable(card)]
+        if len(widgets) < 2:
+            return
+        inside = set(map(id, widgets))
+        by_id = dict(self.cards)
+        first = next((w for i in self._default for w in focusable(by_id[i])), None)
+        prev = first.previousInFocusChain() if first is not None else None
+        while prev is not None and id(prev) in inside:
+            prev = prev.previousInFocusChain()
+        chain = ([prev] if prev is not None else []) + widgets
+        for a, b in zip(chain, chain[1:]):
+            QWidget.setTabOrder(a, b)
 
     def begin(self, card):
         self._drag = card
@@ -729,8 +756,10 @@ class CardColumn(QWidget):
         card.setProperty("dragging", False)
         card.style().unpolish(card)
         card.style().polish(card)
-        if self.ids() != self._before and self.on_order is not None:
-            self.on_order(self.ids())
+        if self.ids() != self._before:
+            self._tab_order()
+            if self.on_order is not None:
+                self.on_order(self.ids())
 
 
 def _card_head(card_layout):
@@ -1339,6 +1368,69 @@ class Heatmap(QWidget):
             QToolTip.showText(e.globalPosition().toPoint(), hit, self)
         else:
             QToolTip.hideText()
+
+
+class SwatchView(QWidget):
+    """The colour palette below the theme list (1.63, user's wish): one square per colour, the chosen one ringed,
+    and "Eigene Farbe …" with Qt's colour dialog (non-modal, no second event loop). post("act", (key, "#rrggbb"))
+    – qt_theme.derive_accent makes any colour readable."""
+
+    SIZE = 22
+
+    def __init__(self, key, post):
+        super().__init__()
+        self._key, self._post = key, post
+        self._values, self._current = (), None
+        self._buttons = []
+        self._dialog = None
+        self._row = FlowRow(self, spacing=6)
+        self.own = QPushButton(_("Eigene Farbe …"))
+        self.own.setFocusPolicy(Qt.TabFocus)
+        self.own.setToolTip(_("Beliebige Farbe wählen – das Programm passt die Helligkeit an, bis alles lesbar "
+                              "ist."))
+        self.own.clicked.connect(self._pick)
+        self._row.addWidget(self.own)
+
+    def show_state(self, st):
+        values = tuple(st.get("values") or ())
+        current = (st.get("current"), bool(st.get("dark", True)))
+        if values != self._values:
+            for b in self._buttons:
+                self._row.removeWidget(b)
+                b.deleteLater()
+            self._buttons = []
+            self._row.removeWidget(self.own)
+            for colour, tip in values:
+                b = QPushButton()
+                b.setFixedSize(self.SIZE, self.SIZE)
+                b.setFocusPolicy(Qt.TabFocus)
+                b.setCursor(Qt.PointingHandCursor)
+                b.setToolTip(tip)
+                b.setProperty("swatch", colour)
+                b.clicked.connect(lambda _c=False, v=colour: self._post("act", (self._key, v)))
+                self._row.addWidget(b)
+                self._buttons.append(b)
+            self._row.addWidget(self.own)
+            self._values, self._current = values, object()
+        if current != self._current:
+            self._current = current
+            chosen, dark = current
+            for b in self._buttons:
+                colour = b.property("swatch")
+                ring = qt_theme.colours(dark)["fg"] if colour == chosen else "transparent"
+                b.setStyleSheet(f"QPushButton {{ background: {colour}; border: 2px solid {ring}; "
+                                f"border-radius: 4px; padding: 0; min-width: 0; }}")
+                b.setAccessibleName(colour)
+
+    def _pick(self):
+        from PySide6.QtWidgets import QColorDialog
+        chosen = self._current[0] if isinstance(self._current, tuple) else None
+        dlg = QColorDialog(QColor(chosen or qt_theme.CUSTOM_DEFAULT), self.window())
+        dlg.setOption(QColorDialog.DontUseNativeDialog, True)
+        dlg.setWindowTitle(_("Eigene Farbe"))
+        dlg.colorSelected.connect(lambda c: self._post("act", (self._key, c.name())))
+        dlg.open()
+        self._dialog = dlg                       # keep it alive while it is open
 
 
 class PreviewView(QWidget):

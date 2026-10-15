@@ -56,6 +56,7 @@ DEFAULTS = {
     "ui_language": "auto",            # auto (Windows language) | de | en
     "dark_mode": True,
     "color_theme": "gold",              # control window: qt_theme.THEMES (accent colour)
+    "accent_custom": "#2f8fe0",         # control window: own accent (color_theme "custom", qt_theme.derive_accent)
     "oled_black": False,                # control window: true black instead of the dark greys (qt_theme.OLED)
     "ui_zoom": 1.0,                     # control window: font size factor (qt_theme.ZOOMS)
     "qt_geometry": "",                  # control window: QWidget.saveGeometry() as base64
