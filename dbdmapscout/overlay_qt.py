@@ -63,7 +63,7 @@ class QtOverlay(PictureOverlay):
         ratio = self._ratio()
         img.setDevicePixelRatio(ratio)
         self.win.image = img
-        self.win.setWindowOpacity(self.opacity)
+        self.win.setWindowOpacity(self.opacity * self.fade)
         x, y = pos or self._pos or (0, 0)
         self.win.setGeometry(round(x / ratio), round(y / ratio), max(1, round(w / ratio)), max(1, round(h / ratio)))
         self.win.update()

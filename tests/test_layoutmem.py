@@ -49,3 +49,16 @@ def test_snapping_to_the_closest_line():
     x, y, lx, ly = layoutmem.snap_rect(3005, 225, 300, 100, xs, ys, 8)      # left edge near 3000, top near 220
     assert (x, lx, y, ly) == (3000, 3000, 220, 220)
     assert layoutmem.snap_rect(2000, 900, 50, 50, xs, ys, 8)[2:] == (None, None)    # nothing close: free
+
+
+def test_layout_presets_only_touch_layout_keys_and_apply():
+    """1.2.9 (user's pick 23): ready-made arrangements as partial layouts."""
+    from dbdmapscout import layoutmem
+    for name, preset in layoutmem.PRESETS.items():
+        assert set(preset["overlay"]) <= set(layoutmem.OVERLAY_KEYS), name
+        assert set(preset) - {"overlay"} <= set(layoutmem.TOP_KEYS), name
+    data = {"overlay": {"anchor": "custom", "pos_x": 0.3, "height": 0.4, "media_pos": "custom"}, "sysinfo": "off"}
+    layoutmem.apply(data, layoutmem.PRESETS["right"])
+    assert data["overlay"]["anchor"] == "top-right" and data["sysinfo"] == "right"
+    assert data["overlay"]["pos_x"] == 0.3 and data["overlay"]["height"] == 0.4      # untouched: size, own place
+    assert data["overlay"]["media_pos"] == "under_today"

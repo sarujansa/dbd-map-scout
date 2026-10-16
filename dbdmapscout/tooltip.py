@@ -75,6 +75,12 @@ TIPS = {
         "Zeile in den Systemwerten an/aus.",
     "Zeile RAM":
         "Zeile in den Systemwerten an/aus.",
+    "Vorlage anwenden":
+        "Setzt Karte, Systemwerte, „Heute“ und Musik auf einmal auf die gewählte Anordnung. „Rückgängig“ holt "
+        "die vorherige zurück.",
+    "Weich ein- und ausblenden (Karte, Systemwerte, Heute)":
+        "Karte, Systemwerte und „Heute“ blenden in einer Drittelsekunde ein und aus, statt hart zu erscheinen. "
+        "Die Musik hat ihr eigenes Häkchen.",
     "Dunkle Fläche hinter Karte und Infos":
         "Eine halb durchsichtige dunkle Fläche mit runden Ecken hinter Karte, Timer und Infozeilen (auch hinter "
         "„Warte auf Map“) – gut lesbar über hellen Stellen im Spiel.",
