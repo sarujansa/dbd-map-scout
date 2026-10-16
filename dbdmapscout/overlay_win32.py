@@ -9,6 +9,7 @@ to the game (WS_EX_TRANSPARENT) – except in edit mode, where it can be dragged
 from __future__ import annotations
 
 import ctypes
+import re
 import sys
 import time
 
@@ -717,6 +718,8 @@ class PictureOverlay:
         self._base_key = None
         self._prepared = []             # [(bytes, w, h, duration)]
         self._key = None
+        self._pushed_key = None         # _key of the picture last put on the screen
+        self._fit = None                # fit_width(): (content key, text height, map height)
         self._frame_i = 0
         self._anim_job = None
         self._floor = None              # frame index of the floor on display; None = all floors one below the other
@@ -809,8 +812,10 @@ class PictureOverlay:
         self.transparent = bool(on)
         self._key = None
 
-    def render(self, height: int):
-        """Prepare pictures for this height; returns (w, h) of the overlay."""
+    def render(self, height: int, push: bool = True):
+        """Prepare pictures for this height; returns (w, h) of the overlay. ``push=False``: only measure – the
+        screen keeps the picture it has (the App tries sizes before it settles; pushing each one made the
+        overlay grow and shrink on every tick)."""
         if self._waiting:
             return self._render_waiting(max(40, int(self.text_height) or int(height)))
         if not self._frames:
@@ -848,12 +853,39 @@ class PictureOverlay:
             self._size = (self._prepared[0][1], self._prepared[0][2])
             if new_base or self._frame_i >= len(self._prepared):
                 self._frame_i = 0
-                if self._shown:
-                    self._push()
+                if push:
+                    self._restart_anim()
+            # else: timer text changed – same frame, the animation keeps running
+        if push and self._shown and self._pushed_key != self._key:
+            self._push()
+            self._pushed_key = self._key
+            if self._anim_job is None:
                 self._restart_anim()
-            elif self._shown:
-                self._push()              # timer text changed: same frame, keep the animation running
         return self._size
+
+    def fit_width(self, height: int, text_h: int, avail: float) -> int:
+        """Map height and ``text_height`` at which the overlay is at most ``avail`` wide (a black bar): the lines
+        below the map get smaller text first, the map only when that is not enough. Measured without putting
+        anything on the screen, with the widest digits in the timer, and kept until the content changes – before,
+        the App rendered big, showed it, then smaller: the map grew and shrank on every tick."""
+        key = (height, text_h, avail, re.sub(r"\d", "0", self._timer), self._server, self._ping, self._note,
+               self._record, self.info_beside, self._editing, self.show_map, self.show_caption, self._caption,
+               self.transparent, self._floor, id(self._frames[0][0]) if self._frames else None)
+        if self._fit is None or self._fit[0] != key:
+            timer, self._timer = self._timer, key[3]
+            try:
+                self.text_height = text_h
+                w, _h = self.render(height, push=False)
+                if w > avail:                   # the lines below are wider than the bar: smaller text, same map
+                    self.text_height = max(40, int(text_h * avail / w))
+                    w, _h = self.render(height, push=False)
+                    if w > avail:               # still too wide (very long line): the map too
+                        height = max(80, int(height * avail / w))
+            finally:
+                self._timer = timer
+            self._fit = (key, self.text_height, height)
+        self.text_height = self._fit[1]
+        return self._fit[2]
 
     def _render_waiting(self, height: int):
         key = ("waiting", height, self.transparent, self._editing, self._waiting, self._server, self._ping)
@@ -902,6 +934,7 @@ class PictureOverlay:
         if not self._shown or pos != self._pos or opacity_key != getattr(self, "_pushed_opacity", None):
             self._pos = pos
             self._push(pos)
+            self._pushed_key = self._key
             self._pushed_opacity = opacity_key
         if not self._shown:
             self._show_window()
