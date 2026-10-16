@@ -1236,6 +1236,11 @@ EN = {
         'Click = view big · double click = show now. Detection takes over again at the next match.',
     'Zurück zu den Karten des Realms (Esc).': "Back to the realm's maps (Esc).",
     'Allgemein': 'General',
+    'Grösse {pct} %': 'size {pct} %',
+    'eigenes Bild': 'own picture',
+    'Eigene Einstellungen dieser Map: {what}': 'Own settings of this map: {what}',
+    'Eigene Grösse und Drehung zurücksetzen': 'Reset own size and rotation',
+    'Kartenbild ersetzen …': 'Replace map picture …',
     'Automatisch: im schwarzen Rand neben dem Spielbild bzw. neben dem DBD-Fenster. Frei platzieren: „Mit der Maus '
     'verschieben“.': 'Automatic: in the black bar next to the game picture or next to the DBD window. Place freely: '
                      '"Move with the mouse".',

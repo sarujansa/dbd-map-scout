@@ -619,20 +619,23 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         deg = (self.settings["overlay"].get("map_rotations") or {}).get(map_id, 0) if map_id else 0
         return deg if deg in (0, 90, 180, 270) else 0
 
-    def rotate_map(self):
-        """Button/hotkey: turn the map on display by 90° clockwise (the name above it stays upright)."""
-        if not self.current:
+    def rotate_map(self, map_id=None):
+        """Button/hotkey: turn the map on display by 90° clockwise (the name above it stays upright); 1.2.18:
+        ``map_id`` from the maps page's right click – any map, shown or not."""
+        map_id = map_id or (self.current[0] if self.current else None)
+        if not map_id:
             self._log(_("Noch keine Map gewählt."), "Overlay")
             return
-        deg = (self._map_rotation() + 90) % 360
         rots = self.settings["overlay"].setdefault("map_rotations", {})
+        deg = (int(rots.get(map_id, 0)) + 90) % 360
         if deg:
-            rots[self.current[0]] = deg
+            rots[map_id] = deg
         else:
-            rots.pop(self.current[0], None)
-        self._reload_picture()
-        m = self.catalog.maps.get(self.current[0])
-        self._log(_("{map} um {deg}° gedreht.", map=m.name if m else self.current[0], deg=deg), "Overlay")
+            rots.pop(map_id, None)
+        if self.current and self.current[0] == map_id:
+            self._reload_picture()
+        m = self.catalog.maps.get(map_id)
+        self._log(_("{map} um {deg}° gedreht.", map=m.name if m else map_id, deg=deg), "Overlay")
         self._show_map_size()
         self._save_soon()
 
