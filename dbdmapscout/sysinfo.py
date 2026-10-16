@@ -46,6 +46,10 @@ CORE_USAGE = re.compile(r"^(?:[pe]-)?core\s*#?\d+(?:\s*t\d+)?\s+usage$")   # per
 # readings ("Power Limit Exceeded", PL1/PL2) are left out: under full load that is the normal state, like the
 # GPU's power cap – it would be a permanent warning.
 CPU_THROTTLE_WORDS = ("thermal throttling", "prochot", "thermal event", "critical temperature")
+# 1.2.2 (user's decision): frame rate as HWiNFO measures it – PresentMon (Windows events, no hook) or RivaTuner, read
+# only from HWiNFO's shared memory like every other value. HWiNFO averages it per second; 0 = no 3D picture.
+FPS_LABELS = ("framerate (presented)", "framerate (displayed)", "framerate")
+FPS_LOW_SHARE = 0.01        # "FPS low" of a round = the slowest 1 % of its seconds (not a per-frame 1 % low)
 # thresholds (°C): green up to the first, amber up to the second, red above
 CPU_WARM, CPU_HOT = 80, 90
 GPU_WARM, GPU_HOT = 75, 85
@@ -70,6 +74,7 @@ class Snapshot:
     cpu_power: float | None = None     # W package power (HWiNFO)
     core_max: float | None = None      # % load of the busiest thread (HWiNFO): DBD runs on few cores
     cpu_throttle: str = ""             # "" | "thermal" (HWiNFO Yes/No readings of the CPU)
+    fps: float | None = None           # frames per second, HWiNFO's average over the last second
     vram_used: float | None = None     # GB
     vram_total: float | None = None
     ram_used: float | None = None      # GB
@@ -102,14 +107,17 @@ def parse_hwinfo(buf: bytes, now: float | None = None) -> dict | None:
                 break
             if _cstr(HWINFO_SENSOR.unpack_from(buf, at)[2]).lower().startswith("cpu"):
                 cpu_sensors.add(i)
-    temps, cpu, usage, threads, throttled = {}, {}, {}, [], False
+    temps, cpu, usage, threads, throttled, fps = {}, {}, {}, [], False, {}
     for i in range(r_num):
         at = r_off + i * r_size
         if at + HWINFO_READING.size > len(buf):
             break
         kind, sensor, _rid, label, _user, unit, value, *_ = HWINFO_READING.unpack_from(buf, at)
         name = _cstr(label).lower()
-        if kind == TEMP:
+        if name in FPS_LABELS:
+            if 0 < value < 1000:                          # 0 = no 3D picture (or HWiNFO's every-other-zero)
+                fps.setdefault(name, value)
+        elif kind == TEMP:
             if "f" in _cstr(unit).lower():
                 value = (value - 32) * 5 / 9              # user switched HWiNFO to Fahrenheit
             temps.setdefault(name, value)                 # first sensor with that label wins
@@ -128,7 +136,8 @@ def parse_hwinfo(buf: bytes, now: float | None = None) -> dict | None:
             "gpu_hot": _pick(temps, HOT_LABELS), "gpu_mem": _pick(temps, MEM_LABELS),
             "cpu_power": None if power is None else float(power),
             "core_max": None if core_max is None else max(0.0, min(100.0, float(core_max))),
-            "cpu_throttle": "thermal" if throttled else ""}
+            "cpu_throttle": "thermal" if throttled else "",
+            "fps": next((float(fps[k]) for k in FPS_LABELS if k in fps), None)}
 
 
 def _pick(temps: dict, labels) -> float | None:
@@ -346,7 +355,7 @@ def hud_rows(s: Snapshot) -> list:
 
 # ------------------------------------------------------------------ per round (tab Statistik)
 SYS_KEYS = ("cpu_temp", "gpu_temp", "cpu_load", "gpu_load", "gpu_power", "vram_used", "ram_used", "gpu_hot",
-            "gpu_mem", "cpu_power", "core_max")
+            "gpu_mem", "cpu_power", "core_max", "fps")
 MIN_SAMPLES = 10             # fewer readings in a round (HUD switched on late, HWiNFO started late): not stored
 
 
@@ -384,6 +393,9 @@ class SysRecorder:
                 out[k + "_max"] = round(max(vs), 1)
         if out and self.readings >= MIN_SAMPLES:
             out["throttle_s"] = float(self.throttled * POLL_EVERY)
+        fps = sorted(self.values["fps"])
+        if len(fps) >= MIN_SAMPLES:
+            out["fps_low"] = round(fps[int(len(fps) * FPS_LOW_SHARE)], 1)    # the slowest 1 % of the seconds
         if out and self.hw_readings >= MIN_SAMPLES:
             out["cpu_throttle_s"] = float(self.cpu_throttled * POLL_EVERY)
         return out or None
@@ -436,6 +448,7 @@ class SysMonitor:
                     snap.gpu_hot, snap.gpu_mem = hw["gpu_hot"], hw["gpu_mem"]
                     snap.cpu_power, snap.core_max = hw["cpu_power"], hw["core_max"]
                     snap.cpu_throttle = hw["cpu_throttle"]
+                    snap.fps = hw["fps"]
                     if snap.gpu_temp is None:
                         snap.gpu_temp = hw["gpu_temp"]           # AMD/Intel: GPU temperature from HWiNFO
             except Exception as e:                               # never kill the thread over one reading
@@ -450,4 +463,5 @@ class SysMonitor:
                 f"HWiNFO={'ja' if s.hwinfo else ('früher ja' if self.hwinfo_seen else 'nein')} "
                 f"CPU={s.cpu_temp}°C/{s.cpu_load}% GPU={s.gpu_temp}°C/{s.gpu_load}% "
                 f"Hotspot={s.gpu_hot} Mem={s.gpu_mem} drosselt={s.throttle or 'nein'} "
-                f"CPU-Leistung={s.cpu_power}W Kern max={s.core_max}% CPU drosselt={s.cpu_throttle or 'nein'}")
+                f"CPU-Leistung={s.cpu_power}W Kern max={s.core_max}% CPU drosselt={s.cpu_throttle or 'nein'} "
+                f"FPS={s.fps}")

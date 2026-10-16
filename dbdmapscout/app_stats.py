@@ -34,7 +34,8 @@ SYS_PEAK_ROWS = {"gpu_temp_max": (N_("GPU-Temperatur"), " °C"), "gpu_hot_max": 
                  "gpu_mem_max": (N_("GPU-Speicher"), " °C"), "cpu_temp_max": (N_("CPU-Temperatur"), " °C"),
                  "gpu_power_max": (N_("GPU-Leistung"), " W"), "vram_used_max": (N_("VRAM"), " GB"),
                  "ram_used_max": (N_("RAM"), " GB"), "throttle_s": (N_("GPU gedrosselt"), ""),
-                 "cpu_power_max": (N_("CPU-Leistung"), " W"), "cpu_throttle_s": (N_("CPU gedrosselt"), "")}
+                 "cpu_power_max": (N_("CPU-Leistung"), " W"), "cpu_throttle_s": (N_("CPU gedrosselt"), ""),
+                 "fps_low": (N_("Niedrigstes FPS-Tief"), " FPS")}
 
 
 def sys_tiles(avg) -> list:
@@ -44,7 +45,8 @@ def sys_tiles(avg) -> list:
     out = []
     for key, title, unit in (("gpu_temp", N_("Ø GPU-Temperatur"), " °C"), ("cpu_temp", N_("Ø CPU-Temperatur"), " °C"),
                              ("gpu_load", N_("Ø GPU-Last"), " %"), ("gpu_power", N_("Ø GPU-Leistung"), " W"),
-                             ("core_max", N_("Ø stärkster CPU-Kern"), " %"), ("cpu_power", N_("Ø CPU-Leistung"), " W")):
+                             ("core_max", N_("Ø stärkster CPU-Kern"), " %"), ("cpu_power", N_("Ø CPU-Leistung"), " W"),
+                             ("fps", N_("Ø FPS"), ""), ("fps_low", N_("Ø FPS-Tief"), "")):
         if key in avg:
             out.append(Tile(_(title), f"{avg[key]:.0f}{unit}", rounds,
                             frac=avg[key] / 100 if key in ("gpu_load", "core_max") else None))
@@ -176,7 +178,8 @@ class StatsTab:
                                                 ("load", _("GPU Ø Last"), 72, "e"), ("pwr", _("Ø Watt"), 56, "e"),
                                                 ("thr", _("GPU gedr."), 70, "e"),
                                                 ("core", _("Kern Ø %"), 64, "e"), ("cpupwr", _("CPU Ø W"), 60, "e"),
-                                                ("cputhr", _("CPU gedr."), 70, "e")), 6)
+                                                ("cputhr", _("CPU gedr."), 70, "e"),
+                                                ("fps", _("FPS Ø"), 56, "e"), ("fpslow", _("FPS Tief"), 60, "e")), 6)
         self.sys_trend = TrendChart(box_s, bool(self.settings.get("dark_mode", True)), panels=("temp",))
         ui.Label(box_s, text=_("Werte der Systemwerte-Anzeige (Tab Overlay) während der Runden – nur Runden, in denen "
                                 "sie eingeschaltet war. CPU-Temperatur nur mit HWiNFO. „Wann/Wo“ zeigt, auf welchen "
@@ -463,7 +466,7 @@ class StatsTab:
                                         num(vals, "gpu_hot_max"), num(vals, "cpu_temp"), num(vals, "cpu_temp_max"),
                                         num(vals, "gpu_load", " %"), num(vals, "gpu_power"), secs(vals, "throttle_s"),
                                         num(vals, "core_max", " %"), num(vals, "cpu_power"),
-                                        secs(vals, "cpu_throttle_s")))
+                                        secs(vals, "cpu_throttle_s"), num(vals, "fps"), num(vals, "fps_low")))
         self._sys_trend_render(rounds, unit)
 
     def _sys_trend_render(self, rounds, unit):
