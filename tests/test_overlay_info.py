@@ -167,8 +167,10 @@ def test_dark_area_behind_the_map_fits_the_bar_and_keeps_every_frame_the_same_si
     pic = ov._prepared[0]
     corner = pic[0][:4]                                  # BGRA of the top left pixel: rounded corner, see-through
     assert corner[3] == 0
-    middle_left = (pic[2] // 2 * pic[1] + 2) * 4         # left edge, half way down: the dark area
-    assert pic[0][middle_left + 3] == ow.CARD_BACKDROP[3]
+    middle_left = (pic[2] // 2 * pic[1]) * 4             # left edge, half way down: the frame (1.2.20) …
+    assert pic[0][middle_left + 3] == ow.CARD_EDGE[3]
+    inside = (pic[2] // 2 * pic[1] + 6) * 4              # … and the dark area right behind it
+    assert pic[0][inside + 3] == ow.CARD_BACKDROP[3]
     frames = [Image.new("RGBA", (100, 80), (0, 0, 0, 0)) for _i in range(2)]
     frames[0].paste((200, 200, 200, 255), (10, 10, 50, 50))
     frames[1].paste((200, 200, 200, 255), (40, 30, 90, 70))

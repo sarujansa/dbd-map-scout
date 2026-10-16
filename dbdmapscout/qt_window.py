@@ -181,6 +181,10 @@ SPECS = {
         ("card", "st.more.own", (("row", (("hint", "st.more.aliases"), ("button", "st.more.aliases_clear"))),)),
         ("card", "st.more.official", (("check", "st.more.off_open"), ("check", "st.more.off_notify"),
                                       ("row", (("button", "st.more.script"), ("stretch",))), ("hint", "st.more.off_text"))),
+        ("card", "st.more.farming", (("check", "st.more.farm_cross"),                       # 1.2.20
+                                     ("row", (("label", "st.more.farm_region.label"), ("combo", "st.more.farm_region"),
+                                              ("stretch",))),
+                                     ("hint", "st.more.farm_text"))),
         ("card", "st.more.backup", (("row", (("button", "st.more.export"), ("button", "st.more.import"), ("stretch",),
                                              ("button", "st.more.clear_hist"), ("button", "st.more.reset_all"))),)),
         ("card", "st.more.folders", (("row", (("button", "st.more.dir"), ("button", "st.more.maps_dir"), ("stretch",))),)),
