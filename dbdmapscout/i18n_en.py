@@ -588,8 +588,6 @@ EN = {
     "Verschieben aktiv – ziehen (rastet ein, Alt = frei), Pfeiltasten = fein, Ecke/Mausrad = Grösse":
         "Moving is on – drag (snaps, Alt = free), arrow keys = fine, corner/mouse wheel = size",
     "Rückgängig": "Undo",
-    "Gilt nur für {map}": "Applies to {map} only",
-    "Gilt für alle Maps (keine Map eingeblendet)": "Applies to all maps (no map on display)",
     "Die Karte ist so breit wie der schwarze Balken – grösser geht so nicht. Grösser mit „Karte darf grösser als der Balken werden“ (ragt dann ins Spielbild).":
         "The map is as wide as the black bar – it cannot get bigger like this. Bigger with “The map may grow bigger than the bar” (it then reaches into the game picture).",
     "Karte darf grösser als der Balken werden (ragt dann ins Spielbild)": "The map may grow bigger than the bar (it then reaches into the game picture)",
@@ -988,7 +986,6 @@ EN = {
     "{name} wurde gelesen, konnte aber nicht gelöscht werden – Details im Log.":
         "{name} was read but could not be deleted – details in the log.",
     # system values (app_sysinfo)
-    "Anzeige": "Show",
     "Links oben (über der Karte)": "Top left (above the map)",
     "Rechts oben": "Top right",
     "GPU: {name}": "GPU: {name}",
@@ -1024,14 +1021,6 @@ EN = {
     # system values: own position
     "Eigene Position (mit der Maus verschieben)": "Own position (drag with the mouse)",
     "SYSTEMWERTE": "SYSTEM VALUES",
-    "Oben im schwarzen Rand, solange eine Karte im Match zu sehen ist. „Eigene Position“: mit „Mit der Maus "
-    "verschieben“ (Tab Overlay) zusammen mit der Karte ziehen; im schmalen Fenster bleibt die Anzeige im Balken "
-    "oben. GPU-Werte von NVIDIA-Karten (Treiber), CPU-Temperatur nur mit HWiNFO („Shared Memory Support“ an) – das "
-    "Programm lädt keinen eigenen Treiber.":
-        "At the top of the black bar while a map is shown in a match. \"Own position\": drag it together with the "
-        "map via \"Move with the mouse\" (Overlay tab); in a narrow window it stays in the bar at the top. GPU values "
-        "from NVIDIA cards (driver), CPU temperature only with HWiNFO (\"Shared Memory Support\" on) – the program "
-        "loads no driver of its own.",
     "Direkt über der Karte (wandert mit)": "Right above the map (moves with it)",
     "Schriftgröße": "Font size",
     "Übersicht": "Overview",
@@ -1238,10 +1227,6 @@ EN = {
         'To the Maps page: show a map by hand (double-click or "Show"). At the next match the automatic detection takes over again.',
     "Erscheint automatisch, sobald im Match das Map-Banner kommt – oder von Hand über „Map wählen“.":
         'Appears by itself as soon as the map banner comes in the match – or by hand with "Choose map".',
-    "Automatisch: im schwarzen Rand neben dem Spielbild, im Fenstermodus neben dem DBD-Fenster (falls dort Platz ist). Eigene Position: „Mit der Maus verschieben“ und in der Vorschau ziehen – oder Vorgabe „eigene Position“.":
-        'Automatic: in the black border next to the game picture, in window mode next to the DBD window (if there is room). Own position: "Move with the mouse" and drag in the preview – or the preset "own position".',
-    "Eigene Position: „Mit der Maus verschieben“ und in der Vorschau ziehen – oder Vorgabe „eigene Position“.":
-        'Own position: "Move with the mouse" and drag in the preview – or the preset "own position".',
     'Unter der Karte': 'Below the map',
     'Wann zeigen': 'When to show',
     'Alle Maps': 'All maps',
@@ -1251,6 +1236,22 @@ EN = {
         'Click = view big · double click = show now. Detection takes over again at the next match.',
     'Zurück zu den Karten des Realms (Esc).': "Back to the realm's maps (Esc).",
     'Allgemein': 'General',
+    'Automatisch: im schwarzen Rand neben dem Spielbild bzw. neben dem DBD-Fenster. Frei platzieren: „Mit der Maus '
+    'verschieben“.': 'Automatic: in the black bar next to the game picture or next to the DBD window. Place freely: '
+                     '"Move with the mouse".',
+    'Frei platzieren: „Mit der Maus verschieben“ oder Vorgabe „eigene Position“.':
+        'Place freely: "Move with the mouse" or preset "own position".',
+    'Im schwarzen Rand, solange die Karte im Match zu sehen ist. GPU-Werte von NVIDIA (Treiber), CPU-Temperatur nur '
+    'mit HWiNFO („Shared Memory Support“ an) – kein eigener Treiber.':
+        'In the black bar while the map is on screen in the match. GPU values from NVIDIA (driver), CPU temperature '
+        'only with HWiNFO ("Shared Memory Support" on) – no driver of its own.',
+    'Standard (wie ausgeliefert)': 'Standard (as delivered)',
+    'Fenster {size}': 'window {size}',
+    'alle Fenstergrössen': 'all window sizes',
+    'Gilt für: {window}': 'Applies to: {window}',
+    'Gilt für: {maps} · {window}': 'Applies to: {maps} · {window}',
+    'nur {map}': 'only {map}',
+    'alle Maps (keine Map eingeblendet)': 'all maps (no map on screen)',
     'Letzte 7 Tage': 'Last 7 days',
     'Letzte 30 Tage': 'Last 30 days',
     'Alle Maps': 'All maps',

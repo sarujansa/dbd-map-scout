@@ -62,3 +62,18 @@ def test_layout_presets_only_touch_layout_keys_and_apply():
     assert data["overlay"]["anchor"] == "top-right" and data["sysinfo"] == "right"
     assert data["overlay"]["pos_x"] == 0.3 and data["overlay"]["height"] == 0.4      # untouched: size, own place
     assert data["overlay"]["media_pos"] == "under_today"
+
+
+def test_the_standard_preset_is_the_delivered_layout():
+    """1.2.17: "Standard (wie ausgeliefert)" puts every layout key back to the defaults, map sizes included."""
+    from dbdmapscout import layoutmem
+    from dbdmapscout.config import DEFAULTS
+    snap = layoutmem.standard_layout(DEFAULTS)
+    assert set(snap["overlay"]) >= set(layoutmem.OVERLAY_KEYS) and snap["overlay"]["map_heights"] == {}
+    assert snap["sysinfo"] == DEFAULTS["sysinfo"] and snap["overlay"]["anchor"] == DEFAULTS["overlay"]["anchor"]
+    data = {"overlay": {"anchor": "custom", "pos_x": 0.3, "map_heights": {"coal": 0.5}, "height": 0.6},
+            "sysinfo": "custom", "sysinfo_pos": [0.2, 0.2]}
+    layoutmem.apply(data, snap)
+    assert data["overlay"]["anchor"] == DEFAULTS["overlay"]["anchor"] and data["overlay"]["map_heights"] == {}
+    assert data["sysinfo"] == DEFAULTS["sysinfo"] and data["overlay"]["height"] == DEFAULTS["overlay"]["height"]
+    assert layoutmem.STANDARD not in layoutmem.PRESETS                      # built from the defaults, not stored
