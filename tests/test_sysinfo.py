@@ -218,6 +218,7 @@ def test_system_values_follow_the_map():
     hud = SimpleNamespace(size=(300, 120), show_at=lambda x, y: shown.append((x, y)), hide=lambda: shown.append(None))
     app = SysInfo()
     app.hud, app.overlay, app.worker = hud, SimpleNamespace(shown=True), SimpleNamespace(hud_rect=None)
+    app.settings = {"overlay": {"stack_gap": 8}}                           # the gap slider (1.2.8)
     app._hud_pending = "above"
     app._hud_follow_map((47, 300, 346, 500), 0, 0, 3440, 1440, 17)       # map in the left bar, room above it
     assert shown[-1] == (70, 300 - 8 - 120) and app.worker.hud_rect == (70, 172, 300, 120)
@@ -279,3 +280,15 @@ def test_frame_rate_from_hwinfo_and_the_slowest_seconds_of_a_round():
     peaks = {key: (v, r.map) for key, v, r in history.sys_peaks(rounds)}
     assert peaks["fps_low"] == (55, "B")
     assert history.sys_average(rounds)["fps_low"] == 72.5
+
+
+def test_hud_rows_can_be_switched_off_one_by_one():
+    """1.2.8 (user's pick 14): each row its own tick box; the throttling warnings always show."""
+    s = sysinfo.Snapshot(cpu_temp=62, cpu_load=45, gpu_temp=71, gpu_load=97, gpu_hot=92.0, vram_used=7.1,
+                         vram_total=16, ram_used=17.2, ram_total=32, throttle="thermal")
+    texts = ["".join(t for t, _c in r) for r in sysinfo.hud_rows(s)]
+    assert [t.split(" ")[0] for t in texts] == ["CPU", "GPU", "HOTSPOT", "GPU", "VRAM", "RAM"]
+    off = {"cpu": False, "spot": False, "ram": False}
+    texts = ["".join(t for t, _c in r) for r in sysinfo.hud_rows(s, off)]
+    assert [t.split(" ")[0] for t in texts] == ["GPU", "GPU", "VRAM"]          # the warning stays
+    assert sysinfo.hud_rows(s, {k: False for k in sysinfo.HUD_ROW_KEYS}) == [[("GPU DROSSELT (TEMP.)", sysinfo.HOT)]]

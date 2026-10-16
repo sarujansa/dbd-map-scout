@@ -65,6 +65,16 @@ TIPS = {
         "Windows) – nur Anzeige, das Programm steuert nichts und speichert nichts.",
     "Fortschritt des Lieds zeigen (Zeit und Balken)":
         "Unter Titel und Künstler: wie weit das Lied ist, mit Balken und Länge – wie in Spotify.",
+    "Zeile CPU (Temperatur, Last)":
+        "Zeile in den Systemwerten an/aus. Die Warnungen „CPU/GPU DROSSELT“ erscheinen immer.",
+    "Zeile GPU (Temperatur, Last)":
+        "Zeile in den Systemwerten an/aus. Die Warnungen „CPU/GPU DROSSELT“ erscheinen immer.",
+    "Zeile Hotspot / GPU-Speicher (HWiNFO)":
+        "Zeile in den Systemwerten an/aus – Hotspot und Memory Junction kommen nur mit HWiNFO.",
+    "Zeile VRAM":
+        "Zeile in den Systemwerten an/aus.",
+    "Zeile RAM":
+        "Zeile in den Systemwerten an/aus.",
     "Dunkle Fläche hinter Karte und Infos":
         "Eine halb durchsichtige dunkle Fläche mit runden Ecken hinter Karte, Timer und Infozeilen (auch hinter "
         "„Warte auf Map“) – gut lesbar über hellen Stellen im Spiel.",

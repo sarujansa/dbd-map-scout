@@ -318,13 +318,20 @@ def temp_colour(t: float, warm: float, hot: float):
     return GOOD if t <= warm else WARM if t <= hot else HOT
 
 
-def hud_rows(s: Snapshot) -> list:
+HUD_ROW_KEYS = ("cpu", "gpu", "spot", "vram", "ram")     # rows the user may switch off (1.2.8)
+
+
+def hud_rows(s: Snapshot, shown=None) -> list:
     """Rows for the HUD: [[(text, colour), ...], ...]; only values that were read. The GPU's power is not in the
-    overlay (1.65.2, user's wish) – it is still recorded for the statistics."""
+    overlay (1.65.2, user's wish) – it is still recorded for the statistics. ``shown`` (1.2.8): {row key: bool}
+    – rows switched off are left out; the throttling warnings always show."""
+    shown = shown or {}
     rows = []
-    for name, temp, load, warm, hot in (
-            ("CPU", s.cpu_temp, s.cpu_load, CPU_WARM, CPU_HOT),
-            ("GPU", s.gpu_temp, s.gpu_load, GPU_WARM, GPU_HOT)):
+    for key, name, temp, load, warm, hot in (
+            ("cpu", "CPU", s.cpu_temp, s.cpu_load, CPU_WARM, CPU_HOT),
+            ("gpu", "GPU", s.gpu_temp, s.gpu_load, GPU_WARM, GPU_HOT)):
+        if not shown.get(key, True):
+            continue
         segs = []
         if temp is not None:
             segs.append((f"{temp:.0f}°C", temp_colour(temp, warm, hot)))
@@ -336,7 +343,7 @@ def hud_rows(s: Snapshot) -> list:
                 row += ([(" · ", DIM)] if i else []) + [seg]
             rows.append(row)
     spots = [(name, t) for name, t in (("HOTSPOT", s.gpu_hot), ("MEM", s.gpu_mem)) if t is not None]
-    if spots:                                   # hot spot / memory junction: only with HWiNFO
+    if spots and shown.get("spot", True):                                   # hot spot / memory junction: only with HWiNFO
         row = []
         for i, (name, t) in enumerate(spots):
             row += ([(" · ", DIM)] if i else []) + [(name + " ", DIM),
@@ -347,8 +354,9 @@ def hud_rows(s: Snapshot) -> list:
     if s.throttle:
         rows.append([(_("GPU DROSSELT (TEMP.)") if s.throttle == "thermal" else
                       _("GPU DROSSELT (HW)"), HOT)])
-    for name, used, total in (("VRAM", s.vram_used, s.vram_total), ("RAM", s.ram_used, s.ram_total)):
-        if used is not None and total:
+    for key, name, used, total in (("vram", "VRAM", s.vram_used, s.vram_total),
+                                   ("ram", "RAM", s.ram_used, s.ram_total)):
+        if used is not None and total and shown.get(key, True):
             rows.append([(name + " ", DIM), (f"{used:.1f} / {total:.0f} GB", WHITE)])
     return rows
 
