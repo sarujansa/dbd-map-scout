@@ -125,5 +125,5 @@ Vom Nutzer verworfen: Zuschauermodus erkennen (Wartekarte „ZUSCHAUER“; Merkm
 
 - Nutzer: Saru, antwortet auf Deutsch, will direkte, kritische, technisch präzise Antworten.
 - Vor größeren Umbauten kurz Plan nennen; nach Änderungen Tests laufen lassen und bei UI-Änderungen das Programm einmal starten.
-- Versionsnummer in `dbdmapscout/__init__.py` erhöhen und README anpassen, wenn sich Verhalten ändert.
+- Versionsnummer in `dbdmapscout/__init__.py` erhöhen und README anpassen, wenn sich Verhalten ändert. **Seit 1.66.4 neu gezählt ab 1.2** (Wunsch des Nutzers): alle „seit 1.x“-Angaben in Code/Doku bis einschließlich 1.66.4 gehören zur alten Zählung; neue Versionen 1.2.1, 1.3 … Updates vergleichen keine Nummern (Git-Commits), `update.py` zeigt die Nummer nur an. Vor 1.25 die alte Zählung beachten (Doku nennt 1.25–1.66 der alten Reihe).
 - Nach dem Push **immer direkt einen PR aufmachen, ohne nachzufragen** (Wunsch des Nutzers); gemergt wird erst bei grünem Haken – und zwar **von Claude selbst** (Wunsch des Nutzers, seit 1.64.9: sobald Linux- und Windows-Prüfung grün sind, ohne Rückfrage mergen; danach Zweig auf `main` zurücksetzen).
