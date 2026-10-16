@@ -509,16 +509,19 @@ def progress_strip(width: int, elapsed: float, total: float, height: int, accent
 
 
 CARD_BACKDROP = (14, 14, 18, 165)    # the music card's own dark area (1.2.4): readable over a bright game picture
+CARD_EDGE = (118, 118, 130, 200)      # 1.2.20: its thin frame – the area alone vanishes on the black bars (user:
+                                      # "trotz schwarzem Hintergrund den Rahmen von der Map sehen")
 
 
 def backdrop(pic: Image.Image, height: int, pad: int = 0, radius: int = 0) -> Image.Image:
-    """``pic`` on a dark half-transparent area with rounded corners (1.2.4, user's pick: "Hintergrund-Kachel";
-    since 1.2.4 also behind the map and the system values, user: "Hintergrund dahinter, für jedes UI-Element").
-    ``height``: game height (sets padding and corners unless given)."""
+    """``pic`` on a dark half-transparent area with rounded corners and a thin lighter frame (1.2.4, user's pick:
+    "Hintergrund-Kachel"; since 1.2.4 also behind the map and the system values, user: "Hintergrund dahinter, für
+    jedes UI-Element"; frame since 1.2.20). ``height``: game height (sets padding and corners unless given)."""
     pad = pad or max(4, height // 160)
+    radius = radius or max(6, height // 90)
     out = Image.new("RGBA", (pic.width + 2 * pad, pic.height + 2 * pad), (0, 0, 0, 0))
-    ImageDraw.Draw(out).rounded_rectangle((0, 0, out.width - 1, out.height - 1),
-                                          radius=radius or max(6, height // 90), fill=CARD_BACKDROP)
+    ImageDraw.Draw(out).rounded_rectangle((0, 0, out.width - 1, out.height - 1), radius=radius,
+                                          fill=CARD_BACKDROP, outline=CARD_EDGE, width=max(1, radius // 7))
     out.alpha_composite(pic, (pad, pad))
     return out
 

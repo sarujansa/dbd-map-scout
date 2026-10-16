@@ -53,13 +53,16 @@ class LobbyInfo:
             role = killer_label(self._killer_of(q["killer"]))                 # "Nurse" says more than "Killer"
         if q["state"] == "search" and q.get("since"):
             text = _("Suche läuft: {time}", time=fmt_duration(max(0.0, now - q["since"])))
+            if q.get("crossplay_off") and self.settings.get("farming_crossplay", True):
+                text += " · " + _("Farming")
             return text + (f" · {role}" if role else "")
         f = q.get("found") or q.get("used")          # lobby found / the round it led to
         if q["state"] == "custom" or (f is not None and f.custom):
             return _("Custom Game")
         if f is not None:
             parts = ([_("Rolle: {role}", role=role)] if role else []) + \
-                ([_("Wartezeit {time}", time=fmt_duration(f.wait))] if f.wait is not None else [])
+                ([_("Wartezeit {time}", time=fmt_duration(f.wait))] if f.wait is not None else []) + \
+                ([_("Farming")] if f.crossplay_off and self.settings.get("farming_crossplay", True) else [])
             return " · ".join(parts)
         return ""
 
@@ -67,7 +70,8 @@ class LobbyInfo:
         prev, what = self._queue, d.get("what")
         if what == "search":
             self._queue = {"state": "search", "since": d.get("since"), "role": d.get("role") or prev.get("role"),
-                           "killer": d.get("killer") or prev.get("killer", "")}
+                           "killer": d.get("killer") or prev.get("killer", ""),
+                           "crossplay_off": d.get("crossplay_off")}
             if prev.get("state") != "search":
                 self._log(_("Suche nach einem Match gestartet."), "Erkennung")
         elif what == "cancel":
@@ -91,6 +95,8 @@ class LobbyInfo:
                     self._log(_("Lobby gefunden nach {time}{role}.", time=fmt_duration(f.wait), role=who), "Erkennung")
                 else:
                     self._log(_("Lobby gefunden{role}.", role=who), "Erkennung")
+                if f.crossplay_off and self.settings.get("farming_crossplay", True):
+                    self._log(_("Crossplay ist aus – die nächste Runde zählt als Farming-Runde."), "Erkennung")
         elif what == "remind":
             if self.settings.get("lobby_remind", True):
                 self._notify(_("Lobby startet gleich"), _("Noch {n} s – READY ist noch nicht gedrückt.",
@@ -98,4 +104,5 @@ class LobbyInfo:
                 self._log(_("Lobby-Countdown läuft ab, READY ist noch nicht gedrückt."), "Erkennung")
         else:
             self._queue = dict(prev, role=d.get("role") or prev.get("role"),
-                               killer=d.get("killer") or prev.get("killer", ""))
+                               killer=d.get("killer") or prev.get("killer", ""),
+                               crossplay_off=d.get("crossplay_off", prev.get("crossplay_off")))

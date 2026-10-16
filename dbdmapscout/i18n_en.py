@@ -104,6 +104,32 @@ EN = {
     "Alle Rollen": "All roles",
     "Custom Game": "Custom game",
     "Custom Games": "Custom games",
+    "Farming": "Farming",
+    "Farming an/aus": "Farming on/off",
+    "Farming-Runden": "Farming rounds",
+    "Runden ohne Crossplay als Farming zählen": "Count rounds without cross-play as farming",
+    "Alle Runden auf": "All rounds on",
+    "Farming-Runden zählen nicht zu den normalen Runden (Rollen-Filter, Wartezeiten, Bilanz, Ergebnisse) – "
+    "die Statistik hat dafür den Filter „Farming“. Crossplay aus erkennt das Programm an der Weltkugel mit "
+    "rotem Kreuz neben dem Lobby-Knopf; Runden auf der gewählten Region zählen immer als Farming, auch "
+    "ältere. Einzelne Runden: „Farming an/aus“ unter „Letzte Runden“.":
+        "Farming rounds do not count as normal rounds (role filters, waiting times, record, results) – the "
+        "statistics have their own filter \"Farming\". Cross-play off is read from the globe with the red cross next "
+        "to the lobby button; rounds on the chosen region always count as farming, older ones too. Single rounds: "
+        "\"Farming on/off\" under \"Last rounds\".",
+    "{map} ({when}) zählt jetzt als Farming-Runde.": "{map} ({when}) now counts as a farming round.",
+    "{map} ({when}) zählt wieder als normale Runde.": "{map} ({when}) counts as a normal round again.",
+    "Hinweis: Runden auf {region} zählen laut Einstellung weiter als Farming.":
+        "Note: rounds on {region} still count as farming by the setting.",
+    "Crossplay war aus – die Runde zählt als Farming-Runde.": "Cross-play was off – the round counts as a farming round.",
+    "Crossplay ist aus – die nächste Runde zählt als Farming-Runde.":
+        "Cross-play is off – the next round counts as a farming round.",
+    "Diese Runde als Farming-Runde zählen bzw. wieder als normale Runde – Farming-Runden erscheinen nur unter dem "
+    "Filter „Farming“. Runden auf der Farming-Region (Einstellungen → Mehr) bleiben Farming.":
+        "Count this round as a farming round, or as a normal round again – farming rounds show only under the "
+        "filter \"Farming\". Rounds on the farming region (Settings → More) stay farming.",
+    "Zeigt die Lobby die Weltkugel mit rotem Kreuz (Crossplay aus), zählt die nächste Runde als Farming-Runde.":
+        "If the lobby shows the globe with the red cross (cross-play off), the next round counts as a farming round.",
     "Custom Game – keine Wartezeit.": "Custom game – no waiting time.",
     "Suche läuft: {time}": "Searching: {time}",
     "Suche nach einem Match gestartet.": "Started searching for a match.",

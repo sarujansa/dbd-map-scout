@@ -276,3 +276,55 @@ def test_old_rounds_read_with_a_slip_count_for_the_killer():
     assert lobby.resolve_killer("Hillilly", {"HILLILLY": "The Nurse"}) == "The Nurse"
     assert lobby.resolve_killer("The Hunter", {}) == "The Hunter"
     assert lobby.resolve_killer("", {}) == ""
+
+
+# ------------------------------------------------------------------ cross-play (farming rounds, 1.2.20)
+@pytest.mark.parametrize("name, expected", [
+    ("crossplay_off", True),             # the user's lobby screenshot (2000×837 copy): globe with the red cross
+    ("crossplay_on_synthetic", False),   # the same globe with the cross painted over (no screenshot with it on yet)
+    ("crossplay_none", None),            # ground and fire only
+])
+def test_crossplay_globe(name, expected):
+    img = cv2.imread(os.path.join(DATA, name + ".png"))
+    assert lobby.crossplay_off(img, 2000, 837) is expected
+
+
+def test_crossplay_box_sits_above_the_button_and_scales():
+    x, y, w, h = lobby.crossplay_box(W, H)
+    bx, by, bw, bh = lobby.corner_box(W, H)
+    assert x + w <= W and y + h <= by + 2 and x >= bx                 # above the button, inside its columns
+    assert lobby.crossplay_box(1920, 1080)[2] == pytest.approx(w * 0.75, abs=2)
+    assert lobby.crossplay_off(np.zeros((h, w, 3), np.uint8), W, H) is None
+    red = np.zeros((h, w, 3), np.uint8)
+    red[:] = (20, 20, 220)                                             # a red-tinted zone without a globe
+    assert lobby.crossplay_off(red, W, H) is None
+
+
+def test_found_lobby_carries_crossplay_off():
+    """The looks while searching decide; the PLAY screen before counts only when none of them could tell."""
+    q = QueueTracker()
+    play = LobbyView(button="play", crossplay_off=True)
+    search = LobbyView(button="cancel", time_text="0:05 EST. 2:00", crossplay_off=True)
+    blind = LobbyView(button="cancel", time_text="0:06 EST. 2:00")           # globe hidden (overlay, notification)
+    ready = LobbyView(button="ready", time_text="00:50", crossplay_off=True)
+    t = 0.0
+    for v in (play, play, search, search, blind, ready, ready):
+        ev = q.update(v, t)
+        t += 1
+    found = [e for e in ev if e[0] == "found"][0][1]
+    assert found.crossplay_off is True
+    # a new search with cross-play on: the old looks do not stick
+    q.update(LobbyView(button="play", crossplay_off=False), t)
+    q.update(LobbyView(button="play", crossplay_off=False), t + 1)
+    on = LobbyView(button="cancel", time_text="0:05 EST. 2:00", crossplay_off=False)
+    for i in range(2):
+        q.update(on, t + 2 + i)
+    assert q.crossplay_off is False
+    for i in range(2):
+        ev = q.update(LobbyView(button="ready", time_text="00:50"), t + 4 + i)
+    assert [e for e in ev if e[0] == "found"][0][1].crossplay_off is False
+    # never seen: unknown
+    q2 = QueueTracker()
+    for i in range(2):
+        ev = q2.update(LobbyView(button="ready", time_text="00:50"), float(i))
+    assert [e for e in ev if e[0] == "found"][0][1].crossplay_off is None

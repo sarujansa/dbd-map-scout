@@ -111,6 +111,11 @@ TIPS = {
                            "wurden.",
     "Survivor": "Diese Runde als Survivor-Runde zählen (falls die Erkennung falsch lag).",
     "Custom Game": "Diese Runde als Custom Game zählen – sie fliesst dann nicht in die Wartezeit ein.",
+    "Farming an/aus": "Diese Runde als Farming-Runde zählen bzw. wieder als normale Runde – Farming-Runden "
+                      "erscheinen nur unter dem Filter „Farming“. Runden auf der Farming-Region (Einstellungen → "
+                      "Mehr) bleiben Farming.",
+    "Runden ohne Crossplay als Farming zählen": "Zeigt die Lobby die Weltkugel mit rotem Kreuz (Crossplay aus), "
+                                                 "zählt die nächste Runde als Farming-Runde.",
     "Drehen ↻": "Dreht die angezeigte Karte um 90° im Uhrzeigersinn (für jede Map gemerkt). Der Map-Name "
                 "darüber bleibt aufrecht, die Zahlen in der Karte drehen sich mit.",
     "Scannen": "Sucht sofort auf dem ganzen Bildschirm nach einem Map- oder Realm-Namen – falls die "

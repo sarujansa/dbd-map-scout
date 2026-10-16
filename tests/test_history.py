@@ -244,4 +244,27 @@ def test_last_days_periods_map_filter_and_csv_export(tmp_path):
                                   "escaped": None, "bloodpoints": 25000, "extra": "ignored"}])
     text = path.read_text(encoding="utf-8-sig")
     assert n == 1 and text.splitlines()[0] == ";".join(h.CSV_COLUMNS)
-    assert text.splitlines()[1] == "2026-10-16 15:30:00;Coal Tower;600;;;;;;;3;;25000"
+    assert text.splitlines()[1] == "2026-10-16 15:30:00;Coal Tower;600;;;;;;;;3;;25000"
+
+
+def test_farming_rounds_count_only_in_their_own_filter(tmp_path):
+    """1.2.20 (user: rounds without cross-play / on the farming region are farming rounds, not normal ones)."""
+    rs = [h.Round(100, 600, "a", "A", "eu-central-1", wait=60, role="killer"),
+          h.Round(200, 600, "a", "A", "ap-southeast-1", wait=30, role="killer", farming=True),
+          h.Round(300, 600, "a", "A", role="survivor", farming=True),
+          h.Round(400, 600, "a", "A", custom=True, farming=True)]
+    assert [r.t for r in h.select(rs)] == [100, 400]                       # "all" leaves farming out
+    assert [r.t for r in h.select(rs, role="killer")] == [100]
+    assert [r.t for r in h.select(rs, role="farming")] == [200, 300]       # custom stays custom
+    assert [r.t for r in h.select(rs, role="custom")] == [400]
+    assert h.wait_summary(rs)["count"] == 1 and h.roles_per_map(rs) == {"A": (1, 0)}
+    assert [h.normal(r) for r in rs] == [True, False, False, False]
+    assert "farming" in h.LOST_KEYS and "farming" in h.CSV_COLUMNS
+    path = str(tmp_path / "rounds.jsonl")
+    for r in rs[:2]:
+        h.append(path, r)
+    assert [r.farming for r in h.load(path)] == [False, True]
+    assert h.set_farming(path, 100, True).farming is True
+    assert [r.farming for r in h.load(path)] == [True, True]
+    assert h.set_farming(path, 200, False).role == "killer"                # the role stays
+    assert h.set_farming(path, 999, True) is None
