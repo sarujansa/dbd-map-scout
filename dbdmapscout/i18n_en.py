@@ -1126,6 +1126,8 @@ EN = {
         'avg. kills or escaped from the stats page and the time of day. Position below, size through the size '
         'slider (pick "Today").',
     'Dunkle Fläche hinter „Heute“': 'Dark area behind "Today"',
+    'Unter „Heute“': 'Below "Today"',
+    'Unter der Musik': 'Below the music',
     'Eine halb durchsichtige dunkle Fläche mit runden Ecken hinter „Heute“.':
         'A half-transparent dark area with rounded corners behind "Today".',
     'HEUTE': 'TODAY',

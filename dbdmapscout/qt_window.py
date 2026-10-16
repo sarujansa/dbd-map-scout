@@ -51,7 +51,7 @@ SPECS = {
         ("tabs", (
             ("ov.pos", N_("Position & Grösse"), (
                 ("row", (("label", "ov.sel.label"), ("combo", "ov.sel"), ("stretch",))), ("slider", "ov.sel_size"),
-                ("hint", "ov.size_scope"), ("hint", "ov.size_cap"),
+                ("slider", "ov.opacity"), ("hint", "ov.size_scope"), ("hint", "ov.size_cap"),
                 ("row", (("label", "ov.anchor.label"), ("combo", "ov.anchor"), ("stretch",), ("button", "ov.reset"))),
                 ("slider", "ov.posx"), ("slider", "ov.posy"),
                 ("row", (("button", "ov.edit"), ("button", "ov.test"), ("button", "ov.undo"), ("stretch",))),
@@ -59,7 +59,6 @@ SPECS = {
                 ("hint", "ov.per_size_hint"))),
             ("ov.look", N_("Aussehen"), (
                 ("row", (("hint", "ov.map_size"), ("stretch",), ("button", "ov.map_size_reset"))),
-                ("slider", "ov.opacity"),
                 ("row", (("label", "ov.map_style.label"), ("combo", "ov.map_style"), ("stretch",))),
                 ("sub", N_("Karte")), ("check", "ov.show_map"), ("check", "ov.caption"), ("check", "ov.floors"),
                 ("check", "ov.transparent"), ("check", "ov.map_backdrop"),
@@ -1641,11 +1640,12 @@ class PreviewView(QWidget):
         ratio = self.devicePixelRatioF()
         cache = self._pix if isinstance(self._pix, dict) else {}
         fresh = {}
-        p.setOpacity(float(d.get("opacity", 1.0)))
+        ops = d.get("opacities") or {}
         for name, lx, ly, lw, lh in self._layers():
             img = pics.get(name)
             if img is None:
                 continue
+            p.setOpacity(float(ops.get(name, d.get("opacity", 1.0))))     # per element (1.2.7)
             th = max(1, round(lh * s))
             hit = cache.get(name)
             pix = hit[2] if hit and hit[0] is img and hit[1] == th else pixmap_from_pil(img, th, ratio)

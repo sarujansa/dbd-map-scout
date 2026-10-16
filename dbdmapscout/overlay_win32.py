@@ -132,9 +132,12 @@ def compose(img: Image.Image, height: int, caption: str, transparent: bool, bord
     if split and text_h and text_h != height and 0 < split < img.height:
         title = img.crop((0, 0, img.width, split))
         body = img.crop((0, split, img.width, img.height))
+        tb = title.getchannel("A").getbbox()        # 1.2.7: the name itself, not the empty strip beside it – the
+        if tb:                                      # whole strip made the overlay as wide as the name's size, and
+            title = title.crop((tb[0], 0, tb[2], split))     # the lines below were shrunk for nothing
         th = max(1, round(split * text_h / img.height))
         bh = max(1, round(body.height * height / img.height))
-        title = title.resize((max(1, round(img.width * text_h / img.height)), th), Image.LANCZOS)
+        title = title.resize((max(1, round(title.width * text_h / img.height)), th), Image.LANCZOS)
         body = body.resize((max(1, round(img.width * height / img.height)), bh), Image.LANCZOS)
         w = max(title.width, body.width)
         pic = Image.new("RGBA", (w, th + bh), (0, 0, 0, 0))
@@ -185,6 +188,7 @@ def add_border(pic: Image.Image, label: str = "") -> Image.Image:
 
 
 INFO_TIMER = (255, 255, 255, 255)
+TIMER_GAP = 2.5                    # the gap below the timer, in row gaps (1.2.7, user: too close)
 DIM_LABEL = (150, 156, 170, 255)   # = sysinfo.DIM: a row starting with it is "label: values" (column, 1.64.7)
 TITLE_SCALE = 1.15                 # the music card's title, a bit larger than the artist below it
 INFO_SERVER = (178, 184, 248, 255)     # light tone of the map colour
@@ -252,7 +256,9 @@ def add_info(pic: Image.Image, timer: str, server: str, height: int, backdrop: b
         else:
             widths.append(int(_tracked_width(d0, text, font, track)) + (2 * dot if kind == "server" else 0))
     heights = [b[3] - b[1] for b in boxes]
-    block_h = sum(heights) + gap * (len(rows) - 1)
+    # 1.2.7 (user's screenshot: the lines sat right under the timer): more room after the big timer digits
+    gaps = [int(TIMER_GAP * gap) if kind == "timer" else gap for kind, _s, _f in rows[:-1]]
+    block_h = sum(heights) + sum(gaps)
     width = max([pic.width] + [w + 2 * gap for w in widths])
     # text layer for the info block only (shadow = blurred dark copy, like the title of the map pictures)
     blur = max(2, height // 150)
@@ -294,7 +300,7 @@ def add_info(pic: Image.Image, timer: str, server: str, height: int, backdrop: b
                         d.text((x, y - y0), ch, font=font, fill=dark if shadow else colour,
                                stroke_width=halo if shadow else 0, stroke_fill=dark)
                         x += d.textlength(ch, font=font) + track
-            y += h + gap
+            y += h + (int(TIMER_GAP * gap) if kind == "timer" else gap)
 
     shadow = Image.new("RGBA", (layer_w, layer_h), (0, 0, 0, 0))
     draw(ImageDraw.Draw(shadow), True)

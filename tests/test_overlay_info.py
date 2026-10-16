@@ -201,3 +201,15 @@ def test_the_dark_area_does_not_make_the_map_smaller():
     assert 0 < edge < 17                                           # fits into the 17-px margin of 1440p
     boxed_h = ov.fit_width(height, 518, 406 + 2 * edge)
     assert boxed_h == plain_h and ov.render(boxed_h)[0] <= 406 + 2 * edge
+
+
+def test_more_room_below_the_timer_than_between_the_small_lines():
+    """1.2.7 (user's screenshot): the lines sat right under the big timer digits."""
+    import numpy as np
+    pic = map_pic()
+    out = ow.add_info(pic, "02:36", "Global", 518, record="40% Escaped · 5 Rounds")
+    a = np.asarray(out.getchannel("A"))[pic.height:]
+    rows = np.flatnonzero((a > 200).any(axis=1))           # rows with solid text (not the soft shadow)
+    gaps = np.diff(rows)
+    big = sorted(gaps[gaps > 1])
+    assert len(big) >= 2 and big[-1] >= 2 * big[-2]        # the gap after the timer is the clearly largest one
