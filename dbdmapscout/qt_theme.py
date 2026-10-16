@@ -192,6 +192,7 @@ QTabBar::tab {{ background: transparent; color: {c['dim']}; padding: 7px 14px; b
 QTabBar::tab:selected {{ color: {c['accent']}; border-bottom: 2px solid {c['accent']}; }}
 QTabBar::tab:hover:!selected {{ color: {c['fg']}; }}
 QLabel[class="kpi"] {{ font-size: {px(24)}; font-weight: 700; color: {c['head']}; }}
+QLabel[class="sub"] {{ color: {c['dim']}; font-size: {px(11)}; font-weight: 700; letter-spacing: 1px; padding-top: 6px; }}
 QLabel[class="note"] {{ color: {DOT['warn']}; }}
 QLabel#thumb {{ background: {DARK['field']}; border-radius: 8px; }}  /* map pictures need a dark backdrop */
 QLabel#pill {{ border-radius: 10px; padding: 3px 12px; font-size: {px(12)}; font-weight: 600; }}
