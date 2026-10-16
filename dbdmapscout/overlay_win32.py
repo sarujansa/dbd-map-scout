@@ -464,8 +464,13 @@ def map_backdrop(pics, text_h: int) -> list:
         b = pic.getchannel("A").getbbox()
         if b:
             box = b if box is None else (min(box[0], b[0]), min(box[1], b[1]), max(box[2], b[2]), max(box[3], b[3]))
-    pad, radius = max(6, text_h // 45), max(8, text_h // 30)
+    pad, radius = backdrop_pad(text_h), max(8, text_h // 30)
     return [backdrop(pic.crop(box) if box else pic, 0, pad, radius) for pic in pics]
+
+
+def backdrop_pad(text_h: int) -> int:
+    """Edge of the dark area around the map (map_backdrop)."""
+    return max(6, text_h // 45)
 
 
 def _below(pic: Image.Image, strip: Image.Image, centred: bool) -> Image.Image:
@@ -874,6 +879,11 @@ class PictureOverlay:
         self.backdrop = bool(on)
         self._key = None
 
+    def backdrop_pad(self, text_h: int) -> int:
+        """Edge the dark area adds around the map (0 without it) – the App lets it use the margin, so the map
+        stays as big as without the area (1.2.5, user: "Warum wird die Map kleiner?")."""
+        return backdrop_pad(text_h) if self.backdrop else 0
+
     def render(self, height: int, push: bool = True):
         """Prepare pictures for this height; returns (w, h) of the overlay. ``push=False``: only measure – the
         screen keeps the picture it has (the App tries sizes before it settles; pushing each one made the
@@ -943,14 +953,18 @@ class PictureOverlay:
             try:
                 self.text_height = text_h
                 w, _h = self.render(height, push=False)
-                if w > avail:                   # the lines below are wider than the bar: smaller text, same map
-                    self.text_height = max(40, int(text_h * avail / w))
+                iw, ih = self.map_size()
+                map_w = (round(iw * height / ih) if ih else 0) + 2 * self.backdrop_pad(text_h)
+                for _try in range(3):           # the lines below are wider than the bar: smaller text, same map
+                    if w <= avail or w <= map_w or self.text_height <= 40:    # (the area's edge does not scale)
+                        break
+                    self.text_height = max(40, int(self.text_height * avail / w))
                     w, _h = self.render(height, push=False)
-                    for _try in range(6):       # still too wide (long line, the dark area's edge): the map too
-                        if w <= avail or height <= 80:
-                            break
-                        height = max(80, min(height - 1, int(height * avail / w)))
-                        w, _h = self.render(height, push=False)
+                for _try in range(6):           # still too wide (the map with the area's edge): the map too
+                    if w <= avail or height <= 80:
+                        break
+                    height = max(80, min(height - 1, int(height * avail / w)))
+                    w, _h = self.render(height, push=False)
             finally:
                 self._timer = timer
             self._fit = (key, self.text_height, height)

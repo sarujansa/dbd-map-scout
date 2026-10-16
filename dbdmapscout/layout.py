@@ -206,9 +206,10 @@ def media_xy(spot: str, game, size, margin: int, hud=None, own=None):
     gx, gy, gw, gh = game
     w, h = size
     bar = bar_width(gw, gh)
-    if spot == "custom":
+    if spot == "custom":                      # 1.2.5: by its centre – a wider/taller card (long title) stays put
         fx, fy = own or (1.0, 1.0)
-        return gx + fx * max(0, gw - w), gy + fy * max(0, gh - h)
+        return (min(max(gx + fx * gw - w / 2, gx), gx + max(0, gw - w)),
+                min(max(gy + fy * gh - h / 2, gy), gy + max(0, gh - h)))
     if spot in ("bottom_left", "bottom_right"):
         side = "left" if spot == "bottom_left" else "right"
         return hud_x(side, gx, gw, margin, w, bar), gy + gh - margin - h
@@ -216,6 +217,15 @@ def media_xy(spot: str, game, size, margin: int, hud=None, own=None):
         x = min(max(hud[0] + hud[2] / 2 - w / 2, gx + margin), gx + gw - margin - w)
         return x, hud[1] + hud[3] + max(2, margin // 2)
     return hud_x("right", gx, gw, margin, w, bar), gy + margin
+
+
+def media_own(gw: float, gh: float, size, x: float, y: float):
+    """``media_xy`` of a music card of ``size`` whose top-left corner is at (x, y) in the game window (1.2.5: the
+    share of the window where its centre is – before, the share of the free room, so a card that got wider with
+    a long title moved, user: "nicht mehr zentriert")."""
+    w, h = size
+    return (round(min(1.0, max(0.0, (x + w / 2) / max(1, gw))), 4),
+            round(min(1.0, max(0.0, (y + h / 2) / max(1, gh))), 4))
 
 
 def steady_width(state, key, w: int):
