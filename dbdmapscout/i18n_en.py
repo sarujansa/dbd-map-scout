@@ -177,8 +177,6 @@ EN = {
         "Count this round as a survivor round (if the detection was wrong).",
     "Diese Runde als Custom Game zählen – sie fliesst dann nicht in die Wartezeit ein.":
         "Count this round as a custom game – it is then left out of the waiting time.",
-    "Ø {avg} · Median {median} · kürzeste {min} · längste {max} ({n} Runden)":
-        "Avg. {avg} · median {median} · shortest {min} · longest {max} ({n} rounds)",
     "Noch keine Wartezeiten in dieser Auswahl.": "No waiting times in this selection yet.",
     "nach Wochentag": "by weekday",
     "nach Uhrzeit": "by time of day",
@@ -1253,6 +1251,23 @@ EN = {
         'Click = view big · double click = show now. Detection takes over again at the next match.',
     'Zurück zu den Karten des Realms (Esc).': "Back to the realm's maps (Esc).",
     'Allgemein': 'General',
+    'Letzte 7 Tage': 'Last 7 days',
+    'Letzte 30 Tage': 'Last 30 days',
+    'Alle Maps': 'All maps',
+    'Rolle/Killer': 'Role/killer',
+    'Weitere 100 Runden anzeigen': 'Show 100 more rounds',
+    'Als CSV exportieren …': 'Export as CSV …',
+    'Runden exportieren': 'Export rounds',
+    '{n} Runden exportiert: {path}': '{n} rounds exported: {path}',
+    'Median': 'Median',
+    '{n} Runden': '{n} rounds',
+    'Längste': 'Longest',
+    'Die Liste zeigt die neuesten 100 Runden der Auswahl; jeder Klick hängt 100 ältere an.':
+        'The list shows the newest 100 rounds of the selection; every click appends 100 older ones.',
+    'Speichert die Runden der aktuellen Filter als CSV (Semikolon, UTF-8) – mit Kills, Entkommen und Bloodpoints, '
+    'soweit ein Match der Stats-Seite zugeordnet ist.': 'Saves the rounds of the current filters as CSV (semicolon, '
+                                                        'UTF-8) – with kills, escapes and bloodpoints where a match '
+                                                        'of the stats page is tied.',
     'Server-Tab öffnen': 'Open the server tab',
     'Match-Daten einrichten …': 'Set up match data …',
     'Kills und Entkommen kommen von der Stats-Seite': 'Kills and escapes come from the stats page',

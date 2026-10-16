@@ -204,17 +204,20 @@ def per_map(rounds) -> list:
 
 
 # ------------------------------------------------------------------ filters (tab Statistik)
-PERIODS = ("all", "day", "week", "month", "year")
+PERIODS = ("all", "day", "7d", "30d", "week", "month", "year")   # 7d/30d since 1.2.16
 NO_REGION = "-"
 
 
 def period_start(period: str, now: float):
-    """Start of the current calendar day / week (Monday) / month / year in local time; None = all."""
+    """Start of the current calendar day / week (Monday) / month / year in local time; None = all. "7d" / "30d"
+    (1.2.16): midnight 6 / 29 days ago – today and the six / twenty-nine days before it."""
     import datetime
     if period not in PERIODS or period == "all":
         return None
     d = datetime.datetime.fromtimestamp(now).replace(hour=0, minute=0, second=0, microsecond=0)
-    if period == "week":
+    if period in ("7d", "30d"):
+        d -= datetime.timedelta(days=6 if period == "7d" else 29)
+    elif period == "week":
         d -= datetime.timedelta(days=d.weekday())
     elif period == "month":
         d = d.replace(day=1)
@@ -227,11 +230,13 @@ ROLES = ("killer", "survivor")
 ROLE_FILTERS = ("all", "killer", "survivor", "custom")
 
 
-def select(rounds, since=None, region=None, role="all", killer=None) -> list:
+def select(rounds, since=None, region=None, role="all", killer=None, map_label=None) -> list:
     """Rounds from ``since`` on; ``region``: None = all, NO_REGION = rounds without a known server;
     ``role``: all | killer | survivor | custom (custom games only); ``killer``: None = all, else only
-    killer rounds with this killer."""
+    killer rounds with this killer; ``map_label`` (1.2.16): only this map (the label as the tables group it)."""
     out = [r for r in rounds if since is None or r.t >= since]
+    if map_label:
+        out = [r for r in out if r.map == map_label]
     if killer:
         out = [r for r in out if r.killer == killer and r.role == "killer" and not r.custom]
     if role == "custom":
@@ -469,3 +474,21 @@ def sys_trend(rounds, unit: str) -> list:
         out.append((b, *groups.get(b, ([], [], []))))
         b = _next_bucket(b, unit)
     return out[-MAX_BUCKETS:]
+
+
+CSV_COLUMNS = ("start", "map", "seconds", "wait_seconds", "role", "custom", "killer", "region", "ping_ms",
+               "kills", "escaped", "bloodpoints")
+
+
+def export_csv(path: str, rows) -> int:
+    """1.2.16: the filtered rounds of the statistics as a CSV file (one row per round, CSV_COLUMNS; the
+    official results where a match is tied). ``rows``: dicts with those keys; returns the number written."""
+    import csv
+    with open(path, "w", encoding="utf-8-sig", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=CSV_COLUMNS, delimiter=";", extrasaction="ignore")
+        w.writeheader()
+        n = 0
+        for row in rows:
+            w.writerow({k: ("" if row.get(k) is None else row.get(k)) for k in CSV_COLUMNS})
+            n += 1
+    return n

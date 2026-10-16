@@ -68,8 +68,11 @@ RESULTS = {"escaped": N_("entkommen"), "dead": N_("tot"), "abandoned": N_("aufge
 
 
 RECORD_MIN = 3        # rounds with official results on a map before the overlay shows the own record there
-STATS_PERIODS = [("all", N_("Gesamter Zeitraum")), ("day", N_("Heute")), ("week", N_("Diese Woche")), ("month", N_("Dieser Monat")),
+STATS_PERIODS = [("all", N_("Gesamter Zeitraum")), ("day", N_("Heute")), ("7d", N_("Letzte 7 Tage")),
+                 ("30d", N_("Letzte 30 Tage")), ("week", N_("Diese Woche")), ("month", N_("Dieser Monat")),
                  ("year", N_("Dieses Jahr"))]
+TREND_UNIT = {"day": "hour", "7d": "day", "30d": "day", "week": "day", "month": "day"}   # else: week
+LAST_ROUNDS_STEP = 100                      # "Letzte Runden": rows shown, +100 per "Weitere" (1.2.16)
 
 
 class StatsTab:
@@ -102,15 +105,23 @@ class StatsTab:
                                             values=[lbl for _k, lbl in self._stats_killers])
         self.stats_killer_cb.pack(side="left", padx=(8, 0))
         self.stats_killer_cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
-        ui.Button(fr, text=_("Verlauf löschen"), command=self._stats_clear).pack(side="right")
+        # 1.2.16: map filter – set by hand or by a click on the dashboard (map bar, heatmap cell)
+        self._stats_maps_f = [(None, _("Alle Maps"))]
+        self.stats_map_var = ui.StringVar(value=self._stats_maps_f[0][1])
+        self.stats_map_cb = ui.Combobox(fr, textvariable=self.stats_map_var, state="readonly", width=18,
+                                         values=[lbl for _k, lbl in self._stats_maps_f])
+        self.stats_map_cb.pack(side="left", padx=(8, 0))
+        self.stats_map_cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
         ui.Button(fr, text=_("Stats-Seite öffnen"),
-                  command=lambda: self._official_open(False)).pack(side="right", padx=(0, 6))
+                  command=lambda: self._official_open(False)).pack(side="right")
+        self._stats_last_limit = LAST_ROUNDS_STEP
+        self._stats_filter_key = None
         # one thing at a time: the dashboard and each table on a sub-tab of its own, filling the window's height
         # (1.58.1 – before, dashboard and buttons stood above the tables and left them a few rows)
         self.stats_nb = ui.Notebook(f)
         self.stats_nb.pack(fill="both", expand=True)
         box_d = self._stats_page(_("Übersicht"))
-        self.stats_dash = ui.Dashboard(box_d)       # 1.58: key figures, maps, killer × map for the filters
+        self.stats_dash = ui.Dashboard(box_d, command=self._dash_clicked)   # 1.58: key figures, maps, killer × map
         self.stats_dash.pack(fill="x")
         self.stats_lost_var = ui.StringVar(value="")
         self.stats_lost_label = ui.Label(box_d, textvariable=self.stats_lost_var, wraplength=540)  # only when needed
@@ -193,6 +204,8 @@ class StatsTab:
         ui.Label(box_r, text=_("Region nur bekannt, wenn im Tab Server „Verbundener Spielserver“ an war."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         box_w = self._stats_page(_("Wartezeit in der Lobby"))
+        self.stats_wait_tiles = ui.Tiles(box_w)          # 1.2.16: Ø / median / shortest / longest as tiles
+        self.stats_wait_tiles.pack(fill="x", pady=(0, 6))
         wr = ui.Frame(box_w)
         wr.pack(fill="x", pady=(0, 4))
         self.stats_wait_var = ui.StringVar(value="")
@@ -212,12 +225,14 @@ class StatsTab:
         box2 = self._stats_page(_("Letzte Runden"))
         self.stats_last = self._stats_tree(box2, (("when", _("Wann"), 120, "w"), ("map", _("Map"), 130, "w"),
                                                   ("dur", _("Dauer"), 60, "e"), ("wait", _("Warten"), 65, "e"),
-                                                  ("role", _("Rolle"), 115, "w"), ("res", _("Ergebnis"), 75, "w"),
+                                                  ("role", _("Rolle/Killer"), 115, "w"), ("res", _("Ergebnis"), 75, "w"),
                                                   ("srv", _("Server"), 100, "w")), 7,
                                            select=True)
         self.stats_last.bind("<<TreeviewSelect>>", lambda e: self._stats_role_buttons())
+        self.stats_more_btn = ui.Button(box2, text=_("Weitere 100 Runden anzeigen"), command=self._stats_more_rounds)
         rr = ui.Frame(box2)
         rr.pack(fill="x", pady=(6, 0))
+        self._stats_last_rr = rr
         ui.Label(rr, text=_("Rolle der markierten Runde:")).pack(side="left")
         self.stats_role_btns = []
         for role, label in (("killer", N_("Killer")), ("survivor", N_("Survivor")), ("custom", N_("Custom Game"))):
@@ -227,6 +242,7 @@ class StatsTab:
         self.stats_delete_btn = ui.Button(rr, text=_("Runde löschen"), command=self._stats_delete_round,
                                            state="disabled")
         self.stats_delete_btn.pack(side="right")
+        ui.Button(rr, text=_("Als CSV exportieren …"), command=self._stats_export_csv).pack(side="right", padx=(0, 6))
         kr = ui.Frame(box2)
         kr.pack(fill="x", pady=(6, 0))
         ui.Label(kr, text=_("Killer der markierten Runde:")).pack(side="left")
@@ -329,8 +345,19 @@ class StatsTab:
             killer = None
         self.stats_killer_cb.configure(values=[lbl for _k, lbl in self._stats_killers])
         self.stats_killer_var.set(dict(self._stats_killers)[killer])
+        wmap = next((k for k, lbl in self._stats_maps_f if lbl == self.stats_map_var.get()), None)
+        self._stats_maps_f = [(None, _("Alle Maps"))] + [(m, m) for m in sorted({r.map for r in all_rounds},
+                                                                                 key=str.lower)]
+        if wmap not in [k for k, _lbl in self._stats_maps_f]:
+            wmap = None
+        self.stats_map_cb.configure(values=[lbl for _k, lbl in self._stats_maps_f])
+        self.stats_map_var.set(dict(self._stats_maps_f)[wmap])
         since = history.period_start(period, time.time())
-        rounds = history.select(all_rounds, since=since, region=wanted, role=role, killer=killer)
+        rounds = history.select(all_rounds, since=since, region=wanted, role=role, killer=killer, map_label=wmap)
+        fkey = (period, wanted, role, killer, wmap)
+        if fkey != self._stats_filter_key:                 # other filters: the round list starts short again
+            self._stats_filter_key, self._stats_last_limit = fkey, LAST_ROUNDS_STEP
+        self._stats_rounds_shown = rounds
         ids = {id(r) for r in rounds}
         saved = {r.t for r in rescued}
         lost = [x for x in history.load_lost(self._hist_path()) if (since is None or x[0] >= since)
@@ -385,8 +412,8 @@ class StatsTab:
         if keep and t.exists(keep[0]):
             t.selection_set(keep[0])
         self._stats_alias_buttons()
-        self._trend_render(pairs, {"day": "hour", "week": "day", "month": "day"}.get(period, "week"))
-        self._stats_sys_render(rounds, {"day": "hour", "week": "day", "month": "day"}.get(period, "week"))
+        self._trend_render(pairs, TREND_UNIT.get(period, "week"))
+        self._stats_sys_render(rounds, TREND_UNIT.get(period, "week"))
         t = self.stats_regs
         t.delete(*t.get_children())
         pings = history.ping_by_region(rounds)
@@ -395,10 +422,12 @@ class StatsTab:
             t.insert("", "end", values=(self._stats_region_name(code), n, fmt_duration(avg), f"{share:.0%}",
                                         f"{p:.0f} ms" if p is not None else "–"))
         ws = history.wait_summary(rounds)
-        self.stats_wait_var.set(_("Ø {avg} · Median {median} · kürzeste {min} · längste {max} ({n} Runden)",
-                                  avg=fmt_duration(ws["avg"]), median=fmt_duration(ws["median"]),
-                                  min=fmt_duration(ws["min"]), max=fmt_duration(ws["max"]), n=ws["count"])
-                                if ws["count"] else _("Noch keine Wartezeiten in dieser Auswahl."))
+        self.stats_wait_var.set("" if ws["count"] else _("Noch keine Wartezeiten in dieser Auswahl."))
+        n_txt = _("{n} Runden", n=ws["count"])
+        self.stats_wait_tiles.data = [Tile(_("Ø Wartezeit"), fmt_duration(ws["avg"]), n_txt),
+                                      Tile(_("Median"), fmt_duration(ws["median"]), n_txt),
+                                      Tile(_("Kürzeste"), fmt_duration(ws["min"]), ""),
+                                      Tile(_("Längste"), fmt_duration(ws["max"]), "")] if ws["count"] else []
         by = next((k for k, lbl in self._stats_wait_groups if lbl == self.stats_wait_by_var.get()), "weekday")
         t = self.stats_wait
         t.delete(*t.get_children())
@@ -413,7 +442,13 @@ class StatsTab:
         t = self.stats_last
         keep = t.selection()                     # the marked round stays marked (e.g. after changing its role)
         t.delete(*t.get_children())
-        for r in sorted(rounds, key=lambda r: r.t, reverse=True)[:100]:
+        newest = sorted(rounds, key=lambda r: r.t, reverse=True)
+        if len(newest) > self._stats_last_limit:          # 1.2.16: more on request instead of a silent cut at 100
+            if not self.stats_more_btn.winfo_manager():
+                self.stats_more_btn.pack(anchor="w", pady=(4, 0), before=self._stats_last_rr)
+        elif self.stats_more_btn.winfo_manager():
+            self.stats_more_btn.pack_forget()
+        for r in newest[:self._stats_last_limit]:
             role = _("Custom Game") if r.custom else (killer_label(r.killer) if r.role == "killer" and r.killer
                                                       else self._role_name(r.role) or "–")
             t.insert("", "end", iid=repr(r.t), values=(time.strftime("%d.%m.%y %H:%M", time.localtime(r.t)), r.map,
@@ -594,6 +629,44 @@ class StatsTab:
                       "System")
         self.stats_round_killer_var.set("")
         self._stats_render()
+
+    def _dash_clicked(self, value):
+        """1.2.16: a click on the dashboard filters – a map bar sets the map, a heatmap cell map and killer."""
+        if not value or value[0] not in ("map", "cell"):
+            return
+        labels = dict(self._stats_maps_f)
+        if value[1] in labels:
+            self.stats_map_var.set(labels[value[1]])
+        if value[0] == "cell" and value[2] in [lbl for _k, lbl in self._stats_killers]:
+            self.stats_killer_var.set(value[2])
+        self._stats_render()
+
+    def _stats_more_rounds(self):
+        self._stats_last_limit += LAST_ROUNDS_STEP
+        self._stats_render()
+
+    def _stats_export_csv(self, path=None):
+        """1.2.16: the rounds of the current filters as CSV (semicolon; the official result where tied)."""
+        if path is None:
+            self._qt_file("save", _("Runden exportieren"), "dbdmapscout-runden.csv", self._stats_export_csv,
+                          pattern="CSV (*.csv)")
+            return
+        off = getattr(self._joined(), "off", {})
+        rows = []
+        for r in sorted(getattr(self, "_stats_rounds_shown", []), key=lambda r: r.t):
+            m = off.get(id(r))
+            rows.append({"start": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(r.t)), "map": r.map,
+                         "seconds": round(r.seconds), "wait_seconds": round(r.wait) if r.wait is not None else None,
+                         "role": r.role, "custom": int(bool(r.custom)), "killer": r.killer, "region": r.region,
+                         "ping_ms": round(r.ping) if r.ping is not None else None,
+                         "kills": official.kills(m) if m else None, "escaped": official.escaped(m) if m else None,
+                         "bloodpoints": m.bp if m else None})
+        try:
+            n = history.export_csv(path, rows)
+        except OSError as e:
+            self._log(_("Export fehlgeschlagen: {error}", error=e), "Fehler")
+            return
+        self._log(_("{n} Runden exportiert: {path}", n=n, path=path), "System")
 
     def _stats_clear(self):
         if not os.path.exists(self._hist_path()):

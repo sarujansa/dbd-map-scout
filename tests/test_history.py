@@ -226,3 +226,22 @@ def test_lost_rounds_keep_what_was_known(tmp_path):
     h.set_role(p, 1.0, "survivor")                         # rewriting the file keeps the lost lines whole
     assert [r.wait for r in h.load_lost_rounds(p)] == [95.0, None]
     assert [r.role for r in h.load(p)] == ["survivor"]
+
+
+def test_last_days_periods_map_filter_and_csv_export(tmp_path):
+    """1.2.16: "Letzte 7/30 Tage" start at midnight 6 / 29 days back; select() takes a map label; export_csv
+    writes one row per round with the official result columns."""
+    import datetime
+    now = datetime.datetime(2026, 10, 16, 15, 30).timestamp()
+    assert h.period_start("7d", now) == datetime.datetime(2026, 10, 10).timestamp()
+    assert h.period_start("30d", now) == datetime.datetime(2026, 9, 17).timestamp()
+    rounds = [h.Round(t=now - i * 3600, seconds=600, map_id="coal", map="Coal Tower" if i % 2 else "Gas Heaven")
+              for i in range(4)]
+    assert [r.map for r in h.select(rounds, map_label="Coal Tower")] == ["Coal Tower", "Coal Tower"]
+    assert len(h.select(rounds, map_label=None)) == 4
+    path = tmp_path / "runden.csv"
+    n = h.export_csv(str(path), [{"start": "2026-10-16 15:30:00", "map": "Coal Tower", "seconds": 600, "kills": 3,
+                                  "escaped": None, "bloodpoints": 25000, "extra": "ignored"}])
+    text = path.read_text(encoding="utf-8-sig")
+    assert n == 1 and text.splitlines()[0] == ";".join(h.CSV_COLUMNS)
+    assert text.splitlines()[1] == "2026-10-16 15:30:00;Coal Tower;600;;;;;;;3;;25000"
