@@ -6,8 +6,8 @@ import copy
 
 # what a layout is: place and size of the map, the system values / "today" and the music card
 OVERLAY_KEYS = ("anchor", "pos_x", "pos_y", "height", "map_heights", "text_scale", "hud_scale", "media_scale",
-                "media_pos", "media_xy")
-TOP_KEYS = ("sysinfo", "sysinfo_pos", "today_side")
+                "media_pos", "media_xy", "today_pos", "today_xy", "today_scale")
+TOP_KEYS = ("sysinfo", "sysinfo_pos")
 UNDO_KEPT = 50
 GESTURE_GAP = 0.8      # s: changes closer together than this are one step (a drag, a row of arrow keys)
 SNAP_PX = 6            # px in the preview: this close to a line, an element snaps to it (1.65.2: was 8)

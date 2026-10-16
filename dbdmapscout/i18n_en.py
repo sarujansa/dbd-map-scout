@@ -1107,7 +1107,6 @@ EN = {
     'Klick auf Karte, Systemwerte oder Musik wählt das Element für den Regler „Grösse“. Mit „Mit der Maus verschieben“: Element ziehen = verschieben, an der Ecke ziehen oder Mausrad = Grösse, Klick auf eine freie Stelle setzt die Karte dorthin. Ende mit „Fertig“.':
         'A click on the map, the system values or the music picks the element for the “Size” slider. With “Move with the mouse”: drag an element = move it, drag its corner or the mouse wheel = size, a click on an empty spot puts the map there. End with “Done”.',
     "Element": "Element",
-    "Systemwerte · Heute": "System values · today",
     "Schrift der Karte (Name, Timer, Infos)": "Map text (name, timer, info)",
     'Spielbild': 'Game picture',
     'Map-Name': 'Map name',
@@ -1118,11 +1117,19 @@ EN = {
     'Eisblau': 'Ice blue',
     'Giftgrün': 'Toxic green',
     'Lila': 'Purple',
-    # 1.62: block "today" in the black bar
-    'Darunter „Heute“: Runden, Spielzeit, Ø Kills/Entkommen, Uhrzeit (auch wenn die Systemwerte aus sind: rechts oben)':
-        'Below them "Today": rounds, play time, avg. kills/escaped, clock (also with the system values off: top right)',
-    'Zeigt im schwarzen Balken, solange eine Karte im Match zu sehen ist, wie viele Runden du heute gespielt hast, wie lange, Ø Kills bzw. Entkommen laut Stats-Seite und die Uhrzeit.':
-        'Shows in the black bar, while a map is on screen in a match, how many rounds you played today, for how long, avg. kills or escaped from the stats page and the time of day.',
+    # 1.62: block "today" in the black bar; 1.2.6: a card of its own
+    '„Heute“: Runden, Spielzeit, Ø Kills/Entkommen, Uhrzeit': '"Today": rounds, play time, avg. kills/escaped, clock',
+    'Eine eigene Karte, solange eine Map im Match zu sehen ist: wie viele Runden du heute gespielt hast, wie '
+    'lange, Ø Kills bzw. Entkommen laut Stats-Seite und die Uhrzeit. Position darunter, Größe über den '
+    'Größenregler („Heute“ wählen).':
+        'A card of its own while a map is on screen in a match: how many rounds you played today, for how long, '
+        'avg. kills or escaped from the stats page and the time of day. Position below, size through the size '
+        'slider (pick "Today").',
+    'Dunkle Fläche hinter „Heute“': 'Dark area behind "Today"',
+    'Eine halb durchsichtige dunkle Fläche mit runden Ecken hinter „Heute“.':
+        'A half-transparent dark area with rounded corners behind "Today".',
+    'HEUTE': 'TODAY',
+    'Heute': 'Today',
     'ENTKOMMEN ': 'ESCAPED ',
     'HEUTE ': 'TODAY ',
     'UHR ': 'TIME ',
