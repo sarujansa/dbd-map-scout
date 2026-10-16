@@ -14,7 +14,7 @@ import traceback
 
 from PIL import Image
 
-from . import __version__, overview, tooltip
+from . import __version__, official, overview, tooltip
 from . import uimodel as ui
 from .capture import IS_WIN
 from .i18n import _
@@ -384,6 +384,18 @@ class QtShell:
             self._hide_unknown()
         elif action == "choose":                     # overview without a map: to the maps page
             self.qt.show_page("maps")
+        elif action == "map_action":                 # 1.2.18: right click on a map tile
+            name, (mid, v) = arg
+            if name == "show":
+                self.show_map(mid, v, "manual")
+            elif name == "rotate":
+                self.rotate_map(mid)
+            elif name == "size_reset":
+                self._reset_map_size(mid)
+            elif name == "picture":
+                from .picturedlg import PictureDialog
+                self._picture_from_unknown = False
+                PictureDialog(self, "", "", map_id=mid, variant=v)
         elif action == "server_page":                # 1.2.15: "Server aus" on the overview → the server tab
             self.qt.show_page("server")
         elif action == "official_setup":             # 1.2.15: "noch keine Stats-Daten" → the card under "Mehr"
@@ -450,7 +462,8 @@ class QtShell:
             if force or rev != getattr(self, "_qt_maps_shown", None):
                 self._qt_maps_shown = rev
                 items = self._qt_map_items()
-                q.show_maps(items, self.current, self._qt_preview(sel), self._qt_thumbs(items), self._qt_recent())
+                q.show_maps(items, self.current, self._qt_preview(sel), self._qt_thumbs(items), self._qt_recent(),
+                            self._qt_marks(items))
         reg = self.__dict__.get("_qt_reg", {})
         keys = self._qt_mod.page_keys(page)
         if keys:
@@ -501,6 +514,42 @@ class QtShell:
                     out[(mid, v)] = path           # the original in the dark style: the warm-up may still make it
             paths[(mid, v)] = path
         return paths
+
+    def _qt_marks(self, items):
+        """1.2.18: {(map_id, variant): (info line, tooltip, has own values)} for the tiles – rounds and Ø kills
+        from the history, and the map's own size / rotation / picture (settings, user_maps/)."""
+        j = self._joined()
+        cache = getattr(self, "_qt_map_stats", None)
+        if cache is None or cache[0] is not j:
+            stats = {}
+            for r in j.rounds:
+                n, kills = stats.get(r.map, (0, []))
+                m = j.off.get(id(r))
+                k = official.kills(m) if m is not None else None
+                stats[r.map] = (n + 1, kills + ([k] if k is not None else []))
+            cache = self._qt_map_stats = (j, stats)
+        o = self.settings["overlay"]
+        heights, rots = o.get("map_heights") or {}, o.get("map_rotations") or {}
+        out = {}
+        for _realm, label, mid, v in items:
+            parts, tips = [], []
+            n, kills = cache[1].get(label, (0, []))
+            if n:
+                parts.append(_("{n} Runden", n=n) + (" · " + _("Ø {kills} Kills", kills=f"{sum(kills) / len(kills):.1f}")
+                                                     if kills else ""))
+            own = []
+            if heights.get(mid):
+                own.append(_("Grösse {pct} %", pct=f"{heights[mid] * 100:.0f}"))
+            if rots.get(mid):
+                own.append(f"{rots[mid]}°")
+            if self.catalog.is_own(mid, v):
+                own.append(_("eigenes Bild"))
+            if own:
+                parts.append(" · ".join(own))
+                tips.append(_("Eigene Einstellungen dieser Map: {what}", what=", ".join(own)))
+            if parts or own:
+                out[(mid, v)] = (" · ".join(parts), "\n".join([" · ".join(parts)] + tips), bool(own))
+        return out
 
     def _qt_recent(self, kept=12):
         """Map ids of the rounds played last, newest first, each once (the list entry "Zuletzt gespielt")."""
