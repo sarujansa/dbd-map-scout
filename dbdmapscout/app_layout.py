@@ -40,7 +40,7 @@ class LayoutMemory:
 
     def _layout_apply(self, snap):
         """A stored layout into the settings and every control that shows it."""
-        from .app_sysinfo import HUD_SIDES, MEDIA_SPOTS
+        from .app_sysinfo import HUD_SIDES, MEDIA_SPOTS, TODAY_SPOTS
         self._layout_applying = True
         try:
             layoutmem.apply(self.settings.data, snap)
@@ -51,7 +51,7 @@ class LayoutMemory:
             self.size_label.configure(text=f"{o['height'] * 100:.0f} %")
             self.media_size_var.set(round(o.get("media_scale", 1.0) * 100))
             self.media_pos_var.set(_(dict(MEDIA_SPOTS).get(o.get("media_pos", "bottom_right"), "")))
-            self.today_pos_var.set(_(dict(MEDIA_SPOTS).get(o.get("today_pos", "below"), "")))
+            self.today_pos_var.set(_(dict(TODAY_SPOTS).get(o.get("today_pos", "below"), "")))
             self.sysinfo_var.set(_(dict(HUD_SIDES).get(self.settings.get("sysinfo", "off"), "")))
             self._pos_hint()
             self._show_map_size()
