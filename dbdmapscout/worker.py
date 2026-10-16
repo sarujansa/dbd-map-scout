@@ -17,7 +17,7 @@ from .capture import (IS_WIN, ImageSource, ScreenGrabber, cursor_state, find_gam
 from .i18n import _
 from .detector import ROI, Accumulator, BannerReader, OutOfMatchWatcher, letterbox_rows
 from .layout import MIN_VBAR
-from .lobby import LobbyReader, QueueTracker, corner_box, result_box
+from .lobby import LobbyReader, QueueTracker, corner_box, crossplay_box, crossplay_off, result_box
 from .matchend import MatchEndTracker, Signals
 from .ocr import Recognizer
 
@@ -338,9 +338,17 @@ class DetectionWorker(threading.Thread):
                         view = lobby_reader.read(corner, fw, fh)
                         if view.button is not None:
                             lobby_button_t = tick
+                            # 1.2.20: the cross-play globe above the button (farming rounds) – a second small grab
+                            xb = crossplay_box(fw, fh)
+                            globe = grab(xb)
+                            if globe is not None:
+                                if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect or self.today_rect or self.guide_rects):
+                                    self._mask_overlay(globe, origin[0] + xb[0], origin[1] + xb[1])
+                                view.crossplay_off = crossplay_off(globe, fw, fh)
                         fit = "–" if view.fit is None else f"{view.fit:.1f}"
+                        cross = {True: " · Crossplay aus", False: " · Crossplay an"}.get(view.crossplay_off, "")
                         self.lobby_info = (f"{view.button or '–'} ({fit}) "
-                                           f"„{view.name}“ „{view.time_text}“ → {view.kind or '–'}")
+                                           f"„{view.name}“ „{view.time_text}“ → {view.kind or '–'}{cross}")
                         for ev in self.queue.update(view, tick):
                             self._queue_event(ev, tick)
                 except Exception:
@@ -452,13 +460,14 @@ class DetectionWorker(threading.Thread):
         """QueueTracker events -> UI: what=search | cancel | role | found."""
         if ev[0] == "search":
             self.post("queue", what="search", since=self.queue.search_start, role=self.queue.role,
-                      killer=self.queue.killer)
+                      killer=self.queue.killer, crossplay_off=self.queue.crossplay_off)
         elif ev[0] == "cancel":
             self.post("queue", what="cancel")
         elif ev[0] == "left":
             self.post("queue", what="left")
         elif ev[0] == "role":
-            self.post("queue", what="role", role=ev[1], killer=self.queue.killer)
+            self.post("queue", what="role", role=ev[1], killer=self.queue.killer,
+                      crossplay_off=self.queue.crossplay_off)
         elif ev[0] == "found":
             self.post("queue", what="found", found=ev[1], role=ev[1].role)
         elif ev[0] == "remind":

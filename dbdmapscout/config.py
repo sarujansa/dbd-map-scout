@@ -109,6 +109,8 @@ DEFAULTS = {
     "official_open_after_dbd": False,   # open stats.deadbydaylight.com once DBD was closed (userscript saves the matches)
     "official_dir": "",                 # where the userscript's files land ("" = the Windows download folder)
     "official_notify": True,
+    "farming_crossplay": True,          # 1.2.20: a round whose lobby showed cross-play off is a farming round
+    "farming_region": "ap-southeast-1",  # … and every round on this server region ("" = none)
     "sysinfo": "right",                 # system values at the top of a black bar: off | left | right | custom
     "sysinfo_pos": [1.0, 0.0],          # sysinfo = custom: 0..1 of the free space in the DBD window (x, y)
 }

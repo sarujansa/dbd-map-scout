@@ -18,6 +18,11 @@ instead of being forced onto a wrong one – the user assigns it once (settings 
 After the match the result screen names the four categories – BRUTALITY … for killers,
 OBJECTIVES … for survivors – which confirms the role (also in custom games).
 
+Cross-play (1.2.20, user: rounds without cross-play are "farming" rounds): the globe right of the bloodpoint
+multiplier above the button carries a small red cross while cross-play is off. ``crossplay_off()`` reads it from
+pixels alone (bright globe, red cluster at its lower right) – measured on one screenshot of the user
+(2000×837 copy of 3440×1440): globe 19 px wide, cross 8×7 px there.
+
 Only screen pixels, like the rest of the detection. ``QueueTracker`` is pure logic (testable).
 """
 from __future__ import annotations
@@ -26,6 +31,8 @@ import difflib
 import functools
 import re
 from dataclasses import dataclass, field
+
+import numpy as np
 
 from .ocr import LexiconScorer, best_path_logp
 from .textnorm import fold
@@ -56,6 +63,9 @@ NAME_ZONE = (0.275, 0.13, 0.950, 0.985)
 TIME_ZONE = (0.13, 0.02, 0.950, 0.985)
 # result screen: category headers, (from the left edge, to) in 16:9 widths
 RESULT_ZONE = (0.05, 0.42, 0.198, 0.232)
+# the cross-play globe: right of "x1.00", above the right end of the button (same units as BUTTON_ZONE)
+CROSSPLAY_ZONE = (0.075, 0.030, 0.825, 0.878)
+GLOBE_W = (0.009, 0.020)      # width of the globe in 16:9 widths (measured 0.0128)
 
 
 def _vw(W, H):
@@ -128,6 +138,49 @@ def result_box(W: int, H: int):
     return int(x0 * vw), int(y0 * H), int((x1 - x0) * vw), int((y1 - y0) * H)
 
 
+def crossplay_box(W: int, H: int):
+    """(x, y, w, h) of the cross-play globe's zone (a second small grab next to corner_box)."""
+    return _right_box(CROSSPLAY_ZONE, W, H)
+
+
+def crossplay_off(img, W: int, H: int):
+    """Is cross-play switched off? ``img``: the picture of crossplay_box(W, H) (BGR).
+    True: a globe with the red cross at its lower right; False: a globe without it; None: no globe
+    (another screen, hidden by something) or red all over the zone (a red-tinted lobby) – can't tell."""
+    if img is None or img.size == 0 or img.ndim != 3:
+        return None
+    a = img[..., :3].astype(np.int16)
+    b, g, r = a[..., 0], a[..., 1], a[..., 2]
+    hi, lo = np.maximum(np.maximum(r, g), b), np.minimum(np.minimum(r, g), b)
+    bright = (lo >= 165) & (hi - lo <= 45)                     # the globe's white lines
+    cols = np.nonzero(bright.any(axis=0))[0]
+    if cols.size == 0:
+        return None
+    x1 = int(cols[-1])                                         # the globe is the rightmost bright thing;
+    x0 = x1                                                    # "x1.00" to its left is a separate run
+    for c in cols[::-1]:
+        if x0 - c > 2:
+            break
+        x0 = int(c)
+    rows = np.nonzero(bright[:, x0:x1 + 1].any(axis=1))[0]
+    y0, y1 = int(rows[0]), int(rows[-1])
+    w, h = x1 - x0 + 1, y1 - y0 + 1
+    vw = _vw(W, H)
+    if not (GLOBE_W[0] * vw <= w <= GLOBE_W[1] * vw) or not 0.7 <= w / h <= 1.4:
+        return None
+    if bright[y0:y1 + 1, x0:x1 + 1].sum() < 0.2 * w * h:
+        return None
+    red = (r >= 150) & (g <= 80) & (b <= 80) & (r - np.maximum(g, b) >= 90)
+    # the cross sits on the globe's lower right edge
+    bx0, bx1 = x0 + int(0.45 * w), min(img.shape[1], x1 + 1 + int(0.35 * w))
+    by0, by1 = y0 + int(0.45 * h), min(img.shape[0], y1 + 1 + int(0.35 * h))
+    inside = int(red[by0:by1, bx0:bx1].sum())
+    outside = int(red.sum()) - inside
+    if outside > max(inside, 0.02 * w * h):
+        return None                                            # red elsewhere too: not the cross
+    return inside >= max(4, 0.04 * w * h)
+
+
 _CLOCK = re.compile(r"(\d{1,2})\s*[:.;：]+\s*(\d{2})")     # OCR sometimes doubles the colon
 
 
@@ -138,6 +191,7 @@ class LobbyView:
     name: str = ""                  # text left below the button (killer name)
     time_text: str = ""             # text right below the button (waited time + EST. / countdown)
     killer: str = ""                # name from KILLERS, or the name as read if it is not on the list
+    crossplay_off: bool | None = None   # the globe next to the button: True = red cross (1.2.20)
 
     @property
     def has_name(self) -> bool:
@@ -260,6 +314,7 @@ class Found:
     role: str | None
     custom: bool = False
     killer: str = ""                 # the own killer (role killer only)
+    crossplay_off: bool | None = None   # cross-play was off while searching / in the lobby (None: not seen)
 
 
 @dataclass
@@ -280,10 +335,20 @@ class QueueTracker:
     _reminded: bool = False
     _starts: list = field(default_factory=list)
     _killers: dict = field(default_factory=dict)   # name -> looks (the most read one wins)
+    _cross: dict = field(default_factory=dict)     # cross-play off? -> looks while searching / in the lobby
+    _cross_last: bool | None = None                # … and the last look that could tell (PLAY screen too)
 
     @property
     def killer(self) -> str:
         return max(self._killers, key=self._killers.get) if self.role == "killer" and self._killers else ""
+
+    @property
+    def crossplay_off(self) -> bool | None:
+        """Cross-play off for the search / lobby at hand: the majority of the looks since the search started,
+        else the last look that showed the globe (the PLAY screen before)."""
+        if self._cross:
+            return max(self._cross, key=self._cross.get)
+        return self._cross_last
 
     def update(self, view: LobbyView | None, t: float) -> list:
         """Returns events: ("search",) ("cancel",) ("left",) ("found", Found) ("role", role)
@@ -302,6 +367,10 @@ class QueueTracker:
         role = view.role
         if role == "killer" and view.killer:
             self._killers[view.killer] = self._killers.get(view.killer, 0) + 1
+        if view.crossplay_off is not None:
+            self._cross_last = view.crossplay_off
+            if kind in ("search", "lobby"):
+                self._cross[view.crossplay_off] = self._cross.get(view.crossplay_off, 0) + 1
         if role and role != self.role and kind in ("search", "lobby"):
             self.role = role
             events.append(("role", role))
@@ -321,6 +390,8 @@ class QueueTracker:
             return events
         first = self._pending[2]
         if kind == "search":
+            if self.state != "search":
+                self._cross = {}                     # a new search: count its looks afresh
             self.state = "search"
             if not self._starts:
                 self._starts.append(first)
@@ -331,7 +402,7 @@ class QueueTracker:
             if self.state == "search" and self.search_start is not None:
                 start = sorted(self._starts)[len(self._starts) // 2] if self._starts else self.search_start
                 wait = max(0.0, first - start)
-            self.found = Found(first, wait, self.role, killer=self.killer)
+            self.found = Found(first, wait, self.role, killer=self.killer, crossplay_off=self.crossplay_off)
             self.state = "lobby"
             self._reminded = False
             self._starts = []
@@ -357,6 +428,7 @@ class QueueTracker:
 
     def _reset(self):
         self.state, self.search_start, self._starts, self.role, self._killers = "idle", None, [], None, {}
+        self._cross = {}
 
     def searching_since(self, t: float) -> float | None:
         return t - self.search_start if self.state == "search" and self.search_start is not None else None
