@@ -87,11 +87,13 @@ def map_facts(app, now: float) -> list:
 def actions(app) -> dict:
     has_map = app.overlay.has_map()
     on = app.user_visible and not app.hidden_after_match and not app.menu_paused
+    # 1.66.3: a button that can do nothing now is not shown (it was greyed out); without a map: "Map wählen"
     out = {"scan": (True, _("Scannen")),
-           "rotate": (app.current is not None, _("Drehen ↻")),
-           "toggle": (has_map, _("Overlay ausblenden") if on else _("Overlay einblenden")),
-           "reject": (app.current is not None and app.source == "auto" and not app.hidden_after_match,
-                      _("Falsch erkannt")),
+           "choose": None if has_map else (True, _("Map wählen …")),
+           "rotate": (True, _("Drehen ↻")) if app.current is not None else None,
+           "toggle": (True, _("Overlay ausblenden") if on else _("Overlay einblenden")) if has_map else None,
+           "reject": (True, _("Falsch erkannt")) if app.current is not None and app.source == "auto"
+           and not app.hidden_after_match else None,
            "confirm": None, "layout": None, "floor": None}
     u = app._unsure
     if u and u.get("shown"):
@@ -190,7 +192,8 @@ def overview_model(app, now: float, is_win: bool) -> Overview:
         o.map_label = label
         o.map_line = " · ".join(t for t in (app.catalog.realm_display(m), getattr(app, "_detail", "")) if t)
     else:
-        o.map_line = _("Wird beim Match-Start automatisch erkannt.")
+        o.map_line = _("Erscheint automatisch, sobald im Match das Map-Banner kommt – oder von Hand über "
+                       "„Map wählen“.")
     o.queue = app._queue_text(now)
     o.thumb_rev = getattr(app, "_thumb_rev", 0)
     o.facts = map_facts(app, now)

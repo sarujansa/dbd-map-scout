@@ -50,8 +50,10 @@ def fake_app(**kw):
 def test_overview_without_a_map():
     o = overview.overview_model(fake_app(), time.time(), is_win=True)
     assert o.map_label == "" and o.status_kind == "idle" and "Wartet auf DBD" in o.status_text
-    assert o.actions["scan"][0] and not o.actions["rotate"][0] and not o.actions["toggle"][0]
-    assert not o.actions["reject"][0] and o.actions["confirm"] is None and o.actions["layout"] is None
+    # 1.66.3: buttons that can do nothing now are not there (were greyed out); "Map wählen" leads to the maps
+    assert o.actions["scan"][0] and o.actions["choose"] == (True, "Map wählen …")
+    assert o.actions["rotate"] is None and o.actions["toggle"] is None and o.actions["reject"] is None
+    assert o.actions["confirm"] is None and o.actions["layout"] is None
     assert [f.title for f in o.facts] == ["Rundenzeit", "Server", "Ping", "Rolle"]
     assert o.today[0].value == "0" and o.rounds == []
     assert "aus" in o.system_note                                   # system values switched off
@@ -67,7 +69,7 @@ def test_overview_with_a_map_in_a_round():
     app.round.detected(now - 65)
     o = overview.overview_model(app, now, is_win=True)
     assert o.map_label == "Coal Tower II" and o.map_line == "MacMillan · automatisch erkannt (97%)"
-    assert o.status_kind == "ok" and o.actions["reject"][0] and o.actions["rotate"][0]
+    assert o.status_kind == "ok" and o.actions["reject"][0] and o.actions["rotate"][0] and o.actions["choose"] is None
     assert o.actions["layout"][1].startswith("Layout II von II")
     timer, server, ping, who = o.facts
     assert timer.value == "01:05" and server.value == "Frankfurt" and ping.value == "31 ms" and who.value == "Oni"

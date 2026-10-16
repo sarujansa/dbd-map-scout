@@ -57,9 +57,10 @@ SPECS = {
             ("row", (("hint", "ov.map_size"), ("stretch",), ("button", "ov.map_size_reset"))),
             ("slider", "ov.opacity"),
             ("row", (("label", "ov.map_style.label"), ("combo", "ov.map_style"), ("stretch",))),
-            ("check", "ov.show_map"), ("check", "ov.focus"), ("check", "ov.caption"), ("check", "ov.timer"),
-            ("check", "ov.server"), ("check", "ov.waiting"), ("check", "ov.floors"), ("check", "ov.record"),
-            ("check", "ov.transparent"))),
+            ("sub", N_("Karte")), ("check", "ov.show_map"), ("check", "ov.caption"), ("check", "ov.floors"),
+            ("check", "ov.transparent"),
+            ("sub", N_("Unter der Karte")), ("check", "ov.timer"), ("check", "ov.server"), ("check", "ov.record"),
+            ("sub", N_("Wann zeigen")), ("check", "ov.focus"), ("check", "ov.waiting"))),
         ("card", "ov.sys", (
             ("row", (("label", "ov.sysinfo.label"), ("combo", "ov.sysinfo"), ("stretch",))),
             ("hint", "ov.sys_text"), ("hint", "ov.sys_hint"), ("check", "ov.today"),
@@ -329,7 +330,7 @@ class OverviewPage(QWidget):
         info.addStretch()
         btns = FlowRow(spacing=6)                 # the buttons wrap instead of running out of the card
         self.buttons = {}
-        for key in ("scan", "rotate", "toggle", "reject", "confirm", "layout", "floor"):
+        for key in ("scan", "choose", "rotate", "toggle", "reject", "confirm", "layout", "floor"):
             b = QPushButton()
             if key == "scan":
                 b.setObjectName("primary")
@@ -338,6 +339,7 @@ class OverviewPage(QWidget):
             self.buttons[key] = b
         info.addLayout(btns)
         cl.addLayout(info, 1)
+        card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)    # without a picture: only as tall as its text
         page.addWidget(card)
 
         # today
@@ -394,6 +396,11 @@ class OverviewPage(QWidget):
         _set(self.map_line, o.map_line)
         _set(self.queue, o.queue)
         self.queue.setVisible(bool(o.queue))
+        # 1.66.3: without a map no empty picture box and no row of dashes – only the line how one comes
+        self.thumb.setVisible(bool(o.map_label))
+        empty = not o.map_label and all(f.value == "–" for f in o.facts)
+        for box in self.facts:
+            box.setVisible(not empty)
         if o.thumb_rev != self._thumb_rev:
             self._thumb_rev = o.thumb_rev
             if thumb is None:
@@ -575,7 +582,11 @@ def make_control(kind, key, post):
 
 def show_control(kind, w, extra, st):
     """Put a model widget's state (app_qt.ui_state) into its Qt control – never sends anything back."""
-    if kind not in ("title",):
+    if kind == "title":                  # 1.66.3: a card whose frame is folded away ("Mehr" closed) is not shown
+        card, shown = w.parentWidget(), bool(st.get("visible", True))
+        if card is not None and card.isHidden() == shown:
+            card.setVisible(shown)
+    else:
         shown = bool(st.get("visible", True))
         if kind in ("hint", "plain", "big", "label"):
             shown = shown and bool(st.get("text"))            # empty lines take no room
@@ -892,6 +903,9 @@ class FormPage(QWidget, _Arranged):
             return
         if kind == "stretch":
             lay.addStretch()
+            return
+        if kind == "sub":                           # a small heading inside a card (1.66.3: groups of tick boxes)
+            lay.addWidget(_label(_(item[1]).upper(), "sub"))
             return
         if kind == "note":                          # a fixed text of the page itself (setup assistant)
             lay.addWidget(_label(_(item[1]), wrap=True))
