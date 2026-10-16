@@ -60,8 +60,9 @@ def load_frames(path: str, rotation: int = 0):
     frames = []
     if getattr(im, "is_animated", False):
         for fr in ImageSequence.Iterator(im):
+            pic = fr.convert("RGBA")              # first: an animated WebP knows a frame's duration only once loaded
             d = fr.info.get("duration", 100) or 100
-            frames.append((_fit(fr.convert("RGBA")), max(40, int(d))))
+            frames.append((_fit(pic), max(40, int(d))))
     else:
         frames.append((_fit(im.convert("RGBA")), 0))
     return rotate_frames(frames, rotation)
