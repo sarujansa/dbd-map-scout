@@ -237,3 +237,21 @@ def test_old_single_opacity_becomes_every_cards_opacity(tmp_path):
     o = Settings(str(p))["overlay"]
     assert (o["hud_opacity"], o["today_opacity"], o["media_opacity"]) == (0.6, 0.6, 0.6)
     assert o["media_pos"] == "under_today"
+
+
+def test_alignment_in_the_bar_and_the_stack_gap():
+    """1.2.8 (user's picks 22 + 24): left / centred / right in the bar and under the card above; one gap."""
+    from dbdmapscout import layout
+    game, size, m = (0, 0, 3440, 1440), (270, 90), 17
+    assert layout.hud_x("right", 0, 3440, m, 300, 440, "left") == 3000 + 17
+    assert layout.hud_x("right", 0, 3440, m, 300, 440, "right") == 3440 - 17 - 300
+    assert layout.hud_x("left", 0, 3440, m, 300, 440, "right") == 440 - 17 - 300
+    hud = (3130, 17, 290, 300)
+    assert layout.media_xy("below", game, size, m, hud=hud, align="left")[0] == 3130
+    assert layout.media_xy("below", game, size, m, hud=hud, align="right")[0] == 3130 + 290 - 270
+    assert layout.media_xy("below", game, size, m, hud=hud, gap=30)[1] == 17 + 300 + 30
+    assert layout.media_xy("bottom_left", game, size, m, align="left") == (17, 1333)
+    assert layout.stack_gap({"stack_gap": 8}, 1440) == 8 and layout.stack_gap({"stack_gap": 8}, 1080) == 6
+    assert layout.stack_gap({}, 1440) == 8 and layout.stack_gap({"stack_gap": 0}, 1440) == 0
+    assert layout.preview_place(3440, 1440, "auto", 0, 0, m, True, 300, 400, align="right")[0] == 440 - 17 - 300
+    assert layout.preview_place(3440, 1440, "auto", 0, 0, m, True, 300, 400, align="left")[0] == 17

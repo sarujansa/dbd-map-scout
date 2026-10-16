@@ -89,13 +89,33 @@ def bar_centre(side: str, gx: float, gw: float, bar: float) -> float:
     return gx + bar / 2 if side == "left" else gx + gw - bar / 2
 
 
-def hud_x(side: str, gx: float, gw: float, margin: float, w: float, bar: float = 0) -> float:
-    """x of the system values at the top of a bar: centred in it (1.65.2, user: "untereinander und mittig"),
-    without a wide bar from the left edge / flush right."""
+ALIGNS = ("left", "centre", "right")
+
+
+def stack_gap(o: dict, gh: float) -> int:
+    """Room between stacked cards and between the system values and a map below/above them (1.2.8, user's
+    pick: one slider) – ``overlay.stack_gap`` px at 1440p, scaled with the game height."""
+    return max(0, round(float(o.get("stack_gap", 8)) * gh / 1440))
+
+
+def aligned_x(align: str, lo: float, hi: float, centre: float, w: float) -> float:
+    """x of a block of width ``w`` in [lo, hi]: at the left edge, round ``centre`` or at the right edge (1.2.8)."""
+    if align == "left":
+        x = lo
+    elif align == "right":
+        x = hi
+    else:
+        x = centre - w / 2
+    return min(max(x, lo), max(lo, hi))
+
+
+def hud_x(side: str, gx: float, gw: float, margin: float, w: float, bar: float = 0, align: str = "centre") -> float:
+    """x of the system values at the top of a bar: centred in it (1.65.2, user: "untereinander und mittig"; since
+    1.2.8 ``align`` = left / centre / right), without a wide bar from the left edge / flush right."""
     if bar >= MIN_BAR:
         lo, hi = (gx + margin, gx + bar - margin - w) if side == "left" else \
             (gx + gw - bar + margin, gx + gw - margin - w)
-        return min(max(bar_centre(side, gx, gw, bar) - w / 2, lo), max(lo, hi))
+        return aligned_x(align, lo, hi, bar_centre(side, gx, gw, bar), w)
     return gx + margin if side == "left" else gx + gw - margin - w
 
 
@@ -125,12 +145,13 @@ def fit_scale(w: float, h: float, avail_w: float, avail_h: float) -> float:
 
 
 def preview_place(gw: int, gh: int, anchor: str, pos_x: float, pos_y: float, margin: int, keep_in_bar: bool,
-                  w: int, h: int, drop: int = 0):
+                  w: int, h: int, drop: int = 0, align: str = "centre"):
     """Top-left corner of an overlay of w × h on a full-screen DBD (App._place_overlay's rules for the preview);
     ``drop``: room the system values take above a map at the top of the same bar."""
     bar = bar_width(gw, gh)
     if anchor == "auto":
-        x, y = max(margin, (bar - w) / 2), margin + drop
+        x, y = max(margin, (bar - w) / 2) if align == "centre" else (bar - margin - w if align == "right" else margin), \
+            margin + drop
     elif anchor == "custom":
         x, y = pos_x * max(0, gw - w), pos_y * max(0, gh - h)
     else:
@@ -170,7 +191,8 @@ def preview_rect(gw: int, gh: int, anchor: str, pos_x: float, pos_y: float, heig
     return x, y, w, h, height
 
 
-def hud_preview_xy(side: str, gw: int, gh: int, margin: int, size, own=None, map_rect=None):
+def hud_preview_xy(side: str, gw: int, gh: int, margin: int, size, own=None, map_rect=None, align: str = "centre",
+                   gap=None):
     """Top-left corner of the system values on a full-screen DBD (App._hud_place / _hud_follow_map, 1.64)."""
     w, h = size
     if side == "custom":
@@ -178,7 +200,7 @@ def hud_preview_xy(side: str, gw: int, gh: int, margin: int, size, own=None, map
         return int(fx * max(0, gw - w)), int(fy * max(0, gh - h))
     if side == "above" and map_rect:
         x, y, mw, mh = map_rect
-        gap = max(2, margin // 2)
+        gap = max(2, margin // 2) if gap is None else gap
         bar = bar_width(gw, gh)
         lo, hi = 0, gw - w
         if bar >= MIN_BAR and x < bar:
@@ -188,7 +210,7 @@ def hud_preview_xy(side: str, gw: int, gh: int, margin: int, size, own=None, map
         hx = min(max(x + (mw - w) / 2, lo), max(lo, hi))
         hy = y - gap - h if y - gap - h >= 0 else y + mh + gap
         return int(hx), int(hy)
-    return int(hud_x("left" if side == "left" else "right", 0, gw, margin, w, bar_width(gw, gh))), margin
+    return int(hud_x("left" if side == "left" else "right", 0, gw, margin, w, bar_width(gw, gh), align)), margin
 
 
 def pos_from_point(gw: int, gh: int, w: int, h: int, cx: float, cy: float):
@@ -198,25 +220,31 @@ def pos_from_point(gw: int, gh: int, w: int, h: int, cx: float, cy: float):
     return min(1.0, max(0.0, fx)), min(1.0, max(0.0, fy))
 
 
-def media_xy(spot: str, game, size, margin: int, hud=None, own=None):
+def media_xy(spot: str, game, size, margin: int, hud=None, own=None, align: str = "centre", gap=None):
     """Top-left corner of the music card (1.64): "below" the system values (centred under them; without them at
     the top of the right bar), "bottom_right" / "bottom_left" in the black bar (1.65.2: centred in it, on one
     line with the system values above), "custom" = ``own`` (share of the free room in the game window, like the
-    system values' own place)."""
+    system values' own place). 1.2.8: ``align`` = left / centre / right in the bar and under the card above,
+    ``gap`` = px below the card above (default half the margin)."""
     gx, gy, gw, gh = game
     w, h = size
     bar = bar_width(gw, gh)
+    gap = max(2, margin // 2) if gap is None else gap
     if spot == "custom":                      # 1.2.5: by its centre – a wider/taller card (long title) stays put
         fx, fy = own or (1.0, 1.0)
         return (min(max(gx + fx * gw - w / 2, gx), gx + max(0, gw - w)),
                 min(max(gy + fy * gh - h / 2, gy), gy + max(0, gh - h)))
     if spot in ("bottom_left", "bottom_right"):
         side = "left" if spot == "bottom_left" else "right"
-        return hud_x(side, gx, gw, margin, w, bar), gy + gh - margin - h
+        return hud_x(side, gx, gw, margin, w, bar, align), gy + gh - margin - h
     if hud:
-        x = min(max(hud[0] + hud[2] / 2 - w / 2, gx + margin), gx + gw - margin - w)
-        return x, hud[1] + hud[3] + max(2, margin // 2)
-    return hud_x("right", gx, gw, margin, w, bar), gy + margin
+        x = aligned_x(align, gx + margin, gx + gw - margin - w, hud[0] + hud[2] / 2, w)
+        if align == "left":
+            x = min(max(hud[0], gx + margin), gx + gw - margin - w)
+        elif align == "right":
+            x = min(max(hud[0] + hud[2] - w, gx + margin), gx + gw - margin - w)
+        return x, hud[1] + hud[3] + gap
+    return hud_x("right", gx, gw, margin, w, bar, align), gy + margin
 
 
 STACK_ANCHORS = {"below": "hud", "under_today": "today", "under_music": "music"}

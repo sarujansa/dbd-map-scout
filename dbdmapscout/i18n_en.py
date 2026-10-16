@@ -563,9 +563,25 @@ EN = {
     "Layout manuell gewechselt": "layout changed by hand",
     "Scanne den Bildschirm nach Map- oder Realm-Namen …": "Scanning the screen for map or realm names …",
     "Testanzeige": "test display",
-    "Test: Overlay 10 s lang an seiner normalen Position – jetzt zu DBD wechseln (nochmal drücken beendet den "
-    "Test).":
-        "Test: overlay for 10 s at its normal position – switch to DBD now (press again to end the test).",
+    "Test: Overlay 10 s lang an seiner normalen Position, mit Systemwerten, „Heute“ und Musik (Beispielwerte, wenn "
+    "nichts anliegt) – nochmal drücken beendet den Test.":
+        "Test: overlay for 10 s at its normal position, with system values, \"Today\" and music (sample values when "
+        "nothing is there) – press again to end the test.",
+    "Links": "Left",
+    "Mittig": "Centred",
+    "Rechts": "Right",
+    "Im Balken": "In the bar",
+    "Abstand": "Gap",
+    "Zeile CPU (Temperatur, Last)": "Row CPU (temperature, load)",
+    "Zeile GPU (Temperatur, Last)": "Row GPU (temperature, load)",
+    "Zeile Hotspot / GPU-Speicher (HWiNFO)": "Row hot spot / GPU memory (HWiNFO)",
+    "Zeile VRAM": "Row VRAM",
+    "Zeile RAM": "Row RAM",
+    "Zeile in den Systemwerten an/aus. Die Warnungen „CPU/GPU DROSSELT“ erscheinen immer.":
+        "Row of the system values on/off. The warnings \"CPU/GPU THROTTLED\" always show.",
+    "Zeile in den Systemwerten an/aus – Hotspot und Memory Junction kommen nur mit HWiNFO.":
+        "Row of the system values on/off – hot spot and memory junction only come with HWiNFO.",
+    "Zeile in den Systemwerten an/aus.": "Row of the system values on/off.",
     "Test beendet.": "Test ended.",
     "Diagnose in die Zwischenablage kopiert (auch als diagnose.txt gespeichert).":
         "Diagnostics copied to the clipboard (also saved as diagnose.txt).",
@@ -744,10 +760,10 @@ EN = {
         "Switches to the next layout of this map (e.g. Coal Tower ↔ Coal Tower II). Since patch 8.6.0 the layouts "
         "from II on only exist in custom games.",
     "Test sofort beenden.": "End the test now.",
-    "Zeigt die Karte 10 s an ihrer normalen Position – auch wenn sie gerade ausgeblendet wäre. Nochmal drücken "
-    "beendet den Test.":
-        "Shows the map for 10 s at its normal position – even if it would be hidden right now. Press again to end "
-        "the test.",
+    "Zeigt 10 s lang alles, was das Overlay im Match zeigt – Karte, Systemwerte, „Heute“ und Musik (Beispielwerte, "
+    "wenn nichts anliegt) – an den eingestellten Stellen, auch ohne DBD. Nochmal drücken beendet den Test.":
+        "Shows for 10 s everything the overlay shows in a match – map, system values, \"Today\" and music (sample "
+        "values when nothing is there) – at their places, also without DBD. Press again to end the test.",
     "Verschieben beenden.": "Stop moving.",
     "Karte direkt mit der Maus ziehen, Mausrad ändert die Grösse.": "Drag the map with the mouse, the mouse wheel changes the size.",
     "Sucht sofort auf dem ganzen Bildschirm nach einem Map- oder Realm-Namen – falls die automatische Erkennung "

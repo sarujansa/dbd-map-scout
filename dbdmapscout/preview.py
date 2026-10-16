@@ -96,6 +96,7 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
     margin = int(gh * o["margin"])
     bar = layout.bar_width(gw, gh)
     avail = layout.max_width(bar, margin) if bar >= layout.MIN_BAR else gw / 3
+    align, gap = o.get("bar_align", "centre"), layout.stack_gap(o, gh)        # 1.2.8
     out = []
     hud = None
     if hud_side and hud_rows:
@@ -130,7 +131,7 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
         chain = {"hud"}
         for name, anchor in order:
             if anchor in chain:
-                drop += cards[name][0].height + max(2, margin // 2)
+                drop += cards[name][0].height + gap
                 chain.add(name)
     aspect = map_pic.width / map_pic.height if map_pic is not None else 0.8
     rows = sum(1 for k in ("timer", "server", "record") if info.get(k))
@@ -163,21 +164,22 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
             g = (avail + 2 * edge) / over.width
             over = map_pic_at(max(80, int(mh * g)), max(40, int(th * g)))
     mx, my = layout.preview_place(gw, gh, o["anchor"], o.get("pos_x", 0.0), o.get("pos_y", 0.0), margin,
-                                  o.get("keep_in_bar", True), over.width, over.height, drop)
+                                  o.get("keep_in_bar", True), over.width, over.height, drop, align)
     if in_bar and edge:                                 # the area's edge may stand in the margin (like the App)
         mx = int(layout.clamp_x(in_bar, mx, over.width, 0, gw, bar, margin - edge))
     map_rect = (mx, my, over.width, over.height)
     out.append(("map", over, mx, my))
     hud_rect = None
     if hud is not None:
-        hx, hy = layout.hud_preview_xy(hud_side, gw, gh, margin, hud.size, hud_own, map_rect)
+        hx, hy = layout.hud_preview_xy(hud_side, gw, gh, margin, hud.size, hud_own, map_rect, align, gap)
         out.append(("hud", hud, hx, hy))
         hud_rect = (hx, hy, hud.width, hud.height)
     boxes = {"hud": hud_rect}
     for name, anchor in order:                              # stacked in order (1.2.7)
         card, spot, own = cards[name]
         under = (boxes.get(anchor) or boxes.get("hud")) if anchor else None
-        cx, cy = layout.media_xy("below" if anchor else spot, (0, 0, gw, gh), card.size, margin, under, own)
+        cx, cy = layout.media_xy("below" if anchor else spot, (0, 0, gw, gh), card.size, margin, under, own, align,
+                                 gap)
         out.append((name, card, int(cx), int(cy)))
         boxes[name] = (int(cx), int(cy), card.width, card.height)
     return out, map_rect

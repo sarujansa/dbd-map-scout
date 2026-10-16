@@ -32,8 +32,8 @@ from .app_hotkeys import Hotkeys
 from .app_settings import SettingsTab
 from .app_layout import LayoutMemory
 from .app_sysinfo import TEXT_BASE, text_scale
-from .app_sysinfo import (HUD_SHOWN, HUD_SIDES, MAP_SCALE, MEDIA_SCALE, MEDIA_SPOTS, MEDIA_STYLES, OPACITY_KEYS,
-                          SELECTABLE, TODAY_SPOTS, SysInfo)
+from .app_sysinfo import (BAR_ALIGNS, HUD_ROW_LABELS, HUD_SHOWN, HUD_SIDES, MAP_SCALE, MEDIA_SCALE, MEDIA_SPOTS,
+                          MEDIA_STYLES, OPACITY_KEYS, SELECTABLE, TODAY_SPOTS, SysInfo)
 from .app_qt import QtShell
 
 LANGS = [("en", "EN"), ("de", "DE"), ("fr", "FR"), ("es", "ES"), ("es-MX", "ES-MX"), ("it", "IT"),
@@ -240,6 +240,18 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self.opacity_var = ui.DoubleVar(value=o["opacity"] * 100)        # 1.2.7: of the element picked
         self.opacity_label = self._slider(pos, _("Deckkraft"), self.opacity_var, 25, 100, self._opacity_changed,
                                           key="ov.opacity")
+        # 1.2.8: one gap for stacked cards, and where everything sits in the bar
+        self.gap_var = ui.DoubleVar(value=float(o.get("stack_gap", 8)))
+        self._slider(pos, _("Abstand"), self.gap_var, 0, 40, self._gap_changed, fmt="{:.0f} px", key="ov.gap")
+        ar = ui.Frame(pos)
+        ar.pack(fill="x", pady=(4, 0))
+        self._reg("ov.bar_align.label", ui.Label(ar, text=_("Im Balken"), width=12)).pack(side="left")
+        aligns = dict(BAR_ALIGNS)
+        self.bar_align_var = ui.StringVar(value=_(aligns.get(o.get("bar_align", "centre"), aligns["centre"])))
+        acb = self._reg("ov.bar_align", ui.Combobox(ar, textvariable=self.bar_align_var, state="readonly", width=24,
+                                                     values=[_(t) for _k, t in BAR_ALIGNS]))
+        acb.pack(side="left", padx=6)
+        acb.bind("<<ComboboxSelected>>", lambda e: self._bar_align_changed())
         self.size_scope_var = ui.StringVar(value="")     # 1.65.5: this map only / all maps
         self._reg("ov.size_scope", ui.Label(pos, textvariable=self.size_scope_var, style="Dim.TLabel"))
         self.size_cap_var = ui.StringVar(value="")       # 1.65.2: the bar is what limits the map's size
@@ -357,6 +369,18 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self._reg("ov.hud_backdrop", ui.Checkbutton(sysf, text=_("Dunkle Fläche hinter den Systemwerten"),
                                                     variable=self.hud_backdrop_var, command=self._today_flag_changed)
                   ).pack(anchor="w", pady=(2, 0))
+        shown = o.get("hud_rows") or {}
+        self.hud_row_vars = {}
+
+        def row_check(key, text):                      # 1.2.8: rows of the system values, each its own tick box
+            var = self.hud_row_vars[key] = ui.BooleanVar(value=bool(shown.get(key, True)))
+            return ui.Checkbutton(sysf, text=text, variable=var, command=self._hud_rows_changed)
+        labels = dict(HUD_ROW_LABELS)
+        self._reg("ov.hud_row_cpu", row_check("cpu", _(labels["cpu"]))).pack(anchor="w", pady=(2, 0))
+        self._reg("ov.hud_row_gpu", row_check("gpu", _(labels["gpu"]))).pack(anchor="w", pady=(2, 0))
+        self._reg("ov.hud_row_spot", row_check("spot", _(labels["spot"]))).pack(anchor="w", pady=(2, 0))
+        self._reg("ov.hud_row_vram", row_check("vram", _(labels["vram"]))).pack(anchor="w", pady=(2, 0))
+        self._reg("ov.hud_row_ram", row_check("ram", _(labels["ram"]))).pack(anchor="w", pady=(2, 0))
         self.today_var = ui.BooleanVar(value=o.get("show_today", True))
         self._reg("ov.today", ui.Checkbutton(sysf, text=_("„Heute“: Runden, Spielzeit, Ø Kills/Entkommen, Uhrzeit"),
                                              variable=self.today_var, command=self._today_flag_changed)
@@ -695,8 +719,9 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         hk = {b: k for k, b in self.hk_buttons.items()}
         if w is self.test_btn:
             return lambda: (_("Test sofort beenden.") if self.test_btn.cget("text") == _("Test beenden") else
-                            _("Zeigt die Karte 10 s an ihrer normalen Position – auch wenn sie gerade ausgeblendet "
-                              "wäre. Nochmal drücken beendet den Test."))
+                            _("Zeigt 10 s lang alles, was das Overlay im Match zeigt – Karte, Systemwerte, „Heute“ "
+                              "und Musik (Beispielwerte, wenn nichts anliegt) – an den eingestellten Stellen, auch "
+                              "ohne DBD. Nochmal drücken beendet den Test."))
         if w is self.adv_btn:
             return _("Technische Optionen für die Fehlersuche ein- oder ausklappen.")
         if w is self.more_btn:
@@ -753,8 +778,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
                 self.show_map(first[0], first[1], "manual", _("Testanzeige"))
                 self._test_map = True            # loaded only for the test: hidden again when it ends
         self._force_until = time.time() + 10
-        self._log(_("Test: Overlay 10 s lang an seiner normalen Position – jetzt zu DBD wechseln "
-                    "(nochmal drücken beendet den Test)."), "Overlay")
+        self._log(_("Test: Overlay 10 s lang an seiner normalen Position, mit Systemwerten, „Heute“ und Musik "
+                    "(Beispielwerte, wenn nichts anliegt) – nochmal drücken beendet den Test."), "Overlay")
         self.test_btn.configure(text=_("Test beenden"))
         self._tick_overlay(reschedule=False)
 
@@ -1216,6 +1241,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         gx, gy, gw, gh = self._game_rect()               # keeps the game window info fresh
         # test: shown at its normal place, ignoring every reason to hide it
         forced = time.time() < getattr(self, "_force_until", 0) and self.overlay.has_map()
+        self._forced = forced                               # the cards show too, with sample values (1.2.8)
         if forced:
             self._pos_forced = True
         elif getattr(self, "_pos_forced", False):
@@ -1281,8 +1307,10 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         def place(w, h):
             if slot is not None:
                 return layout.slot_x(slot, w, margin), gy + margin
-            if a == "auto":
-                return gx + max(margin, (bar - w) / 2), gy + margin + drop
+            if a == "auto":                      # 1.2.8: left / centre / right in the bar
+                align = o.get("bar_align", "centre")
+                ax = (bar - w) / 2 if align == "centre" else (bar - margin - w if align == "right" else margin)
+                return gx + max(margin, ax), gy + margin + drop
             if a == "custom":
                 return gx + o.get("pos_x", 0.0) * max(0, gw - w), gy + o.get("pos_y", 0.0) * max(0, gh - h)
             return (gx + margin if a.endswith("left") else gx + gw - w - margin,
@@ -1514,7 +1542,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         rows = []
         if sys_on:
             snap = self.sysmon.snapshot
-            rows = sysinfo.hud_rows(snap if now - snap.t < 3 else preview.sample_snapshot())
+            rows = sysinfo.hud_rows(snap if now - snap.t < 3 else preview.sample_snapshot(), o.get("hud_rows"))
         today_rows = self._today_rows(now) if today else None
         hud_side = side if sys_on else ""
         music = preview.music_rows(self.media.now, now) if o.get("show_media", True) else None
