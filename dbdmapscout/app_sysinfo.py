@@ -17,6 +17,10 @@ HUD_SIDES = [("off", N_("Aus")), ("above", N_("Direkt über der Karte (wandert m
              ("left", N_("Links oben (über der Karte)")), ("right", N_("Rechts oben")),
              ("custom", N_("Eigene Position (mit der Maus verschieben)"))]
 HUD_SHOWN = ("above", "left", "right", "custom")
+BAR_ALIGNS = [("left", N_("Links")), ("centre", N_("Mittig")), ("right", N_("Rechts"))]     # 1.2.8
+HUD_ROW_LABELS = [("cpu", N_("Zeile CPU (Temperatur, Last)")), ("gpu", N_("Zeile GPU (Temperatur, Last)")),
+                  ("spot", N_("Zeile Hotspot / GPU-Speicher (HWiNFO)")), ("vram", N_("Zeile VRAM")),
+                  ("ram", N_("Zeile RAM"))]
 
 
 def today_rows(j, now: float) -> list:
@@ -121,7 +125,11 @@ class SysInfo:
         snap = self.sysmon.snapshot
         if self._hist is not None and self._sysrec is not None and sys_on and time.time() - snap.t < 3:
             self._sysrec.add(snap)
-        rows = sysinfo.hud_rows(snap) if on else []
+        forced = getattr(self, "_forced", False)            # "Overlay testen" (1.2.8): every element, sample values
+        if on and forced and time.time() - snap.t >= 3:
+            from .preview import sample_snapshot
+            snap = sample_snapshot()
+        rows = sysinfo.hud_rows(snap, self.settings["overlay"].get("hud_rows")) if on else []
         editing = on and self.overlay.editing          # 1.64.1: always draggable while moving, like the music
         if self.hud is not None:
             self.hud.set_editing(editing)
@@ -133,7 +141,7 @@ class SysInfo:
         beside = side == "above" and bool(vb)               # narrow window: right of the map in the bottom bar
         self._hud_pending = ""
         if not (on and (show or editing) and rows and (bar >= layout.MIN_BAR or vb or own or follow)
-                and (self.game is not None or editing)):
+                and (self.game is not None or editing or forced)):
             if self.hud is not None:
                 self.hud.hide()
             self.worker.hud_rect = None
@@ -158,8 +166,8 @@ class SysInfo:
             fx, fy = self.settings.get("sysinfo_pos") or (1.0, 0.0)
             x, y = gx + fx * max(0, gw - sw), gy + fy * max(0, gh - h)
         else:                                               # own place in the narrow window: the bar above
-            x, y = layout.hud_x("left" if side == "left" else "right", gx, gw, margin, sw, 0 if vb else bar), \
-                gy + margin
+            x, y = layout.hud_x("left" if side == "left" else "right", gx, gw, margin, sw, 0 if vb else bar,
+                                o.get("bar_align", "centre")), gy + margin
         self.hud.show_at(int(x), int(y))
         self.worker.hud_rect = (int(x), int(y), w, h)
         self._hud_box = (int(x), int(y), sw, h)             # steady box: the music card centres below it
@@ -178,7 +186,7 @@ class SysInfo:
         """Height the cards hanging below the system values take (a map at the top of that bar moves down by it;
         1.2.6, stacking 1.2.7): "today" as it would be rendered now, the music card as last shown."""
         o = self.settings["overlay"]
-        gap = max(2, int(gh * o["margin"]) // 2)
+        gap = layout.stack_gap(o, gh)
         total, chain = 0, {"hud"}
         for name, anchor in layout.stack_order({"today": o.get("today_pos", "below"),
                                                 "music": o.get("media_pos", "below")}):
@@ -226,7 +234,8 @@ class SysInfo:
         spot = o.get("today_pos", "below")
         gx, gy, gw, gh, show = ctx or (0, 0, 0, 0, False)
         bar = layout.bar_width(gw, gh) if gh else 0
-        if not (ctx and rows and (show or editing) and (self.game is not None or editing)
+        forced = getattr(self, "_forced", False)
+        if not (ctx and rows and (show or editing) and (self.game is not None or editing or forced)
                 and (bar >= layout.MIN_BAR or spot == "custom" or editing)):
             win.hide()
             self.worker.today_rect = None
@@ -241,7 +250,7 @@ class SysInfo:
         if w > avail:                                       # never wider than the black bar
             w, h = win.render(rows, max(200, int(height * avail / w)), look=look)
         x, y = layout.media_xy("below" if stacked else spot, (gx, gy, gw, gh), (w, h), margin, under,
-                               o.get("today_xy"))
+                               o.get("today_xy"), o.get("bar_align", "centre"), layout.stack_gap(o, gh))
         win.show_at(int(x), int(y))
         self.worker.today_rect = self._today_box = (int(x), int(y), w, h)
         return self._today_box
@@ -258,6 +267,25 @@ class SysInfo:
         o["today_xy"], o["today_pos"] = [fx, fy], "custom"
         if hasattr(self, "today_pos_var"):
             self.today_pos_var.set(_(dict(TODAY_SPOTS)["custom"]))
+        self._save_soon()
+        self._tick_overlay(reschedule=False)
+
+    def _hud_rows_changed(self):
+        """Rows of the system values switched on/off (1.2.8)."""
+        self.settings["overlay"]["hud_rows"] = {k: bool(v.get()) for k, v in self.hud_row_vars.items()}
+        self._save_soon()
+        self._tick_overlay(reschedule=False)
+
+    def _bar_align_changed(self):
+        self._layout_mark()
+        key = dict((_(label), k) for k, label in BAR_ALIGNS).get(self.bar_align_var.get(), "centre")
+        self.settings["overlay"]["bar_align"] = key
+        self._save_soon()
+        self._tick_overlay(reschedule=False)
+
+    def _gap_changed(self):
+        self._layout_mark()
+        self.settings["overlay"]["stack_gap"] = int(round(self.gap_var.get()))
         self._save_soon()
         self._tick_overlay(reschedule=False)
 
@@ -283,7 +311,7 @@ class SysInfo:
         hw, hh = self.hud.size
         steady = getattr(self, "_hud_steady", None)
         hw = max(hw, steady[1]) if steady else hw            # centred by its widest width: no wobble
-        gap = max(2, margin // 2)
+        gap = layout.stack_gap(self.settings["overlay"], gh)
         if mode == "beside":
             hx, hy = min(x + w + 3 * gap, gx + gw - gap - hw), y + max(0, (h - hh) // 2)
             self.hud.show_at(int(hx), int(hy))
@@ -326,13 +354,19 @@ class SysInfo:
         win.set_editing(editing)
         now = self.media.now
         rows = media.rows(now, time.time(), "", sysinfo.DIM, sysinfo.WHITE) if music else []
+        forced = getattr(self, "_forced", False)
+        if music and forced and not rows:                   # "Overlay testen" (1.2.8): a sample song
+            from .preview import sample_cover
+            now = media.NowPlaying("Blinding Lights", "The Weeknd", True, time.time(), position=70.0,
+                                   duration=176.0, at=time.time(), cover=sample_cover())
+            rows = media.rows(now, time.time(), "", sysinfo.DIM, sysinfo.WHITE)
         if editing and not rows:
             rows = [[(_("MUSIK"), sysinfo.DIM)], [(_("läuft gerade"), sysinfo.DIM)]]   # something to drag
         spot = o.get("media_pos", "below")
         gx, gy, gw, gh, show = ctx or (0, 0, 0, 0, False)
         bar = layout.bar_width(gw, gh) if gh else 0
         fade = bool(o.get("media_fade", True)) and not editing
-        if not (ctx and rows and (show or editing) and (self.game is not None or editing)
+        if not (ctx and rows and (show or editing) and (self.game is not None or editing or forced)
                 and (bar >= layout.MIN_BAR or spot == "custom" or editing)):
             if fade and win.shown:
                 if self._media_fader.target != 0:
@@ -356,7 +390,7 @@ class SysInfo:
             w, h = win.render(rows, max(200, int(height * avail / w)), cover, o.get("media_style", "big"), prog,
                               look)
         x, y = layout.media_xy("below" if stacked else spot, (gx, gy, gw, gh), (w, h), margin, under,
-                               o.get("media_xy"))
+                               o.get("media_xy"), o.get("bar_align", "centre"), layout.stack_gap(o, gh))
         song = (now.title, now.artist)
         if not fade:
             self._media_fade_stop()
