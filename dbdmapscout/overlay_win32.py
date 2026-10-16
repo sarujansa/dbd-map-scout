@@ -9,9 +9,11 @@ to the game (WS_EX_TRANSPARENT) – except in edit mode, where it can be dragged
 from __future__ import annotations
 
 import ctypes
+import math
 import re
 import sys
 import time
+from functools import lru_cache
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
@@ -114,6 +116,7 @@ if IS_WIN:
     HWND_NOTOPMOST = wintypes.HWND(-2)
 
 
+@lru_cache(maxsize=64)
 def _font(size: int, heavy: bool = False):
     names = ("seguibl.ttf",) if heavy else ()             # Segoe UI Black: as heavy as the map titles
     for name in names + ("segoeuib.ttf", "arialbd.ttf", "DejaVuSans-Bold.ttf"):
@@ -122,6 +125,71 @@ def _font(size: int, heavy: bool = False):
         except OSError:
             continue
     return ImageFont.load_default()
+
+
+@lru_cache(maxsize=64)
+def fira(size: int):
+    """Fira Sans ExtraBold at ``size`` (the map titles' font), loaded once per size (1.2.13: the HUD and the music
+    card are redrawn every second – the font, its glyphs and their widths are cached, see _draw_run)."""
+    try:
+        return ImageFont.truetype(FIRA, size)
+    except OSError:
+        return _font(size)
+
+
+_GLYPHS: dict = {}                 # (font id, char, stroke, x fraction) -> (L mask, offset) as ImageDraw.text uses it
+_CHAR_LEN: dict = {}               # (font id, char) -> textlength
+GLYPHS_KEPT = 6000                 # the caches start over beyond this (a few hundred entries in practice)
+
+
+def _char_len(font, ch: str) -> float:
+    key = (id(font), ch)
+    n = _CHAR_LEN.get(key)
+    if n is None:
+        if len(_CHAR_LEN) > GLYPHS_KEPT:
+            _CHAR_LEN.clear()
+        n = _CHAR_LEN[key] = font.getlength(ch)
+    return n
+
+
+def _glyph(font, ch: str, stroke: int, fx: float):
+    """Pillow's own mask of ``ch`` (with ``stroke``) at the fractional x start ``fx`` – exactly what
+    ImageDraw.text((x, y), ch, …) draws, cached per font/char/stroke/fraction (the fractions repeat: the same
+    text starts at the same x every second)."""
+    key = (id(font), ch, stroke, fx)
+    hit = _GLYPHS.get(key)
+    if hit is None:
+        try:
+            mask, off = font.getmask2(ch, "L", stroke_width=stroke, start=(fx, 0), stroke_filled=True)
+        except TypeError:                                  # Pillow before stroke_filled
+            mask, off = font.getmask2(ch, "L", stroke_width=stroke, start=(fx, 0))
+        tile = Image.new("L", tuple(mask.size))
+        tile.im.paste(mask, (0, 0) + tuple(mask.size))
+        if len(_GLYPHS) > GLYPHS_KEPT:
+            _GLYPHS.clear()
+        hit = _GLYPHS[key] = (tile, (int(off[0]), int(off[1])))
+    return hit
+
+
+def _draw_run(pic: Image.Image, x: float, y: float, text: str, font, fill, stroke: int = 0,
+              stroke_fill=None, track: float = 0) -> float:
+    """``text`` drawn character by character like ``d.text((x, y), ch, …); x += d.textlength(ch) + track`` (no
+    kerning – the look chosen in 1.49; ``track`` = letter spacing of the info lines), from the glyph cache;
+    returns the x after the text. Pixel for pixel the same as ImageDraw.text
+    (test_text_is_drawn_exactly_like_character_by_character), a fraction of its time."""
+    d = ImageDraw.Draw(pic)
+    iy = int(y)
+    same = stroke and fill == stroke_fill          # ImageDraw.text draws the fill only when it differs
+    for ch in text:
+        ix, fx = int(x), math.modf(x)[0]
+        if stroke:
+            tile, off = _glyph(font, ch, stroke, fx)
+            d.bitmap((ix + off[0], iy + off[1]), tile, fill=stroke_fill)
+        if not same:
+            tile, off = _glyph(font, ch, 0, fx)
+            d.bitmap((ix + off[0], iy + off[1]), tile, fill=fill)
+        x += _char_len(font, ch) + track
+    return x
 
 
 def compose(img: Image.Image, height: int, caption: str, transparent: bool, border: bool,
@@ -281,7 +349,8 @@ def add_info(pic: Image.Image, timer: str, server: str, height: int, backdrop: b
     canvas.alpha_composite(pic, (0, (canvas.height - pic.height) // 2 if beside else 0))
     dark = (0, 0, 0, 230)
 
-    def draw(d, shadow):
+    def draw(im, shadow):
+        d = ImageDraw.Draw(im)
         y = pad
         for (kind, segs, font), (x0, y0, x1, y1), w, h in zip(rows, boxes, widths, heights):
             if kind == "timer":
@@ -297,17 +366,15 @@ def add_info(pic: Image.Image, timer: str, server: str, height: int, backdrop: b
                               fill=dark if shadow else INFO_DOT)
                     x += 2 * dot
                 for text, colour in segs:
-                    for ch in text:
-                        d.text((x, y - y0), ch, font=font, fill=dark if shadow else colour,
-                               stroke_width=halo if shadow else 0, stroke_fill=dark)
-                        x += d.textlength(ch, font=font) + track
+                    x = _draw_run(im, x, y - y0, text, font, dark if shadow else colour, halo if shadow else 0,
+                                  dark, track)
             y += h + (int(TIMER_GAP * gap) if kind == "timer" else gap)
 
     shadow = Image.new("RGBA", (layer_w, layer_h), (0, 0, 0, 0))
-    draw(ImageDraw.Draw(shadow), True)
+    draw(shadow, True)
     shadow = shadow.filter(ImageFilter.GaussianBlur(blur))
     text = Image.new("RGBA", (layer_w, layer_h), (0, 0, 0, 0))
-    draw(ImageDraw.Draw(text), False)
+    draw(text, False)
     canvas.alpha_composite(shadow, (left + off, top - pad + 2 * off))
     canvas.alpha_composite(text, (left, top - pad))
     return canvas
@@ -362,47 +429,43 @@ def render_hud(rows, height: int) -> Image.Image:
     variants, 1.49: labels grey, values bright, same font and size, no letter spacing) with the soft shadow of
     the info block, left-aligned; ``height``: game height."""
     size = max(13, height // 60)
-    try:
-        font = ImageFont.truetype(FIRA, size)
-    except OSError:
-        font = _font(size)
-    track = 0
+    font = fira(size)
     gap = max(3, height // 160)
     blur = max(2, height // 300)
     pad = 3 * blur
     halo = max(1, height // 400)
-    d0 = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
     # 1.64.7 (user: "alles schön untereinander"): rows of label + values start their values in one column
     labelled = [len(row) >= 2 and row[0][1] == DIM_LABEL and row[0][0].strip() for row in rows]
-    col = max((int(_tracked_width(d0, row[0][0], font, track)) for row, lab in zip(rows, labelled) if lab),
-              default=0)
+    col = max((int(_run_len(font, row[0][0])) for row, lab in zip(rows, labelled) if lab), default=0)
     texts = ["".join(t for t, _ in (row[1:] if lab else row)) for row, lab in zip(rows, labelled)]
-    widths = [int(_tracked_width(d0, t, font, track)) + (col if lab else 0) for t, lab in zip(texts, labelled)]
+    widths = [int(_run_len(font, t)) + (col if lab else 0) for t, lab in zip(texts, labelled)]
     asc, desc = font.getmetrics()
     line_h = asc + desc
     w = max(widths, default=0) + 2 * pad
     h = len(rows) * line_h + gap * max(0, len(rows) - 1) + 2 * pad
     dark = (0, 0, 0, 230)
 
-    def draw(d, shadow):
+    def draw(im, shadow):
         y = pad
         for row, lab in zip(rows, labelled):
             x = pad
             for i, (text, colour) in enumerate(row):
                 if lab and i == 1:
                     x = pad + col                      # the values' column
-                for ch in text:
-                    d.text((x, y), ch, font=font, fill=dark if shadow else colour,
-                           stroke_width=halo if shadow else 0, stroke_fill=dark)
-                    x += d.textlength(ch, font=font) + track
+                x = _draw_run(im, x, y, text, font, dark if shadow else colour, halo if shadow else 0, dark)
             y += line_h + gap
 
     pic = Image.new("RGBA", (max(1, w), max(1, h)), (0, 0, 0, 0))
     shadow = Image.new("RGBA", pic.size, (0, 0, 0, 0))
-    draw(ImageDraw.Draw(shadow), True)
+    draw(shadow, True)
     pic.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(blur)), (0, 0))
-    draw(ImageDraw.Draw(pic), False)
+    draw(pic, False)
     return pic
+
+
+def _run_len(font, text: str) -> float:
+    """Width of ``text`` drawn character by character (_draw_run), from the width cache."""
+    return sum(_char_len(font, ch) for ch in text)
 
 
 def progress_strip(width: int, elapsed: float, total: float, height: int, accent=None,
@@ -412,10 +475,7 @@ def progress_strip(width: int, elapsed: float, total: float, height: int, accent
     = colour of the bar (from the cover), ``remaining`` = time left on the right ("−1:46") instead of the length."""
     from .media import clock
     size = max(11, height // 75)
-    try:
-        font = ImageFont.truetype(FIRA, size)
-    except OSError:
-        font = _font(size)
+    font = fira(size)
     blur = max(2, height // 300)
     pad = 3 * blur
     halo = max(1, height // 400)
@@ -495,14 +555,14 @@ def fit_lines(rows, height: int, scales=None):
     """Each row as a picture no wider than a line of media.MAX_CHARS characters (1.65.2, user: "lieber die
     Schrift kleiner statt Zeilenumbruch"): a longer row gets smaller text, down to FIT_MIN; only what is still
     too long wraps (media.wrap) at that size. ``scales``: size factor per row (the title is a bit larger)."""
-    from .media import ARTIST_LINES, MAX_CHARS, TITLE_LINES, wrap
+    from .media import ARTIST_LINES, TITLE_LINES, wrap
     out = []
     for i, row in enumerate(rows):
         scale = scales[i] if scales else 1.0
         h = int(height * scale)
         im = render_hud([row], h)
         colour = row[-1][1] if row else (255, 255, 255, 255)
-        max_w = render_hud([[("n" * MAX_CHARS, colour)]], h).width
+        max_w = _line_cap(h)
         if im.width <= max_w or len(row) != 1:
             out.append(im)
             continue
@@ -516,6 +576,13 @@ def fit_lines(rows, height: int, scales=None):
         lines = wrap(text, chars, TITLE_LINES if i == 0 else ARTIST_LINES)
         out += [render_hud([[(line, colour)]], max(1, int(h * f))) for line in lines]
     return out
+
+
+@lru_cache(maxsize=128)
+def _line_cap(h: int) -> int:
+    """Width of a line of media.MAX_CHARS characters at ``h`` (fit_lines' limit), measured once per size."""
+    from .media import MAX_CHARS
+    return render_hud([[("n" * MAX_CHARS, (255, 255, 255, 255))]], h).width
 
 
 def _stack(lines, pad: int, centred: bool) -> Image.Image:
@@ -559,25 +626,23 @@ def render_music(rows, cover, height: int, style: str = "big", progress=None, lo
     """"Läuft gerade": style "big" (1.64.7, user's choice "A") = the cover big on top, below it the title (a bit
     larger) and the artist, centred; "compact" = the card of 1.64 (cover left). Text like the system values, the
     cover slightly rounded with the same soft shadow. ``look`` (1.2.4): "accent" = bar in the cover's colour,
-    "remaining" = time left, "backdrop" = on a dark area."""
-    pic = _render_music(rows, cover, height, style, progress, look)
-    return backdrop(pic, height) if "backdrop" in look else pic
+    "remaining" = time left, "backdrop" = on a dark area. = music_card(music_body(…)); HudWindow keeps the body
+    (cover and text) and draws only the progress strip anew every second (1.2.13)."""
+    return music_card(music_body(rows, cover, height, style, look), height, style, progress, look)
 
 
-def _render_music(rows, cover, height, style, progress, look):
+def music_body(rows, cover, height: int, style: str, look=()):
+    """The part of the music card that stays while a song plays: (picture of cover + text, strip width, accent
+    colour or None). Costs the text rendering (fit_lines) – cached by HudWindow.render per song."""
     accent = None
-    if progress and "accent" in look:
+    if "accent" in look:
         from .media import accent as cover_accent
         accent = cover_accent(cover)
-    strip = (lambda w: progress_strip(w, *progress, height, accent, "remaining" in look)) if progress else None
-    if style == "compact":
-        pic = render_music_compact(rows, cover, height)
-        if strip:
-            pad = 3 * max(2, height // 300)
-            pic = _below(pic, strip(pic.width - 2 * pad), False)
-        return pic
     blur = max(2, height // 300)
     pad = 3 * blur
+    if style == "compact":
+        pic = render_music_compact(rows, cover, height)
+        return pic, pic.width - 2 * pad, accent
     lines = fit_lines(rows, height, [TITLE_SCALE if i == 0 else 1.0 for i in range(len(rows))])
     side = max(32, height // 6) if cover is not None else 0
     gap = max(4, height // 120) if cover is not None else 0
@@ -600,9 +665,18 @@ def _render_music(rows, cover, height, style, progress, look):
     for im in lines:
         pic.alpha_composite(im, ((w - im.width) // 2, y))
         y += im.height - pad
-    if strip:
-        pic = _below(pic, strip(max(side, text_w - 2 * pad)), True)
-    return pic
+    return pic, max(side, text_w - 2 * pad), accent
+
+
+def music_card(body, height: int, style: str, progress=None, look=()) -> Image.Image:
+    """The music card from its body (music_body): the progress strip below it (``progress`` = (elapsed, total)
+    seconds), on the dark area if "backdrop" is in ``look``. Cheap – drawn every second while a song plays."""
+    pic, strip_w, accent = body
+    if progress:
+        strip = progress_strip(strip_w, *progress, height, accent if "accent" in look else None,
+                               "remaining" in look)
+        pic = _below(pic, strip, style != "compact")
+    return backdrop(pic, height) if "backdrop" in look else pic
 
 
 def guide_line(length: int, vertical: bool, dash: int = 14) -> Image.Image:
@@ -635,6 +709,8 @@ class HudWindow:
         self._key = None
         self._data = None
         self._pos = None
+        self._body_key = None                  # the music card's body (1.2.13), kept while the song plays
+        self._body = None
         self._shown = False
         self.size = (0, 0)
         self._raised = 0.0
@@ -692,11 +768,17 @@ class HudWindow:
             self._key = key
             if not rows:
                 self._data, self.size = None, (0, 0)
-            else:
-                pic = render_hud(rows, height) if style is None else render_music(rows, cover, height, style,
-                                                                                  progress, look)
-                if style is None and "backdrop" in look:
+            elif style is None:
+                pic = render_hud(rows, height)
+                if "backdrop" in look:
                     pic = backdrop(pic, height)
+            else:                                     # 1.2.13: the body (cover, text) once per song, the strip
+                body_key = (key[0], key[1], id(cover), style, "accent" in look)   # every second
+                if body_key != self._body_key:
+                    self._body_key = body_key
+                    self._body = (music_body(rows, cover, height, style, look), cover)   # cover kept: id stays
+                pic = music_card(self._body[0], height, style, progress, look)
+            if rows:
                 if self.editing:
                     pic = add_border(pic, self.edit_label)
                 self._data, self.size = premultiplied_bgra(pic), pic.size

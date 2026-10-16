@@ -255,3 +255,80 @@ def test_alignment_in_the_bar_and_the_stack_gap():
     assert layout.stack_gap({}, 1440) == 8 and layout.stack_gap({"stack_gap": 0}, 1440) == 0
     assert layout.preview_place(3440, 1440, "auto", 0, 0, m, True, 300, 400, align="right")[0] == 440 - 17 - 300
     assert layout.preview_place(3440, 1440, "auto", 0, 0, m, True, 300, 400, align="left")[0] == 17
+
+
+def _reference_hud(rows, height):
+    """render_hud as it was before 1.2.13: every character with ImageDraw.text (no cache)."""
+    from PIL import Image, ImageDraw, ImageFilter, ImageFont
+    from dbdmapscout.overlay_win32 import DIM_LABEL, FIRA
+    size = max(13, height // 60)
+    font = ImageFont.truetype(FIRA, size)
+    gap, blur, halo = max(3, height // 160), max(2, height // 300), max(1, height // 400)
+    pad = 3 * blur
+    d0 = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+
+    def width(text):
+        return sum(d0.textlength(c, font=font) for c in text)
+    labelled = [len(row) >= 2 and row[0][1] == DIM_LABEL and row[0][0].strip() for row in rows]
+    col = max((int(width(row[0][0])) for row, lab in zip(rows, labelled) if lab), default=0)
+    texts = ["".join(t for t, _ in (row[1:] if lab else row)) for row, lab in zip(rows, labelled)]
+    widths = [int(width(t)) + (col if lab else 0) for t, lab in zip(texts, labelled)]
+    asc, desc = font.getmetrics()
+    line_h = asc + desc
+    w, h = max(widths, default=0) + 2 * pad, len(rows) * line_h + gap * max(0, len(rows) - 1) + 2 * pad
+    dark = (0, 0, 0, 230)
+
+    def draw(d, shadow):
+        y = pad
+        for row, lab in zip(rows, labelled):
+            x = pad
+            for i, (text, colour) in enumerate(row):
+                if lab and i == 1:
+                    x = pad + col
+                for ch in text:
+                    d.text((x, y), ch, font=font, fill=dark if shadow else colour,
+                           stroke_width=halo if shadow else 0, stroke_fill=dark)
+                    x += d.textlength(ch, font=font)
+            y += line_h + gap
+    pic = Image.new("RGBA", (max(1, w), max(1, h)), (0, 0, 0, 0))
+    shadow = Image.new("RGBA", pic.size, (0, 0, 0, 0))
+    draw(ImageDraw.Draw(shadow), True)
+    pic.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(blur)), (0, 0))
+    draw(ImageDraw.Draw(pic), False)
+    return pic
+
+
+def test_text_is_drawn_exactly_like_character_by_character():
+    """1.2.13 (analysis points 5/6): the glyph cache draws the system values pixel for pixel like the
+    character-by-character ImageDraw.text of 1.49 – cold and warm – in every size."""
+    from dbdmapscout import sysinfo
+    from dbdmapscout.overlay_win32 import _GLYPHS, render_hud
+    from dbdmapscout.preview import sample_snapshot
+    hud = sysinfo.hud_rows(sample_snapshot(), None)
+    text = [[("Blinding Lights – jäöü ÄÖÜ ß é 12:34 °C %", sysinfo.WHITE)], [("The Weeknd", sysinfo.DIM)]]
+    _GLYPHS.clear()
+    for height in (300, 720, 1017, 1080, 1440, 2160):
+        for rows in (hud, text):
+            want = _reference_hud(rows, height)
+            cold, warm = render_hud(rows, height), render_hud(rows, height)
+            assert cold.size == want.size and cold.tobytes() == want.tobytes(), height
+            assert warm.tobytes() == want.tobytes(), height
+    assert 0 < len(_GLYPHS) < 3000
+
+
+def test_music_card_is_its_body_plus_the_progress_strip():
+    """1.2.13: HudWindow keeps the body (cover + text) while a song plays and only draws the strip – the card
+    from the parts equals the card drawn in one go, for every style and look."""
+    from PIL import Image
+    from dbdmapscout.overlay_win32 import music_body, music_card, render_music
+    rows = [[("Blinding Lights", (255, 255, 255, 255))], [("The Weeknd", (150, 156, 170, 255))]]
+    cover = Image.new("RGBA", (160, 160), (200, 30, 60, 255))
+    for style in ("big", "compact"):
+        for look in ((), ("accent",), ("accent", "backdrop", "remaining")):
+            body = music_body(rows, cover, 1440, style, look)
+            for progress in (None, (70, 176), (71, 176)):
+                a = render_music(rows, cover, 1440, style, progress, look)
+                b = music_card(body, 1440, style, progress, look)
+                assert a.size == b.size and a.tobytes() == b.tobytes(), (style, look, progress)
+    pic, strip_w, accent = music_body(rows, cover, 1440, "big", ("accent",))
+    assert strip_w > 0 and accent is not None and music_body(rows, None, 1440, "big", ())[2] is None
