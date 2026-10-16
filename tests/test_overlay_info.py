@@ -231,7 +231,7 @@ def test_a_big_text_with_the_dark_area_still_fits_the_bar():
 
     ov = Overlay(Root())
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    ov.set_map(os.path.join(root, "maps", "Autohaven Wreckers", "Gas Heaven.webp"), "")
+    ov.set_map(os.path.join(root, "maps", "Azarovs", "Gas Heaven.webp"), "")
     ov.set_timer("0:59")
     ov.set_server("Frankfurt", 28)
     ov.set_record("Ø 2.8 Kills · 12 Runden")
