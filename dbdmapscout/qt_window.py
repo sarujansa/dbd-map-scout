@@ -68,8 +68,10 @@ SPECS = {
             ("ov.sys", N_("Systemwerte & Musik"), (
                 ("sub", N_("Systemwerte")),
                 ("row", (("label", "ov.sysinfo.label"), ("combo", "ov.sysinfo"), ("stretch",))),
-                ("hint", "ov.sys_text"), ("hint", "ov.sys_hint"), ("check", "ov.today"),
-                ("check", "ov.hud_backdrop"),
+                ("hint", "ov.sys_text"), ("hint", "ov.sys_hint"), ("check", "ov.hud_backdrop"),
+                ("sub", N_("Heute")), ("check", "ov.today"),
+                ("row", (("label", "ov.today_pos.label"), ("combo", "ov.today_pos"), ("stretch",))),
+                ("check", "ov.today_backdrop"),
                 ("sub", N_("Musik")),
                 ("check", "ov.media"), ("row", (("label", "ov.media_pos.label"), ("combo", "ov.media_pos"), ("stretch",))),
                 ("row", (("label", "ov.media_style.label"), ("combo", "ov.media_style"), ("stretch",))),
@@ -1546,7 +1548,7 @@ class SwatchView(QWidget):
         self._dialog = dlg                       # keep it alive while it is open
 
 
-PREVIEW_NAMES = {"map": N_("Karte"), "hud": N_("Systemwerte"), "music": N_("Musik")}
+PREVIEW_NAMES = {"map": N_("Karte"), "hud": N_("Systemwerte"), "today": N_("Heute"), "music": N_("Musik")}
 
 
 class PreviewView(QWidget):

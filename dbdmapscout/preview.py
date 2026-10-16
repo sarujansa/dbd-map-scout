@@ -89,10 +89,10 @@ def music_rows(now: media.NowPlaying, wall: float):
 
 
 def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, map_pic, caption: str,
-           info: dict, height_frac: float, music=None):
+           info: dict, height_frac: float, music=None, today=None):
     """[(name, picture, x, y)] in screen pixels, bottom to top, + the map's (x, y, w, h) for clicks.
-    ``o`` = settings["overlay"], ``hud_side`` = settings["sysinfo"] (or "right" for "today" alone, "" for none),
-    ``info`` = timer/server/ping/record lines, ``music`` = (rows, cover) or None."""
+    ``o`` = settings["overlay"], ``hud_side`` = settings["sysinfo"] ("" for none), ``info`` = timer/server/ping/
+    record lines, ``music`` = (rows, cover) or None, ``today`` = rows of "today" (its own card, 1.2.6) or None."""
     margin = int(gh * o["margin"])
     bar = layout.bar_width(gw, gh)
     avail = layout.max_width(bar, margin) if bar >= layout.MIN_BAR else gw / 3
@@ -103,8 +103,17 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
         boxed = bool(o.get("hud_backdrop", False))
         hud = fitted(lambda h: backdrop(render_hud(hud_rows, h), h) if boxed else render_hud(hud_rows, h), hh, avail,
                      ("hud", repr(hud_rows), boxed))
+    today_card = None
+    if today:
+        th = int(gh * min(2.0, max(0.6, float(o.get("today_scale", 1.0)))))
+        tboxed = bool(o.get("today_backdrop", False))
+        today_card = fitted(lambda h: backdrop(render_hud(today, h), h) if tboxed else render_hud(today, h), th,
+                            avail if o.get("today_pos", "below") != "custom" else gw / 3,
+                            ("today", repr(today), tboxed))
     drop = hud.height + margin if hud is not None and hud_side != "custom" \
         and layout.below_hud(hud_side, o["anchor"]) else 0
+    if drop and today_card is not None and o.get("today_pos", "below") == "below":
+        drop += today_card.height + max(2, margin // 2)     # "today" hangs below them: the map below both
     aspect = map_pic.width / map_pic.height if map_pic is not None else 0.8
     rows = sum(1 for k in ("timer", "server", "record") if info.get(k))
     rows += 1 if info.get("timer") else 0
@@ -146,6 +155,13 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
         hx, hy = layout.hud_preview_xy(hud_side, gw, gh, margin, hud.size, hud_own, map_rect)
         out.append(("hud", hud, hx, hy))
         hud_rect = (hx, hy, hud.width, hud.height)
+    under = hud_rect
+    if today_card is not None:
+        tspot = o.get("today_pos", "below")
+        tx, ty = layout.media_xy(tspot, (0, 0, gw, gh), today_card.size, margin, hud_rect, o.get("today_xy"))
+        out.append(("today", today_card, int(tx), int(ty)))
+        if tspot == "below":
+            under = (int(tx), int(ty), today_card.width, today_card.height)
     if music:
         rows_m, cover, prog = music
         prog = prog if o.get("media_progress", True) else None
@@ -157,6 +173,6 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
         card = fitted(lambda h: render_music(rows_m, show_cover, h, style, prog, look), int(gh * scale),
                       avail if spot != "custom" else gw / 3,
                       ("music", repr(rows_m), id(show_cover), style, prog, look))
-        cx, cy = layout.media_xy(spot, (0, 0, gw, gh), card.size, margin, hud_rect, o.get("media_xy"))
+        cx, cy = layout.media_xy(spot, (0, 0, gw, gh), card.size, margin, under, o.get("media_xy"))
         out.append(("music", card, int(cx), int(cy)))
     return out, map_rect
