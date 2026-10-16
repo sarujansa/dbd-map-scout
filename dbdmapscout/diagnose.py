@@ -115,7 +115,8 @@ def collect(app) -> str:
                      f"{app.settings.get('window_capture', True)})")
         q = getattr(w, "queue", None)
         lines.append(f"Lobby: letzter Blick {getattr(w, 'lobby_info', '?')} · Zustand "
-                     f"{getattr(q, 'state', '?')}, Rolle {getattr(q, 'role', None)}")
+                     f"{getattr(q, 'state', '?')}, Rolle {getattr(q, 'role', None)}, "
+                     f"Crossplay aus={getattr(q, 'crossplay_off', None)}")
         seen = list(getattr(w, "banner_history", []))
         lines.append(f"Letzte Banner ({len(seen)}):" if seen else "Letzte Banner: keine")
         lines.extend("  " + h for h in seen)

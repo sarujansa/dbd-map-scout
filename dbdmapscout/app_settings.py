@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
-from . import __version__, i18n, qt_theme
+from . import __version__, i18n, qt_theme, regions
 from . import uimodel as ui
 from .capture import IS_WIN
 from . import autostart
@@ -181,6 +181,29 @@ class SettingsTab:
                              "speichert das Skript die letzten 30 Matches im Download-Ordner; das Programm liest die "
                              "Datei und löscht sie. Es geht dafür selbst nicht ins Internet."),
                   style="Dim.TLabel", wraplength=420)).pack(anchor="w", pady=(4, 0))
+
+        fm = self._reg("st.more.farming", ui.LabelFrame(more, text=_("Farming-Runden"), padding=8))   # 1.2.20
+        fm.pack(fill="x", pady=(8, 0))
+        self.farm_cross_var = ui.BooleanVar(value=self.settings.get("farming_crossplay", True))
+        self._reg("st.more.farm_cross", ui.Checkbutton(fm, text=_("Runden ohne Crossplay als Farming zählen"),
+                                                        variable=self.farm_cross_var,
+                                                        command=self._farming_setting)).pack(anchor="w")
+        fr = ui.Frame(fm)
+        fr.pack(fill="x", pady=(4, 0))
+        self._reg("st.more.farm_region.label", ui.Label(fr, text=_("Alle Runden auf"), width=14)).pack(side="left")
+        self._farm_regions = [("", _("(keine)"))] + [(c, _(n)) for c, n, _cont in regions.REGIONS]
+        names = dict(self._farm_regions)
+        self.farm_region_var = ui.StringVar(value=names.get(self.settings.get("farming_region", ""), names[""]))
+        cb = self._reg("st.more.farm_region", ui.Combobox(fr, textvariable=self.farm_region_var, state="readonly",
+                                                           width=22, values=[lbl for _c, lbl in self._farm_regions]))
+        cb.pack(side="left", padx=6)
+        cb.bind("<<ComboboxSelected>>", lambda e: self._farming_setting())
+        self._reg("st.more.farm_text", ui.Label(fm, text=_(
+            "Farming-Runden zählen nicht zu den normalen Runden (Rollen-Filter, Wartezeiten, Bilanz, Ergebnisse) – "
+            "die Statistik hat dafür den Filter „Farming“. Crossplay aus erkennt das Programm an der Weltkugel mit "
+            "rotem Kreuz neben dem Lobby-Knopf; Runden auf der gewählten Region zählen immer als Farming, auch "
+            "ältere. Einzelne Runden: „Farming an/aus“ unter „Letzte Runden“."),
+            style="Dim.TLabel", wraplength=420)).pack(anchor="w", pady=(4, 0))
 
         # 1.2.15: the same controls once more for the setup assistant's step "Match-Daten" – the originals sit
         # under "Mehr" and count as hidden while it is folded (the settings page itself draws only SPECS keys)

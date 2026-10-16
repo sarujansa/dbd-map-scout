@@ -116,7 +116,7 @@ def today(app, now: float) -> tuple[list, str]:
     j = app._joined()
     d = history.today(j.rounds, now)
     day = history.period_start("day", now)
-    s = official.summary([j.off[id(r)] for r in j.rounds if r.t >= day and id(r) in j.off and not r.custom])
+    s = official.summary([j.off[id(r)] for r in j.rounds if r.t >= day and id(r) in j.off and history.normal(r)])
     rounds = Fact(_("Runden"), str(d["count"]),
                   _("{k} Killer / {s} Survivor", k=d["killer"], s=d["survivor"]) if d["count"] else "")
     if s["killer"]:
@@ -178,6 +178,8 @@ def last_rounds(app, n: int = LAST_ROUNDS) -> list:
             who = killer_label(r.killer)
         else:
             who = app._role_name(r.role)
+        if r.farming and not r.custom:
+            who = (who + " · " if who else "") + _("Farming")
         res = app._official_result(j.off.get(id(r)))
         parts = [p for p in (who, res if res != "–" else "", fmt_duration(r.seconds)) if p]
         out.append((r.map, " · ".join(parts)))

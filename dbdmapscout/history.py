@@ -25,6 +25,7 @@ class Round:
     wait: float | None = None   # seconds searched in the lobby until it was found (None: not seen / custom)
     role: str = ""          # killer | survivor | "" (unknown)
     custom: bool = False    # custom game (no queue)
+    farming: bool = False   # 1.2.20: cross-play off in the lobby (not a normal round; see also normal())
     ping: float | None = None   # median ping (ms) to the server region during the round
     killer: str = ""        # own killer, read in the lobby ("The Nurse"); counts only while role == killer
     sys: dict | None = None     # system values during the round (sysinfo.SysRecorder: averages and maxima)
@@ -32,6 +33,12 @@ class Round:
 
 def should_record(seconds: float) -> bool:
     return seconds >= MIN_SECONDS
+
+
+def normal(r: Round) -> bool:
+    """A normal public round: neither a custom game nor a farming round (those count only in their own
+    filter – not in the role filters, waiting times, records and results)."""
+    return not (r.custom or r.farming)
 
 
 def append(path: str, rnd: Round) -> None:
@@ -65,7 +72,7 @@ def _rewrite(path: str, rounds, lost) -> None:
     os.replace(tmp, path)
 
 
-LOST_KEYS = ("map_id", "region", "source", "wait", "role", "custom", "killer", "ping", "sys")   # since 1.35/1.43
+LOST_KEYS = ("map_id", "region", "source", "wait", "role", "custom", "farming", "killer", "ping", "sys")   # since 1.35/1.43
 
 
 def append_lost(path: str, t: float, map_label: str, reason: str, **known) -> None:
@@ -114,7 +121,7 @@ def load_lost_rounds(path: str) -> list:
                          source=str(d.get("source") or ""),
                          wait=float(wait) if isinstance(wait, (int, float)) and wait >= 0 else None,
                          role=str(d.get("role") or "") if d.get("role") in ROLES else "",
-                         custom=bool(d.get("custom")),
+                         custom=bool(d.get("custom")), farming=bool(d.get("farming")),
                          ping=float(ping) if isinstance(ping, (int, float)) and ping >= 0 else None,
                          killer=str(d.get("killer") or ""), sys=_sys(d.get("sys"))))
     return out
@@ -136,7 +143,7 @@ def load(path: str) -> list:
                                      source=str(d.get("source") or ""),
                                      wait=float(wait) if isinstance(wait, (int, float)) and wait >= 0 else None,
                                      role=str(d.get("role") or "") if d.get("role") in ROLES else "",
-                                     custom=bool(d.get("custom")),
+                                     custom=bool(d.get("custom")), farming=bool(d.get("farming")),
                                      ping=float(d["ping"]) if isinstance(d.get("ping"), (int, float))
                                      and d["ping"] >= 0 else None,
                                      killer=str(d.get("killer") or ""), sys=_sys(d.get("sys"))))
@@ -171,24 +178,25 @@ def today(rounds, now: float) -> dict:
     """Today at a glance (calendar day, all filters off): rounds, killer/survivor, play time, average wait,
     most played killer, median ping."""
     rs = select(rounds, since=period_start("day", now))
-    waits = [r.wait for r in rs if r.wait is not None and not r.custom]
+    waits = [r.wait for r in rs if r.wait is not None and normal(r)]
     killers = killers_used(rs)
     return {"count": len(rs), "total": sum(r.seconds for r in rs),
-            "killer": sum(1 for r in rs if r.role == "killer" and not r.custom),
-            "survivor": sum(1 for r in rs if r.role == "survivor" and not r.custom),
+            "killer": sum(1 for r in rs if r.role == "killer" and normal(r)),
+            "survivor": sum(1 for r in rs if r.role == "survivor" and normal(r)),
             "wait": sum(waits) / len(waits) if waits else None,
             "top_killer": killers[0] if killers else "",
             "ping": median([r.ping for r in rs if r.ping is not None])}
 
 
 def roles_per_map(rounds) -> dict:
-    """{map label: (killer rounds, survivor rounds)} – custom games and unknown roles count for neither."""
+    """{map label: (killer rounds, survivor rounds)} – custom games, farming rounds and unknown roles count
+    for neither."""
     out = {}
     for r in rounds:
         k, s = out.get(r.map, (0, 0))
-        if not r.custom and r.role == "killer":
+        if normal(r) and r.role == "killer":
             k += 1
-        elif not r.custom and r.role == "survivor":
+        elif normal(r) and r.role == "survivor":
             s += 1
         out[r.map] = (k, s)
     return out
@@ -227,18 +235,23 @@ def period_start(period: str, now: float):
 
 
 ROLES = ("killer", "survivor")
-ROLE_FILTERS = ("all", "killer", "survivor", "custom")
+ROLE_FILTERS = ("all", "killer", "survivor", "custom", "farming")
 
 
 def select(rounds, since=None, region=None, role="all", killer=None, map_label=None) -> list:
     """Rounds from ``since`` on; ``region``: None = all, NO_REGION = rounds without a known server;
-    ``role``: all | killer | survivor | custom (custom games only); ``killer``: None = all, else only
+    ``role``: all | killer | survivor | custom (custom games only) | farming (1.2.20: farming rounds only –
+    every other filter leaves them out, they are not normal rounds); ``killer``: None = all, else only
     killer rounds with this killer; ``map_label`` (1.2.16): only this map (the label as the tables group it)."""
     out = [r for r in rounds if since is None or r.t >= since]
     if map_label:
         out = [r for r in out if r.map == map_label]
     if killer:
-        out = [r for r in out if r.killer == killer and r.role == "killer" and not r.custom]
+        out = [r for r in out if r.killer == killer and r.role == "killer" and normal(r)]
+    if role == "farming":
+        out = [r for r in out if r.farming and not r.custom]
+    else:                                    # a custom game is never a farming round
+        out = [r for r in out if not (r.farming and not r.custom)]
     if role == "custom":
         out = [r for r in out if r.custom]
     elif role in ROLES:
@@ -298,7 +311,7 @@ HOUR_BLOCK = 3              # time of day in blocks of 3 hours (00–03, 03–06
 
 def wait_summary(rounds) -> dict:
     """Waiting times of rounds that have one (public matches whose search was seen)."""
-    w = sorted(r.wait for r in rounds if r.wait is not None and not r.custom)
+    w = sorted(r.wait for r in rounds if r.wait is not None and normal(r))
     if not w:
         return {"count": 0, "avg": 0.0, "median": 0.0, "min": 0.0, "max": 0.0}
     return {"count": len(w), "avg": sum(w) / len(w), "median": w[len(w) // 2], "min": w[0], "max": w[-1]}
@@ -319,7 +332,7 @@ def wait_by(rounds, by: str) -> list:
     regions by shortest average wait (the answer to "where/when do I find a match fastest?")."""
     groups = {}
     for r in rounds:
-        if r.wait is not None and not r.custom:
+        if r.wait is not None and normal(r):
             groups.setdefault(_wait_key(r, by), []).append(r.wait)
     rows = [(k, len(w), sum(w) / len(w), min(w)) for k, w in groups.items()]
     if by == "region":
@@ -338,6 +351,18 @@ def set_role(path: str, t: float, role: str):
         return None
     hit.custom = role == "custom"
     hit.role = "" if hit.custom else role       # the waiting time stays (ignored for custom games): undo-able
+    _rewrite(path, rounds, _lost_lines(path))
+    return hit
+
+
+def set_farming(path: str, t: float, farming: bool):
+    """1.2.20: mark / unmark the round that started at ``t`` as a farming round (the role stays).
+    Rewrites the file; returns the changed round or None."""
+    rounds = load(path)
+    hit = next((r for r in rounds if abs(r.t - t) < 1e-6), None)
+    if hit is None:
+        return None
+    hit.farming = bool(farming)
     _rewrite(path, rounds, _lost_lines(path))
     return hit
 
@@ -476,7 +501,7 @@ def sys_trend(rounds, unit: str) -> list:
     return out[-MAX_BUCKETS:]
 
 
-CSV_COLUMNS = ("start", "map", "seconds", "wait_seconds", "role", "custom", "killer", "region", "ping_ms",
+CSV_COLUMNS = ("start", "map", "seconds", "wait_seconds", "role", "custom", "farming", "killer", "region", "ping_ms",
                "kills", "escaped", "bloodpoints")
 
 

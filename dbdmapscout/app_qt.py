@@ -14,7 +14,7 @@ import traceback
 
 from PIL import Image
 
-from . import __version__, official, overview, tooltip
+from . import __version__, history, official, overview, tooltip
 from . import uimodel as ui
 from .capture import IS_WIN
 from .i18n import _
@@ -526,6 +526,8 @@ class QtShell:
         if cache is None or cache[0] is not j:
             stats = {}
             for r in j.rounds:
+                if not history.normal(r):            # custom games and farming rounds are no record
+                    continue
                 n, kills = stats.get(r.map, (0, []))
                 m = j.off.get(id(r))
                 k = official.kills(m) if m is not None else None

@@ -24,7 +24,7 @@ from .trendchart import TrendChart
 log = logging.getLogger("dbdmapscout")
 
 STATS_ROLES = [("all", N_("Alle Rollen")), ("killer", N_("Killer")), ("survivor", N_("Survivor")),
-               ("custom", N_("Custom Games"))]
+               ("custom", N_("Custom Games")), ("farming", N_("Farming"))]
 STATS_WAIT_GROUPS = [("weekday", N_("nach Wochentag")), ("hour", N_("nach Uhrzeit")), ("region", N_("nach Region"))]
 WEEKDAYS = [N_("Montag"), N_("Dienstag"), N_("Mittwoch"), N_("Donnerstag"), N_("Freitag"), N_("Samstag"),
             N_("Sonntag")]
@@ -239,6 +239,9 @@ class StatsTab:
             b = ui.Button(rr, text=_(label), command=lambda r=role: self._stats_set_role(r), state="disabled")
             b.pack(side="left", padx=(6, 0))
             self.stats_role_btns.append(b)
+        b = ui.Button(rr, text=_("Farming an/aus"), command=self._stats_toggle_farming, state="disabled")   # 1.2.20
+        b.pack(side="left", padx=(6, 0))
+        self.stats_role_btns.append(b)
         self.stats_delete_btn = ui.Button(rr, text=_("Runde löschen"), command=self._stats_delete_round,
                                            state="disabled")
         self.stats_delete_btn.pack(side="right")
@@ -289,8 +292,11 @@ class StatsTab:
         Rounds whose end was never detected count with the page's length once a match fits them."""
         all_rounds = history.load(self._hist_path())
         lost_rounds = history.load_lost_rounds(self._hist_path())
+        farm_region = self.settings.get("farming_region") or ""
         for r in all_rounds + lost_rounds:           # skins / new killers: the user's assignment
             r.killer = self._killer_of(r.killer)
+            if farm_region and r.region == farm_region:
+                r.farming = True                     # 1.2.20: every round on that server region (display only)
         for r in lost_rounds:                        # lines from before 1.35 know only the label
             r.map_id = r.map_id or self._official_map_id(r.map) or ""
         matches = official.load(self._official_path())
@@ -374,7 +380,7 @@ class StatsTab:
             notes.append(_("✓ {n} × Map mitten im Match falsch erkannt (laut Stats-Seite lief da schon ein Match) – "
                            "nicht gezählt. Zuletzt: {map}, {when}.", n=len(ghosts), map=ghosts[-1].map,
                            when=time.strftime("%d.%m.%y %H:%M", time.localtime(ghosts[-1].t))))
-        pairs = [(r, off[id(r)]) for r in rounds if id(r) in off and (role == "custom" or not r.custom)]
+        pairs = [(r, off[id(r)]) for r in rounds if id(r) in off and (role in ("custom", "farming") or history.normal(r))]
         self.stats_lost_var.set("\n".join(notes))
         if self.stats_lost_var.get():
             self.stats_lost_label.pack(anchor="w", after=self.stats_dash, pady=(6, 0))
@@ -451,6 +457,8 @@ class StatsTab:
         for r in newest[:self._stats_last_limit]:
             role = _("Custom Game") if r.custom else (killer_label(r.killer) if r.role == "killer" and r.killer
                                                       else self._role_name(r.role) or "–")
+            if r.farming and not r.custom:
+                role += " · " + _("Farming")
             t.insert("", "end", iid=repr(r.t), values=(time.strftime("%d.%m.%y %H:%M", time.localtime(r.t)), r.map,
                                                        fmt_duration(r.seconds),
                                                        fmt_duration(r.wait) if r.wait is not None else "–", role,
@@ -591,6 +599,29 @@ class StatsTab:
                         role=_("Custom Game") if role == "custom" else self._role_name(role)), "System")
         self._stats_render()
 
+    def _stats_toggle_farming(self):
+        """1.2.20: mark / unmark the round marked in "Letzte Runden" as a farming round."""
+        sel = self.stats_last.selection()
+        if not sel:
+            return
+        t = float(sel[0])
+        now = next((r for r in history.load(self._hist_path()) if abs(r.t - t) < 1e-6), None)
+        if now is None:
+            return
+        try:
+            r = history.set_farming(self._hist_path(), t, not now.farming)
+        except OSError as e:
+            self._log(_("Rolle konnte nicht gespeichert werden: {error}", error=e), "Fehler")
+            return
+        if r is not None:
+            when = time.strftime("%d.%m.%y %H:%M", time.localtime(r.t))
+            self._log(_("{map} ({when}) zählt jetzt als Farming-Runde.", map=r.map, when=when) if r.farming
+                      else _("{map} ({when}) zählt wieder als normale Runde.", map=r.map, when=when), "System")
+            if not r.farming and r.region and r.region == (self.settings.get("farming_region") or None):
+                self._log(_("Hinweis: Runden auf {region} zählen laut Einstellung weiter als Farming.",
+                            region=self._stats_region_name(r.region)), "System")
+        self._stats_render()
+
     def _stats_delete_round(self):
         """Remove the round marked in "Letzte Runden" (e.g. a map read wrongly in the middle of a match)."""
         sel = self.stats_last.selection()
@@ -657,7 +688,8 @@ class StatsTab:
             m = off.get(id(r))
             rows.append({"start": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(r.t)), "map": r.map,
                          "seconds": round(r.seconds), "wait_seconds": round(r.wait) if r.wait is not None else None,
-                         "role": r.role, "custom": int(bool(r.custom)), "killer": r.killer, "region": r.region,
+                         "role": r.role, "custom": int(bool(r.custom)), "farming": int(bool(r.farming)),
+                         "killer": r.killer, "region": r.region,
                          "ping_ms": round(r.ping) if r.ping is not None else None,
                          "kills": official.kills(m) if m else None, "escaped": official.escaped(m) if m else None,
                          "bloodpoints": m.bp if m else None})
@@ -699,8 +731,12 @@ class StatsTab:
         self._sysrec = sysinfo.SysRecorder()          # system values during this round
         f = self._queue.get("found")                  # the lobby this match came from (once, max. 15 min old)
         if f is not None and 0 <= now - f.t <= 900:
-            self._hist.update(wait=f.wait, role=f.role or "", custom=f.custom, killer=f.killer)
+            self._hist.update(wait=f.wait, role=f.role or "", custom=f.custom, killer=f.killer,
+                              farming=bool(f.crossplay_off) and not f.custom
+                              and bool(self.settings.get("farming_crossplay", True)))
             self._queue = dict(self._queue, found=None, used=f)
+            if self._hist["farming"]:
+                self._log(_("Crossplay war aus – die Runde zählt als Farming-Runde."), "Erkennung")
 
     def _hist_close(self, t, role=None):
         rec, self._hist = self._hist, None
@@ -738,7 +774,7 @@ class StatsTab:
         key += (repr(sorted((self.settings.get("killer_aliases") or {}).items())),)
         if getattr(self, "_record_key", None) != key:
             j = self._joined()
-            pairs = [(r, j.off[id(r)]) for r in j.rounds if id(r) in j.off and not r.custom]
+            pairs = [(r, j.off[id(r)]) for r in j.rounds if id(r) in j.off and history.normal(r)]
             self._record_cache, self._record_key = official.results(pairs, lambda r: r.map_id), key
         return self._record_cache
 
@@ -778,7 +814,7 @@ class StatsTab:
     def _joined(self):
         """_official_join() cached until rounds.jsonl / official.jsonl, the killer assignments or the catalog
         change (the Qt overview asks 4×/s; a full join of 5000 + 5000 lines takes ~100 ms)."""
-        key = [repr(sorted((self.settings.get("killer_aliases") or {}).items()))]
+        key = [repr(sorted((self.settings.get("killer_aliases") or {}).items())), self.settings.get("farming_region")]
         for p in (self._hist_path(), self._official_path()):
             try:
                 st = os.stat(p)
@@ -896,6 +932,15 @@ class StatsTab:
         self.settings.set("official_open_after_dbd", bool(self.off_open_var.get()))
         self.settings.set("official_notify", bool(self.off_notify_var.get()))
         self._save_soon()
+
+    def _farming_setting(self):
+        """1.2.20: farming rounds – cross-play off in the lobby and/or every round on one server region."""
+        self.settings.set("farming_crossplay", bool(self.farm_cross_var.get()))
+        label = self.farm_region_var.get()
+        self.settings.set("farming_region", next((c for c, lbl in self._farm_regions if lbl == label), ""))
+        self._save_soon()
+        if self.nb.select() == str(self.tab_stats):
+            self._stats_render()
 
     def _official_open(self, after_game):
         """Open the stats page in the browser; the userscript then saves the matches (download folder)."""
