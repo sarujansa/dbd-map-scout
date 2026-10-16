@@ -134,10 +134,11 @@ class SysInfo:
             (layout.max_width(bar, margin) if bar >= layout.MIN_BAR else gw / 3, gh)
         self.hud.opacity = o["opacity"]
         hh = int(gh * hud_scale(o))
-        w, h = self.hud.render(rows, hh)
+        look = ("backdrop",) if o.get("hud_backdrop", False) else ()
+        w, h = self.hud.render(rows, hh, look=look)
         f = layout.fit_scale(w, h, avail_w, avail_h)
         if f < 1:                                           # narrow bar / low bar: smaller text
-            w, h = self.hud.render(rows, max(200, int(hh * f)))
+            w, h = self.hud.render(rows, max(200, int(hh * f)), look=look)
         labels = tuple(r[0][0] for r in rows if r)
         self._hud_steady, sw = layout.steady_width(getattr(self, "_hud_steady", None), (side, hh, labels), w)
         if follow or beside:                                # shown by _hud_follow_map() after the map

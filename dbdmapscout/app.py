@@ -326,6 +326,10 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
                                ("transparent", N_("Transparenter Rand um die Karte"), self.transp_var)):
             self._reg(f"ov.{key}", ui.Checkbutton(look, text=_(text), variable=var,
                                                    command=self._overlay_flags_changed)).pack(anchor="w", pady=1)
+        self.map_backdrop_var = ui.BooleanVar(value=o.get("map_backdrop", False))
+        self._reg("ov.map_backdrop", ui.Checkbutton(look, text=_("Dunkle Fläche hinter Karte und Infos"),
+                                                    variable=self.map_backdrop_var,
+                                                    command=self._today_flag_changed)).pack(anchor="w", pady=1)
         sysf = self._reg("ov.sys", ui.LabelFrame(f, text=_("Systemwerte (CPU/GPU-Temperatur, Auslastung, VRAM, RAM)"),
                                                   padding=8))
         sysf.pack(fill="x", pady=(8, 0))
@@ -352,6 +356,10 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
                                                            "Uhrzeit (auch wenn die Systemwerte aus sind: rechts oben)"),
                                              variable=self.today_var, command=self._today_flag_changed)
                   ).pack(anchor="w", pady=(6, 0))
+        self.hud_backdrop_var = ui.BooleanVar(value=o.get("hud_backdrop", False))
+        self._reg("ov.hud_backdrop", ui.Checkbutton(sysf, text=_("Dunkle Fläche hinter den Systemwerten"),
+                                                    variable=self.hud_backdrop_var, command=self._today_flag_changed)
+                  ).pack(anchor="w", pady=(2, 0))
         self.media_var = ui.BooleanVar(value=o.get("show_media", True))
         self._reg("ov.media", ui.Checkbutton(sysf, text=_("„Läuft gerade“: Titel, Interpret und Cover der Musik "
                                                            "(Spotify, Browser … – nur während sie spielt)"),
@@ -407,6 +415,9 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self.settings["overlay"]["media_progress"] = bool(self.media_progress_var.get())
         for key, var in self.media_look_vars.items():
             self.settings["overlay"][key] = bool(var.get())
+        self.settings["overlay"]["hud_backdrop"] = bool(self.hud_backdrop_var.get())
+        self.settings["overlay"]["map_backdrop"] = bool(self.map_backdrop_var.get())
+        self.overlay.set_backdrop(self.settings["overlay"]["map_backdrop"])
         self._save_soon()
         self._tick_overlay(reschedule=False)
 
@@ -1391,6 +1402,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self.overlay.opacity = o["opacity"]
         self.overlay.show_caption = o["show_caption"]
         self.overlay.set_transparent(o.get("transparent", True))
+        self.overlay.set_backdrop(o.get("map_backdrop", False))
         self.overlay.set_show_map(o.get("show_map", True))
 
     def _pos_hint(self):
