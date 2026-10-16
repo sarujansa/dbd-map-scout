@@ -1246,7 +1246,9 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         try:
             self._place_overlay_map()
         finally:
-            self._cards_place()                     # "today" and the music card, stacked (1.2.6 / 1.2.7)
+            if not getattr(self, "_cards_done", False):
+                self._cards_place()                 # "today" and the music card, stacked (1.2.6 / 1.2.7)
+            self._cards_done = False
             self._guides_place()                    # centre cross while moving (1.64.5)
 
     def _place_overlay_map(self):
@@ -1287,9 +1289,13 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
             self._vis_state = "wartet"                      # the waiting card is not logged
         elif not forced:
             self._log_visibility(reason, (gx, gy, gw, gh))
-        hud = self._hud_place(gx, gy, gw, gh, show=not reason and not wait)
-        if hud:                                     # cards below the system values: the map moves down by them too
-            hud = (hud[0], hud[1] + self._stack_height(gh))
+        self._hud_place(gx, gy, gw, gh, show=not reason and not wait)
+        self._cards_done = False
+        if not self._hud_pending:                   # 1.2.11: the cards first (they do not depend on the map) – the
+            self._cards_place()                     # map moves below / above what stands at the top / bottom of its
+            self._cards_done = True                 # bar; with the values right above the map they follow it later
+        else:
+            self._cards_place(free_only=True)       # … only the cards in a bar corner / at an own place now
         self._sysinfo_status()
         fade = bool(o.get("fade", True)) and not self.overlay.editing      # 1.2.9
         if reason:
@@ -1303,9 +1309,19 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         # floors one below the other (Midwich): each as big as one map, as far as the screen allows
         height = int(gh * min(MAX_HEIGHT, self._map_height() * self.overlay.stacked()))
         a = o["anchor"]
-        drop = hud[1] + margin if hud and layout.below_hud(hud[0], a) else 0     # map below the system values
-        height = min(height, gh - drop - 2 * margin)
         bar = layout.bar_width(gw, gh)          # black bar left/right of a 16:9 picture (ultrawide)
+        drop = lift = 0                         # what stands at the top / bottom of the map's bar (1.2.11)
+        span = layout.map_bar_range(a, o.get("pos_x", 0.0), gx, gw, bar)
+        if span and a != "custom" and not self.overlay.editing:
+            fixed = [self.worker.hud_rect if self.hud is not None and self.hud.shown else None]
+            if o.get("today_pos", "below") != "custom":
+                fixed.append(self.worker.today_rect)
+            if o.get("media_pos", "below") != "custom":
+                fixed.append(self.worker.media_rect)
+            drop, lift = layout.bar_stack(fixed, span[0], span[1], gy, gh, margin, layout.stack_gap(o, gh))
+            drop = drop + margin if drop else 0
+            lift = lift + margin if lift else 0
+        height = max(40, min(height, gh - drop - lift - 2 * margin))
         # window narrower than 16:9: the trial has bars above/below – the map goes there whatever the position
         # setting says (user: own position at 1440p, the bar in the small window); not while dragging it
         vb = None if self.overlay.editing else layout.vbars(self.worker.vbars, gw, gh, time.time())
@@ -1329,7 +1345,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
             if a == "custom":
                 return gx + o.get("pos_x", 0.0) * max(0, gw - w), gy + o.get("pos_y", 0.0) * max(0, gh - h)
             return (gx + margin if a.endswith("left") else gx + gw - w - margin,
-                    gy + margin + drop if a.startswith("top") else gy + gh - h - margin)
+                    gy + margin + drop if a.startswith("top") else gy + gh - h - margin - lift)
 
         # Fit before rendering: only the final size may reach the screen (render() shows it at once).
         iw, ih = self.overlay.map_size()
@@ -1350,7 +1366,12 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         else:
             self.overlay.text_height = text_h
         w, h = self.overlay.render(height)
+        room = gh - drop - lift - 2 * margin
+        if a != "custom" and h > room and height > 80:   # the lines below made it too tall: smaller (1.2.11)
+            w, h = self.overlay.render(max(80, height - (h - room)))
         x, y = place(w, h)
+        if a != "custom":
+            y = max(gy, min(y, gy + gh - h))             # never off the screen
         if side and side != "slot":
             x = layout.clamp_x(side, x, w, gx, gw, bar, margin - edge)
         self._fade_show("map", fade)
@@ -1564,6 +1585,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         hud_side = side if sys_on else ""
         music = preview.music_rows(self.media.now, now) if o.get("show_media", True) else None
         key = (gw, gh, repr(sorted((k, v) for k, v in o.items() if not isinstance(v, dict))), hud_side,
+               bool(self.overlay.editing),
                repr(rows), repr(today_rows), repr(self.settings.get("sysinfo_pos")), id(pic), caption, repr(info),
                self._map_height(), repr(music[0]) if music else None, id(music[1]) if music else None)
         cached = getattr(self, "_preview_cache", None)
@@ -1572,7 +1594,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
             f = min(1.0, preview.RENDER_H / max(1, gh))
             layers, rect = preview.layers(round(gw * f), round(gh * f), o, hud_side, rows,
                                           self.settings.get("sysinfo_pos"), pic, caption, info, self._map_height(),
-                                          music, today_rows)
+                                          music, today_rows, bool(self.overlay.editing))
             self._preview_cache = cached = (key, layers, tuple(round(v / f) for v in rect), f)
         _key, layers, (x, y, w, h), f = cached
         return {"screen": (gw, gh), "bar": layout.bar_width(gw, gh), "rect": (x, y, w, h, h),
