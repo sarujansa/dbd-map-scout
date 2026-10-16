@@ -175,15 +175,15 @@ SPECS = {
             ("row", (("button", "st.hk_defaults"), ("hint", "st.hk_status"))))),
         ("card", "st.updates", (
             ("check", "st.update"), ("hint", "st.update_note"),
-            ("row", (("button", "st.upd_btn"), ("button", "st.upd_apply"), ("stretch",))), ("hint", "st.upd_status"))),
+            ("row", (("button", "st.upd_btn"), ("button", "st.upd_apply"), ("stretch",))), ("hint", "st.upd_status"),
+            ("hint", "st.version"))),                 # 1.2.19: the version where the updates are
         ("row", (("button", "st.more_btn"), ("stretch",))),
         ("card", "st.more.own", (("row", (("hint", "st.more.aliases"), ("button", "st.more.aliases_clear"))),)),
         ("card", "st.more.official", (("check", "st.more.off_open"), ("check", "st.more.off_notify"),
                                       ("row", (("button", "st.more.script"), ("stretch",))), ("hint", "st.more.off_text"))),
         ("card", "st.more.backup", (("row", (("button", "st.more.export"), ("button", "st.more.import"), ("stretch",),
-                                             ("button", "st.more.clear_hist"))),)),
+                                             ("button", "st.more.clear_hist"), ("button", "st.more.reset_all"))),)),
         ("card", "st.more.folders", (("row", (("button", "st.more.dir"), ("button", "st.more.maps_dir"), ("stretch",))),)),
-        ("plain", "st.version"),
     ),
 }
 
@@ -472,7 +472,12 @@ class MainWindow(QMainWindow):
         if on:
             self.setup.go(0)
             self.stack.setCurrentWidget(self.setup)
+            self.nav.blockSignals(True)                # 1.2.19: no page is highlighted behind the assistant
+            self.nav.setCurrentRow(-1)
+            self.nav.blockSignals(False)
         else:
+            if self.nav.currentRow() < 0:
+                self.nav.setCurrentRow(0)              # posts "page" → the App fills the overview
             self.stack.setCurrentIndex(max(0, self.nav.currentRow()))
 
     # ------------------------------------------------------------- search over the settings

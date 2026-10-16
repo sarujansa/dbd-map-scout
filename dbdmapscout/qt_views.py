@@ -292,6 +292,15 @@ class HotkeyButton(QPushButton):
         vk = (e.nativeVirtualKey() or None) if sys.platform == "win32" else None
         self._post("hk_key", (self._key, mods, sym, vk))
 
+    def contextMenuEvent(self, e):
+        """1.2.19: right click – this one hotkey back to its default, or off."""
+        from PySide6.QtWidgets import QMenu
+        menu = QMenu(self)
+        for action, label in (("default", _("Standard wiederherstellen")), ("off", _("Ausschalten"))):
+            menu.addAction(label).triggered.connect(lambda _c=False, a=action: self._post("hk_menu", (self._key, a)))
+        self._menu = menu
+        menu.popup(e.globalPos())
+
     def focusOutEvent(self, e):
         if self._recording:
             self._recording = False

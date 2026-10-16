@@ -136,6 +136,19 @@ def export_settings(data: dict, path: str) -> None:
 LOCAL_KEYS = ("setup_version", "setup_root", "qt_geometry", "official_dir", "layouts", "layout_key")
 
 
+def reset_data(current: dict) -> dict:
+    """1.2.19 ("Alle Einstellungen zurücksetzen"): the defaults, with the PC-specific values (LOCAL_KEYS) of
+    ``current`` kept – the window geometry, the setup marker, the download folder; the layouts per window size
+    go with the layout (they are layout). ``welcome_seen`` stays: the assistant is not forced again."""
+    data = copy.deepcopy(DEFAULTS)
+    for k in ("setup_version", "setup_root", "qt_geometry", "official_dir"):
+        if k in current:
+            data[k] = copy.deepcopy(current[k])
+    if current.get("welcome_seen"):
+        data["welcome_seen"] = True
+    return data
+
+
 def read_backup(path: str, current: dict) -> dict:
     """Settings from a backup file, merged over the defaults (keys missing in older backups get their
     default); ValueError if it is no settings file of this program."""

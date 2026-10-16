@@ -56,8 +56,8 @@ TIPS = {
                            "und die wichtigsten Tasten.",
     "„Heute“: Runden, Spielzeit, Ø Kills/Entkommen, Uhrzeit":
         "Eine eigene Karte, solange eine Map im Match zu sehen ist: wie viele Runden du heute gespielt hast, wie "
-        "lange, Ø Kills bzw. Entkommen laut Stats-Seite und die Uhrzeit. Position darunter, Größe über den "
-        "Größenregler („Heute“ wählen).",
+        "lange, Ø Kills bzw. Entkommen laut Stats-Seite und die Uhrzeit. Position darunter, Grösse über den "
+        "Grössenregler („Heute“ wählen).",
     "Dunkle Fläche hinter „Heute“":
         "Eine halb durchsichtige dunkle Fläche mit runden Ecken hinter „Heute“.",
     "„Läuft gerade“: Titel, Interpret und Cover der Musik (Spotify, Browser … – nur während sie spielt)":
@@ -134,6 +134,9 @@ TIPS = {
                                    "ältere an.",
     "Als CSV exportieren …": "Speichert die Runden der aktuellen Filter als CSV (Semikolon, UTF-8) – mit Kills, "
                              "Entkommen und Bloodpoints, soweit ein Match der Stats-Seite zugeordnet ist.",
+    "Alle Einstellungen zurücksetzen": "Setzt jede Einstellung auf die Auslieferung zurück (Overlay, Hotkeys, Erkennung, "
+                                       "Server-Auswahl im Programm …). Runden, Match-Daten und eigene Bilder bleiben; "
+                                       "das Programm startet danach neu. Vorher sichern: „Einstellungen exportieren“.",
     "Kartenbild hinzufügen …": "Eigenes Bild für eine Map wählen: vorhandenes Bild ersetzen oder neue Map "
                                "anlegen. Rand und Hintergrund werden automatisch entfernt.",
     # overlay tab

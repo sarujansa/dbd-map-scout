@@ -1022,7 +1022,7 @@ EN = {
     "Eigene Position (mit der Maus verschieben)": "Own position (drag with the mouse)",
     "SYSTEMWERTE": "SYSTEM VALUES",
     "Direkt über der Karte (wandert mit)": "Right above the map (moves with it)",
-    "Schriftgröße": "Font size",
+    "Schriftgrösse": "Font size",
     "Übersicht": "Overview",
     "Aktuelle Map": "Current map",
     "Rundenzeit": "Round time",
@@ -1123,8 +1123,8 @@ EN = {
     # 1.62: block "today" in the black bar; 1.2.6: a card of its own
     '„Heute“: Runden, Spielzeit, Ø Kills/Entkommen, Uhrzeit': '"Today": rounds, play time, avg. kills/escaped, clock',
     'Eine eigene Karte, solange eine Map im Match zu sehen ist: wie viele Runden du heute gespielt hast, wie '
-    'lange, Ø Kills bzw. Entkommen laut Stats-Seite und die Uhrzeit. Position darunter, Größe über den '
-    'Größenregler („Heute“ wählen).':
+    'lange, Ø Kills bzw. Entkommen laut Stats-Seite und die Uhrzeit. Position darunter, Grösse über den '
+    'Grössenregler („Heute“ wählen).':
         'A card of its own while a map is on screen in a match: how many rounds you played today, for how long, '
         'avg. kills or escaped from the stats page and the time of day. Position below, size through the size '
         'slider (pick "Today").',
@@ -1176,7 +1176,7 @@ EN = {
     'Musik': 'Music',
     'MUSIK': 'MUSIC',
     'läuft gerade': 'now playing',
-    'Größe Musik': 'Music size',
+    'Grösse Musik': 'Music size',
     'Albumcover zeigen': 'Show the album cover',
     'Balken in der Farbe des Covers': "Bar in the cover's colour",
     'Dunkle Fläche hinter Karte und Infos': 'Dark area behind the map and its lines',
@@ -1236,6 +1236,22 @@ EN = {
         'Click = view big · double click = show now. Detection takes over again at the next match.',
     'Zurück zu den Karten des Realms (Esc).': "Back to the realm's maps (Esc).",
     'Allgemein': 'General',
+    'Alle Einstellungen zurücksetzen': 'Reset all settings',
+    'Alle Einstellungen auf die Auslieferung zurücksetzen? Runden, Match-Daten und eigene Bilder bleiben. Das '
+    'Programm startet danach neu.': 'Reset every setting to the delivered state? Rounds, match data and own pictures '
+                                     'stay. The program restarts afterwards.',
+    'Alle Einstellungen zurückgesetzt.': 'All settings reset.',
+    'Standard wiederherstellen': 'Restore default',
+    'Ausschalten': 'Switch off',
+    '{free} von {total} Regionen freigegeben': '{free} of {total} regions allowed',
+    'DBD läuft gerade – die Änderung gilt erst nach einem Neustart von DBD.':
+        'DBD is running – the change takes effect only after DBD restarts.',
+    'Suchen …': 'Search …',
+    'Setzt jede Einstellung auf die Auslieferung zurück (Overlay, Hotkeys, Erkennung, Server-Auswahl im Programm …). '
+    'Runden, Match-Daten und eigene Bilder bleiben; das Programm startet danach neu. Vorher sichern: „Einstellungen '
+    'exportieren“.': 'Resets every setting to the delivered state (overlay, hotkeys, detection, the region choice in '
+                     'the program …). Rounds, match data and own pictures stay; the program restarts afterwards. '
+                     'Back up first: "Export settings".',
     'Grösse {pct} %': 'size {pct} %',
     'eigenes Bild': 'own picture',
     'Eigene Einstellungen dieser Map: {what}': 'Own settings of this map: {what}',

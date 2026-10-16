@@ -163,6 +163,7 @@ def ui_state(w) -> dict:
         st.update(value=w.get(), values=[str(v) for v in w.cget("values") or ()], editable=w.editable())
     elif isinstance(w, ui.Entry):
         st["value"] = w.get()
+        st["placeholder"] = getattr(w, "_dbdms_placeholder", "")      # 1.2.19 (the log's search field)
     return st
 
 
@@ -330,6 +331,8 @@ class QtShell:
         elif action == "hk_cancel":
             if self._hk_rec == arg.split(".", 2)[2]:
                 self._hk_stop(save=False)
+        elif action == "hk_menu":                    # 1.2.19: right click on a hotkey button
+            self._hk_set(arg[0].split(".", 2)[2], arg[1])
         elif action == "dlg_close":
             entry = self._qt_dialogs.get(arg)
             if entry is not None:

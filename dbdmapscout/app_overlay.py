@@ -246,7 +246,7 @@ class OverlayTab:
         scb.pack(side="left", padx=6)
         scb.bind("<<ComboboxSelected>>", lambda e: self._media_style_changed())
         self.media_size_var = ui.DoubleVar(value=round(float(o.get("media_scale", 1.0)) * 100))
-        self._slider(mf, _("Größe Musik"), self.media_size_var, *MEDIA_SCALE, self._media_size_changed,
+        self._slider(mf, _("Grösse Musik"), self.media_size_var, *MEDIA_SCALE, self._media_size_changed,
                      key="ov.media_size")
         self.media_cover_var = ui.BooleanVar(value=o.get("media_cover", True))
         self._reg("ov.media_cover", ui.Checkbutton(mf, text=_("Albumcover zeigen"), variable=self.media_cover_var,
