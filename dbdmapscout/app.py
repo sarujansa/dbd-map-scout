@@ -296,9 +296,13 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
             v = ui.BooleanVar(value=c in enabled)
             self.cat_vars[c] = v
             ui.Checkbutton(top, text=_(c), variable=v, command=self._log_filter_changed).pack(side="left", padx=(6, 0))
+        self.log_search_var = ui.StringVar(value="")       # 1.2.19: a text filter over the lines
+        self._log_search_last = ""
+        search = ui.Entry(top, textvariable=self.log_search_var, width=22)
+        search.pack(side="right")
+        search._dbdms_placeholder = _("Suchen …")
         # the Qt window shows the entries itself (coloured by category): (entries, dark mode)
-        self.log_text = ui.Log(f, lines=lambda: ([e for e in self._log_entries if self.cat_vars[e[1]].get()][-400:],
-                                                 bool(self.settings.get("dark_mode", True))))
+        self.log_text = ui.Log(f, lines=self._log_lines)
         self.log_text.pack(fill="both", expand=True)
         bottom = ui.Frame(f)
         bottom.pack(fill="x", pady=(6, 0))
@@ -1529,6 +1533,16 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         q = getattr(self, "qt", None)
         if entry[1] == "Fehler" and (q is None or not q.isVisible() or q.current_key() != "log"):
             self._log_alert = True                # "Log ⚠" in the window until the log is opened
+
+    def _log_lines(self):
+        """The log lines the window shows: the categories ticked, and (1.2.19) only lines with the search text."""
+        needle = fold(self.log_search_var.get().strip())
+        if needle != self._log_search_last:                # a new search: the window draws everything anew
+            self._log_search_last = needle
+            self.log_text._dbdms_rev = getattr(self.log_text, "_dbdms_rev", 0) + 1
+        lines = [e for e in self._log_entries if self.cat_vars[e[1]].get()
+                 and (not needle or needle in fold(e[2]))]
+        return lines[-400:], bool(self.settings.get("dark_mode", True))
 
     def _log_filter_changed(self):
         self.settings.set("log_categories", [c for c in CATS if self.cat_vars[c].get()])

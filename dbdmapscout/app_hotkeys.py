@@ -118,6 +118,22 @@ class Hotkeys:
         self._hk_show_all()
         self.hotkeys = self._start_hotkeys()
 
+    def _hk_set(self, key, what):
+        """1.2.19: one hotkey to its default ("default") or off ("off") – from the button's right-click menu."""
+        from .config import DEFAULTS
+        if key not in DEFAULTS["hotkeys"]:
+            return
+        if self._hk_rec:
+            self._hk_stop(save=False)
+        combo = DEFAULTS["hotkeys"][key] if what == "default" else ""
+        taken = [k for k, c in self.settings["hotkeys"].items() if combo and c == combo and k != key]
+        if taken:
+            self.hk_status.set(_("{keys} ist schon „{action}“ – andere wählen.", keys=pretty(combo),
+                                  action=_(dict(HOTKEY_LABELS).get(taken[0], taken[0]))))
+            return
+        self._hk_rec = key
+        self._hk_stop(save=True, combo=combo)        # saves, logs, shows all, restarts the hotkey thread
+
     def _hk_defaults(self):
         from .config import DEFAULTS
         if self._hk_rec:

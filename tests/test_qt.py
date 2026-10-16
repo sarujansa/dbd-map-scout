@@ -1159,3 +1159,20 @@ def test_map_tiles_show_marks_and_a_context_menu(qapp, keep):
     page._menu.close()
     page.show_maps(items, None, marks={})                      # marks gone: the line empties
     assert coal.info.text() == ""
+
+
+def test_the_assistant_clears_the_navigation_and_shows_the_preview(qapp, keep):
+    """1.2.19: no page stays highlighted behind the assistant; step 2 carries the overlay preview and the
+    system values / today / music switches; a hotkey button's right click posts hk_menu."""
+    from dbdmapscout import qt_window
+    posted = queue.Queue()
+    win = keep(qt_window.MainWindow(lambda a, arg=None: posted.put((a, arg))))
+    win.show_page("stats")
+    win.show_setup(True)
+    assert win.nav.currentRow() == -1 and win.current_key() == "setup"
+    assert qt_window.page_keys("setup") >= {"ov.preview", "ov.sysinfo", "ov.today", "ov.media"}
+    win.show_setup(False)
+    assert win.nav.currentRow() == 0 and win.current_key() == "overview"
+    btn = win.forms["settings"].controls["st.hk.toggle_overlay"][1]
+    btn._post("hk_menu", ("st.hk.toggle_overlay", "off"))
+    assert ("hk_menu", ("st.hk.toggle_overlay", "off")) in [posted.get_nowait() for _i in range(posted.qsize())]
