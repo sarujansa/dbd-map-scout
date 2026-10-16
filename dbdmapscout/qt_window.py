@@ -72,7 +72,8 @@ SPECS = {
                 ("sub", N_("Musik")),
                 ("check", "ov.media"), ("row", (("label", "ov.media_pos.label"), ("combo", "ov.media_pos"), ("stretch",))),
                 ("row", (("label", "ov.media_style.label"), ("combo", "ov.media_style"), ("stretch",))),
-                ("check", "ov.media_cover"), ("check", "ov.media_progress"))))),
+                ("check", "ov.media_cover"), ("check", "ov.media_progress"), ("check", "ov.media_accent"),
+                ("check", "ov.media_remaining"), ("check", "ov.media_backdrop"), ("check", "ov.media_fade"))))),
     ),
     "settings": (
         ("card", "st.look", (

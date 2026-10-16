@@ -149,8 +149,10 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
         spot = o.get("media_pos", "below")
         show_cover = cover if o.get("media_cover", True) else None
         style = o.get("media_style", "big")
-        card = fitted(lambda h: render_music(rows_m, show_cover, h, style, prog), int(gh * scale),
-                      avail if spot != "custom" else gw / 3, ("music", repr(rows_m), id(show_cover), style, prog))
+        look = media.look(o)
+        card = fitted(lambda h: render_music(rows_m, show_cover, h, style, prog, look), int(gh * scale),
+                      avail if spot != "custom" else gw / 3,
+                      ("music", repr(rows_m), id(show_cover), style, prog, look))
         cx, cy = layout.media_xy(spot, (0, 0, gw, gh), card.size, margin, hud_rect, o.get("media_xy"))
         out.append(("music", card, int(cx), int(cy)))
     return out, map_rect

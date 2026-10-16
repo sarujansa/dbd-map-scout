@@ -1151,6 +1151,22 @@ EN = {
     'läuft gerade': 'now playing',
     'Größe Musik': 'Music size',
     'Albumcover zeigen': 'Show the album cover',
+    'Balken in der Farbe des Covers': "Bar in the cover's colour",
+    'Restzeit statt Länge (−1:46)': 'Time left instead of length (−1:46)',
+    'Dunkle Fläche hinter der Musikkarte': 'Dark area behind the music card',
+    'Weich ein- und ausblenden (auch beim nächsten Lied)': 'Fade in and out smoothly (also on the next song)',
+    'Der Fortschrittsbalken nimmt die Hauptfarbe des Albumcovers an, wie bei Spotify. Graue Cover: weiss.':
+        "The progress bar takes the album cover's main colour, like in Spotify. Grey covers: white.",
+    'Rechts neben dem Balken steht, wie lange das Lied noch läuft, statt seiner Gesamtlänge.':
+        'Right of the bar: how long the song still runs instead of its total length.',
+    'Eine halb durchsichtige dunkle Fläche mit runden Ecken hinter Cover und Text – gut lesbar, wenn die '
+    'Karte über hellen Stellen im Spiel liegt.':
+        'A half-transparent dark area with rounded corners behind cover and text – easy to read when the card '
+        'lies over bright parts of the game.',
+    'Die Musikkarte blendet in einer Drittelsekunde ein und aus, statt hart zu erscheinen – auch wenn ein '
+    'neues Lied beginnt.':
+        'The music card fades in and out within a third of a second instead of popping up – also when a new '
+        'song starts.',
     'Das Bild zum Lied links neben Titel und Interpret – Windows liefert es mit; es bleibt nur im Speicher.':
         'The picture of the song left of title and artist – Windows supplies it; it stays in memory only.',
     # 1.64.7: music card styles

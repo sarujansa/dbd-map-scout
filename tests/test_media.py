@@ -153,3 +153,45 @@ def test_a_long_title_gets_smaller_text_before_it_wraps():
     assert fit_lines(short, 1440)[0].size == render_hud(short, 1440).size  # short: untouched
     very = fit_lines([[("Somebody That I Used To Know And Then Some More Words Here", white)]], 1440)
     assert len(very) > 1                                                 # far too long: wraps, at the small size
+
+
+def test_accent_colour_from_the_cover():
+    """1.2.4: the bar takes the cover's main colour, lifted to read on black; grey covers have none."""
+    import colorsys
+    from PIL import Image, ImageDraw
+    cover = Image.new("RGB", (160, 160), (10, 10, 10))
+    ImageDraw.Draw(cover).rectangle((0, 0, 159, 100), fill=(20, 60, 160))          # dark blue, most of it
+    r, g, b, a = media.accent(cover)
+    h, light, _s = colorsys.rgb_to_hls(r / 255, g / 255, b / 255)
+    assert b > r and b > g and light >= media.ACCENT_LIGHT - 0.01 and a == 255
+    assert media.accent(Image.new("RGB", (64, 64), (128, 128, 128))) is None        # grey: the bar stays white
+    assert media.accent(None) is None
+
+
+def test_music_card_look_options():
+    """1.2.4 (user's pick 4–7): accent bar, time left, dark area behind the card."""
+    from PIL import Image
+    from dbdmapscout.overlay_win32 import CARD_BACKDROP, progress_strip, render_music
+    rows = [[("Blinding Lights", (255, 255, 255, 255))], [("The Weeknd", (150, 156, 170, 255))]]
+    cover = Image.new("RGBA", (160, 160), (200, 30, 60, 255))
+    plain = render_music(rows, cover, 1440, "big", (70, 200))
+    boxed = render_music(rows, cover, 1440, "big", (70, 200), ("backdrop",))
+    assert boxed.width > plain.width and boxed.height > plain.height
+    assert boxed.getpixel((boxed.width // 2, boxed.height - 3)) == CARD_BACKDROP     # the area at the bottom edge
+    white = progress_strip(300, 100, 200, 1440)
+    red = progress_strip(300, 100, 200, 1440, accent=(220, 40, 60, 255))
+    bar = [red.getpixel((x, red.height // 2)) for x in range(red.width)]
+    assert (220, 40, 60, 235) in bar and white.tobytes() != red.tobytes()
+    assert progress_strip(300, 100, 200, 1440, remaining=True).tobytes() != white.tobytes()
+    assert media.look({}) == ("accent", "remaining", "backdrop")
+    assert media.look({"media_remaining": False, "media_backdrop": False}) == ("accent",)
+
+
+def test_fader_eases_in_and_out():
+    f = media.Fader()
+    f.go(1, 10.0, start=0.0)
+    assert f.value == 0.0 and not f.step(10.1) and 0 < f.value < 0.5
+    assert f.step(10.0 + f.IN_S) and f.value == 1.0
+    f.go(0, 20.0)
+    assert not f.step(20.1) and 0.3 < f.value < 1
+    assert f.step(20.0 + f.OUT_S) and f.value == 0.0
