@@ -394,11 +394,14 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self._reg("ov.hud_row_spot", row_check("spot", _(labels["spot"]))).pack(anchor="w", pady=(2, 0))
         self._reg("ov.hud_row_vram", row_check("vram", _(labels["vram"]))).pack(anchor="w", pady=(2, 0))
         self._reg("ov.hud_row_ram", row_check("ram", _(labels["ram"]))).pack(anchor="w", pady=(2, 0))
+        # 1.2.12: "Heute" and the music each have their own frame (= tab of the Qt page)
+        tf = self._reg("ov.today_f", ui.LabelFrame(f, text=_("Heute"), padding=8))
+        tf.pack(fill="x", pady=(8, 0))
         self.today_var = ui.BooleanVar(value=o.get("show_today", True))
-        self._reg("ov.today", ui.Checkbutton(sysf, text=_("„Heute“: Runden, Spielzeit, Ø Kills/Entkommen, Uhrzeit"),
+        self._reg("ov.today", ui.Checkbutton(tf, text=_("„Heute“: Runden, Spielzeit, Ø Kills/Entkommen, Uhrzeit"),
                                              variable=self.today_var, command=self._today_flag_changed)
                   ).pack(anchor="w", pady=(6, 0))
-        tr = ui.Frame(sysf)
+        tr = ui.Frame(tf)
         tr.pack(fill="x", pady=(4, 0))
         self._reg("ov.today_pos.label", ui.Label(tr, text=_("Heute"), width=12)).pack(side="left")
         spots = dict(TODAY_SPOTS)
@@ -408,15 +411,17 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         tcb.pack(side="left", padx=6)
         tcb.bind("<<ComboboxSelected>>", lambda e: self._today_spot_changed())
         self.today_backdrop_var = ui.BooleanVar(value=o.get("today_backdrop", False))
-        self._reg("ov.today_backdrop", ui.Checkbutton(sysf, text=_("Dunkle Fläche hinter „Heute“"),
+        self._reg("ov.today_backdrop", ui.Checkbutton(tf, text=_("Dunkle Fläche hinter „Heute“"),
                                                       variable=self.today_backdrop_var,
                                                       command=self._today_flag_changed)).pack(anchor="w", pady=(2, 0))
+        mf = self._reg("ov.music_f", ui.LabelFrame(f, text=_("Musik"), padding=8))
+        mf.pack(fill="x", pady=(8, 0))
         self.media_var = ui.BooleanVar(value=o.get("show_media", True))
-        self._reg("ov.media", ui.Checkbutton(sysf, text=_("„Läuft gerade“: Titel, Interpret und Cover der Musik "
+        self._reg("ov.media", ui.Checkbutton(mf, text=_("„Läuft gerade“: Titel, Interpret und Cover der Musik "
                                                            "(Spotify, Browser … – nur während sie spielt)"),
                                              variable=self.media_var, command=self._today_flag_changed)
                   ).pack(anchor="w", pady=(2, 0))
-        mr = ui.Frame(sysf)
+        mr = ui.Frame(mf)
         mr.pack(fill="x", pady=(4, 0))
         self._reg("ov.media_pos.label", ui.Label(mr, text=_("Musik"), width=12)).pack(side="left")
         spots = dict(MEDIA_SPOTS)
@@ -425,7 +430,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
                                                      values=[_(t) for _k, t in MEDIA_SPOTS]))
         mcb.pack(side="left", padx=6)
         mcb.bind("<<ComboboxSelected>>", lambda e: self._media_spot_changed())
-        sr = ui.Frame(sysf)
+        sr = ui.Frame(mf)
         sr.pack(fill="x", pady=(4, 0))
         self._reg("ov.media_style.label", ui.Label(sr, text=_("Stil"), width=12)).pack(side="left")
         styles = dict(MEDIA_STYLES)
@@ -435,20 +440,20 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         scb.pack(side="left", padx=6)
         scb.bind("<<ComboboxSelected>>", lambda e: self._media_style_changed())
         self.media_size_var = ui.DoubleVar(value=round(float(o.get("media_scale", 1.0)) * 100))
-        self._slider(sysf, _("Größe Musik"), self.media_size_var, *MEDIA_SCALE, self._media_size_changed,
+        self._slider(mf, _("Größe Musik"), self.media_size_var, *MEDIA_SCALE, self._media_size_changed,
                      key="ov.media_size")
         self.media_cover_var = ui.BooleanVar(value=o.get("media_cover", True))
-        self._reg("ov.media_cover", ui.Checkbutton(sysf, text=_("Albumcover zeigen"), variable=self.media_cover_var,
+        self._reg("ov.media_cover", ui.Checkbutton(mf, text=_("Albumcover zeigen"), variable=self.media_cover_var,
                                                    command=self._today_flag_changed)).pack(anchor="w", pady=(2, 0))
         self.media_progress_var = ui.BooleanVar(value=o.get("media_progress", True))
-        self._reg("ov.media_progress", ui.Checkbutton(sysf, text=_("Fortschritt des Lieds zeigen (Zeit und Balken)"),
+        self._reg("ov.media_progress", ui.Checkbutton(mf, text=_("Fortschritt des Lieds zeigen (Zeit und Balken)"),
                                                       variable=self.media_progress_var,
                                                       command=self._today_flag_changed)).pack(anchor="w", pady=(2, 0))
         self.media_look_vars = {}
 
         def look_check(key, text):                     # 1.2.4: the music card's look
             var = self.media_look_vars[key] = ui.BooleanVar(value=o.get(key, True))
-            return ui.Checkbutton(sysf, text=text, variable=var, command=self._today_flag_changed)
+            return ui.Checkbutton(mf, text=text, variable=var, command=self._today_flag_changed)
         self._reg("ov.media_accent", look_check("media_accent", _("Balken in der Farbe des Covers"))
                   ).pack(anchor="w", pady=(2, 0))
         self._reg("ov.media_remaining", look_check("media_remaining", _("Restzeit statt Länge (−1:46)"))

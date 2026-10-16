@@ -217,7 +217,8 @@ def test_form_page_shows_states_and_posts_clicks(qapp, keep):
     assert (slider.minimum(), slider.maximum(), slider.value(), value.text()) == (15, 90, 36, "36 %")
     assert page.controls["ov.map_size_reset"][1].isHidden() and page.controls["ov.pos_hint"][1].isHidden()
     kind, tabs, index = page.controls["ov.pos"]                # 1.66.4: the cards of the page are tabs
-    assert kind == "tab" and tabs.tabText(index) == "Position && Grösse" and tabs.count() == 3
+    assert kind == "tab" and tabs.tabText(index) == "Allgemein" and tabs.count() == 5   # 1.2.12: one per element
+    assert [tabs.tabText(i) for i in range(5)] == ["Karte", "Systemwerte", "Heute", "Musik", "Allgemein"]
     page.show_states({"ov.sys": {"text": "Systemwerte", "visible": False}})
     assert not tabs.isTabVisible(page.controls["ov.sys"][2]) and tabs.isTabVisible(index)
     assert posted.empty()                                   # showing a state never sends anything back
@@ -764,6 +765,21 @@ def test_search_finds_a_setting_and_lights_its_card(qapp, keep):
     qapp.processEvents()
     tabs = win.forms["overlay"].controls["ov.look"][1]      # 1.66.4: on another tab – that tab is opened
     assert tabs.currentIndex() == win.forms["overlay"].controls["ov.look"][2] and tabs.property("found") is True
+
+
+def test_open_tab_shows_an_elements_settings(qapp, keep):
+    """1.2.12 (analysis point 10): a click on an element in the preview opens its tab of the overlay page."""
+    from dbdmapscout import qt_window
+    win = keep(qt_window.MainWindow(lambda a, arg=None: None))
+    tabs = win.forms["overlay"].controls["ov.music_f"][1]
+    assert tabs.currentIndex() == 0
+    win.open_tab("overlay", "ov.music_f")
+    assert tabs.currentIndex() == win.forms["overlay"].controls["ov.music_f"][2]
+    win.open_tab("overlay", "ov.sys")
+    assert tabs.currentIndex() == win.forms["overlay"].controls["ov.sys"][2]
+    win.open_tab("overlay", "ov.caption")                     # not a tab: nothing happens
+    win.open_tab("stats", "ov.sys")
+    assert tabs.currentIndex() == win.forms["overlay"].controls["ov.sys"][2]
 
 
 def test_tiles_view_shows_the_system_averages(qapp, keep):
