@@ -1283,15 +1283,16 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         # it stays at the bar's outer edge
         grow = bool(o.get("grow_past_bar", False)) and side in ("left", "right")
         text_h = self._text_height(gh)
+        edge = min(self.overlay.backdrop_pad(text_h), max(0, margin - 2))   # the dark area may use the margin
         if side and not grow:
             height = layout.fit_height(height, avail, iw, ih)
-            height = self.overlay.fit_width(height, text_h, avail)      # sets the text height too
+            height = self.overlay.fit_width(height, text_h, avail + 2 * edge)   # sets the text height too
         else:
             self.overlay.text_height = text_h
         w, h = self.overlay.render(height)
         x, y = place(w, h)
         if side and side != "slot":
-            x = layout.clamp_x(side, x, w, gx, gw, bar, margin)
+            x = layout.clamp_x(side, x, w, gx, gw, bar, margin - edge)
         self.overlay.show_at(int(x), int(y))
         self._last_place = (int(x), int(y), w, h)
         self.worker.overlay_rect = self._last_place if self.overlay.shown else None
@@ -1566,6 +1567,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
                 return
             fx = round(min(1.0, max(0.0, x / max(1, gw - size[0]))), 4)
             fy = round(min(1.0, max(0.0, y / max(1, gh - size[1]))), 4)
+            if name == "music":
+                fx, fy = layout.media_own(gw, gh, size, x, y)       # by its centre (1.2.5)
             if name == "hud":
                 self._hud_own_place(fx, fy)
             elif name == "music":

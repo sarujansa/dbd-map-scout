@@ -9,7 +9,7 @@ from functools import lru_cache
 from PIL import Image, ImageDraw
 
 from . import layout, media, sysinfo
-from .overlay_win32 import add_info, backdrop, compose, map_backdrop, render_hud, render_music
+from .overlay_win32 import add_info, backdrop, backdrop_pad, compose, map_backdrop, render_hud, render_music
 
 SAMPLE_SNAPSHOT = dict(cpu_load=38, cpu_temp=64, gpu_temp=71, gpu_load=92, gpu_name="GPU",
                        vram_used=7.1, vram_total=16, ram_used=17.2, ram_total=32, gpu_power=241)
@@ -113,31 +113,32 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
                                              drop, bool(o.get("grow_past_bar", False)))
     text_h = int(gh * 0.36 * min(2.0, max(0.5, float(o.get("text_scale", 1.0)))))     # App._text_height
     dark = bool(o.get("map_backdrop", False))
-    over = fitted(lambda h: overlay_picture(map_pic, h, caption, o.get("transparent", True), info.get("timer", ""),
-                                            info.get("server", ""), info.get("ping"), info.get("record", ""),
-                                            text_h, dark),
-                  mh, 0, ("map", id(map_pic), caption, o.get("transparent", True), dark, repr(info), text_h))
+    def map_pic_at(h, th):
+        return fitted(lambda hh: overlay_picture(map_pic, hh, caption, o.get("transparent", True),
+                                                 info.get("timer", ""), info.get("server", ""), info.get("ping"),
+                                                 info.get("record", ""), th, dark),
+                      h, 0, ("map", id(map_pic), caption, o.get("transparent", True), dark, repr(info), th))
+
+    over = map_pic_at(mh, text_h)
     x0, _y0 = layout.preview_place(gw, gh, o["anchor"], o.get("pos_x", 0.0), o.get("pos_y", 0.0), margin, False,
                                    over.width, over.height, drop)
     in_bar = (o["anchor"] == "auto" or o.get("keep_in_bar", True)) and \
         layout.bar_side(o["anchor"], x0, over.width, 0, gw, bar)
-    if in_bar and over.width > avail and not o.get("grow_past_bar", False):   # lines wider: smaller text
-        f = avail / over.width
-        over = fitted(lambda h: overlay_picture(map_pic, h, caption, o.get("transparent", True),
-                                                info.get("timer", ""), info.get("server", ""), info.get("ping"),
-                                                info.get("record", ""), max(40, int(text_h * f)), dark),
-                      mh, 0,
-                      ("map", id(map_pic), caption, o.get("transparent", True), dark, repr(info), int(text_h * f)))
-        if over.width > avail:                          # still too wide: the map too
-            g = avail / over.width
-            over = fitted(lambda h: overlay_picture(map_pic, h, caption, o.get("transparent", True),
-                                                    info.get("timer", ""), info.get("server", ""), info.get("ping"),
-                                                    info.get("record", ""), max(40, int(text_h * f * g)), dark),
-                          max(80, int(mh * g)), 0,
-                          ("map", id(map_pic), caption, o.get("transparent", True), dark, repr(info),
-                           int(text_h * f * g)))
+    edge = min(backdrop_pad(text_h), max(0, margin - 2)) if dark else 0      # the dark area may use the margin
+    if in_bar and over.width > avail + 2 * edge and not o.get("grow_past_bar", False):
+        th, map_w = text_h, round(mh * aspect) + 2 * edge
+        for _try in range(3):                           # lines wider: smaller text (the area's edge does not scale)
+            if over.width <= avail + 2 * edge or over.width <= map_w or th <= 40:
+                break
+            th = max(40, int(th * (avail + 2 * edge) / over.width))
+            over = map_pic_at(mh, th)
+        if over.width > avail + 2 * edge:               # still too wide: the map too
+            g = (avail + 2 * edge) / over.width
+            over = map_pic_at(max(80, int(mh * g)), max(40, int(th * g)))
     mx, my = layout.preview_place(gw, gh, o["anchor"], o.get("pos_x", 0.0), o.get("pos_y", 0.0), margin,
                                   o.get("keep_in_bar", True), over.width, over.height, drop)
+    if in_bar and edge:                                 # the area's edge may stand in the margin (like the App)
+        mx = int(layout.clamp_x(in_bar, mx, over.width, 0, gw, bar, margin - edge))
     map_rect = (mx, my, over.width, over.height)
     out.append(("map", over, mx, my))
     hud_rect = None
