@@ -282,6 +282,16 @@ def test_system_values_window_can_be_dragged_in_edit_mode(root):
     hud._wndproc(hud.hwnd(), ow.WM_EXITSIZEMOVE, 0, 0)
     assert moved == [(30, 30)]
     hud.set_editing(False)
+    # 1.2.13: the music card keeps its body (cover + text) while the song plays, a new second draws only the strip
+    from PIL import Image
+    cover = Image.new("RGBA", (160, 160), (200, 30, 60, 255))
+    song = [[("Blinding Lights", (255, 255, 255, 255))], [("The Weeknd", (150, 156, 170, 255))]]
+    size1 = hud.render(song, 1440, cover, "big", (70, 176), ("accent",))
+    body = hud._body_key
+    size2 = hud.render(song, 1440, cover, "big", (71, 176), ("accent",))
+    assert body is not None and hud._body_key is body and size1 == size2
+    hud.render(song, 1440, cover, "compact", (71, 176), ("accent",))
+    assert hud._body_key is not body                           # another style: a new body
     hud.destroy()
 
 
