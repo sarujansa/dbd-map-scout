@@ -41,10 +41,13 @@ SETUP = (
     (N_("Overlay"), (
         ("note", N_("Die Karte erscheint beim Match-Start von selbst und verschwindet nach der Runde. „automatisch“ "
                     "legt sie in den schwarzen Rand neben dem Spielbild (Ultrawide) bzw. neben das DBD-Fenster.")),
+        ("preview", "ov.preview"),                   # 1.2.19: the live preview of the overlay page here too
         ("row", (("label", "ov.anchor.label"), ("combo", "ov.anchor"), ("stretch",))),
         ("slider", "ov.size"),
         ("row", (("button", "ov.test"), ("button", "ov.edit"), ("stretch",))),
-        ("note", N_("„Overlay testen“ zeigt die Karte sofort, „Mit der Maus verschieben“ lässt sie dich hinziehen.")))),
+        ("note", N_("„Overlay testen“ zeigt die Karte sofort, „Mit der Maus verschieben“ lässt sie dich hinziehen.")),
+        ("row", (("label", "ov.sysinfo.label"), ("combo", "ov.sysinfo"), ("stretch",))),
+        ("check", "ov.today"), ("check", "ov.media"))),
     (N_("Tasten und Start"), (
         ("note", N_("Die wichtigsten Tasten – zum Ändern draufklicken und die neue Kombination drücken. Alle "
                     "Tasten findest du später unter Einstellungen.")),
@@ -384,6 +387,8 @@ def show_control(kind, w, extra, st):
     elif kind == "entry":
         if not w.hasFocus() and w.text() != st.get("value", ""):     # never overwrite while typing
             w.setText(st.get("value", ""))
+        if st.get("placeholder", "") != w.placeholderText():
+            w.setPlaceholderText(st.get("placeholder", ""))
     elif kind == "image":
         pil = st.get("pil")
         if pil is not getattr(w, "_pil", None):

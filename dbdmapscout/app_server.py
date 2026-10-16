@@ -39,8 +39,10 @@ class ServerTab:
         self.srv_btns[0].pack(side="left")
         self.srv_btns[1].pack(side="left", padx=6)
         self.srv_btns[2].pack(side="left")
+        self.srv_summary = ui.StringVar(value="")        # 1.2.19: "3 von 15 Regionen freigegeben"
+        ui.Label(f, textvariable=self.srv_summary, style="Big.TLabel").pack(anchor="w", pady=(6, 0))
         self.srv_status = ui.StringVar(value="")
-        ui.Label(f, textvariable=self.srv_status, wraplength=430).pack(anchor="w", pady=(6, 0))
+        ui.Label(f, textvariable=self.srv_status, wraplength=430).pack(anchor="w", pady=(2, 0))
         tf = ui.Frame(f)
         tf.pack(fill="x", pady=(6, 0))
         t = ui.Treeview(tf, columns=("ping", "state"), show="tree headings", height=11, selectmode="browse")
@@ -194,6 +196,7 @@ class ServerTab:
         rs = st["regions"]
         visible = [c for c, _, _ in regions.REGIONS]
         free = [c for c in visible if rs.get(c) == "frei"]
+        self.srv_summary.set(_("{free} von {total} Regionen freigegeben", free=len(free), total=len(visible)))
         if st["own"] and not self.settings.get("regions_selected"):
             self.srv_sel = set(free)                          # show what is actually active
         if st["own"]:
@@ -308,7 +311,9 @@ class ServerTab:
         if res.get("ok"):
             if res.get("changed", True):
                 self._log(_("Serverregionen: {text}. DBD neu starten, damit es wirkt.", text=label), "System")
-                self.srv_status.set(_("{text}. DBD jetzt neu starten.", text=label) + "  " + self.srv_status.get())
+                self.srv_status.set(_("{text}. DBD jetzt neu starten.", text=label) + "  " + self.srv_status.get()
+                                    + ("  " + _("DBD läuft gerade – die Änderung gilt erst nach einem Neustart von DBD.")
+                                       if self.game is not None else ""))
             else:
                 self.srv_status.set(_("Keine Änderung nötig.") + "  " + self.srv_status.get())
         else:
