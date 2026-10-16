@@ -69,9 +69,10 @@ class OverlayTab:
         self._reg("ov.preset_apply", ui.Button(pr, text=_("Vorlage anwenden"), command=self._preset_apply)
                   ).pack(side="left")
         self.size_scope_var = ui.StringVar(value="")     # 1.65.5: this map only / all maps
-        self._reg("ov.size_scope", ui.Label(pos, textvariable=self.size_scope_var, style="Dim.TLabel"))
+        # 1.2.17: packed – unpacked, the Qt page counted both hints as hidden (never shown since the Qt window)
+        self._reg("ov.size_scope", ui.Label(pos, textvariable=self.size_scope_var, style="Dim.TLabel")).pack(anchor="w")
         self.size_cap_var = ui.StringVar(value="")       # 1.65.2: the bar is what limits the map's size
-        self._reg("ov.size_cap", ui.Label(pos, textvariable=self.size_cap_var, style="Dim.TLabel"))
+        self._reg("ov.size_cap", ui.Label(pos, textvariable=self.size_cap_var, style="Dim.TLabel")).pack(anchor="w")
         r = ui.Frame(pos)
         r.pack(fill="x", pady=(0, 4))
         self._reg("ov.anchor.label", ui.Label(r, text=_("Vorgabe"), width=12)).pack(side="left")
@@ -169,18 +170,16 @@ class OverlayTab:
         sysf.pack(fill="x", pady=(8, 0))
         r = ui.Frame(sysf)
         r.pack(fill="x")
-        self._reg("ov.sysinfo.label", ui.Label(r, text=_("Anzeige"), width=12)).pack(side="left")
+        self._reg("ov.sysinfo.label", ui.Label(r, text=_("Position"), width=12)).pack(side="left")
         labels = dict(HUD_SIDES)
         self.sysinfo_var = ui.StringVar(value=_(labels.get(self.settings.get("sysinfo", "off"), labels["off"])))
         cb = self._reg("ov.sysinfo", ui.Combobox(r, textvariable=self.sysinfo_var, values=[_(t) for _k, t in HUD_SIDES],
                                                   state="readonly", width=38))
         cb.pack(side="left", padx=6)
         cb.bind("<<ComboboxSelected>>", lambda e: self._sysinfo_changed())
-        self._reg("ov.sys_text", ui.Label(sysf, text=_("Oben im schwarzen Rand, solange eine Karte im Match zu sehen ist. „Eigene Position“: "
-                               "mit „Mit der Maus verschieben“ (Tab Overlay) zusammen mit der Karte ziehen; im "
-                               "schmalen Fenster bleibt die Anzeige im Balken oben. GPU-Werte von NVIDIA-Karten "
-                               "(Treiber), CPU-Temperatur nur mit HWiNFO („Shared Memory Support“ an) – das "
-                               "Programm lädt keinen eigenen Treiber."),
+        self._reg("ov.sys_text", ui.Label(sysf, text=_("Im schwarzen Rand, solange die Karte im Match zu sehen ist. GPU-Werte von NVIDIA "
+                               "(Treiber), CPU-Temperatur nur mit HWiNFO („Shared Memory Support“ an) – kein "
+                               "eigener Treiber."),
                   style="Dim.TLabel", wraplength=520)).pack(anchor="w", pady=(4, 0))
         self.sysinfo_hint_var = ui.StringVar(value="")
         self._reg("ov.sys_hint", ui.Label(sysf, textvariable=self.sysinfo_hint_var, style="Dim.TLabel",
@@ -210,7 +209,7 @@ class OverlayTab:
                   ).pack(anchor="w", pady=(6, 0))
         tr = ui.Frame(tf)
         tr.pack(fill="x", pady=(4, 0))
-        self._reg("ov.today_pos.label", ui.Label(tr, text=_("Heute"), width=12)).pack(side="left")
+        self._reg("ov.today_pos.label", ui.Label(tr, text=_("Position"), width=12)).pack(side="left")
         spots = dict(TODAY_SPOTS)
         self.today_pos_var = ui.StringVar(value=_(spots.get(o.get("today_pos", "below"), spots["below"])))
         tcb = self._reg("ov.today_pos", ui.Combobox(tr, textvariable=self.today_pos_var, state="readonly", width=38,
@@ -230,7 +229,7 @@ class OverlayTab:
                   ).pack(anchor="w", pady=(2, 0))
         mr = ui.Frame(mf)
         mr.pack(fill="x", pady=(4, 0))
-        self._reg("ov.media_pos.label", ui.Label(mr, text=_("Musik"), width=12)).pack(side="left")
+        self._reg("ov.media_pos.label", ui.Label(mr, text=_("Position"), width=12)).pack(side="left")
         spots = dict(MEDIA_SPOTS)
         self.media_pos_var = ui.StringVar(value=_(spots.get(o.get("media_pos", "below"), spots["below"])))
         mcb = self._reg("ov.media_pos", ui.Combobox(mr, textvariable=self.media_pos_var, state="readonly", width=38,
@@ -353,15 +352,13 @@ class OverlayTab:
                     row.pack(fill="x", pady=3, before=after)
                 elif anchor != "custom" and row.winfo_manager():
                     row.pack_forget()
-        if anchor == "custom":
+        if anchor == "custom":                   # 1.2.17: one short line each; the long version is the tooltip
             text = _("0 % = links/oben, 100 % = rechts/unten")
         elif anchor == "auto":
-            text = _("Automatisch: im schwarzen Rand neben dem Spielbild, im Fenstermodus neben dem DBD-Fenster "
-                     "(falls dort Platz ist). Eigene Position: „Mit der Maus verschieben“ und in der Vorschau "
-                     "ziehen – oder Vorgabe „eigene Position“.")
+            text = _("Automatisch: im schwarzen Rand neben dem Spielbild bzw. neben dem DBD-Fenster. Frei "
+                     "platzieren: „Mit der Maus verschieben“.")
         else:
-            text = _("Eigene Position: „Mit der Maus verschieben“ und in der Vorschau ziehen – oder Vorgabe "
-                     "„eigene Position“.")
+            text = _("Frei platzieren: „Mit der Maus verschieben“ oder Vorgabe „eigene Position“.")
         self.pos_hint_var.set(text)
 
     def _anchor_text(self, key):

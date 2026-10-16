@@ -485,12 +485,15 @@ def test_size_changes_with_a_map_on_display_are_for_that_map(app_root):
     try:
         o = app.settings["overlay"]
         app._select("map")
-        assert app._size_scope_text().startswith("Gilt für alle Maps")
+        assert app._size_scope_text().startswith("Gilt für: alle Maps")
+        app._select("hud")                                # 1.2.17: every element says what it applies to
+        assert app._size_scope_text() == "Gilt für: alle Fenstergrössen"
+        app._select("map")
         app._set_size("map", 40)                              # no map on display: all maps
         assert o["height"] == 0.4 and not o.get("map_heights")
         mid = list(app.catalog.maps)[2]
         app.show_map(mid, 1, "manual")
-        assert app._size_scope_text() == f"Gilt nur für {app.catalog.maps[mid].name}"
+        assert app._size_scope_text().startswith(f"Gilt für: nur {app.catalog.maps[mid].name}")
         app._set_size("map", 55)                              # a map on display: only this one
         assert o["height"] == 0.4 and o["map_heights"][mid] == 0.55 and app._map_height() == 0.55
         app._resize(0.05)                                     # hotkeys: the same map

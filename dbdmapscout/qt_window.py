@@ -129,7 +129,7 @@ SPECS = {
                 ("slider", "ov.posx"), ("slider", "ov.posy"), ("hint", "ov.pos_hint"),
                 ("row", (("hint", "ov.map_size"), ("stretch",), ("button", "ov.map_size_reset"))),
                 ("row", (("label", "ov.map_style.label"), ("combo", "ov.map_style"), ("stretch",))),
-                ("sub", N_("Karte")), ("check", "ov.show_map"), ("check", "ov.caption"), ("check", "ov.floors"),
+                ("sub", N_("Darstellung")), ("check", "ov.show_map"), ("check", "ov.caption"), ("check", "ov.floors"),
                 ("check", "ov.transparent"), ("check", "ov.map_backdrop"), ("check", "ov.keep_bar"), ("check", "ov.grow"),
                 ("sub", N_("Unter der Karte")), ("check", "ov.timer"), ("check", "ov.server"), ("check", "ov.record"),
                 ("sub", N_("Wann zeigen")), ("check", "ov.focus"), ("check", "ov.waiting"))),
