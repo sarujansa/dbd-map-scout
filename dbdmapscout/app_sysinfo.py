@@ -60,6 +60,8 @@ SELECTABLE = (("map", N_("Karte")), ("text", N_("Schrift der Karte (Name, Timer,
 TODAY_SCALE = (60, 200)                     # size of "today", percent (1.2.6)
 TEXT_SCALE = (50, 200)                      # size of the map's name/timer/info lines, percent (1.65)
 TEXT_BASE = 0.36                            # … of the text at the standard map size (share of the game height)
+# 1.2.12: the tab of the overlay page (qt_window.SPECS frame keys) that holds each element's settings
+ELEMENT_TABS = {"map": "ov.look", "text": "ov.look", "hud": "ov.sys", "today": "ov.today_f", "music": "ov.music_f"}
 
 
 def text_scale(o: dict) -> float:
@@ -564,11 +566,15 @@ class SysInfo:
 
     def _select(self, name):
         """The element the size slider works on (a click on it in the preview, or the list)."""
-        if name not in dict(SELECTABLE) or name == getattr(self, "_sel", "map"):
+        if name not in dict(SELECTABLE):
             return
-        self._sel = name
-        self.sel_var.set(_(dict(SELECTABLE)[name]))
-        self._sel_sync()
+        if name != getattr(self, "_sel", "map"):
+            self._sel = name
+            self.sel_var.set(_(dict(SELECTABLE)[name]))
+            self._sel_sync()
+        qt = getattr(self, "qt", None)              # 1.2.12 (analysis point 10): its settings tab opens with it
+        if qt is not None and hasattr(qt, "open_tab"):     # (also when it was picked already: a second click)
+            qt.open_tab("overlay", ELEMENT_TABS.get(name, "ov.look"))
 
     def _sel_picked(self):
         names = {_(label): k for k, label in SELECTABLE}

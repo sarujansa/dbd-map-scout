@@ -1252,9 +1252,7 @@ EN = {
     'Klick = groß ansehen · Doppelklick = jetzt anzeigen. Die Erkennung übernimmt beim nächsten Match wieder.':
         'Click = view big · double click = show now. Detection takes over again at the next match.',
     'Zurück zu den Karten des Realms (Esc).': "Back to the realm's maps (Esc).",
-    'Position & Grösse': 'Position & size',
-    'Aussehen': 'Look',
-    'Systemwerte & Musik': 'System values & music',
+    'Allgemein': 'General',
     'CPU DROSSELT (TEMP.)': 'CPU THROTTLED (TEMP.)',
     'CPU gedr.': 'CPU thr.',
     'GPU gedr.': 'GPU thr.',
