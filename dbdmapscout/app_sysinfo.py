@@ -18,8 +18,9 @@ HUD_SIDES = [("off", N_("Aus")), ("above", N_("Direkt über der Karte (wandert m
              ("custom", N_("Eigene Position (mit der Maus verschieben)"))]
 HUD_SHOWN = ("above", "left", "right", "custom")
 BAR_ALIGNS = [("left", N_("Links")), ("centre", N_("Mittig")), ("right", N_("Rechts"))]     # 1.2.8
-PRESET_LABELS = [("left", N_("Alles links")), ("right", N_("Alles rechts")),
-                 ("spread", N_("Verteilt: Karte links, Werte rechts"))]                      # 1.2.9 (layoutmem.PRESETS)
+PRESET_LABELS = [("left", N_("Alles links")), ("right", N_("Alles rechts")),           # 1.2.9 (layoutmem.PRESETS)
+                 ("spread", N_("Verteilt: Karte links, Werte rechts")),
+                 ("standard", N_("Standard (wie ausgeliefert)"))]                         # 1.2.17 (config.DEFAULTS)
 HUD_ROW_LABELS = [("cpu", N_("Zeile CPU (Temperatur, Last)")), ("gpu", N_("Zeile GPU (Temperatur, Last)")),
                   ("spot", N_("Zeile Hotspot / GPU-Speicher (HWiNFO)")), ("vram", N_("Zeile VRAM")),
                   ("ram", N_("Zeile RAM"))]
@@ -280,9 +281,11 @@ class SysInfo:
     def _preset_apply(self):
         """Button "Vorlage anwenden" (1.2.9): one of layoutmem.PRESETS as a layout change (undo works)."""
         from . import layoutmem
+        from .config import DEFAULTS
         key = dict((_(label), k) for k, label in PRESET_LABELS).get(self.preset_var.get(), "left")
         self._layout_mark()
-        self._layout_apply(layoutmem.PRESETS[key])
+        self._layout_apply(layoutmem.standard_layout(DEFAULTS) if key == layoutmem.STANDARD
+                           else layoutmem.PRESETS[key])
         self._log(_("Vorlage „{name}“ angewendet.", name=self.preset_var.get()), "Overlay")
 
     def _hud_rows_changed(self):
@@ -588,11 +591,16 @@ class SysInfo:
         return None
 
     def _size_scope_text(self) -> str:
+        """Under the size slider: what the size applies to – for the map its own size per map (1.65.5), for every
+        element the window size whose layout is being edited (1.2.17; before, nothing for the other elements)."""
+        key = self.settings.get("layout_key") if self.settings.get("layout_per_size", True) else None
+        window = (_("Fenster {size}", size=str(key).replace("x", "×")) if key else _("alle Fenstergrössen"))
         if getattr(self, "_sel", "map") != "map":
-            return ""
+            return _("Gilt für: {window}", window=window)
         mid = self._own_size_map()
         m = self.catalog.maps.get(mid) if mid else None
-        return _("Gilt nur für {map}", map=m.name) if m else _("Gilt für alle Maps (keine Map eingeblendet)")
+        maps = _("nur {map}", map=m.name) if m else _("alle Maps (keine Map eingeblendet)")
+        return _("Gilt für: {maps} · {window}", maps=maps, window=window)
 
     def _sel_sync(self):
         """Slider range, label and value for the element picked (also when its size changed elsewhere); since
