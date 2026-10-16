@@ -80,6 +80,8 @@ TIPS = {
                 "darüber bleibt aufrecht, die Zahlen in der Karte drehen sich mit.",
     "Scannen": "Sucht sofort auf dem ganzen Bildschirm nach einem Map- oder Realm-Namen – falls die "
                "automatische Erkennung das Banner verpasst hat.",
+    "Map wählen …": "Zur Seite Maps: eine Map von Hand anzeigen (Doppelklick oder „Anzeigen“). Beim nächsten "
+                    "Match übernimmt die automatische Erkennung wieder.",
     "Bild hinzufügen …": "Eigenes Kartenbild für diese unbekannte Map anlegen – Name und Realm sind schon "
                          "eingetragen, der Hintergrund wird automatisch entfernt.",
     "Zuordnen …": "Der gelesene Name gehört zu einer vorhandenen Map (z. B. anders geschrieben)? Einmal "
