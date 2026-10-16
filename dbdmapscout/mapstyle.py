@@ -1,7 +1,13 @@
 """Map style "Dunkel" (1.66, user's wish: the supplied callout maps in the style of Fallen Refuge / Freddy Fazbear's
 Pizza): the lilac floor becomes see-through, a thick black line runs along the outline, the digits get a dark
-edge, the M box turns dark red and the S box olive; other coloured fields turn grey. Pure picture logic – the
-pictures in maps/ stay as they are, the dark ones are made once and kept in a cache folder (``styled_path``).
+edge, the M box turns dark red, the S box olive and other boxes (WT, H, P …) and lines inside grey (black would
+vanish on black). Pure picture logic – the pictures in maps/ stay as they are, the dark ones are made once and kept
+in a cache folder (``styled_path``).
+
+1.66.1 (user: "jede Map prüfen, ob sie identisch ist mit dem alten Bild"): every pixel of these maps is a neutral
+grey laid over the lilac floor (``unblend``); the conversion takes the floor off exactly, so the dark picture laid
+over lilac again gives back the original wherever no black backing was added – tests/test_mapstyle.py checks that
+for every map.
 
 Pictures in another style (Fallen Refuge, Freddy, Trickster's Delusion) and animated ones (Midwich) stay unchanged.
 """
@@ -17,12 +23,14 @@ from PIL import Image, ImageDraw, ImageFont
 
 from .mapimage import FONT, title_split
 
-STYLE_VERSION = 1                     # raise when the conversion changes: the cache is made anew
+STYLE_VERSION = 6                     # raise when the conversion changes: the cache is made anew
 FILL = np.array([140, 148, 232])      # the lilac floor of the supplied maps
 FILL_SHARE = 0.3                      # at least this share of the outline must be lilac, else: another style
 M_COLOUR, S_COLOUR = (100, 48, 48), (100, 100, 48)    # as on Fallen Refuge
+BOX_GREY = (128, 128, 128)            # other boxes (WT, H, P …) – grey as on Fallen Refuge: black would vanish in the bar
+WALL = 110                            # black lines/walls inside the map (RPD, Hawkins …): grey, else they vanish on black
 M_MIN, S_MIN = 0.66, 0.75             # letter match needed (measured: M ≈ 0.72, S ≈ 0.88, WT 0.52, H 0.61)
-GREY = 0.62                           # other coloured fields: their brightness times this, as grey
+MISFIT, MISFIT_SHARE = 30, 0.002      # pixel off "grey over lilac" by this much = a colour; more than this share: leave it
 RING, EDGE, BOX_EDGE = 24, 5, 4       # px at 1280 px picture height: outline, digit edge, box edge
 
 
@@ -74,6 +82,26 @@ def _disk(r: int):
     return cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1))
 
 
+def unblend(rgb):
+    """Every pixel of the supplied maps is a neutral grey g laid over the lilac floor with cover a:
+    P = a·g + (1 − a)·FILL (checked on all 52 maps: no pixel off by 30 or more). Solved per pixel (least squares
+    over the three channels) → (g, a, misfit). With it the floor comes off exactly – soft edges and the drop
+    shadow of the digits included – and the picture laid over lilac again is the original."""
+    fill = FILL.astype(float)
+    p = rgb.astype(float) - fill
+    basis = np.stack([np.ones(3), fill], axis=1)                  # P − FILL = c0·1 + c1·FILL
+    coef = p @ np.linalg.pinv(basis).T
+    a = np.clip(-coef[..., 1], 0.0, 1.0)
+    g = np.clip(coef[..., 0] / np.maximum(a, 1e-3), 0, 255)
+    # g held to 0..255 (the black lines are a little blue: "blacker than black"): the cover again for that grey,
+    # then the grey for that cover
+    d = g[..., None] - fill
+    a = np.clip((p * d).sum(axis=-1) / np.maximum((d * d).sum(axis=-1), 1e-6), 0.0, 1.0)
+    g = np.where(a > 1e-3, np.clip((rgb - (1 - a[..., None]) * fill).mean(axis=-1) / np.maximum(a, 1e-3), 0, 255), 0)
+    misfit = np.abs(rgb - a[..., None] * g[..., None] - (1 - a[..., None]) * fill).sum(axis=-1)
+    return g, a, misfit
+
+
 def restyle(img: Image.Image) -> Image.Image:
     """The picture in the dark style; unchanged if it is not one of the lilac callout maps."""
     a = np.asarray(img.convert("RGBA")).copy()
@@ -85,17 +113,16 @@ def restyle(img: Image.Image) -> Image.Image:
     dist = np.abs(rgb - FILL).sum(axis=2)
     if not shape.any() or (dist[shape] < 30).mean() < FILL_SHARE:
         return img                                             # another style: leave it
+    grey, cover, misfit = unblend(rgb)
+    if ((misfit >= MISFIT) & (rgb.max(axis=2) > 80))[shape].mean() > MISFIT_SHARE:   # (blue-black line rims: no colour)
+        return img                                             # colours the conversion cannot keep: leave it
+    cover = cover * body[..., 3] / 255                         # holes in the original stay holes
     s = a.shape[0] / 1280
     ring = max(2, round(RING * s))
     padded = cv2.copyMakeBorder(shape.astype(np.uint8), ring, ring, ring, ring, cv2.BORDER_CONSTANT, value=0)
     inner = cv2.erode(padded, _disk(ring))[ring:-ring, ring:-ring].astype(bool)
     black = (rgb.max(axis=2) < 40) & shape
-    # where a pixel lies between the floor and white (digits with their soft edges) and how far towards white
-    span = 255 - FILL
-    t = np.clip(((rgb - FILL) * span).sum(axis=2) / (span ** 2).sum(), 0, 1)
-    on_line = np.abs(rgb - (FILL + t[..., None] * span)).sum(axis=2) < 45
     out = body.copy()
-    out[shape] = (0, 0, 0, 0)                                  # the floor: see-through
     # M and S boxes: black squares with a light letter
     boxes = np.zeros_like(shape)
     n, lab, stats, _c = cv2.connectedComponentsWithStats((black & inner).astype(np.uint8))
@@ -110,36 +137,62 @@ def restyle(img: Image.Image) -> Image.Image:
         area_mask = area_mask.astype(bool)
         if comp.sum() < 0.45 * area_mask.sum():
             continue                                           # a thin frame round a room, not a filled box
-        boxes[y:y + h, x:x + w] |= area_mask
+        # smooth the box (its lower edge is frayed on some maps) and take in its soft rim: that gets the black edge
+        pad = max(2, round(2 * s))
+        y0, x0 = max(0, y - pad), max(0, x - pad)
+        y1, x1 = min(shape.shape[0], y + h + pad), min(shape.shape[1], x + w + pad)
+        full = np.zeros((y1 - y0, x1 - x0), np.uint8)
+        full[y - y0:y - y0 + h, x - x0:x - x0 + w] = area_mask
+        # the box's own edge by its cover (> 50 % dark), not by "darker than 40": soft rows of the original's edge
+        # are then all in or all out – no teeth (Ormond II); only next to the found box, holes (the letter) filled
+        near_box = cv2.dilate(full, _disk(pad)).astype(bool)
+        dark_win = ((cover > 0.5) & (grey < 80))[y0:y1, x0:x1] & near_box
+        cs2, _h3 = cv2.findContours((dark_win | full.astype(bool)).astype(np.uint8), cv2.RETR_EXTERNAL,
+                                    cv2.CHAIN_APPROX_NONE)
+        full = np.zeros_like(full)
+        cv2.drawContours(full, cs2, -1, 1, -1)
+        full = cv2.morphologyEx(full, cv2.MORPH_CLOSE, _disk(pad), borderType=cv2.BORDER_CONSTANT, borderValue=0)
+        full = full.astype(bool)
+        if (cover[y0:y1, x0:x1][full] < 0.5).mean() > 0.05:
+            continue                                           # floor inside: a room frame (Hawkins "BOT MID")
+        grown = cv2.dilate(full.astype(np.uint8), _disk(pad)).astype(bool) & shape[y0:y1, x0:x1]
+        boxes[y0:y1, x0:x1] |= grown
         light = (rgb[y:y + h, x:x + w].max(axis=2) >= 60) & area_mask
         sm, ss = best_score(light, "M"), best_score(light, "S")
-        colour = np.array(M_COLOUR) if sm >= M_MIN and sm > ss else np.array(S_COLOUR) if ss >= S_MIN else None
-        b = out[y:y + h, x:x + w]
-        src = body[y:y + h, x:x + w]
-        b[area_mask] = src[area_mask]                          # other labels (WT, H, P …) stay as they are
-        if colour is None:
-            continue
-        lum = rgb[y:y + h, x:x + w].mean(axis=2, keepdims=True) / 255
+        colour = np.array(M_COLOUR if sm >= M_MIN and sm > ss else S_COLOUR if ss >= S_MIN else BOX_GREY)
+        b = out[y0:y1, x0:x1]
+        lum = (grey * cover)[y0:y1, x0:x1, None] / 255           # the letter's brightness, the floor counts as box
         tinted = (colour * (1 - lum) + 255 * lum).astype(np.uint8)
-        b[area_mask, :3] = tinted[area_mask]
+        b[full, :3] = tinted[full]
+        b[full, 3] = 255
         bw = max(2, round(BOX_EDGE * s))
-        edge = area_mask & ~cv2.erode(area_mask.astype(np.uint8), _disk(bw)).astype(bool)
-        b[edge] = (0, 0, 0, 255)
+        square = cv2.getStructuringElement(cv2.MORPH_RECT, (2 * bw + 1, 2 * bw + 1))   # square: thin bits of the rim stay out
+        inside = cv2.erode(full.astype(np.uint8), square, borderType=cv2.BORDER_CONSTANT, borderValue=0).astype(bool)
+        rim = grown & ~inside
+        b[rim] = (0, 0, 0, 255)
+        ink = np.rint(grey * cover).astype(np.uint8)[y0:y1, x0:x1]
+        b[rim, 0] = b[rim, 1] = b[rim, 2] = ink[rim]           # digits reaching over the rim stay (Nostromo "12")
     rest = shape & ~boxes
-    ink = rest & on_line & (t > 0.08)                          # white digits and labels
-    other = rest & ~on_line & ~black & (dist >= 30)            # other coloured fields
-    keep_black = rest & black                                  # lines and boxes drawn in black
-    lum = rgb.mean(axis=2)
-    grey = np.clip(lum * GREY, 40, 200).astype(np.uint8)
-    out[other, 0] = out[other, 1] = out[other, 2] = grey[other]
-    out[other, 3] = 255
-    out[keep_black] = (0, 0, 0, 255)
-    halo = cv2.dilate((ink & (t > 0.5)).astype(np.uint8), _disk(max(2, round(EDGE * s)))).astype(bool)
-    halo &= rest & ~ink & ~other
-    out[halo | (shape & ~inner & ~boxes)] = (0, 0, 0, 255)     # digit edges + the black line along the outline
-    v = (t * 255).astype(np.uint8)
-    out[ink, 0] = out[ink, 1] = out[ink, 2] = v[ink]           # digits on top: whole also at the edge
-    out[ink, 3] = 255
+    # the drawing without its floor: grey g with cover a (see-through where the floor was)
+    g8 = np.rint(grey).astype(np.uint8)
+    out[rest, 0] = out[rest, 1] = out[rest, 2] = g8[rest]
+    out[rest, 3] = np.rint(cover[rest] * 255).astype(np.uint8)
+    # black behind the light text (dark edge) and along the outline: the drawing laid over black
+    light = rest & (cover > 0.5) & (grey > 128)
+    edge = max(2, round(EDGE * s))
+    halo = cv2.dilate(light.astype(np.uint8), _disk(edge)).astype(bool)
+    # walls: dark parts of the drawing away from the light text (the drop shadow of the digits lies closer)
+    near = cv2.dilate(light.astype(np.uint8), _disk(2 * edge)).astype(bool)
+    walls = (rest & inner & (cover > 0.5) & (grey < 60) & ~near).astype(np.uint8)   # in the outline band: black
+    n, lab, stats, _c = cv2.connectedComponentsWithStats(walls)
+    big = stats[:, cv2.CC_STAT_AREA] >= 30 * s * s            # single dark pixels at edges are no wall
+    big[0] = False
+    walls = big[lab]
+    out[walls, 0] = out[walls, 1] = out[walls, 2] = WALL
+    backed = rest & (halo | ~inner) & ~walls
+    on_black = np.rint(grey * cover).astype(np.uint8)
+    out[backed, 0] = out[backed, 1] = out[backed, 2] = on_black[backed]
+    out[backed, 3] = 255
     a[top:] = out
     return Image.fromarray(a)
 
@@ -167,7 +220,7 @@ def styled_path(path: str, cache_dir: str) -> str:
             return path
         os.makedirs(os.path.dirname(target), exist_ok=True)
         tmp = f"{target}.{os.getpid()}-{threading.get_ident()}.tmp"     # the warm-up thread may make it too
-        dark.save(tmp, "WEBP", lossless=True)
+        dark.save(tmp, "WEBP", lossless=True, exact=True)    # exact: also the invisible pixels as they were
         os.replace(tmp, target)
         return target
     except Exception:
