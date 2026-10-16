@@ -4,6 +4,7 @@ import sys
 import types
 
 import numpy as np
+import pytest
 from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -75,3 +76,70 @@ def test_app_takes_the_dark_picture_only_when_chosen_and_never_for_own_pictures(
     assert dark.startswith(os.path.join(str(tmp_path), appmod.STYLE_CACHE))
     own["x"] = True
     assert appmod.App._map_file(fake, "coal", 1) == (path, 1)
+
+
+@pytest.fixture(scope="module")
+def dark_maps(tmp_path_factory):
+    """Every supplied map converted once (≈ 0.7 s each) – the tests below share them."""
+    cache = str(tmp_path_factory.mktemp("maps_dark"))
+    return {path: mapstyle.styled_path(path, cache) for path in _supplied()}
+
+
+def _supplied():
+    return sorted(os.path.join(dp, f) for dp, _d, fs in os.walk(MAPS) for f in fs
+                  if f.lower().endswith((".webp", ".png", ".jpg", ".gif")))
+
+
+def test_every_map_stays_the_same_picture(dark_maps):
+    """1.66.1 (user: "jede Map prüfen, ob sie korrekt angezeigt wird und identisch ist mit dem alten Bild"): for every
+    supplied map – same size and name on top, nothing outside the map changed, no lilac left, clearly white text as
+    white as before, and the dark picture laid over the lilac floor again = the original wherever no black backing
+    was added (only the rounding of soft edges differs). Box colours never on what was floor."""
+    other = {"Midwich.gif", "Trickster's Delusion.webp", "Fallen Refuge.webp", "Freddy Fazbears Pizza.webp"}
+    fill = mapstyle.FILL.astype(float)
+    styled = 0
+    for path, out in dark_maps.items():
+        name = os.path.basename(path)
+        if name in other:
+            assert out == path, name
+            continue
+        assert out != path, name + ": not converted"
+        styled += 1
+        oi, di = Image.open(path).convert("RGBA"), Image.open(out).convert("RGBA")
+        assert oi.size == di.size, name
+        split = mapimage.title_split(oi)
+        assert split and mapimage.title_split(di) == split, name
+        top = split[2]
+        o, d = np.asarray(oi).astype(float), np.asarray(di).astype(float)
+        assert np.array_equal(o[:top], d[:top]), name + ": the name on top changed"
+        o, d = o[top:], d[top:]
+        shape = mapstyle._outline(o[..., 3].astype(np.uint8))
+        assert not (np.abs(o - d).max(axis=2) > 0)[~shape].any(), name + ": changed outside the map"
+        assert not (_near(d, mapstyle.FILL) & shape).any(), name + ": lilac left"
+        opaque = d[..., 3] == 255
+        a = d[..., 3:4] / 255
+        back = np.abs(d[..., :3] * a + fill * (1 - a) - o[..., :3]).max(axis=2)
+        free = shape & ~opaque & (o[..., 3] == 255) & ~(d[..., :3] == mapstyle.WALL).all(axis=2)
+        assert back[free].max() <= 20, f"{name}: over lilac it is not the original ({back[free].max():.0f})"
+        white = shape & opaque & (o[..., 3] == 255) & (o[..., :3].min(axis=2) > 245)
+        darker = (o[..., :3].mean(axis=2) - d[..., :3].mean(axis=2))[white]
+        assert (darker > 15).sum() <= 0.002 * white.sum(), name + ": white text got darker"
+        floor = _near(o, mapstyle.FILL) & (o[..., 3] == 255)
+        box = _near(d, mapstyle.M_COLOUR) | _near(d, mapstyle.S_COLOUR) | _near(d, mapstyle.BOX_GREY)
+        assert (box & floor).sum() <= 50, name + ": box colour on what was floor"
+    assert styled == 52
+
+
+def test_the_boxes_get_their_colours_on_every_map(dark_maps):
+    """M dark red / S olive where the map has them; WT/H/P boxes grey, never red or olive (Hawkins, Léry's: none)."""
+    no_m = {"Wreckers.webp", "Rotten Fields.webp", "Dead Sands.webp", "Hawkins.webp", "Lerys.webp", "THE GAME.webp",
+            "Rpd East Wing.webp", "Rpd West Wing.webp"}
+    no_s = {"Nostromo Wreckage.webp", "Haddonfield.webp", "Hawkins.webp", "Lerys.webp", "THE GAME.webp",
+            "Rpd East Wing.webp", "Rpd West Wing.webp"}
+    for path, out in dark_maps.items():
+        if out == path:
+            continue
+        name = os.path.basename(path)
+        d = np.asarray(Image.open(out).convert("RGBA"))
+        assert (_near(d, mapstyle.M_COLOUR).sum() > 3000) == (name not in no_m), name + ": M box"
+        assert (_near(d, mapstyle.S_COLOUR).sum() > 3000) == (name not in no_s), name + ": S box"
