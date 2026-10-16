@@ -299,7 +299,9 @@ def test_the_program_starts_shows_every_page_and_quits(app_root):
             assert len(app.qt.dialogs) == 2
             assert app.settings["welcome_seen"] and any("Overlay" in e for e in app.qt._found)
             assert app.settings["overlay"]["anchor"] == "custom"
-            assert (app.settings["overlay"]["media_pos"], app.settings["overlay"]["media_xy"]) == ("custom", [0.0, 0.0])
+            assert app.settings["overlay"]["media_pos"] == "custom"       # dropped at (0, 0): its centre (1.2.5)
+            music = next(lay for lay in app._preview_data()["layers"] if lay[0] == "music")
+            assert music[1:3] == (0, 0)
             assert (app.settings["sysinfo"], app.settings["sysinfo_pos"]) == ("custom", [0.0, 0.0])
             o = app.settings["overlay"]
             assert (o["hud_scale"], o["media_scale"], o["height"]) == (1.5, 2.0, 0.36)
