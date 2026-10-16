@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import ctypes
 import os
+import re
 import struct
 import sys
 import threading
@@ -26,15 +27,25 @@ HWINFO_MAP = "Global\\HWiNFO_SENS_SM2"
 HWINFO_SIGS = (0x53695748, 0x48576953)     # "HWiS" (either byte order); "DEAD" = HWiNFO stopped sharing
 HWINFO_HEADER = struct.Struct("<IIIqIIIIII")   # signature … number of readings (pack 1, 44 bytes)
 HWINFO_READING = struct.Struct("<III128s128s16sdddd")
+HWINFO_SENSOR = struct.Struct("<II128s")    # id, instance, original name (user name and UTF-8 copy follow)
 HWINFO_STALE = 10.0          # HWiNFO's last poll older than this: values are not current any more
 HWINFO_MAX = 16 << 20        # sanity limit for the shared memory size
-TEMP = 1                     # SENSOR_TYPE_TEMP
+TEMP, POWER, USAGE = 1, 5, 7  # SENSOR_TYPE_*
 # HWiNFO labels of the CPU temperature, best first (Intel, AMD, fallbacks)
 CPU_LABELS = ("cpu package", "cpu (tctl/tdie)", "cpu die (average)", "cpu (tctl)", "cpu tdie", "cpu (tdie)",
               "core max", "cpu")
 GPU_LABELS = ("gpu temperature",)
 HOT_LABELS = ("gpu hot spot temperature", "gpu hotspot temperature", "gpu hot spot")
 MEM_LABELS = ("gpu memory junction temperature", "gpu memory temperature")
+# 1.2.1 (HWiNFO Pro: sharing stays on): CPU power, busiest thread, thermal throttling – only from sensors whose
+# name starts with "CPU" (the GPU sensors have readings with similar names)
+CPU_POWER_LABELS = ("cpu package power", "cpu ppt", "package power")
+CORE_MAX_LABELS = ("max cpu/thread usage",)                 # HWiNFO's own maximum over all threads (any sensor)
+CORE_USAGE = re.compile(r"^(?:[pe]-)?core\s*#?\d+(?:\s*t\d+)?\s+usage$")   # per thread, if the maximum is missing
+# Yes/No readings that mean "slowed down because of heat" (Intel DTS / limit reasons, AMD HTC/PROCHOT). Power limit
+# readings ("Power Limit Exceeded", PL1/PL2) are left out: under full load that is the normal state, like the
+# GPU's power cap – it would be a permanent warning.
+CPU_THROTTLE_WORDS = ("thermal throttling", "prochot", "thermal event", "critical temperature")
 # thresholds (°C): green up to the first, amber up to the second, red above
 CPU_WARM, CPU_HOT = 80, 90
 GPU_WARM, GPU_HOT = 75, 85
@@ -56,6 +67,9 @@ class Snapshot:
     gpu_hot: float | None = None       # °C hot spot (HWiNFO)
     gpu_mem: float | None = None       # °C memory junction (HWiNFO)
     throttle: str = ""                 # "" | "thermal" | "hw" (NVML clock event reasons)
+    cpu_power: float | None = None     # W package power (HWiNFO)
+    core_max: float | None = None      # % load of the busiest thread (HWiNFO): DBD runs on few cores
+    cpu_throttle: str = ""             # "" | "thermal" (HWiNFO Yes/No readings of the CPU)
     vram_used: float | None = None     # GB
     vram_total: float | None = None
     ram_used: float | None = None      # GB
@@ -70,30 +84,51 @@ def _cstr(raw: bytes) -> str:
 
 
 def parse_hwinfo(buf: bytes, now: float | None = None) -> dict | None:
-    """Temperatures from a copy of HWiNFO's shared memory: {"cpu_temp", "gpu_temp", "gpu_hot", "gpu_mem"}
-    or None (not HWiNFO, sharing stopped, stale)."""
+    """Values from a copy of HWiNFO's shared memory: {"cpu_temp", "gpu_temp", "gpu_hot", "gpu_mem", "cpu_power",
+    "core_max", "cpu_throttle"} or None (not HWiNFO, sharing stopped, stale)."""
     if len(buf) < HWINFO_HEADER.size:
         return None
-    sig, _ver, _rev, poll, _so, _ss, _sn, r_off, r_size, r_num = HWINFO_HEADER.unpack_from(buf)
+    sig, _ver, _rev, poll, s_off, s_size, s_num, r_off, r_size, r_num = HWINFO_HEADER.unpack_from(buf)
     if sig not in HWINFO_SIGS or r_size < HWINFO_READING.size:
         return None
     now = time.time() if now is None else now
     if poll and abs(now - poll) > HWINFO_STALE:
         return None
-    temps = {}
+    cpu_sensors = set()
+    if s_size >= HWINFO_SENSOR.size:
+        for i in range(s_num):
+            at = s_off + i * s_size
+            if at + HWINFO_SENSOR.size > len(buf):
+                break
+            if _cstr(HWINFO_SENSOR.unpack_from(buf, at)[2]).lower().startswith("cpu"):
+                cpu_sensors.add(i)
+    temps, cpu, usage, threads, throttled = {}, {}, {}, [], False
     for i in range(r_num):
         at = r_off + i * r_size
         if at + HWINFO_READING.size > len(buf):
             break
-        kind, _si, _rid, label, _user, unit, value, *_ = HWINFO_READING.unpack_from(buf, at)
-        if kind != TEMP:
-            continue
+        kind, sensor, _rid, label, _user, unit, value, *_ = HWINFO_READING.unpack_from(buf, at)
         name = _cstr(label).lower()
-        if "f" in _cstr(unit).lower():
-            value = (value - 32) * 5 / 9                  # user switched HWiNFO to Fahrenheit
-        temps.setdefault(name, value)                     # first sensor with that label wins
+        if kind == TEMP:
+            if "f" in _cstr(unit).lower():
+                value = (value - 32) * 5 / 9              # user switched HWiNFO to Fahrenheit
+            temps.setdefault(name, value)                 # first sensor with that label wins
+        elif kind == USAGE and name in CORE_MAX_LABELS:
+            usage.setdefault(name, value)
+        elif sensor in cpu_sensors:
+            if kind == POWER:
+                cpu.setdefault(name, value)
+            elif kind == USAGE and CORE_USAGE.match(name):
+                threads.append(value)
+            elif any(w in name for w in CPU_THROTTLE_WORDS) and value >= 0.5:      # Yes = 1
+                throttled = True
+    core_max = next((usage[k] for k in CORE_MAX_LABELS if k in usage), max(threads, default=None))
+    power = next((cpu[k] for k in CPU_POWER_LABELS if k in cpu and 0 < cpu[k] < 1000), None)
     return {"cpu_temp": _pick(temps, CPU_LABELS), "gpu_temp": _pick(temps, GPU_LABELS),
-            "gpu_hot": _pick(temps, HOT_LABELS), "gpu_mem": _pick(temps, MEM_LABELS)}
+            "gpu_hot": _pick(temps, HOT_LABELS), "gpu_mem": _pick(temps, MEM_LABELS),
+            "cpu_power": None if power is None else float(power),
+            "core_max": None if core_max is None else max(0.0, min(100.0, float(core_max))),
+            "cpu_throttle": "thermal" if throttled else ""}
 
 
 def _pick(temps: dict, labels) -> float | None:
@@ -298,6 +333,8 @@ def hud_rows(s: Snapshot) -> list:
             row += ([(" · ", DIM)] if i else []) + [(name + " ", DIM),
                                                    (f"{t:.0f}°C", temp_colour(t, SPOT_WARM, SPOT_HOT))]
         rows.append(row)
+    if s.cpu_throttle:
+        rows.append([(_("CPU DROSSELT (TEMP.)"), HOT)])
     if s.throttle:
         rows.append([(_("GPU DROSSELT (TEMP.)") if s.throttle == "thermal" else
                       _("GPU DROSSELT (HW)"), HOT)])
@@ -309,7 +346,7 @@ def hud_rows(s: Snapshot) -> list:
 
 # ------------------------------------------------------------------ per round (tab Statistik)
 SYS_KEYS = ("cpu_temp", "gpu_temp", "cpu_load", "gpu_load", "gpu_power", "vram_used", "ram_used", "gpu_hot",
-            "gpu_mem")
+            "gpu_mem", "cpu_power", "core_max")
 MIN_SAMPLES = 10             # fewer readings in a round (HUD switched on late, HWiNFO started late): not stored
 
 
@@ -319,7 +356,9 @@ class SysRecorder:
     def __init__(self):
         self.values = {k: [] for k in SYS_KEYS}
         self.throttled = 0                           # readings (≈ seconds) with a thermal / hardware slowdown
+        self.cpu_throttled = 0                       # the same for the CPU (HWiNFO)
         self.readings = 0
+        self.hw_readings = 0                         # readings with HWiNFO: only then is "CPU not throttled" known
         self._last_t = None
 
     def add(self, snap: Snapshot) -> None:
@@ -328,6 +367,9 @@ class SysRecorder:
         self._last_t = snap.t
         self.readings += 1
         self.throttled += bool(snap.throttle)
+        if snap.hwinfo:
+            self.hw_readings += 1
+            self.cpu_throttled += bool(snap.cpu_throttle)
         for k in SYS_KEYS:
             v = getattr(snap, k)
             if v is not None:
@@ -342,6 +384,8 @@ class SysRecorder:
                 out[k + "_max"] = round(max(vs), 1)
         if out and self.readings >= MIN_SAMPLES:
             out["throttle_s"] = float(self.throttled * POLL_EVERY)
+        if out and self.hw_readings >= MIN_SAMPLES:
+            out["cpu_throttle_s"] = float(self.cpu_throttled * POLL_EVERY)
         return out or None
 
 
@@ -390,6 +434,8 @@ class SysMonitor:
                     snap.hwinfo = self.hwinfo_seen = True
                     snap.cpu_temp = hw["cpu_temp"]
                     snap.gpu_hot, snap.gpu_mem = hw["gpu_hot"], hw["gpu_mem"]
+                    snap.cpu_power, snap.core_max = hw["cpu_power"], hw["core_max"]
+                    snap.cpu_throttle = hw["cpu_throttle"]
                     if snap.gpu_temp is None:
                         snap.gpu_temp = hw["gpu_temp"]           # AMD/Intel: GPU temperature from HWiNFO
             except Exception as e:                               # never kill the thread over one reading
@@ -403,4 +449,5 @@ class SysMonitor:
         return (f"Systemwerte: aktiv={self.active} GPU={s.gpu_name or '—'} nvml={self.nvml_error or 'ok'} "
                 f"HWiNFO={'ja' if s.hwinfo else ('früher ja' if self.hwinfo_seen else 'nein')} "
                 f"CPU={s.cpu_temp}°C/{s.cpu_load}% GPU={s.gpu_temp}°C/{s.gpu_load}% "
-                f"Hotspot={s.gpu_hot} Mem={s.gpu_mem} drosselt={s.throttle or 'nein'}")
+                f"Hotspot={s.gpu_hot} Mem={s.gpu_mem} drosselt={s.throttle or 'nein'} "
+                f"CPU-Leistung={s.cpu_power}W Kern max={s.core_max}% CPU drosselt={s.cpu_throttle or 'nein'}")
