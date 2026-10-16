@@ -223,6 +223,9 @@ def test_qt_overlay_shows_the_map_and_reports_a_drag():
     assert w > 0 and h > 300                                  # map + timer below it
     ov.show_at(40, 50)
     assert ov.shown and ov.is_visible() and ov.win.image.width() == w
+    ov.set_fade(0.5)                                          # fading (1.2.9): a share of the opacity
+    assert abs(ov.win.windowOpacity() - ov.opacity * 0.5) < 0.01
+    ov.set_fade(1.0)
     moved = []
     ov.on_moved = lambda x, y: moved.append((x, y))
     ov.set_editing(True)

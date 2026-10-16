@@ -8,6 +8,15 @@ import copy
 OVERLAY_KEYS = ("anchor", "pos_x", "pos_y", "height", "map_heights", "text_scale", "hud_scale", "media_scale",
                 "media_pos", "media_xy", "today_pos", "today_xy", "today_scale", "stack_gap", "bar_align")
 TOP_KEYS = ("sysinfo", "sysinfo_pos")
+# 1.2.9 (user's pick: "Layout-Vorlagen"): ready-made arrangements – partial layouts, applied like an undo step
+PRESETS = {
+    "left": {"overlay": {"anchor": "auto", "bar_align": "centre", "today_pos": "below", "media_pos": "under_today"},
+             "sysinfo": "left"},
+    "right": {"overlay": {"anchor": "top-right", "bar_align": "centre", "today_pos": "below",
+                          "media_pos": "under_today"}, "sysinfo": "right"},
+    "spread": {"overlay": {"anchor": "auto", "bar_align": "centre", "today_pos": "below", "media_pos": "bottom_left"},
+               "sysinfo": "right"},
+}
 UNDO_KEPT = 50
 GESTURE_GAP = 0.8      # s: changes closer together than this are one step (a drag, a row of arrow keys)
 SNAP_PX = 6            # px in the preview: this close to a line, an element snaps to it (1.65.2: was 8)

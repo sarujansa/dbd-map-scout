@@ -53,6 +53,8 @@ SPECS = {
                 ("row", (("label", "ov.sel.label"), ("combo", "ov.sel"), ("stretch",))), ("slider", "ov.sel_size"),
                 ("slider", "ov.opacity"), ("slider", "ov.gap"),
                 ("row", (("label", "ov.bar_align.label"), ("combo", "ov.bar_align"), ("stretch",))),
+                ("row", (("label", "ov.preset.label"), ("combo", "ov.preset"), ("button", "ov.preset_apply"),
+                         ("stretch",))),
                 ("hint", "ov.size_scope"), ("hint", "ov.size_cap"),
                 ("row", (("label", "ov.anchor.label"), ("combo", "ov.anchor"), ("stretch",), ("button", "ov.reset"))),
                 ("slider", "ov.posx"), ("slider", "ov.posy"),
@@ -63,7 +65,7 @@ SPECS = {
                 ("row", (("hint", "ov.map_size"), ("stretch",), ("button", "ov.map_size_reset"))),
                 ("row", (("label", "ov.map_style.label"), ("combo", "ov.map_style"), ("stretch",))),
                 ("sub", N_("Karte")), ("check", "ov.show_map"), ("check", "ov.caption"), ("check", "ov.floors"),
-                ("check", "ov.transparent"), ("check", "ov.map_backdrop"),
+                ("check", "ov.transparent"), ("check", "ov.fade"), ("check", "ov.map_backdrop"),
                 ("sub", N_("Unter der Karte")), ("check", "ov.timer"), ("check", "ov.server"), ("check", "ov.record"),
                 ("sub", N_("Wann zeigen")), ("check", "ov.focus"), ("check", "ov.waiting"))),
             ("ov.sys", N_("Systemwerte & Musik"), (

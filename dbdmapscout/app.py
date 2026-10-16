@@ -33,7 +33,7 @@ from .app_settings import SettingsTab
 from .app_layout import LayoutMemory
 from .app_sysinfo import TEXT_BASE, text_scale
 from .app_sysinfo import (BAR_ALIGNS, HUD_ROW_LABELS, HUD_SHOWN, HUD_SIDES, MAP_SCALE, MEDIA_SCALE, MEDIA_SPOTS,
-                          MEDIA_STYLES, OPACITY_KEYS, SELECTABLE, TODAY_SPOTS, SysInfo)
+                          MEDIA_STYLES, OPACITY_KEYS, PRESET_LABELS, SELECTABLE, TODAY_SPOTS, SysInfo)
 from .app_qt import QtShell
 
 LANGS = [("en", "EN"), ("de", "DE"), ("fr", "FR"), ("es", "ES"), ("es-MX", "ES-MX"), ("it", "IT"),
@@ -252,6 +252,15 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
                                                      values=[_(t) for _k, t in BAR_ALIGNS]))
         acb.pack(side="left", padx=6)
         acb.bind("<<ComboboxSelected>>", lambda e: self._bar_align_changed())
+        pr = ui.Frame(pos)                              # 1.2.9: ready-made arrangements
+        pr.pack(fill="x", pady=(4, 0))
+        self._reg("ov.preset.label", ui.Label(pr, text=_("Vorlage"), width=12)).pack(side="left")
+        self.preset_var = ui.StringVar(value=_(PRESET_LABELS[0][1]))
+        pcb = self._reg("ov.preset", ui.Combobox(pr, textvariable=self.preset_var, state="readonly", width=30,
+                                                  values=[_(t) for _k, t in PRESET_LABELS]))
+        pcb.pack(side="left", padx=6)
+        self._reg("ov.preset_apply", ui.Button(pr, text=_("Vorlage anwenden"), command=self._preset_apply)
+                  ).pack(side="left")
         self.size_scope_var = ui.StringVar(value="")     # 1.65.5: this map only / all maps
         self._reg("ov.size_scope", ui.Label(pos, textvariable=self.size_scope_var, style="Dim.TLabel"))
         self.size_cap_var = ui.StringVar(value="")       # 1.65.2: the bar is what limits the map's size
@@ -340,6 +349,10 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
                                ("transparent", N_("Transparenter Rand um die Karte"), self.transp_var)):
             self._reg(f"ov.{key}", ui.Checkbutton(look, text=_(text), variable=var,
                                                    command=self._overlay_flags_changed)).pack(anchor="w", pady=1)
+        self.fade_var = ui.BooleanVar(value=o.get("fade", True))
+        self._reg("ov.fade", ui.Checkbutton(look, text=_("Weich ein- und ausblenden (Karte, Systemwerte, Heute)"),
+                                            variable=self.fade_var, command=self._today_flag_changed)
+                  ).pack(anchor="w", pady=1)
         self.map_backdrop_var = ui.BooleanVar(value=o.get("map_backdrop", False))
         self._reg("ov.map_backdrop", ui.Checkbutton(look, text=_("Dunkle Fläche hinter Karte und Infos"),
                                                     variable=self.map_backdrop_var,
@@ -455,6 +468,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
             self.settings["overlay"][key] = bool(var.get())
         self.settings["overlay"]["hud_backdrop"] = bool(self.hud_backdrop_var.get())
         self.settings["overlay"]["today_backdrop"] = bool(self.today_backdrop_var.get())
+        self.settings["overlay"]["fade"] = bool(self.fade_var.get())
         self.settings["overlay"]["map_backdrop"] = bool(self.map_backdrop_var.get())
         self.overlay.set_backdrop(self.settings["overlay"]["map_backdrop"])
         self._save_soon()
@@ -1277,8 +1291,9 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         if hud:                                     # cards below the system values: the map moves down by them too
             hud = (hud[0], hud[1] + self._stack_height(gh))
         self._sysinfo_status()
+        fade = bool(o.get("fade", True)) and not self.overlay.editing      # 1.2.9
         if reason:
-            self.overlay.hide()
+            self._fade_hide("map", fade)
             self.worker.overlay_rect = None
             return
         if self.overlay.editing and self.overlay.dragging:
@@ -1338,6 +1353,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         x, y = place(w, h)
         if side and side != "slot":
             x = layout.clamp_x(side, x, w, gx, gw, bar, margin - edge)
+        self._fade_show("map", fade)
         self.overlay.show_at(int(x), int(y))
         self._last_place = (int(x), int(y), w, h)
         self.worker.overlay_rect = self._last_place if self.overlay.shown else None
@@ -1360,6 +1376,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
             w, h = self.overlay.render(height, push=False)
         w, h = self.overlay.render(height)
         x, y = gx + margin, gy + gh - bottom + margin
+        self._fade_show("map", bool(self.settings["overlay"].get("fade", True)) and not self.overlay.editing)
         self.overlay.show_at(int(x), int(y))
         self._last_place = (int(x), int(y), w, h)
         self.worker.overlay_rect = self._last_place if self.overlay.shown else None
