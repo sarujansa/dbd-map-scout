@@ -565,12 +565,14 @@ class Chart(Widget):
 
 
 class Dashboard(Widget):
-    """The statistics dashboard (dashboard.Dashboard in ``data``), drawn by qt_window.DashboardView."""
+    """The statistics dashboard (dashboard.Dashboard in ``data``), drawn by qt_window.DashboardView. A click on a
+    map bar or a heatmap cell goes to ``command(("map", name))`` / ``command(("cell", map, killer))`` (1.2.16)."""
 
-    def __init__(self, master=None, **kw):
+    def __init__(self, master=None, command=None, **kw):
         super().__init__(master, **kw)
         self.data = None
         self.dark = True
+        self.command = command
 
 
 class Tiles(Widget):

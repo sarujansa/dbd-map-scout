@@ -439,10 +439,18 @@ class MapBars(QWidget):
     """Most played maps: one row each – name, a bar for the rounds, the count and the results (stats page)."""
     ROW = 26
 
-    def __init__(self):
+    def __init__(self, on_click=None):
         super().__init__()
         self._rows, self._max, self._dark = [], 1, True
+        self._on_click = on_click                     # 1.2.16: a click on a row filters the statistics by that map
+        if on_click:
+            self.setCursor(Qt.PointingHandCursor)
         self.setMinimumHeight(self.ROW)
+
+    def mousePressEvent(self, e):
+        i = int(e.position().y() // self.ROW)
+        if self._on_click and 0 <= i < len(self._rows):
+            self._on_click(("map", self._rows[i][0]))
 
     def set_rows(self, rows, top, dark):
         self._rows, self._max, self._dark = list(rows), max(1, top), dark
@@ -481,8 +489,11 @@ class Heatmap(QWidget):
     written in it; empty cells = too few rounds. Hover: the cell's text with its number of rounds."""
     HEAD, ROW, LEGEND = 28, 26, 30
 
-    def __init__(self):
+    def __init__(self, on_click=None):
         super().__init__()
+        self._on_click = on_click
+        if on_click:
+            self.setCursor(Qt.PointingHandCursor)
         self._d, self._dark, self._hits = None, True, []
         self.setMouseTracking(True)
 
@@ -534,7 +545,7 @@ class Heatmap(QWidget):
                 p.setPen(ink_on(fill))
                 p.drawText(rect, Qt.AlignCenter, f"{avg:.1f}")
                 self._hits.append((rect, _("{map} · {killer}: Ø {kills} Kills ({n} Runden)", map=m, killer=k,
-                                           kills=f"{avg:.1f}", n=n)))
+                                           kills=f"{avg:.1f}", n=n), m, k))
         # legend: the ramp from 0 to 4 kills
         ly = self.HEAD + len(d.rows) * self.ROW + 10
         grad = QLinearGradient(name_w, 0, name_w + 160, 0)
@@ -552,11 +563,18 @@ class Heatmap(QWidget):
     def mouseMoveEvent(self, e):
         from PySide6.QtWidgets import QToolTip
         pos = e.position()
-        hit = next((t for r, t in self._hits if r.contains(pos)), None)
+        hit = next((t for r, t, _m, _k in self._hits if r.contains(pos)), None)
         if hit:
             QToolTip.showText(e.globalPosition().toPoint(), hit, self)
         else:
             QToolTip.hideText()
+
+    def mousePressEvent(self, e):
+        """1.2.16: a click on a cell filters the statistics by that map and killer."""
+        pos = e.position()
+        hit = next(((m, k) for r, _t, m, k in self._hits if r.contains(pos)), None)
+        if hit and self._on_click:
+            self._on_click(("cell",) + hit)
 
 
 class SwatchView(QWidget):
@@ -655,9 +673,10 @@ class TilesView(QWidget):
 class DashboardView(QWidget):
     """The statistics dashboard (dashboard.Dashboard): key figure tiles, the most played maps, killer × map."""
 
-    def __init__(self):
+    def __init__(self, key="", post=None):
         super().__init__()
         self._shown = None
+        self._key, self._post = key, post
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(12)
@@ -676,10 +695,15 @@ class DashboardView(QWidget):
             self.grid.addWidget(card)
             self.tiles.append((card, box))
         lay.addWidget(self.tiles_box)
-        self.maps_card, self.maps = self._chart_card(lay, _("Maps – am häufigsten gespielt"), MapBars())
-        self.heat_card, self.heat = self._chart_card(lay, _("Killer × Map – Ø Kills laut Stats-Seite"), Heatmap())
+        click = self._click if post else None
+        self.maps_card, self.maps = self._chart_card(lay, _("Maps – am häufigsten gespielt"), MapBars(click))
+        self.heat_card, self.heat = self._chart_card(lay, _("Killer × Map – Ø Kills laut Stats-Seite"), Heatmap(click))
         self.heat_note = _label(cls="dim", wrap=True)
         self.heat_card.layout().addWidget(self.heat_note)
+
+    def _click(self, value):
+        if self._post:
+            self._post("act", (self._key, value))
 
     @staticmethod
     def _chart_card(lay, title, widget):

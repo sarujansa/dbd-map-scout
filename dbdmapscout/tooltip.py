@@ -130,6 +130,10 @@ TIPS = {
                          "und Ping stehen dann hier und im Overlay.",
     "Match-Daten einrichten …": "Zu Einstellungen → Mehr → Offizielle Match-Daten: einmal das Userscript in den "
                                 "Browser, danach zählen Kills, Entkommen und Bloodpoints in der Statistik.",
+    "Weitere 100 Runden anzeigen": "Die Liste zeigt die neuesten 100 Runden der Auswahl; jeder Klick hängt 100 "
+                                   "ältere an.",
+    "Als CSV exportieren …": "Speichert die Runden der aktuellen Filter als CSV (Semikolon, UTF-8) – mit Kills, "
+                             "Entkommen und Bloodpoints, soweit ein Match der Stats-Seite zugeordnet ist.",
     "Kartenbild hinzufügen …": "Eigenes Bild für eine Map wählen: vorhandenes Bild ersetzen oder neue Map "
                                "anlegen. Rand und Hintergrund werden automatisch entfernt.",
     # overlay tab
