@@ -6,7 +6,7 @@ import json
 import os
 
 HUD_SHOWN = ("above", "left", "right", "custom")    # settings.sysinfo values that show the system values
-SETTINGS_VERSION = 5
+SETTINGS_VERSION = 6
 
 DEFAULTS = {
     "settings_version": SETTINGS_VERSION,
@@ -26,7 +26,10 @@ DEFAULTS = {
         "pos_y": 0.0,                   # anchor=custom: 0 = top, 1 = bottom
         "margin": 0.012,                # distance to the window edge (fraction of the game height)
         "height": 0.36,                 # overlay height as a fraction of the game height
-        "opacity": 0.85,
+        "opacity": 0.85,                # of the map (+ its lines); the other cards have their own (1.2.7)
+        "hud_opacity": 0.85,
+        "today_opacity": 0.85,
+        "media_opacity": 0.85,
         "only_when_game_focused": True,
         "show_caption": False,          # the map pictures already carry their name
         "show_timer": True,             # round timer below the map (map shown -> map gone)
@@ -173,6 +176,12 @@ class Settings:
                         ov["today_pos"] = "custom"                    # it stood alone at its own place
                         fx, fy = (self.data.get("sysinfo_pos") or [1.0, 0.0])[:2]
                         ov["today_xy"] = [float(fx), float(fy)]
+                if raw.get("settings_version", 1) < 6:                # 1.2.7: opacity per card, cards stack
+                    for key in ("hud_opacity", "today_opacity", "media_opacity"):
+                        ov[key] = ov.get("opacity", 0.85)             # as before: one opacity for everything
+                    if ov.get("media_pos") == "below" and ov.get("today_pos", "below") == "below" \
+                            and ov.get("show_today", True):
+                        ov["media_pos"] = "under_today"               # 1.2.6 hung the music below "today"
                 if self.data.get("color_theme") == "oled":            # 1.62.0: OLED was a theme of its own
                     self.data["color_theme"], self.data["oled_black"] = "gold", True
                 self.data["settings_version"] = SETTINGS_VERSION

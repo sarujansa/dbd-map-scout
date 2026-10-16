@@ -32,7 +32,8 @@ from .app_hotkeys import Hotkeys
 from .app_settings import SettingsTab
 from .app_layout import LayoutMemory
 from .app_sysinfo import TEXT_BASE, text_scale
-from .app_sysinfo import HUD_SHOWN, HUD_SIDES, MAP_SCALE, MEDIA_SCALE, MEDIA_SPOTS, MEDIA_STYLES, SELECTABLE, SysInfo
+from .app_sysinfo import (HUD_SHOWN, HUD_SIDES, MAP_SCALE, MEDIA_SCALE, MEDIA_SPOTS, MEDIA_STYLES, OPACITY_KEYS,
+                          SELECTABLE, TODAY_SPOTS, SysInfo)
 from .app_qt import QtShell
 
 LANGS = [("en", "EN"), ("de", "DE"), ("fr", "FR"), ("es", "ES"), ("es-MX", "ES-MX"), ("it", "IT"),
@@ -236,6 +237,9 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self.sel_size_label = self._slider(pos, _("Grösse"), self.sel_size_var, *MAP_SCALE, self._sel_size_changed,
                                            key="ov.sel_size")
         self.sel_scale = self._qt_reg["ov.sel_size"]
+        self.opacity_var = ui.DoubleVar(value=o["opacity"] * 100)        # 1.2.7: of the element picked
+        self.opacity_label = self._slider(pos, _("Deckkraft"), self.opacity_var, 25, 100, self._opacity_changed,
+                                          key="ov.opacity")
         self.size_scope_var = ui.StringVar(value="")     # 1.65.5: this map only / all maps
         self._reg("ov.size_scope", ui.Label(pos, textvariable=self.size_scope_var, style="Dim.TLabel"))
         self.size_cap_var = ui.StringVar(value="")       # 1.65.2: the bar is what limits the map's size
@@ -285,8 +289,6 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self._reg("ov.map_size_reset", ui.Button(self.map_size_row, text=_("Für diese Map zurücksetzen"),
                                                   command=self._reset_map_size)).pack(side="right")
         self._size_row_after = self.size_label.master
-        self.opacity_var = ui.DoubleVar(value=o["opacity"] * 100)
-        self._slider(look, _("Deckkraft"), self.opacity_var, 25, 100, self._opacity_changed, key="ov.opacity")
         sr = ui.Frame(look)
         sr.pack(fill="x", pady=(4, 0))
         self._reg("ov.map_style.label", ui.Label(sr, text=_("Kartenstil"), width=12)).pack(side="left")
@@ -362,10 +364,10 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         tr = ui.Frame(sysf)
         tr.pack(fill="x", pady=(4, 0))
         self._reg("ov.today_pos.label", ui.Label(tr, text=_("Heute"), width=12)).pack(side="left")
-        spots = dict(MEDIA_SPOTS)
+        spots = dict(TODAY_SPOTS)
         self.today_pos_var = ui.StringVar(value=_(spots.get(o.get("today_pos", "below"), spots["below"])))
         tcb = self._reg("ov.today_pos", ui.Combobox(tr, textvariable=self.today_pos_var, state="readonly", width=38,
-                                                     values=[_(t) for _k, t in MEDIA_SPOTS]))
+                                                     values=[_(t) for _k, t in TODAY_SPOTS]))
         tcb.pack(side="left", padx=6)
         tcb.bind("<<ComboboxSelected>>", lambda e: self._today_spot_changed())
         self.today_backdrop_var = ui.BooleanVar(value=o.get("today_backdrop", False))
@@ -1205,8 +1207,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         try:
             self._place_overlay_map()
         finally:
-            self._today_place()                     # "today" goes where the map and system values are (1.2.6)
-            self._media_place()                     # … and the music card below it
+            self._cards_place()                     # "today" and the music card, stacked (1.2.6 / 1.2.7)
             self._guides_place()                    # centre cross while moving (1.64.5)
 
     def _place_overlay_map(self):
@@ -1247,8 +1248,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         elif not forced:
             self._log_visibility(reason, (gx, gy, gw, gh))
         hud = self._hud_place(gx, gy, gw, gh, show=not reason and not wait)
-        if hud:                                     # "today" below the system values: the map moves down by it too
-            hud = (hud[0], hud[1] + self._today_height(gh))
+        if hud:                                     # cards below the system values: the map moves down by them too
+            hud = (hud[0], hud[1] + self._stack_height(gh))
         self._sysinfo_status()
         if reason:
             self.overlay.hide()
@@ -1533,6 +1534,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
                 "layers": [(name, round(lx / f), round(ly / f), round(img.width / f), round(img.height / f))
                            for name, img, lx, ly in layers],
                 "pics": {name: img for name, img, _lx, _ly in layers}, "opacity": o["opacity"],
+                "opacities": {n: float(o.get(k, o["opacity"])) for n, k in OPACITY_KEYS.items()},
                 "editing": bool(self.overlay.editing), "selected": getattr(self, "_sel", "map")}
 
     def _preview_sample(self):
@@ -1619,7 +1621,9 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self._tick_overlay(reschedule=False)
 
     def _opacity_changed(self):
-        self.settings["overlay"]["opacity"] = round(self.opacity_var.get() / 100, 2)
+        """The opacity slider: the element picked (1.2.7; "text" is part of the map's window)."""
+        key = OPACITY_KEYS.get(getattr(self, "_sel", "map"), "opacity")
+        self.settings["overlay"][key] = round(self.opacity_var.get() / 100, 2)
         self._save_soon()
         self._tick_overlay(reschedule=False)
 

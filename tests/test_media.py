@@ -126,6 +126,8 @@ def test_old_settings_move_the_music_card_out_of_the_system_values(tmp_path):
     p.write_text(json.dumps({"settings_version": 3, "overlay": {"media_pos": "below"}, "hotkeys": {}}))
     assert Settings(str(p))["overlay"]["media_pos"] == "bottom_right"
     p.write_text(json.dumps({"settings_version": 4, "overlay": {"media_pos": "below"}, "hotkeys": {}}))
+    assert Settings(str(p))["overlay"]["media_pos"] == "under_today"      # 1.2.7: below "today", as 1.2.6 showed it
+    p.write_text(json.dumps({"settings_version": 6, "overlay": {"media_pos": "below"}, "hotkeys": {}}))
     assert Settings(str(p))["overlay"]["media_pos"] == "below"
 
 
@@ -224,3 +226,14 @@ def test_old_today_at_its_own_place_becomes_a_card_at_that_place(tmp_path):
     p.write_text(json.dumps({"settings_version": 4, "sysinfo": "right", "today_side": "custom",
                              "sysinfo_pos": [0.2, 0.7], "overlay": {}, "hotkeys": {}}))
     assert Settings(str(p))["overlay"]["today_pos"] == "below"          # it hung below the system values
+
+
+def test_old_single_opacity_becomes_every_cards_opacity(tmp_path):
+    """1.2.7: one opacity for everything → each card keeps that value as its own; music "below" under "today"."""
+    import json
+    from dbdmapscout.config import Settings
+    p = tmp_path / "settings.json"
+    p.write_text(json.dumps({"settings_version": 5, "overlay": {"opacity": 0.6, "media_pos": "below"}, "hotkeys": {}}))
+    o = Settings(str(p))["overlay"]
+    assert (o["hud_opacity"], o["today_opacity"], o["media_opacity"]) == (0.6, 0.6, 0.6)
+    assert o["media_pos"] == "under_today"
