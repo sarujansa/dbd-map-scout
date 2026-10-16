@@ -33,7 +33,8 @@ STATS_SYS_GROUPS = [("map", N_("nach Map")), ("hour", N_("nach Uhrzeit")), ("wee
 SYS_PEAK_ROWS = {"gpu_temp_max": (N_("GPU-Temperatur"), " °C"), "gpu_hot_max": (N_("Hotspot"), " °C"),
                  "gpu_mem_max": (N_("GPU-Speicher"), " °C"), "cpu_temp_max": (N_("CPU-Temperatur"), " °C"),
                  "gpu_power_max": (N_("GPU-Leistung"), " W"), "vram_used_max": (N_("VRAM"), " GB"),
-                 "ram_used_max": (N_("RAM"), " GB"), "throttle_s": (N_("Gedrosselt"), "")}
+                 "ram_used_max": (N_("RAM"), " GB"), "throttle_s": (N_("GPU gedrosselt"), ""),
+                 "cpu_power_max": (N_("CPU-Leistung"), " W"), "cpu_throttle_s": (N_("CPU gedrosselt"), "")}
 
 
 def sys_tiles(avg) -> list:
@@ -42,14 +43,20 @@ def sys_tiles(avg) -> list:
     rounds = _("über {n} Runden", n=n)
     out = []
     for key, title, unit in (("gpu_temp", N_("Ø GPU-Temperatur"), " °C"), ("cpu_temp", N_("Ø CPU-Temperatur"), " °C"),
-                             ("gpu_load", N_("Ø GPU-Last"), " %"), ("gpu_power", N_("Ø GPU-Leistung"), " W")):
+                             ("gpu_load", N_("Ø GPU-Last"), " %"), ("gpu_power", N_("Ø GPU-Leistung"), " W"),
+                             ("core_max", N_("Ø stärkster CPU-Kern"), " %"), ("cpu_power", N_("Ø CPU-Leistung"), " W")):
         if key in avg:
             out.append(Tile(_(title), f"{avg[key]:.0f}{unit}", rounds,
-                            frac=avg[key] / 100 if key == "gpu_load" else None))
+                            frac=avg[key] / 100 if key in ("gpu_load", "core_max") else None))
     thr = avg["throttle_rounds"]
     out.append(Tile(_("GPU gedrosselt"), _("{n} von {total}", n=thr, total=n),
                     _("Runden, zusammen {time}", time=fmt_duration(avg["throttle_s"])) if thr else _("Runden"),
                     colour=DOT["warn"] if thr else None))
+    if avg.get("cpu_known"):                         # only rounds with HWiNFO know whether the CPU throttled
+        thr = avg["cpu_throttle_rounds"]
+        out.append(Tile(_("CPU gedrosselt"), _("{n} von {total}", n=thr, total=avg["cpu_known"]),
+                        _("Runden, zusammen {time}", time=fmt_duration(avg["cpu_throttle_s"])) if thr else _("Runden"),
+                        colour=DOT["warn"] if thr else None))
     return out
 
 
@@ -167,7 +174,9 @@ class StatsTab:
                                                 ("hot", _("Hotspot max"), 82, "e"),
                                                 ("cpu", _("CPU Ø °C"), 64, "e"), ("cpumax", _("CPU max"), 60, "e"),
                                                 ("load", _("GPU Ø Last"), 72, "e"), ("pwr", _("Ø Watt"), 56, "e"),
-                                                ("thr", _("Gedrosselt"), 74, "e")), 6)
+                                                ("thr", _("GPU gedr."), 70, "e"),
+                                                ("core", _("Kern Ø %"), 64, "e"), ("cpupwr", _("CPU Ø W"), 60, "e"),
+                                                ("cputhr", _("CPU gedr."), 70, "e")), 6)
         self.sys_trend = TrendChart(box_s, bool(self.settings.get("dark_mode", True)), panels=("temp",))
         ui.Label(box_s, text=_("Werte der Systemwerte-Anzeige (Tab Overlay) während der Runden – nur Runden, in denen "
                                 "sie eingeschaltet war. CPU-Temperatur nur mit HWiNFO. „Wann/Wo“ zeigt, auf welchen "
@@ -426,7 +435,7 @@ class StatsTab:
         t.delete(*t.get_children())
         for key, v, r in peaks:
             name, suffix = SYS_PEAK_ROWS[key]
-            value = fmt_duration(v) if key == "throttle_s" else (f"{v:.1f}" if "_used" in key else f"{v:.0f}") + suffix
+            value = fmt_duration(v) if key in history.SYS_SUMS else (f"{v:.1f}" if "_used" in key else f"{v:.0f}") + suffix
             t.insert("", "end", values=(_(name), value, time.strftime("%d.%m. %H:%M", time.localtime(r.t)), r.map))
         if peaks:
             self.stats_sys_peaks_box.pack(fill="x", pady=(8, 0), after=self.stats_sys_tiles)
@@ -438,6 +447,9 @@ class StatsTab:
 
         def num(vals, key, unit=""):
             return f"{vals[key]:.0f}{unit}" if key in vals else "–"
+
+        def secs(vals, key):
+            return fmt_duration(vals[key]) if vals.get(key) else ("0" if key in vals else "–")
         for key, n, vals in history.sys_by(rounds, by):
             if by == "weekday":
                 label = _(WEEKDAYS[key])
@@ -449,9 +461,9 @@ class StatsTab:
                 label = key
             t.insert("", "end", values=(label, n, num(vals, "gpu_temp"), num(vals, "gpu_temp_max"),
                                         num(vals, "gpu_hot_max"), num(vals, "cpu_temp"), num(vals, "cpu_temp_max"),
-                                        num(vals, "gpu_load", " %"), num(vals, "gpu_power"),
-                                        fmt_duration(vals["throttle_s"]) if vals.get("throttle_s") else
-                                        ("0" if "throttle_s" in vals else "–")))
+                                        num(vals, "gpu_load", " %"), num(vals, "gpu_power"), secs(vals, "throttle_s"),
+                                        num(vals, "core_max", " %"), num(vals, "cpu_power"),
+                                        secs(vals, "cpu_throttle_s")))
         self._sys_trend_render(rounds, unit)
 
     def _sys_trend_render(self, rounds, unit):

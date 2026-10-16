@@ -13,23 +13,31 @@ from dbdmapscout import layout, sysinfo  # noqa: E402
 from dbdmapscout.overlay_win32 import render_hud  # noqa: E402
 
 
-def _hwinfo(readings, poll=1000, sig=0x53695748):
-    """Shared memory as HWiNFO writes it: header, no sensor section, then the readings."""
-    r_off, r_size = sysinfo.HWINFO_HEADER.size, sysinfo.HWINFO_READING.size + 144   # newer versions: utf8 fields
-    head = sysinfo.HWINFO_HEADER.pack(sig, 2, 1, poll, r_off, 264, 0, r_off, r_size, len(readings))
+def _hwinfo(readings, poll=1000, sig=0x53695748, sensors=()):
+    """Shared memory as HWiNFO writes it: header, sensor section (names), then the readings. A reading is
+    (type, label, unit, value) or (type, label, unit, value, sensor index)."""
+    s_off, s_size = sysinfo.HWINFO_HEADER.size, 392                               # newer versions: utf8 name too
+    r_off, r_size = s_off + s_size * len(sensors), sysinfo.HWINFO_READING.size + 144   # newer versions: utf8 fields
+    head = sysinfo.HWINFO_HEADER.pack(sig, 2, 1, poll, s_off, s_size, len(sensors), r_off, r_size, len(readings))
     body = b""
-    for kind, label, unit, value in readings:
-        rec = sysinfo.HWINFO_READING.pack(kind, 0, 0, label.encode("cp1252"), b"", unit.encode("cp1252"),
-                                          value, 0, 0, 0)
+    for i, name in enumerate(sensors):
+        rec = sysinfo.HWINFO_SENSOR.pack(i, 0, name.encode("cp1252"))
+        body += rec + b"\0" * (s_size - len(rec))
+    for kind, label, unit, value, *sensor in readings:
+        rec = sysinfo.HWINFO_READING.pack(kind, sensor[0] if sensor else 0, 0, label.encode("cp1252"), b"",
+                                          unit.encode("cp1252"), value, 0, 0, 0)
         body += rec + b"\0" * (r_size - len(rec))
     return head + body
+
+
+NONE = {"cpu_power": None, "core_max": None, "cpu_throttle": ""}
 
 
 def test_hwinfo_picks_cpu_package_and_gpu_temperature():
     buf = _hwinfo([(1, "Core Max", "°C", 70.0), (7, "CPU Package", "%", 50.0), (1, "CPU Package", "°C", 63.5),
                    (1, "GPU Temperature", "°C", 71.0)])
     assert sysinfo.parse_hwinfo(buf, now=1001) == {"cpu_temp": 63.5, "gpu_temp": 71.0, "gpu_hot": None,
-                                                   "gpu_mem": None}
+                                                   "gpu_mem": None, **NONE}
 
 
 def test_hwinfo_amd_fahrenheit_stale_and_dead():
@@ -38,8 +46,45 @@ def test_hwinfo_amd_fahrenheit_stale_and_dead():
     assert sysinfo.parse_hwinfo(buf, now=1000 + sysinfo.HWINFO_STALE + 1) is None    # HWiNFO stopped polling
     assert sysinfo.parse_hwinfo(_hwinfo([], sig=struct.unpack("<I", b"DEAD")[0]), now=1000) is None
     assert sysinfo.parse_hwinfo(b"", now=1000) is None
-    assert sysinfo.parse_hwinfo(_hwinfo([(1, "Motherboard", "°C", 40.0)]), now=1000) == dict.fromkeys(
-        ("cpu_temp", "gpu_temp", "gpu_hot", "gpu_mem"))
+    assert sysinfo.parse_hwinfo(_hwinfo([(1, "Motherboard", "°C", 40.0)]), now=1000) == {**dict.fromkeys(
+        ("cpu_temp", "gpu_temp", "gpu_hot", "gpu_mem")), **NONE}
+
+
+def test_hwinfo_cpu_power_busiest_thread_and_throttling():
+    """1.2.1 (HWiNFO Pro, sharing stays on): CPU package power, the busiest thread and thermal throttling –
+    Yes/No readings only from the CPU's sensors, power limits are no warning."""
+    sensors = ("System: DESKTOP", "CPU [#0]: Intel Core i7-13700K", "CPU [#0]: Intel Core i7-13700K: DTS",
+               "GPU [#0]: NVIDIA GeForce RTX 4070")
+    rows = [(1, "CPU Package", "°C", 71.0, 2), (5, "CPU Package Power", "W", 118.4, 1),
+            (7, "Max CPU/Thread Usage", "%", 97.0, 0), (7, "Core 0 T0 Usage", "%", 60.0, 1),
+            (8, "Core Thermal Throttling", "", 0.0, 2), (8, "Package/Ring Power Limit Exceeded", "", 1.0, 2),
+            (8, "Performance Limit - Thermal", "", 1.0, 3), (5, "GPU Power", "W", 210.0, 3)]
+    hw = sysinfo.parse_hwinfo(_hwinfo(rows, sensors=sensors), now=1000)
+    assert (hw["cpu_temp"], hw["cpu_power"], hw["core_max"], hw["cpu_throttle"]) == (71.0, 118.4, 97.0, "")
+    rows[4] = (8, "Core Thermal Throttling", "", 1.0, 2)
+    assert sysinfo.parse_hwinfo(_hwinfo(rows, sensors=sensors), now=1000)["cpu_throttle"] == "thermal"
+    # AMD, no "Max CPU/Thread Usage": the busiest thread from the per-thread readings
+    amd = ("CPU [#0]: AMD Ryzen 7 7800X3D", "CPU [#0]: AMD Ryzen 7 7800X3D: Enhanced")
+    rows = [(7, "Core 0 T0 Usage", "%", 41.0, 0), (7, "Core 3 T1 Usage", "%", 88.5, 0), (7, "Total CPU Usage", "%", 30.0, 0),
+            (5, "CPU PPT", "W", 64.0, 1), (8, "Thermal Throttling (HTC)", "", 1.0, 1)]
+    hw = sysinfo.parse_hwinfo(_hwinfo(rows, sensors=amd), now=1000)
+    assert (hw["cpu_power"], hw["core_max"], hw["cpu_throttle"]) == (64.0, 88.5, "thermal")
+
+
+def test_cpu_throttling_shows_in_the_hud_and_counts_only_with_hwinfo():
+    from dbdmapscout.sysinfo import MIN_SAMPLES, Snapshot, SysRecorder
+    texts = ["".join(t for t, _ in r) for r in sysinfo.hud_rows(Snapshot(cpu_temp=95, cpu_throttle="thermal"))]
+    assert "CPU DROSSELT (TEMP.)" in texts
+    rec = SysRecorder()
+    for i in range(MIN_SAMPLES + 2):
+        rec.add(Snapshot(t=i + 1, gpu_temp=70, hwinfo=True, cpu_power=100 + i, core_max=90,
+                         cpu_throttle="thermal" if i < 3 else ""))
+    out = rec.summary()
+    assert out["cpu_throttle_s"] == 3.0 and out["core_max"] == 90 and out["cpu_power_max"] == 100 + MIN_SAMPLES + 1
+    rec = SysRecorder()                              # without HWiNFO nobody knows whether the CPU throttled
+    for i in range(MIN_SAMPLES + 2):
+        rec.add(Snapshot(t=i + 1, gpu_temp=70))
+    assert "cpu_throttle_s" not in rec.summary()
 
 
 def test_cpu_load_from_system_times():
@@ -191,3 +236,23 @@ def test_system_values_follow_the_map():
     app._hud_pending = "beside"                                          # narrow window: right of the map
     app._hud_follow_map((17, 1180, 281, 166), 0, 0, 1718, 1359, 16)
     assert shown[-1] == (17 + 281 + 24, 1180 + 23) and app.worker.hud_rect[1] == 1203
+
+
+def test_statistics_know_cpu_throttling_only_from_rounds_with_hwinfo():
+    from types import SimpleNamespace
+    from dbdmapscout import history
+    from dbdmapscout.app_stats import sys_tiles
+    rounds = [SimpleNamespace(t=1, map="Coal Tower", sys={"gpu_temp": 70, "core_max": 92, "cpu_power": 110,
+                                                          "cpu_power_max": 140, "cpu_throttle_s": 30.0}),
+              SimpleNamespace(t=2, map="Coal Tower", sys={"gpu_temp": 72, "core_max": 88, "cpu_power": 100,
+                                                          "cpu_throttle_s": 0.0}),
+              SimpleNamespace(t=3, map="Badham", sys={"gpu_temp": 65})]              # no HWiNFO in that round
+    avg = history.sys_average(rounds)
+    assert (avg["cpu_known"], avg["cpu_throttle_rounds"], avg["cpu_throttle_s"], avg["core_max"]) == (2, 1, 30.0, 90)
+    titles = {t.title: t.value for t in sys_tiles(avg)}
+    assert titles["CPU gedrosselt"] == "1 von 2" and titles["Ø stärkster CPU-Kern"] == "90 %"
+    by_map = {key: vals for key, _n, vals in history.sys_by(rounds, "map")}
+    assert by_map["Coal Tower"]["cpu_throttle_s"] == 30.0 and "cpu_throttle_s" not in by_map["Badham"]
+    peaks = {key: v for key, v, _r in history.sys_peaks(rounds)}
+    assert peaks["cpu_power_max"] == 140 and peaks["cpu_throttle_s"] == 30.0
+    assert "CPU gedrosselt" not in {t.title for t in sys_tiles(history.sys_average(rounds[2:]))}

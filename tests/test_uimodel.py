@@ -441,7 +441,7 @@ def test_undo_arrow_keys_and_a_layout_per_window_size(app_root, monkeypatch):
         app.toggle_edit()
 
         # one layout per DBD window size: the first size takes the layout in use
-        app.game = SimpleNamespace(width=3440, height=1440, minimized=False, rect=(0, 0, 3440, 1440))
+        app.game = SimpleNamespace(width=3440, height=1440, minimized=False, rect=(0, 0, 3440, 1440), monitor=None, hwnd=0)
         app._layout_size_tick()                               # a new size must settle first …
         clock[0] += app_layout.SIZE_SETTLE + 0.1
         app._layout_size_tick()
@@ -449,13 +449,13 @@ def test_undo_arrow_keys_and_a_layout_per_window_size(app_root, monkeypatch):
         app._set_size("map", 60)
         app._layout_size_tick()                               # changes go to that size
         assert app.settings["layouts"]["3440x1440"]["overlay"]["height"] == 0.6
-        app.game = SimpleNamespace(width=1920, height=1080, minimized=False, rect=(0, 0, 1920, 1080))
+        app.game = SimpleNamespace(width=1920, height=1080, minimized=False, rect=(0, 0, 1920, 1080), monitor=None, hwnd=0)
         app._layout_size_tick()
         clock[0] += app_layout.SIZE_SETTLE + 0.1
         app._layout_size_tick()                               # a new size: starts with the layout in use
         app._set_size("map", 30)
         app._layout_size_tick()
-        app.game = SimpleNamespace(width=3440, height=1440, minimized=False, rect=(0, 0, 3440, 1440))
+        app.game = SimpleNamespace(width=3440, height=1440, minimized=False, rect=(0, 0, 3440, 1440), monitor=None, hwnd=0)
         app._layout_size_tick()
         clock[0] += app_layout.SIZE_SETTLE + 0.1
         app._layout_size_tick()                               # back: its own layout again
