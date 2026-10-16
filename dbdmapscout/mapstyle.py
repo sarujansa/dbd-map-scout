@@ -303,9 +303,10 @@ def restyle_floors(frames):
     return out
 
 
-def styled_path(path: str, cache_dir: str) -> str:
+def styled_path(path: str, cache_dir: str, make: bool = True) -> str:
     """The dark version of a map picture (made once, kept in ``cache_dir``); the original when the picture is
-    cannot be read or is of another style (an animation: Midwich's kind only)."""
+    cannot be read or is of another style (an animation: Midwich's kind only). ``make=False``: only an existing
+    one (thumbnails of the maps page must not wait ~0.5 s per map), else the original."""
     if not path:
         return path
     try:
@@ -317,6 +318,8 @@ def styled_path(path: str, cache_dir: str) -> str:
     target = os.path.join(cache_dir, sub, name)
     if os.path.exists(target):
         return target
+    if not make:
+        return path
     try:
         with Image.open(path) as im:
             if getattr(im, "is_animated", False):
