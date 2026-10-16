@@ -60,6 +60,7 @@ DEFAULTS = {
         "media_remaining": True,        # … time left ("−1:46") right of the bar instead of the length
         "media_backdrop": True,         # … on a dark half-transparent area
         "media_fade": True,             # … fades in/out (also on a new song)
+        "fade": True,                   # map, system values and "today" fade in/out too (1.2.9)
         "text_scale": 1.0,              # name/timer/info lines of the map, independent of its size (1.65)
         "hud_scale": 1.0,               # size of the system values / "today" (60–200 %, 1.64.9)
         "show_today": True,             # block "today" (rounds, play time, kills/escaped, clock; 1.62)

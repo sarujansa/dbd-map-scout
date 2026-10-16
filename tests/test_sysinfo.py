@@ -215,10 +215,12 @@ def test_system_values_follow_the_map():
     from types import SimpleNamespace
     from dbdmapscout.app_sysinfo import SysInfo
     shown = []
-    hud = SimpleNamespace(size=(300, 120), show_at=lambda x, y: shown.append((x, y)), hide=lambda: shown.append(None))
+    hud = SimpleNamespace(size=(300, 120), show_at=lambda x, y: shown.append((x, y)), hide=lambda: shown.append(None),
+                          shown=True, set_fade=lambda f: None)
     app = SysInfo()
-    app.hud, app.overlay, app.worker = hud, SimpleNamespace(shown=True), SimpleNamespace(hud_rect=None)
-    app.settings = {"overlay": {"stack_gap": 8}}                           # the gap slider (1.2.8)
+    app.hud, app.overlay, app.worker = hud, SimpleNamespace(shown=True, editing=False), SimpleNamespace(hud_rect=None)
+    app.settings = {"overlay": {"stack_gap": 8, "fade": False}}            # the gap slider (1.2.8), no fading
+    app._fades = {}
     app._hud_pending = "above"
     app._hud_follow_map((47, 300, 346, 500), 0, 0, 3440, 1440, 17)       # map in the left bar, room above it
     assert shown[-1] == (70, 300 - 8 - 120) and app.worker.hud_rect == (70, 172, 300, 120)
@@ -292,3 +294,46 @@ def test_hud_rows_can_be_switched_off_one_by_one():
     texts = ["".join(t for t, _c in r) for r in sysinfo.hud_rows(s, off)]
     assert [t.split(" ")[0] for t in texts] == ["GPU", "GPU", "VRAM"]          # the warning stays
     assert sysinfo.hud_rows(s, {k: False for k in sysinfo.HUD_ROW_KEYS}) == [[("GPU DROSSELT (TEMP.)", sysinfo.HOT)]]
+
+
+def test_every_window_fades_in_and_out_through_one_helper(monkeypatch):
+    """1.2.9 (user's pick 25): map, system values and "today" fade like the music card – one helper per window,
+    hidden only at the end of a fade-out, no fading when switched off."""
+    from types import SimpleNamespace
+    from dbdmapscout import app_sysinfo
+    from dbdmapscout.app_sysinfo import SysInfo
+    clock = [100.0]
+    monkeypatch.setattr(app_sysinfo.time, "monotonic", lambda: clock[0])
+    jobs = []
+
+    class Win:
+        def __init__(self):
+            self.shown, self.fade, self.hidden = True, 1.0, 0
+
+        def set_fade(self, f):
+            self.fade = f
+
+        def hide(self):
+            self.shown, self.hidden = False, self.hidden + 1
+
+    app = SysInfo()
+    app._fades = {}
+    app.root = SimpleNamespace(after=lambda ms, fn: jobs.append(fn) or len(jobs), after_cancel=lambda j: None)
+    app.overlay = app.hud = app.today_win = app.media_win = Win()
+    win = app.overlay
+    app._fade_hide("map", True)                               # shown → fades out, still shown now
+    assert win.shown and 0 < win.fade <= 1 and jobs
+    clock[0] += 1.0
+    jobs.pop(0)()                                             # the timer tick: at the end hidden, fade reset
+    assert win.hidden == 1 and not win.shown and win.fade == 1.0
+    app._fade_show("map", True)                               # appears: from nothing
+    assert win.fade == 0.0
+    clock[0] += 1.0
+    jobs.pop(0)()
+    assert win.fade == 1.0 and win.hidden == 1
+    app._fade_hide("map", False)                              # fading off: hidden at once
+    assert win.hidden == 2 and win.fade == 1.0
+    win.shown = True
+    app._fade_hide("map", True)
+    app._fade_show("map", True)                               # caught while fading out: back from where it is
+    assert app._fades["map"][0].target == 1 and win.shown

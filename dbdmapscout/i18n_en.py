@@ -1142,6 +1142,21 @@ EN = {
         'avg. kills or escaped from the stats page and the time of day. Position below, size through the size '
         'slider (pick "Today").',
     'Dunkle Fläche hinter „Heute“': 'Dark area behind "Today"',
+    'Vorlage': 'Preset',
+    'Vorlage anwenden': 'Apply preset',
+    'Alles links': 'Everything left',
+    'Alles rechts': 'Everything right',
+    'Verteilt: Karte links, Werte rechts': 'Spread: map left, values right',
+    'Vorlage „{name}“ angewendet.': 'Preset "{name}" applied.',
+    'Setzt Karte, Systemwerte, „Heute“ und Musik auf einmal auf die gewählte Anordnung. „Rückgängig“ holt '
+    'die vorherige zurück.':
+        'Puts map, system values, "Today" and music into the chosen arrangement at once. "Undo" brings the '
+        'previous one back.',
+    'Weich ein- und ausblenden (Karte, Systemwerte, Heute)': 'Fade in and out smoothly (map, system values, Today)',
+    'Karte, Systemwerte und „Heute“ blenden in einer Drittelsekunde ein und aus, statt hart zu erscheinen. '
+    'Die Musik hat ihr eigenes Häkchen.':
+        'Map, system values and "Today" fade in and out within a third of a second instead of popping up. '
+        'The music has a tick box of its own.',
     'Unter „Heute“': 'Below "Today"',
     'Unter der Musik': 'Below the music',
     'Eine halb durchsichtige dunkle Fläche mit runden Ecken hinter „Heute“.':
