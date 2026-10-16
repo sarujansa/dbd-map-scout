@@ -185,7 +185,7 @@ def ui_act(w, value=None):
         if not w.instate(["disabled"]) and w.get() != str(value):
             w.delete(0, "end")
             w.insert(0, str(value))
-    elif isinstance(w, (ui.Preview, ui.Swatches)):
+    elif isinstance(w, (ui.Preview, ui.Swatches, ui.Dashboard)):
         if w.command is not None:
             w.command(value)
     elif isinstance(w, ui.Scale):
