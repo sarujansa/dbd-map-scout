@@ -385,6 +385,19 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self._reg("ov.media_progress", ui.Checkbutton(sysf, text=_("Fortschritt des Lieds zeigen (Zeit und Balken)"),
                                                       variable=self.media_progress_var,
                                                       command=self._today_flag_changed)).pack(anchor="w", pady=(2, 0))
+        self.media_look_vars = {}
+
+        def look_check(key, text):                     # 1.2.4: the music card's look
+            var = self.media_look_vars[key] = ui.BooleanVar(value=o.get(key, True))
+            return ui.Checkbutton(sysf, text=text, variable=var, command=self._today_flag_changed)
+        self._reg("ov.media_accent", look_check("media_accent", _("Balken in der Farbe des Covers"))
+                  ).pack(anchor="w", pady=(2, 0))
+        self._reg("ov.media_remaining", look_check("media_remaining", _("Restzeit statt Länge (−1:46)"))
+                  ).pack(anchor="w", pady=(2, 0))
+        self._reg("ov.media_backdrop", look_check("media_backdrop", _("Dunkle Fläche hinter der Musikkarte"))
+                  ).pack(anchor="w", pady=(2, 0))
+        self._reg("ov.media_fade", look_check("media_fade", _("Weich ein- und ausblenden (auch beim nächsten Lied)"))
+                  ).pack(anchor="w", pady=(2, 0))
         return outer
 
     def _today_flag_changed(self):
@@ -392,6 +405,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self.settings["overlay"]["show_media"] = bool(self.media_var.get())
         self.settings["overlay"]["media_cover"] = bool(self.media_cover_var.get())
         self.settings["overlay"]["media_progress"] = bool(self.media_progress_var.get())
+        for key, var in self.media_look_vars.items():
+            self.settings["overlay"][key] = bool(var.get())
         self._save_soon()
         self._tick_overlay(reschedule=False)
 

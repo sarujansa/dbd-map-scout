@@ -398,9 +398,11 @@ def render_hud(rows, height: int) -> Image.Image:
     return pic
 
 
-def progress_strip(width: int, elapsed: float, total: float, height: int) -> Image.Image:
+def progress_strip(width: int, elapsed: float, total: float, height: int, accent=None,
+                   remaining: bool = False) -> Image.Image:
     """The song's progress (1.64.7, user's screenshot of Spotify): "1:10 ──────── 2:56" – times grey, the bar
-    white on a faint track, with the soft dark edge of the other text. ``height``: game height."""
+    white on a faint track, with the soft dark edge of the other text. ``height``: game height. 1.2.4: ``accent``
+    = colour of the bar (from the cover), ``remaining`` = time left on the right ("−1:46") instead of the length."""
     from .media import clock
     size = max(11, height // 75)
     try:
@@ -410,7 +412,7 @@ def progress_strip(width: int, elapsed: float, total: float, height: int) -> Ima
     blur = max(2, height // 300)
     pad = 3 * blur
     halo = max(1, height // 400)
-    left, right = clock(elapsed), clock(total)
+    left, right = clock(elapsed), ("\u2212" + clock(total - elapsed) if remaining else clock(total))
     d0 = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
     lw, rw = d0.textlength(left, font=font), d0.textlength(right, font=font)
     asc, desc = font.getmetrics()
@@ -435,8 +437,21 @@ def progress_strip(width: int, elapsed: float, total: float, height: int) -> Ima
     d.rounded_rectangle((x0, cy - bar / 2, x1, cy + bar / 2), radius=bar, fill=(255, 255, 255, 70))
     if frac > 0:
         d.rounded_rectangle((x0, cy - bar / 2, x0 + (x1 - x0) * frac, cy + bar / 2), radius=bar,
-                            fill=(255, 255, 255, 235))
+                            fill=tuple(accent[:3]) + (235,) if accent else (255, 255, 255, 235))
     return pic
+
+
+CARD_BACKDROP = (14, 14, 18, 165)    # the music card's own dark area (1.2.4): readable over a bright game picture
+
+
+def backdrop(pic: Image.Image, height: int) -> Image.Image:
+    """``pic`` on a dark half-transparent area with rounded corners (1.2.4, user's pick: "Hintergrund-Kachel")."""
+    pad = max(4, height // 160)
+    out = Image.new("RGBA", (pic.width + 2 * pad, pic.height + 2 * pad), (0, 0, 0, 0))
+    ImageDraw.Draw(out).rounded_rectangle((0, 0, out.width - 1, out.height - 1), radius=max(6, height // 90),
+                                          fill=CARD_BACKDROP)
+    out.alpha_composite(pic, (pad, pad))
+    return out
 
 
 def _below(pic: Image.Image, strip: Image.Image, centred: bool) -> Image.Image:
@@ -514,15 +529,26 @@ def render_music_compact(rows, cover, height: int) -> Image.Image:
     return pic
 
 
-def render_music(rows, cover, height: int, style: str = "big", progress=None) -> Image.Image:
+def render_music(rows, cover, height: int, style: str = "big", progress=None, look=()) -> Image.Image:
     """"Läuft gerade": style "big" (1.64.7, user's choice "A") = the cover big on top, below it the title (a bit
     larger) and the artist, centred; "compact" = the card of 1.64 (cover left). Text like the system values, the
-    cover slightly rounded with the same soft shadow."""
+    cover slightly rounded with the same soft shadow. ``look`` (1.2.4): "accent" = bar in the cover's colour,
+    "remaining" = time left, "backdrop" = on a dark area."""
+    pic = _render_music(rows, cover, height, style, progress, look)
+    return backdrop(pic, height) if "backdrop" in look else pic
+
+
+def _render_music(rows, cover, height, style, progress, look):
+    accent = None
+    if progress and "accent" in look:
+        from .media import accent as cover_accent
+        accent = cover_accent(cover)
+    strip = (lambda w: progress_strip(w, *progress, height, accent, "remaining" in look)) if progress else None
     if style == "compact":
         pic = render_music_compact(rows, cover, height)
-        if progress:
+        if strip:
             pad = 3 * max(2, height // 300)
-            pic = _below(pic, progress_strip(pic.width - 2 * pad, *progress, height), False)
+            pic = _below(pic, strip(pic.width - 2 * pad), False)
         return pic
     blur = max(2, height // 300)
     pad = 3 * blur
@@ -548,8 +574,8 @@ def render_music(rows, cover, height: int, style: str = "big", progress=None) ->
     for im in lines:
         pic.alpha_composite(im, ((w - im.width) // 2, y))
         y += im.height - pad
-    if progress:
-        pic = _below(pic, progress_strip(max(side, text_w - 2 * pad), *progress, height), True)
+    if strip:
+        pic = _below(pic, strip(max(side, text_w - 2 * pad)), True)
     return pic
 
 
@@ -590,6 +616,7 @@ class HudWindow:
         self.last_error = ""
         self.editing = False
         self.edit_label = ""                   # name on the edit frame ("SYSTEMWERTE", "MUSIK")
+        self.fade = 1.0                        # share of the opacity while fading in/out (music card, 1.2.4)
         self.on_moved = None
         self._proc = WNDPROC(self._wndproc)                    # keep a reference!
         self._old_proc = _SetLong(self._hwnd, GWLP_WNDPROC, ctypes.cast(self._proc, ctypes.c_void_p).value)
@@ -629,18 +656,19 @@ class HudWindow:
             self._pos = None
         return self.size
 
-    def render(self, rows, height: int, cover=None, style=None, progress=None):
-        """Prepare the picture; returns its size (0, 0 without rows). ``cover``/``style``/``progress``: the music
-        card (progress = (elapsed, total) seconds; redrawn once a second while a song plays)."""
+    def render(self, rows, height: int, cover=None, style=None, progress=None, look=()):
+        """Prepare the picture; returns its size (0, 0 without rows). ``cover``/``style``/``progress``/``look``: the
+        music card (progress = (elapsed, total) seconds; redrawn once a second while a song plays)."""
         progress = (int(progress[0]), int(progress[1])) if progress else None
-        key = (tuple(tuple(r) for r in rows), int(height), self.editing, id(cover), style, progress)
+        look = tuple(sorted(look))
+        key = (tuple(tuple(r) for r in rows), int(height), self.editing, id(cover), style, progress, look)
         if key != self._key:
             self._key = key
             if not rows:
                 self._data, self.size = None, (0, 0)
             else:
                 pic = render_hud(rows, height) if style is None else render_music(rows, cover, height, style,
-                                                                                  progress)
+                                                                                  progress, look)
                 if self.editing:
                     pic = add_border(pic, self.edit_label)
                 self._data, self.size = premultiplied_bgra(pic), pic.size
@@ -654,7 +682,8 @@ class HudWindow:
         pos = (int(x), int(y), round(self.opacity, 3))
         if pos != self._pos:
             self._pos = pos
-            err = push_layered(self._hwnd, self._data, self.size[0], self.size[1], pos[:2], self.opacity)
+            err = push_layered(self._hwnd, self._data, self.size[0], self.size[1], pos[:2],
+                               self.opacity * self.fade)
             if err:
                 self.last_error = err
         flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
@@ -671,6 +700,18 @@ class HudWindow:
         if self._shown:
             _u.ShowWindow(self._hwnd, SW_HIDE)
             self._shown = False
+
+    def set_fade(self, fade: float):
+        """Opacity share 0…1 while fading (1.2.4); pushed again at once when shown."""
+        fade = min(1.0, max(0.0, fade))
+        if fade == self.fade:
+            return
+        self.fade = fade
+        if self._shown and self._data and self._pos:
+            err = push_layered(self._hwnd, self._data, self.size[0], self.size[1], self._pos[:2],
+                               self.opacity * fade)
+            if err:
+                self.last_error = err
 
     @property
     def shown(self):

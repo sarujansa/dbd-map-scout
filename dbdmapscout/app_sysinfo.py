@@ -88,6 +88,9 @@ class SysInfo:
             self.media_win.on_moved = lambda x, y: self.events.put(("call", self._media_dragged, (x, y)))
             self.media_win.edit_label = _("MUSIK")
         self._media_ctx = None             # (gx, gy, gw, gh, show) of the last placement
+        self._media_fader = media.Fader()  # 1.2.4: the music card fades in/out
+        self._media_fade_job = None
+        self._media_song = None            # (title, artist) on the card – a new song fades in
         self._hud_reserved = None          # (side, height) taken at the top of a bar, for the map below
         self._hud_pending = ""             # "above"/"beside": rendered, placed once the map's place is known
         self._sysrec = None                # readings of the open round (tab Statistik → System)
@@ -222,9 +225,15 @@ class SysInfo:
         spot = o.get("media_pos", "below")
         gx, gy, gw, gh, show = ctx or (0, 0, 0, 0, False)
         bar = layout.bar_width(gw, gh) if gh else 0
+        fade = bool(o.get("media_fade", True)) and not editing
         if not (ctx and rows and (show or editing) and (self.game is not None or editing)
                 and (bar >= layout.MIN_BAR or spot == "custom" or editing)):
-            win.hide()
+            if fade and win.shown:
+                if self._media_fader.target != 0:
+                    self._media_fade(0)                     # hidden at the end of the fade
+            else:
+                win.hide()
+            self._media_song = None
             self.worker.media_rect = None
             return
         margin = int(gh * o["margin"])
@@ -234,17 +243,54 @@ class SysInfo:
         height = int(gh * max(MEDIA_SCALE[0], min(MEDIA_SCALE[1], o.get("media_scale", 1.0) * 100)) / 100)
         prog = media.progress(now, time.time()) if o.get("media_progress", True) and media.playing(now, time.time()) \
             else None
-        w, h = win.render(rows, height, cover, o.get("media_style", "big"), prog)
+        look = media.look(o)
+        w, h = win.render(rows, height, cover, o.get("media_style", "big"), prog, look)
         avail = layout.max_width(bar, margin) if bar >= layout.MIN_BAR and spot != "custom" else gw / 3
         if w > avail:                                       # never wider than the black bar
-            w, h = win.render(rows, max(200, int(height * avail / w)), cover, o.get("media_style", "big"), prog)
+            w, h = win.render(rows, max(200, int(height * avail / w)), cover, o.get("media_style", "big"), prog,
+                              look)
         hud = self.worker.hud_rect if self.hud is not None and self.hud.shown else None
         box = getattr(self, "_hud_box", None)
         if hud and box and box[:2] == hud[:2]:
             hud = box                                       # by its widest width: no wobble when values change
         x, y = layout.media_xy(spot, (gx, gy, gw, gh), (w, h), margin, hud, o.get("media_xy"))
+        song = (now.title, now.artist)
+        if not fade:
+            self._media_fade_stop()
+        elif not win.shown or song != self._media_song:
+            self._media_fade(1, start=0.0)                  # appears / a new song: from nothing
+        elif self._media_fader.target != 1:
+            self._media_fade(1)                             # back while fading out: from where it is
+        self._media_song = song
         win.show_at(int(x), int(y))
         self.worker.media_rect = (int(x), int(y), w, h)
+
+    def _media_fade(self, target, start=None):
+        f = self._media_fader
+        f.go(target, time.monotonic(), start)
+        self.media_win.set_fade(f.value)
+        if self._media_fade_job is None:
+            self._media_fade_job = self.root.after(f.STEP_MS, self._media_fade_tick)
+
+    def _media_fade_tick(self):
+        self._media_fade_job = None
+        f, win = self._media_fader, self.media_win
+        if win is None:
+            return
+        done = f.step(time.monotonic())
+        win.set_fade(f.value)
+        if not done:
+            self._media_fade_job = self.root.after(f.STEP_MS, self._media_fade_tick)
+        elif f.target == 0:
+            win.hide()
+            win.set_fade(1.0)
+
+    def _media_fade_stop(self):
+        if self._media_fade_job is not None:
+            self.root.after_cancel(self._media_fade_job)
+            self._media_fade_job = None
+        self._media_fader.go(1, time.monotonic(), 1.0)
+        self.media_win.set_fade(1.0)
 
     def _guides_place(self):
         """Centre cross over the DBD window while moving (1.64.5): two thin click-through windows, hidden
