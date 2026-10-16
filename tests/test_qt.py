@@ -56,6 +56,9 @@ def test_overview_without_a_map():
     assert o.actions["confirm"] is None and o.actions["layout"] is None
     assert [f.title for f in o.facts] == ["Rundenzeit", "Server", "Ping", "Rolle"]
     assert o.today[0].value == "0" and o.rounds == []
+    # 1.2.15: dead ends get a button – "Server aus" leads to the server tab, no stats data ever to the setup
+    assert (o.facts[1].action, o.facts[1].action_label) == ("server_page", "Server-Tab öffnen")
+    assert o.today[1].action == "official_setup" and o.today[2].action == ""
     assert "aus" in o.system_note                                   # system values switched off
 
 
@@ -735,7 +738,10 @@ def test_setup_assistant_goes_through_its_steps(qapp, keep):
     assert s.pages[0].controls["det.lang.en"][1].isChecked()
     s.next.click()
     s.next.click()
-    assert s.steps.currentIndex() == 2 and s.next.text() == "Fertig"
+    assert s.steps.currentIndex() == 2 and s.next.text() == "Weiter"
+    s.next.click()                                            # 1.2.15: step 4 "Match-Daten" (stats page link)
+    assert s.steps.currentIndex() == 3 and s.next.text() == "Fertig"
+    assert qt_window.page_keys("setup") >= {"setup.script", "setup.open_site", "setup.off_notify"}
     s.next.click()
     s.skip.click()
     assert [posted.get_nowait()[0] for _i in range(2)] == ["setup_done", "setup_done"]
@@ -1066,3 +1072,37 @@ def test_preview_snaps_while_dragging_and_moves_by_arrow_keys(qapp, keep):
     view.show_state({"data": dict(data, editing=False), "visible": True})
     QTest.keyClick(view, Qt.Key_Left)
     assert posted.empty()                                     # not moving: arrow keys do nothing
+
+
+def test_fact_box_shows_its_action_button(qapp, keep):
+    """1.2.15: a fact with an action gets a small button that posts the action; without one it is hidden."""
+    from dbdmapscout import overview, qt_window
+    posted = []
+    box = keep(qt_window.FactBox(bar=True, post=posted.append))
+    box.show_fact(overview.Fact("Server", "–", "aus", action="server_page", action_label="Server-Tab öffnen"))
+    assert not box.link.isHidden() and box.link.text() == "Server-Tab öffnen" and box.link.toolTip()
+    box.link.click()
+    assert posted == ["server_page"]
+    box.show_fact(overview.Fact("Server", "Frankfurt"))
+    assert box.link.isHidden()
+    plain = keep(qt_window.FactBox())                          # dashboard tiles: no post, never a button
+    plain.show_fact(overview.Fact("x", action="server_page", action_label="y"))
+    assert plain.link.isHidden()
+
+
+def test_reveal_opens_the_page_and_lights_the_card(qapp, keep):
+    """1.2.15: MainWindow.reveal(page, key) – the overview's "Match-Daten einrichten" lands on the card."""
+    from dbdmapscout import qt_window
+    win = keep(qt_window.MainWindow(lambda a, arg=None: None))
+    win.show()
+    win.reveal("settings", "st.more.official")
+    assert win.current_key() == "settings"
+    for _i in range(5):
+        qapp.processEvents()
+        time.sleep(0.03)
+    head = win.forms["settings"].controls["st.more.official"][1]
+    card = head.parentWidget()
+    while card is not None and card.property("class") != "card":
+        card = card.parentWidget()
+    assert card is not None and card.property("found") is True
+    win.reveal("settings", "no.such.key")                     # unknown key: nothing happens
