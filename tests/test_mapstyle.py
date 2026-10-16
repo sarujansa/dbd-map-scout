@@ -48,8 +48,10 @@ def test_pictures_of_another_style_and_animations_stay(tmp_path):
         assert mapstyle.restyle(src) is src
         path = os.path.join(MAPS, rel)
         assert mapstyle.styled_path(path, str(tmp_path)) == path
-    gif = os.path.join(MAPS, "Other", "Midwich.gif")
-    assert mapstyle.styled_path(gif, str(tmp_path)) == gif
+    plain = tmp_path / "plain.gif"                       # an animation of another kind: as it is
+    frames = [Image.new("RGB", (40, 40), (200, 30 * i, 0)) for i in range(3)]
+    frames[0].save(plain, save_all=True, append_images=frames[1:], duration=100)
+    assert mapstyle.styled_path(str(plain), str(tmp_path / "cache")) == str(plain)
     assert mapstyle.styled_path(str(tmp_path / "missing.png"), str(tmp_path)) == str(tmp_path / "missing.png")
     assert not any(tmp_path.rglob("*.webp"))
 
@@ -61,7 +63,7 @@ def test_the_dark_picture_is_made_once_and_then_taken_from_the_cache(tmp_path):
     stamp = os.stat(first).st_mtime_ns
     assert mapstyle.styled_path(path, str(tmp_path)) == first and os.stat(first).st_mtime_ns == stamp
     assert not list(tmp_path.rglob("*.tmp"))
-    assert mapstyle.warm([path, os.path.join(MAPS, "Other", "Midwich.gif")], str(tmp_path)) == 1
+    assert mapstyle.warm([path, os.path.join(MAPS, "Other", "Midwich.gif")], str(tmp_path)) == 2
 
 
 def test_app_takes_the_dark_picture_only_when_chosen_and_never_for_own_pictures(tmp_path):
@@ -95,7 +97,7 @@ def test_every_map_stays_the_same_picture(dark_maps):
     supplied map – same size and name on top, nothing outside the map changed, no lilac left, clearly white text as
     white as before, and the dark picture laid over the lilac floor again = the original wherever no black backing
     was added (only the rounding of soft edges differs). Box colours never on what was floor."""
-    other = {"Midwich.gif", "Trickster's Delusion.webp", "Fallen Refuge.webp", "Freddy Fazbears Pizza.webp"}
+    other = {"Trickster's Delusion.webp", "Fallen Refuge.webp", "Freddy Fazbears Pizza.webp"}
     fill = mapstyle.FILL.astype(float)
     styled = 0
     for path, out in dark_maps.items():
@@ -104,6 +106,8 @@ def test_every_map_stays_the_same_picture(dark_maps):
             assert out == path, name
             continue
         assert out != path, name + ": not converted"
+        if name == "Midwich.gif":
+            continue                                       # its own kind: test_midwich_keeps_its_floors
         styled += 1
         oi, di = Image.open(path).convert("RGBA"), Image.open(out).convert("RGBA")
         assert oi.size == di.size, name
@@ -132,9 +136,9 @@ def test_every_map_stays_the_same_picture(dark_maps):
 
 def test_the_boxes_get_their_colours_on_every_map(dark_maps):
     """M dark red / S olive where the map has them; WT/H/P boxes grey, never red or olive (Hawkins, Léry's: none)."""
-    no_m = {"Wreckers.webp", "Rotten Fields.webp", "Dead Sands.webp", "Hawkins.webp", "Lerys.webp", "THE GAME.webp",
+    no_m = {"Midwich.gif", "Wreckers.webp", "Rotten Fields.webp", "Dead Sands.webp", "Hawkins.webp", "Lerys.webp", "THE GAME.webp",
             "Rpd East Wing.webp", "Rpd West Wing.webp"}
-    no_s = {"Nostromo Wreckage.webp", "Haddonfield.webp", "Hawkins.webp", "Lerys.webp", "THE GAME.webp",
+    no_s = {"Midwich.gif", "Nostromo Wreckage.webp", "Haddonfield.webp", "Hawkins.webp", "Lerys.webp", "THE GAME.webp",
             "Rpd East Wing.webp", "Rpd West Wing.webp"}
     for path, out in dark_maps.items():
         if out == path:
@@ -143,3 +147,47 @@ def test_the_boxes_get_their_colours_on_every_map(dark_maps):
         d = np.asarray(Image.open(out).convert("RGBA"))
         assert (_near(d, mapstyle.M_COLOUR).sum() > 3000) == (name not in no_m), name + ": M box"
         assert (_near(d, mapstyle.S_COLOUR).sum() > 3000) == (name not in no_s), name + ": S box"
+
+
+def test_midwich_keeps_its_floors(dark_maps):
+    """1.66.2 (user: "Midwich kann ebenfalls geändert werden"): both floors converted, the same timing (floors
+    7 s, fading frames between), the name on top like on every map (stays upright when turned), the holes of the
+    top floor dark grey, nothing of the patterned background left, the digits as many and as white as before."""
+    import cv2
+    from dbdmapscout.mapimage import floor_frames, title_split
+    from dbdmapscout.overlay import load_frames
+    src = os.path.join(MAPS, "Other", "Midwich.gif")
+    out = dark_maps[src]
+    assert out != src and out.endswith(".webp")
+    orig, dark = load_frames(src), load_frames(out)
+    assert [d for _f, d in dark] == [d for _f, d in orig] and floor_frames(dark) == floor_frames(orig) == [0, 3]
+    hole_px = []
+    for i in (0, 3):
+        pic = np.asarray(dark[i][0]).astype(int)
+        split = title_split(dark[i][0])
+        assert split, "the name on top"
+        body = pic[split[2]:]
+        for colour in ((45, 49, 84), (64, 68, 98), (102, 102, 153)):     # background, its "+", the floor
+            assert _near(body, colour).sum() < 200, (i, colour)
+        hole_px.append(int(_near(body, mapstyle.HOLE, 10).sum()))
+        assert _near(body, mapstyle.BOX_GREY).sum() > (3000 if i == 0 else -1)          # CT box (bottom only)
+
+        def digits(a):
+            white = ((a[..., :3].min(axis=2) > 230) & (a[..., 3] > 200)).astype(np.uint8)
+            n, _l, st, _c = cv2.connectedComponentsWithStats(white)
+            return sum(1 for j in range(1, n)                # the white frame round the old map is no digit
+                       if st[j, 4] > 0.001 * white.size and st[j, 2] < 0.5 * white.shape[1])
+        o = np.asarray(orig[i][0].convert("RGBA")).astype(int)
+        frame_top = int(np.flatnonzero((o[..., :3].min(axis=2) > 230).sum(axis=1) > 0.75 * o.shape[1])[0])
+        assert digits(body) == digits(o[frame_top + 20:]), i       # every digit there (below the old name)
+    assert hole_px[0] < 2000 and hole_px[1] > 100_000     # holes only on the top floor (bottom: a few soft edges)
+
+
+def test_frame_durations_of_an_animated_webp_are_read_right(tmp_path):
+    """An animated WebP knows a frame's duration only once the frame is loaded – read before, it was the one of
+    the frame before (Midwich's floors would have been the fading frames)."""
+    from dbdmapscout.overlay import load_frames
+    path = tmp_path / "anim.webp"
+    frames = [Image.new("RGBA", (20, 20), (i * 60, 0, 0, 255)) for i in range(3)]
+    frames[0].save(path, "WEBP", lossless=True, save_all=True, append_images=frames[1:], duration=[7000, 100, 200])
+    assert [d for _f, d in load_frames(str(path))] == [7000, 100, 200]
