@@ -116,7 +116,7 @@ class SettingsTab:
                   ).pack(anchor="w", pady=(4, 0))
         zr = ui.Frame(look)
         zr.pack(fill="x", pady=(6, 0))
-        self._reg("st.zoom.label", ui.Label(zr, text=_("Schriftgröße"))).pack(side="left")
+        self._reg("st.zoom.label", ui.Label(zr, text=_("Schriftgrösse"))).pack(side="left")
         self._zooms = [(z, f"{z:.0%}") for z in qt_theme.ZOOMS]
         zoom = float(self.settings.get("ui_zoom", 1.0))
         self.zoom_var = ui.StringVar(value=dict(self._zooms).get(zoom, "100%"))
@@ -210,6 +210,8 @@ class SettingsTab:
                                                command=self._import_settings)).pack(side="left", padx=6)
         self._reg("st.more.clear_hist", ui.Button(bk, text=_("Verlauf löschen"),      # 1.2.16: moved from the
                                                    command=self._stats_clear)).pack(side="right")   # statistics
+        self._reg("st.more.reset_all", ui.Button(bk, text=_("Alle Einstellungen zurücksetzen"),   # 1.2.19
+                                                  command=self._reset_all_settings)).pack(side="right", padx=(0, 6))
 
         folders = self._reg("st.more.folders", ui.LabelFrame(more, text=_("Ordner"), padding=8))
         folders.pack(fill="x", pady=(8, 0))
@@ -249,6 +251,27 @@ class SettingsTab:
             self._log(_("Export fehlgeschlagen: {error}", error=e), "Fehler")
             return
         self._log(_("Einstellungen gesichert: {path}", path=path), "System")
+
+    def _reset_all_settings(self):
+        """1.2.19: back to the defaults (PC-specific values stay), then a restart like after an import."""
+        if not self._ask(_("Alle Einstellungen zurücksetzen"),
+                         _("Alle Einstellungen auf die Auslieferung zurücksetzen? Runden, Match-Daten und eigene "
+                           "Bilder bleiben. Das Programm startet danach neu."), self._reset_all_settings):
+            return
+        from .config import reset_data
+        self.settings.data = reset_data(self.settings.data)
+        self.settings.save()
+        self.settings.frozen = True
+        self._log(_("Alle Einstellungen zurückgesetzt."), "System")
+        from . import restart
+        try:
+            ok = restart.spawn_helper(self.root_dir)
+        except OSError:
+            ok = False
+        if ok:
+            self.quit()
+        else:
+            self._inform(_("Alle Einstellungen zurücksetzen"), _("Bitte das Programm jetzt neu starten."))
 
     def _import_settings(self, path=None):
         if path is None:
