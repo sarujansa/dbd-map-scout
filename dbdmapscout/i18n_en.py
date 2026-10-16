@@ -1152,6 +1152,14 @@ EN = {
     'Größe Musik': 'Music size',
     'Albumcover zeigen': 'Show the album cover',
     'Balken in der Farbe des Covers': "Bar in the cover's colour",
+    'Dunkle Fläche hinter Karte und Infos': 'Dark area behind the map and its lines',
+    'Dunkle Fläche hinter den Systemwerten': 'Dark area behind the system values',
+    'Eine halb durchsichtige dunkle Fläche mit runden Ecken hinter Karte, Timer und Infozeilen (auch hinter '
+    '„Warte auf Map“) – gut lesbar über hellen Stellen im Spiel.':
+        'A half-transparent dark area with rounded corners behind map, timer and info lines (also behind '
+        '"Waiting for map") – easy to read over bright parts of the game.',
+    'Eine halb durchsichtige dunkle Fläche mit runden Ecken hinter Systemwerten und „Heute“.':
+        'A half-transparent dark area with rounded corners behind the system values and "Today".',
     'Restzeit statt Länge (−1:46)': 'Time left instead of length (−1:46)',
     'Dunkle Fläche hinter der Musikkarte': 'Dark area behind the music card',
     'Weich ein- und ausblenden (auch beim nächsten Lied)': 'Fade in and out smoothly (also on the next song)',

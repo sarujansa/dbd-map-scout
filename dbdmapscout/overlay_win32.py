@@ -444,14 +444,28 @@ def progress_strip(width: int, elapsed: float, total: float, height: int, accent
 CARD_BACKDROP = (14, 14, 18, 165)    # the music card's own dark area (1.2.4): readable over a bright game picture
 
 
-def backdrop(pic: Image.Image, height: int) -> Image.Image:
-    """``pic`` on a dark half-transparent area with rounded corners (1.2.4, user's pick: "Hintergrund-Kachel")."""
-    pad = max(4, height // 160)
+def backdrop(pic: Image.Image, height: int, pad: int = 0, radius: int = 0) -> Image.Image:
+    """``pic`` on a dark half-transparent area with rounded corners (1.2.4, user's pick: "Hintergrund-Kachel";
+    since 1.2.4 also behind the map and the system values, user: "Hintergrund dahinter, für jedes UI-Element").
+    ``height``: game height (sets padding and corners unless given)."""
+    pad = pad or max(4, height // 160)
     out = Image.new("RGBA", (pic.width + 2 * pad, pic.height + 2 * pad), (0, 0, 0, 0))
-    ImageDraw.Draw(out).rounded_rectangle((0, 0, out.width - 1, out.height - 1), radius=max(6, height // 90),
-                                          fill=CARD_BACKDROP)
+    ImageDraw.Draw(out).rounded_rectangle((0, 0, out.width - 1, out.height - 1),
+                                          radius=radius or max(6, height // 90), fill=CARD_BACKDROP)
     out.alpha_composite(pic, (pad, pad))
     return out
+
+
+def map_backdrop(pics, text_h: int) -> list:
+    """The map window's pictures (all frames of one map) on the dark area: cut to what all of them show (map
+    pictures have empty transparent margins), the same size for every frame; ``text_h``: size of its lines."""
+    box = None
+    for pic in pics:
+        b = pic.getchannel("A").getbbox()
+        if b:
+            box = b if box is None else (min(box[0], b[0]), min(box[1], b[1]), max(box[2], b[2]), max(box[3], b[3]))
+    pad, radius = max(6, text_h // 45), max(8, text_h // 30)
+    return [backdrop(pic.crop(box) if box else pic, 0, pad, radius) for pic in pics]
 
 
 def _below(pic: Image.Image, strip: Image.Image, centred: bool) -> Image.Image:
@@ -669,6 +683,8 @@ class HudWindow:
             else:
                 pic = render_hud(rows, height) if style is None else render_music(rows, cover, height, style,
                                                                                   progress, look)
+                if style is None and "backdrop" in look:
+                    pic = backdrop(pic, height)
                 if self.editing:
                     pic = add_border(pic, self.edit_label)
                 self._data, self.size = premultiplied_bgra(pic), pic.size
@@ -742,6 +758,7 @@ class PictureOverlay:
         self.edit_label = ""            # name on the edit frame (1.64.7: "KARTE · Mausrad = Grösse")
         self.info_beside = False        # timer/server right of the map (low bar above/below the picture)
         self.text_height = 0            # px the timer/name/info are sized for (1.65: not the map's size); 0 = map
+        self.backdrop = False           # dark area with rounded corners behind map and lines (1.2.4)
         self.on_moved = None
         self.on_wheel = None
         self.game_hwnd = None
@@ -853,6 +870,10 @@ class PictureOverlay:
         self.transparent = bool(on)
         self._key = None
 
+    def set_backdrop(self, on: bool):
+        self.backdrop = bool(on)
+        self._key = None
+
     def render(self, height: int, push: bool = True):
         """Prepare pictures for this height; returns (w, h) of the overlay. ``push=False``: only measure – the
         screen keeps the picture it has (the App tries sizes before it settles; pushing each one made the
@@ -879,14 +900,19 @@ class PictureOverlay:
                 self._base = [(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), 0)]
             self._base_key = base_key
         key = (base_key, self._editing, self._timer, self._server, self._ping, self._note, self._record,
-               self.info_beside)
+               self.info_beside, self.backdrop)
         if key != self._key:
             self._prepared = []
+            pics = []
             for pic, dur in self._base:
                 if self.has_info():
                     pic = add_info(pic, self._timer, self._server, text_h, backdrop=not self.transparent,
                                    ping=self._ping, note=self._note, record=self._record,
                                    beside=self.info_beside and self.show_map)
+                pics.append(pic)
+            if self.backdrop:
+                pics = map_backdrop(pics, text_h)
+            for pic, (_b, dur) in zip(pics, self._base):
                 if self._editing:
                     pic = add_border(pic.copy(), self.edit_label)
                 self._prepared.append((premultiplied_bgra(pic), pic.width, pic.height, dur))
@@ -911,7 +937,7 @@ class PictureOverlay:
         the App rendered big, showed it, then smaller: the map grew and shrank on every tick."""
         key = (height, text_h, avail, re.sub(r"\d", "0", self._timer), self._server, self._ping, self._note,
                self._record, self.info_beside, self._editing, self.show_map, self.show_caption, self._caption,
-               self.transparent, self._floor, id(self._frames[0][0]) if self._frames else None)
+               self.transparent, self.backdrop, self._floor, id(self._frames[0][0]) if self._frames else None)
         if self._fit is None or self._fit[0] != key:
             timer, self._timer = self._timer, key[3]
             try:
@@ -920,8 +946,11 @@ class PictureOverlay:
                 if w > avail:                   # the lines below are wider than the bar: smaller text, same map
                     self.text_height = max(40, int(text_h * avail / w))
                     w, _h = self.render(height, push=False)
-                    if w > avail:               # still too wide (very long line): the map too
-                        height = max(80, int(height * avail / w))
+                    for _try in range(6):       # still too wide (long line, the dark area's edge): the map too
+                        if w <= avail or height <= 80:
+                            break
+                        height = max(80, min(height - 1, int(height * avail / w)))
+                        w, _h = self.render(height, push=False)
             finally:
                 self._timer = timer
             self._fit = (key, self.text_height, height)
@@ -929,11 +958,14 @@ class PictureOverlay:
         return self._fit[2]
 
     def _render_waiting(self, height: int):
-        key = ("waiting", height, self.transparent, self._editing, self._waiting, self._server, self._ping)
+        key = ("waiting", height, self.transparent, self._editing, self._waiting, self._server, self._ping,
+               self.backdrop)
         if key != self._key:
             self._stop_anim()
             pic = add_info(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), "", self._server, height,
                            backdrop=not self.transparent, ping=self._ping, status=self._waiting)
+            if self.backdrop:
+                pic = map_backdrop([pic], height)[0]
             if self._editing:
                 pic = add_border(pic.copy(), self.edit_label)
             self._prepared = [(premultiplied_bgra(pic), pic.width, pic.height, 0)]
