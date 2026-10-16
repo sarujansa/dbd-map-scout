@@ -5,16 +5,16 @@ from __future__ import annotations
 from PIL import Image
 from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtGui import QPalette, QPixmap
-from PySide6.QtWidgets import (QApplication, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
+from PySide6.QtWidgets import (QApplication, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu,
                                QPushButton, QStyle, QStyledItemDelegate, QStyleOptionViewItem, QScrollArea,
                                QSizePolicy, QStackedWidget, QVBoxLayout, QWidget)
 
 from .qt_layouts import FlowRow
-from .i18n import _
+from .i18n import N_, _
 from .qt_common import pixmap_from_pil, _label, _tip, _card, _set, _scroll_page
 
 
-TILE_W, TILE_H = 150, 172          # px (logical) of a map tile on the maps page
+TILE_W, TILE_H = 150, 190          # px (logical) of a map tile on the maps page (1.2.18: + info line)
 
 
 TILE_PIC = 124                     # the picture in it
@@ -45,6 +45,20 @@ class MapTile(QFrame):
         fm = self.name.fontMetrics()
         self.name.setText(fm.elidedText(label, Qt.ElideRight, TILE_W - 16))
         lay.addWidget(self.name)
+        self.info = _label("", "tileinfo")       # 1.2.18: rounds / Ø kills and the map's own settings
+        lay.addWidget(self.info)
+        self._mark = None
+
+    def set_mark(self, text: str, tip: str = ""):
+        if (text, tip) == self._mark:
+            return
+        self._mark = (text, tip)
+        fm = self.info.fontMetrics()
+        self.info.setText(fm.elidedText(text, Qt.ElideRight, TILE_W - 16))
+        self.info.setToolTip(tip or text)
+
+    def contextMenuEvent(self, e):
+        self._page.open_menu(self.key, e.globalPos())
 
     def set_current(self, on: bool):
         if bool(self.property("current")) != on:
@@ -103,6 +117,8 @@ class MapsPage(QWidget):
         self._pix = {}                     # path -> QPixmap (made once)
         self._todo = []                    # tiles still waiting for their picture
         self._tiles = {}
+        self._marks = {}                   # (map_id, variant) -> (info text, tooltip) (1.2.18)
+        self._menu = None
         self._realm = None                 # chosen entry of the list (None: not yet – the shown map's realm)
         page, lay = _scroll_page("Maps", scroll=False)
         outer = QVBoxLayout(self)
@@ -267,6 +283,9 @@ class MapsPage(QWidget):
                 flow.addWidget(t)
                 self._tiles[key] = t
                 self._todo.append(t)
+                mark = self._marks.get(key)
+                if mark:
+                    t.set_mark(*mark[:2])
             self.grid_lay.insertLayout(self.grid_lay.count() - 1, flow)
         self._mark_current()
         if self._todo:
@@ -303,6 +322,26 @@ class MapsPage(QWidget):
         cur = tuple(self._shown_current) if self._shown_current else None
         for key, t in self._tiles.items():
             t.set_current(key == cur)
+
+    # ------------------------------------------------------------------ right click (1.2.18)
+    MENU = (("show", N_("Anzeigen")), ("rotate", N_("Drehen ↻")),
+            ("size_reset", N_("Eigene Grösse und Drehung zurücksetzen")), ("picture", N_("Kartenbild ersetzen …")))
+
+    def menu_entries(self, key):
+        """[(action, label, enabled)] of a tile's context menu – the reset only when the map has own values."""
+        mark = self._marks.get(tuple(key))
+        own = bool(mark and len(mark) > 2 and mark[2])
+        return [(a, _(label), a != "size_reset" or own) for a, label in self.MENU]
+
+    def open_menu(self, key, pos):
+        """A popup (no exec: no second event loop); every entry posts ("map_action", (action, key))."""
+        menu = QMenu(self)
+        for action, label, enabled in self.menu_entries(key):
+            act = menu.addAction(label)
+            act.setEnabled(enabled)
+            act.triggered.connect(lambda _c=False, a=action, k=tuple(key): self._post("map_action", (a, k)))
+        self._menu = menu
+        menu.popup(pos)
 
     # ------------------------------------------------------------------ one map big
     def clicked(self, key):
@@ -365,9 +404,14 @@ class MapsPage(QWidget):
             self._post("show_map", (self._items[0][2], self._items[0][3]))
 
     # ------------------------------------------------------------------ from the app
-    def show_maps(self, items, current, thumbs=None, recent=None):
+    def show_maps(self, items, current, thumbs=None, recent=None, marks=None):
         """items [(realm, label, map_id, variant)] (already searched), the map on display, picture paths, the
-        map ids played last (newest first)."""
+        map ids played last (newest first), ``marks`` {key: (info text, tooltip, has own values)} (1.2.18)."""
+        if marks is not None and marks != self._marks:
+            self._marks = dict(marks)
+            for key, t in self._tiles.items():
+                mark = self._marks.get(key)
+                t.set_mark(*mark[:2]) if mark else t.set_mark("")
         if thumbs is not None and dict(thumbs) != self._thumbs:
             old, self._thumbs = self._thumbs, dict(thumbs)
             again = [t for k, t in self._tiles.items() if self._thumbs.get(k) != old.get(k) and t not in self._todo]
