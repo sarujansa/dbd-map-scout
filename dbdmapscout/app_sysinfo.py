@@ -185,46 +185,51 @@ class SysInfo:
             self._today_cache = cache = (j, int(now // 60), today_rows(j, now))
         return cache[2] + [[(_("UHR "), sysinfo.DIM), (time.strftime("%H:%M", time.localtime(now)), sysinfo.WHITE)]]
 
-    def _stack_height(self, gh: int) -> int:
-        """Height the cards hanging below the system values take (a map at the top of that bar moves down by it;
-        1.2.6, stacking 1.2.7): "today" as it would be rendered now, the music card as last shown."""
-        o = self.settings["overlay"]
-        gap = layout.stack_gap(o, gh)
-        total, chain = 0, {"hud"}
-        for name, anchor in layout.stack_order({"today": o.get("today_pos", "below"),
-                                                "music": o.get("media_pos", "below")}):
-            if anchor not in chain:
-                continue
-            h = 0
-            if name == "today" and self.today_win is not None and o.get("show_today", True):
-                look = ("backdrop",) if o.get("today_backdrop", False) else ()
-                h = self.today_win.render(self._today_rows(time.time()), int(gh * today_scale(o)), look=look)[1]
-            elif name == "music" and self.media_win is not None and self.media_win.shown:
-                h = self.media_win.size[1]
-            if h:
-                total += h + gap
-                chain.add(name)
-        return total
+    def _cards_measure(self) -> dict:
+        """Render "today" and the music card for this tick (hidden when they have nothing to show) and remember
+        their sizes – {name: (w, h) or None}; placed afterwards by _cards_place (1.2.11)."""
+        self._card_sizes = {"today": self._today_card(), "music": self._media_card()}
+        return self._card_sizes
 
-    def _cards_place(self):
+    def _cards_place(self, free_only: bool = False):
         """"Today" and the music card, each below the system values / another card / in the bar / at its own place
-        (1.2.7: stacking in order – the card another one hangs on is placed first)."""
+        (1.2.7: stacking in order) – the geometry comes from layout.place_cards, shared with the preview.
+        ``free_only``: only the cards that do not hang on the system values (those follow the map later)."""
         o = self.settings["overlay"]
+        sizes = dict(self._cards_measure())
+        spots = {"today": o.get("today_pos", "below"), "music": o.get("media_pos", "below")}
+        if free_only:
+            for name in sizes:
+                if layout.hangs_on_hud(name, spots):
+                    sizes[name] = None
+                    setattr(self.worker, f"{'media' if name == 'music' else name}_rect", None)
+        gx, gy, gw, gh, _show = self._media_ctx or (0, 0, 0, 0, False)
         hud = self.worker.hud_rect if self.hud is not None and self.hud.shown else None
         box = getattr(self, "_hud_box", None)
         if hud and box and box[:2] == hud[:2]:
             hud = box                                       # by its widest width: no wobble when values change
-        boxes = {"hud": hud}
-        for name, anchor in layout.stack_order({"today": o.get("today_pos", "below"),
-                                                "music": o.get("media_pos", "below")}):
-            under = (boxes.get(anchor) or boxes.get("hud")) if anchor else None
-            boxes[name] = self._today_place(under, bool(anchor)) if name == "today" \
-                else self._media_place(under, bool(anchor))
+        cards = {"today": (sizes["today"], o.get("today_pos", "below"), o.get("today_xy")),
+                 "music": (sizes["music"], o.get("media_pos", "below"), o.get("media_xy"))}
+        placed = layout.place_cards((gx, gy, gw, gh), cards, hud, int(gh * o["margin"]),
+                                    o.get("bar_align", "centre"), layout.stack_gap(o, gh),
+                                    up=self.settings.get("sysinfo") == "above" and hud is not None
+                                    and bool(self._last_place) and hud[1] < self._last_place[1],
+                                    below_box=self._last_place)
+        self._today_box = placed.get("today")
+        if "today" in placed:
+            self._fade_show("today", bool(o.get("fade", True)) and not self.overlay.editing)
+            self.today_win.show_at(placed["today"][0], placed["today"][1])
+            self.worker.today_rect = placed["today"]
+        if "music" in placed:
+            self._fade_show("music", bool(o.get("media_fade", True)) and not self.overlay.editing,
+                            restart=getattr(self, "_media_restart", False))
+            self._media_restart = False
+            self.media_win.show_at(placed["music"][0], placed["music"][1])
+            self.worker.media_rect = placed["music"]
 
-    def _today_place(self, under=None, stacked: bool = False):
-        """"Today" (1.2.6, user: "unter dem GPU/CPU-Zähler macht keinen Sinn"): a card of its own like the music –
-        below the system values (default) or another card (``under`` = its box), bottom right / left in the bar,
-        or an own place; shown with the map. Returns its box on screen, or None."""
+    def _today_card(self):
+        """"Today" (1.2.6, user: "unter dem GPU/CPU-Zähler macht keinen Sinn"): a card of its own like the music.
+        Rendered for this tick; returns its size, or None (then hidden) – placed by _cards_place."""
         o = self.settings["overlay"]
         win = self.today_win
         on = bool(o.get("show_today", True)) and win is not None
@@ -253,12 +258,7 @@ class SysInfo:
         avail = layout.max_width(bar, margin) if bar >= layout.MIN_BAR and spot != "custom" else gw / 3
         if w > avail:                                       # never wider than the black bar
             w, h = win.render(rows, max(200, int(height * avail / w)), look=look)
-        x, y = layout.media_xy("below" if stacked else spot, (gx, gy, gw, gh), (w, h), margin, under,
-                               o.get("today_xy"), o.get("bar_align", "centre"), layout.stack_gap(o, gh))
-        self._fade_show("today", fade)
-        win.show_at(int(x), int(y))
-        self.worker.today_rect = self._today_box = (int(x), int(y), w, h)
-        return self._today_box
+        return (w, h)
 
     def _today_dragged(self, x, y):
         """"Today" dropped somewhere (edit mode): from now on its own place there."""
@@ -354,10 +354,10 @@ class SysInfo:
         self._hud_own_place(round(min(1.0, max(0.0, (x - gx) / max(1, gw - w))), 4),
                             round(min(1.0, max(0.0, (y - gy) / max(1, gh - h))), 4))
 
-    def _media_place(self, under=None, stacked: bool = False):
-        """The music card (1.64, user: own place, cover, size slider): below the system values or another card
-        (``under`` = its box, 1.2.7), bottom right / left in the black bar, or an own place dragged in the map's
-        edit mode. Shown with the map. Returns its box on screen, or None."""
+    def _media_card(self):
+        """The music card (1.64, user: own place, cover, size slider): rendered for this tick; returns its size,
+        or None (then hidden) – placed by _cards_place (below the system values or another card, in the bar, or
+        at its own place). A new song sets ``_media_restart`` (fades in from nothing)."""
         o = self.settings["overlay"]
         win = self.media_win
         music = bool(o.get("show_media", True)) and win is not None
@@ -401,14 +401,10 @@ class SysInfo:
         if w > avail:                                       # never wider than the black bar
             w, h = win.render(rows, max(200, int(height * avail / w)), cover, o.get("media_style", "big"), prog,
                               look)
-        x, y = layout.media_xy("below" if stacked else spot, (gx, gy, gw, gh), (w, h), margin, under,
-                               o.get("media_xy"), o.get("bar_align", "centre"), layout.stack_gap(o, gh))
         song = (now.title, now.artist)
-        self._fade_show("music", fade, restart=song != self._media_song)    # a new song: from nothing
+        self._media_restart = song != self._media_song or not win.shown    # a new song / appears: from nothing
         self._media_song = song
-        win.show_at(int(x), int(y))
-        self.worker.media_rect = (int(x), int(y), w, h)
-        return self.worker.media_rect
+        return (w, h)
 
     # ---- fading (1.2.4 the music card, 1.2.9 map, system values and "today" too): media.Fader per window
     def _fade_win(self, name):

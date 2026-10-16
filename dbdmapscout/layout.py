@@ -145,18 +145,20 @@ def fit_scale(w: float, h: float, avail_w: float, avail_h: float) -> float:
 
 
 def preview_place(gw: int, gh: int, anchor: str, pos_x: float, pos_y: float, margin: int, keep_in_bar: bool,
-                  w: int, h: int, drop: int = 0, align: str = "centre"):
+                  w: int, h: int, drop: int = 0, align: str = "centre", lift: int = 0):
     """Top-left corner of an overlay of w × h on a full-screen DBD (App._place_overlay's rules for the preview);
-    ``drop``: room the system values take above a map at the top of the same bar."""
+    ``drop``: room the system values (and the cards below them) take above a map at the top of the same bar,
+    ``lift`` (1.2.11): room the cards at the bottom of the bar take below a map at the bottom."""
     bar = bar_width(gw, gh)
-    if anchor == "auto":
-        x, y = max(margin, (bar - w) / 2) if align == "centre" else (bar - margin - w if align == "right" else margin), \
-            margin + drop
+    if anchor == "auto":                                    # like App._place_overlay_map's place()
+        x = (bar - w) / 2 if align == "centre" else (bar - margin - w if align == "right" else margin)
+        x, y = max(margin, x), margin + drop
     elif anchor == "custom":
         x, y = pos_x * max(0, gw - w), pos_y * max(0, gh - h)
     else:
         x = margin if anchor.endswith("left") else gw - w - margin
-        y = margin + drop if anchor.startswith("top") else gh - h - margin
+        y = margin + drop if anchor.startswith("top") else gh - h - margin - lift
+    y = max(0, min(y, gh - h)) if anchor != "custom" else y                  # never off the screen (1.2.11)
     side = bar_side(anchor, x, w, 0, gw, bar) if (anchor == "auto" or keep_in_bar) else None
     if side:
         x = clamp_x(side, x, w, 0, gw, bar, margin)
@@ -165,14 +167,14 @@ def preview_place(gw: int, gh: int, anchor: str, pos_x: float, pos_y: float, mar
 
 def preview_rect(gw: int, gh: int, anchor: str, pos_x: float, pos_y: float, height_frac: float,
                  margin_frac: float, keep_in_bar: bool, aspect: float, info_rows: int = 0, drop: int = 0,
-                 grow: bool = False):
+                 grow: bool = False, lift: int = 0):
     """Where the overlay sits on a full-screen DBD of gw × gh (the overlay tab's preview, since 1.61): (x, y, w,
     h, map_h) – the same rules as App._place_overlay for the common case (no window mode, no bars above/below).
     ``aspect`` = map width / height, ``info_rows`` = lines below the map (timer counts double), ``drop`` = room
     of the system values above the map (1.64)."""
     margin = int(gh * margin_frac)
     height = int(gh * min(0.9, max(0.05, height_frac)))
-    height = min(height, gh - drop - 2 * margin)
+    height = max(40, min(height, gh - drop - lift - 2 * margin))
     bar = bar_width(gw, gh)
 
     def size(hm):
@@ -243,7 +245,12 @@ def media_xy(spot: str, game, size, margin: int, hud=None, own=None, align: str 
             x = min(max(hud[0], gx + margin), gx + gw - margin - w)
         elif align == "right":
             x = min(max(hud[0] + hud[2] - w, gx + margin), gx + gw - margin - w)
-        return x, hud[1] + hud[3] + gap
+        y = hud[1] + hud[3] + gap
+        if y + h > gy + gh - margin:                     # no room below (the card above sits at the bottom, 1.2.11
+            y = hud[1] - gap - h                         # sweep): above it instead, never off the screen
+            if y < gy + margin:
+                y = max(gy + margin, gy + gh - margin - h)
+        return x, y
     return hud_x("right", gx, gw, margin, w, bar, align), gy + margin
 
 
@@ -268,6 +275,93 @@ def stack_order(spots: dict) -> list:
             out.append((n, "hud" if a is not None and a != "hud" and a not in spots else a))
             done.add(n)
     return out
+
+
+def hangs_on_hud(name: str, spots: dict) -> bool:
+    """Whether the card's chain of anchors ends at the system values (then it waits for them when they follow
+    the map); a bar corner or an own place does not (1.2.11)."""
+    seen = set()
+    while True:
+        anchor = STACK_ANCHORS.get(spots.get(name))
+        if anchor is None:
+            return False
+        if anchor == "hud" or anchor in seen or anchor not in spots:
+            return True
+        seen.add(name)
+        name = anchor
+
+
+def place_cards(game, cards: dict, hud_box, margin: int, align: str = "centre", gap=None,
+                up: bool = False, below_box=None) -> dict:
+    """Top-left corner and size of every card ("today", "music") in stacking order (1.2.11: the one place for
+    App and preview). ``cards`` = {name: ((w, h) or None, position setting, own place)}; a card hangs below its
+    anchor's box – below the system values when the anchor is not there – or stands in the bar / at its own
+    place (media_xy). ``up``: the system values sit right above the map, so the stack grows upwards from them –
+    without room above, a card goes below ``below_box`` (the map) instead. Returns {name: (x, y, w, h)} for the
+    cards with a size."""
+    order = stack_order({n: c[1] for n, c in cards.items()})
+    boxes, out, corners = {"hud": hud_box}, {}, {}
+    gy, gh = game[1], game[3]
+    g = gap if gap is not None else max(2, margin // 2)
+    for name, anchor in order:
+        size, spot, own = cards[name]
+        if not size:
+            boxes[name] = None
+            continue
+        under = (boxes.get(anchor) or boxes.get("hud")) if anchor else None
+        x, y = media_xy("below" if anchor else spot, game, size, margin, under, own, align, gap)
+        if anchor and under is not None and up:         # above the card / values it hangs on (the map is below)
+            y = under[1] - g - size[1]
+            if y < gy + margin:                         # no room above: below the map (and what hangs there)
+                floor = below_box if below_box is not None else under
+                y = min(gy + gh - margin - size[1], floor[1] + floor[3] + g)
+                below_box = (floor[0], y, size[0], size[1])
+        if spot in corners:                             # two cards in the same bottom corner: the second above
+            y = max(gy + margin, corners[spot][1] - g - size[1])
+        out[name] = boxes[name] = (int(x), int(y), int(size[0]), int(size[1]))
+        if anchor:                                      # two cards below the same element: the second below the
+            boxes[anchor] = out[name]                   # first (1.2.11 sweep: they sat on top of each other)
+        elif spot in ("bottom_left", "bottom_right"):
+            corners[spot] = out[name]
+    return out
+
+
+def bar_stack(boxes, x0: float, x1: float, gy: float, gh: float, margin: int, gap: int):
+    """(drop, lift): how far the elements standing at the top / the bottom of the bar [x0, x1] reach down / up
+    (1.2.11, one rule for App and preview): a box at the top edge counts, and every box that hangs right below
+    it (within ``gap`` + a few px) – the same from the bottom up. ``boxes`` = (x, y, w, h) of the system values
+    and the cards; a map at the top of that bar moves below the stack, one at the bottom above it."""
+    inside = [b for b in boxes if b and b[0] < x1 and b[0] + b[2] > x0]
+    drop, lift = 0, 0
+    bottom = gy + margin
+    for b in sorted(inside, key=lambda b: b[1]):
+        if b[1] <= bottom + gap + 2:
+            bottom = max(bottom, b[1] + b[3])
+    if bottom > gy + margin:
+        drop = int(bottom - gy)
+    top = gy + gh - margin
+    for b in sorted(inside, key=lambda b: b[1] + b[3], reverse=True):
+        if b[1] + b[3] >= top - gap - 2:
+            top = min(top, b[1])
+    if top < gy + gh - margin:
+        lift = int(gy + gh - top)
+    return drop, lift
+
+
+def map_bar_range(anchor: str, pos_x: float, gx: float, gw: float, bar: float):
+    """x range of the black bar the map stands in (for bar_stack), or None without bars / over the picture."""
+    if bar < MIN_BAR:
+        return None
+    if anchor in ("auto", "top-left", "bottom-left"):
+        return gx, gx + bar
+    if anchor in ("top-right", "bottom-right"):
+        return gx + gw - bar, gx + gw
+    x = gx + pos_x * gw                                    # custom: the bar its left edge starts in
+    if x < gx + bar:
+        return gx, gx + bar
+    if x >= gx + gw - bar:
+        return gx + gw - bar, gx + gw
+    return None
 
 
 def media_own(gw: float, gh: float, size, x: float, y: float):
