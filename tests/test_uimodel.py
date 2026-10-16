@@ -552,3 +552,22 @@ def test_a_card_is_hidden_with_its_frame():
     assert card.isHidden()
     qt_window.show_control(kind, head, extra, {"visible": True, "text": "Karte"})
     assert not card.isHidden()
+
+
+def test_a_slider_rows_labels_are_not_drawn_twice():
+    """1.2.15 (Erkennung → Erweitert showed "Scans/Sek. Scans/Sek." and the value twice): the name and value
+    labels of App._slider belong to the slider control – ui_layout leaves them out."""
+    from dbdmapscout import uimodel as ui
+    from dbdmapscout.app_qt import ui_layout
+    root = ui.Frame(None)
+    row = ui.Frame(root)
+    row.pack(fill="x")
+    name = ui.Label(row, text="Scans/Sek.")
+    name.pack(side="left")
+    val = ui.Label(row, text="5")
+    val.pack(side="right")
+    name._dbdms_slider_part = val._dbdms_slider_part = True
+    ui.Scale(row, from_=2, to=10, variable=ui.DoubleVar(value=5)).pack(side="left", fill="x", expand=True)
+    node = ui_layout(root, {})
+    kinds = [c["kind"] for c in node["children"][0]["children"]]
+    assert kinds == ["slider"]

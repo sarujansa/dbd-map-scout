@@ -14,13 +14,13 @@ from PySide6.QtWidgets import (QPlainTextEdit, QProgressBar, QPushButton, QSizeP
 from . import qt_theme
 from .qt_layouts import FlowRow, TileGrid
 from .i18n import _
-from .qt_common import _label, _card, _set
+from .qt_common import _label, _card, _set, _tip
 
 
 class FactBox(QWidget):
     """Title, big value, optional bar and a small line (map card values and today's tiles)."""
 
-    def __init__(self, bar=False):
+    def __init__(self, bar=False, post=None):
         super().__init__()
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -37,12 +37,26 @@ class FactBox(QWidget):
             lay.addWidget(self.bar)
         self.sub = _label(cls="dim")
         lay.addWidget(self.sub)
+        # 1.2.15: a fact can carry a small button (overview: "Server aus" → server tab, no stats data → setup)
+        self._post, self._action = post, ""
+        self.link = QPushButton()
+        self.link.setFocusPolicy(Qt.TabFocus)
+        self.link.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        self.link.clicked.connect(lambda _c=False: self._post and self._action and self._post(self._action))
+        self.link.hide()
+        lay.addWidget(self.link, 0, Qt.AlignLeft)
         self._colour = None
 
     def show_fact(self, f):
         _set(self.title, f.title)
         _set(self.value, f.value)
         _set(self.sub, f.sub)
+        action = getattr(f, "action", "") if self._post else ""
+        if action != self._action or (action and self.link.text() != f.action_label):
+            self._action = action
+            _set(self.link, f.action_label if action else "")
+            self.link.setToolTip(_tip(f.action_label) if action else "")
+            self.link.setVisible(bool(action))
         colour = qt_theme.hex_colour(f.colour) if f.colour is not None else None
         if colour != self._colour:
             self._colour = colour

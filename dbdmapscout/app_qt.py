@@ -79,6 +79,8 @@ def ui_layout(w, reg: dict):
     nodes = []
     grid = False
     for c in w.winfo_children():
+        if getattr(c, "_dbdms_slider_part", False):    # name/value of a _slider row: part of the slider control
+            continue
         n = ui_layout(c, reg)
         if n is not None:
             n["side"] = _side(c)                    # how this child sits in this frame
@@ -382,11 +384,23 @@ class QtShell:
             self._hide_unknown()
         elif action == "choose":                     # overview without a map: to the maps page
             self.qt.show_page("maps")
+        elif action == "server_page":                # 1.2.15: "Server aus" on the overview → the server tab
+            self.qt.show_page("server")
+        elif action == "official_setup":             # 1.2.15: "noch keine Stats-Daten" → the card under "Mehr"
+            self._reveal_official()
         else:
             {"scan": self.scan_now, "rotate": self.rotate_map, "toggle": self.toggle_overlay,
              "reject": self.reject_detection, "confirm": self._confirm_unsure, "layout": self.next_variant,
              "floor": self.next_floor}.get(action, lambda: None)()
         self._qt_refresh(force=True)
+
+    def _reveal_official(self):
+        """Settings → "Mehr" opened → the card "Offizielle Match-Daten" scrolled into view and lit up."""
+        self.qt.show_page("settings")
+        if not self._more_open:
+            self._toggle_more()
+        self._qt_refresh(force=True)
+        self.qt.reveal("settings", "st.more.official")
 
     def _show_main(self):
         """Tray "Öffnen"."""

@@ -26,6 +26,8 @@ class Fact:
     sub: str = ""
     frac: float | None = None
     colour: object = None
+    action: str = ""          # 1.2.15: a small button on the fact (posted to the App), "" = none
+    action_label: str = ""
 
 
 @dataclass
@@ -69,7 +71,7 @@ def map_facts(app, now: float) -> list:
     elif conn.running:
         server = Fact(_("Server"), "–", _("Warte auf Match …"))
     else:
-        server = Fact(_("Server"), "–", _("aus"))
+        server = Fact(_("Server"), "–", _("aus"), action="server_page", action_label=_("Server-Tab öffnen"))
     ms = conn.ping_ms if srv and srv["region"] != UNKNOWN else None
     ping = Fact(_("Ping"), f"{ms:.0f} ms", colour=ping_colour(ms)) if ms is not None else Fact(_("Ping"))
     hist, q = app._hist or {}, app._queue
@@ -120,8 +122,11 @@ def today(app, now: float) -> tuple[list, str]:
     if s["killer"]:
         kills = Fact(_("Ø Kills"), _num(s["kills"]), _("4K: {n} von {total}", n=s["four"], total=s["killer"]),
                      frac=s["kills"] / 4)
-    else:
+    elif getattr(j, "matches", None):
         kills = Fact(_("Ø Kills"), sub=_("noch keine Stats-Daten"))
+    else:                                      # 1.2.15: never set up – say where (it hides under "Mehr")
+        kills = Fact(_("Ø Kills"), sub=_("Kills und Entkommen kommen von der Stats-Seite"),
+                     action="official_setup", action_label=_("Match-Daten einrichten …"))
     if s["survivor"]:
         esc = Fact(_("Entkommen"), f"{s['escaped']:.0%}", _("{n} Survivor-Runden", n=s["survivor"]),
                    frac=s["escaped"])

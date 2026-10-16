@@ -182,6 +182,26 @@ class SettingsTab:
                              "Datei und löscht sie. Es geht dafür selbst nicht ins Internet."),
                   style="Dim.TLabel", wraplength=420)).pack(anchor="w", pady=(4, 0))
 
+        # 1.2.15: the same controls once more for the setup assistant's step "Match-Daten" – the originals sit
+        # under "Mehr" and count as hidden while it is folded (the settings page itself draws only SPECS keys)
+        sx = ui.Frame(f)
+        sx.pack(fill="x")
+        self._reg("setup.script", ui.Button(sx, text=_("Userscript kopieren"),
+                                             command=self._official_copy_script)).pack(side="left")
+        self._reg("setup.open_site", ui.Button(sx, text=_("Stats-Seite öffnen"),
+                                                command=lambda: self._official_open(False))).pack(side="left")
+        self._reg("setup.off_notify", ui.Checkbutton(
+            sx, text=_("Meldung, wenn Match-Daten eingelesen und gelöscht wurden"), variable=self.off_notify_var,
+            command=self._official_setting)).pack(anchor="w")
+        self._reg("setup.off_open", ui.Checkbutton(sx, text=_("Stats-Seite öffnen, wenn DBD beendet wird"),
+                                                    variable=self.off_open_var,
+                                                    command=self._official_setting)).pack(anchor="w")
+        self._reg("setup.off_text", ui.Label(sx, text=_("Einmal einrichten: Tampermonkey im Browser installieren, „Userscript kopieren“ und dort "
+                             "als neues Skript einfügen, auf stats.deadbydaylight.com anmelden. Beim Öffnen der Seite "
+                             "speichert das Skript die letzten 30 Matches im Download-Ordner; das Programm liest die "
+                             "Datei und löscht sie. Es geht dafür selbst nicht ins Internet."),
+                  style="Dim.TLabel", wraplength=420)).pack(anchor="w")
+
         bk = self._reg("st.more.backup", ui.LabelFrame(more, text=_("Sicherung"), padding=8))
         bk.pack(fill="x", pady=(8, 0))
         self._reg("st.more.export", ui.Button(bk, text=_("Einstellungen exportieren …"),
