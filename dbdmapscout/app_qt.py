@@ -435,7 +435,8 @@ class QtShell:
             rev = (getattr(self, "_qt_maps_rev", 0), id(self.catalog), self.current, sel)
             if force or rev != getattr(self, "_qt_maps_shown", None):
                 self._qt_maps_shown = rev
-                q.show_maps(self._qt_map_items(), self.current, self._qt_preview(sel))
+                items = self._qt_map_items()
+                q.show_maps(items, self.current, self._qt_preview(sel), self._qt_thumbs(items), self._qt_recent())
         reg = self.__dict__.get("_qt_reg", {})
         keys = self._qt_mod.page_keys(page)
         if keys:
@@ -469,6 +470,32 @@ class QtShell:
         realm = self.catalog.realm_display(m) or _("Eigene Bilder")
         out = (mid, shown, m.label(shown), realm, pic)
         self._qt_preview_cache = ((mid, v, id(self.catalog)), out)
+        return out
+
+    def _qt_thumbs(self, items):
+        """{(map_id, variant): picture path} for the tiles – the dark picture only if already made (no waiting)."""
+        style = self.settings["overlay"].get("map_style", "classic")
+        cached = getattr(self, "_qt_thumbs_cache", None)
+        if cached is None or cached[0] is not self.catalog or cached[1] != style:
+            cached = self._qt_thumbs_cache = (self.catalog, style, {})
+        out, paths = cached[2], {}
+        for _r, _l, mid, v in items:
+            path = out.get((mid, v))
+            if path is None:
+                path = self._map_file(mid, v, make=False)[0]
+                if style != "dark" or path != self.catalog.image_path(mid, v)[0]:
+                    out[(mid, v)] = path           # the original in the dark style: the warm-up may still make it
+            paths[(mid, v)] = path
+        return paths
+
+    def _qt_recent(self, kept=12):
+        """Map ids of the rounds played last, newest first, each once (the list entry "Zuletzt gespielt")."""
+        out = []
+        for r in sorted(self._joined().rounds, key=lambda r: r.t, reverse=True):
+            if r.map_id in self.catalog.maps and r.map_id not in out:
+                out.append(r.map_id)
+                if len(out) >= kept:
+                    break
         return out
 
     def _qt_map_items(self):

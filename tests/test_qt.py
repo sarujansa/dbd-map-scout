@@ -216,7 +216,10 @@ def test_form_page_shows_states_and_posts_clicks(qapp, keep):
     name, slider, value = page.controls["ov.sel_size"][2]
     assert (slider.minimum(), slider.maximum(), slider.value(), value.text()) == (15, 90, 36, "36 %")
     assert page.controls["ov.map_size_reset"][1].isHidden() and page.controls["ov.pos_hint"][1].isHidden()
-    assert page.controls["ov.pos"][1].text() == "POSITION"
+    kind, tabs, index = page.controls["ov.pos"]                # 1.66.4: the cards of the page are tabs
+    assert kind == "tab" and tabs.tabText(index) == "Position && Grösse" and tabs.count() == 3
+    page.show_states({"ov.sys": {"text": "Systemwerte", "visible": False}})
+    assert not tabs.isTabVisible(page.controls["ov.sys"][2]) and tabs.isTabVisible(index)
     assert posted.empty()                                   # showing a state never sends anything back
     check.click()
     combo.activated.emit(0)
@@ -225,42 +228,60 @@ def test_form_page_shows_states_and_posts_clicks(qapp, keep):
                                                         ("act", ("ov.sel_size", 50))]
 
 
-def test_maps_page_lists_by_realm_and_posts_the_pick(qapp, keep):
+def test_maps_page_lists_by_realm_and_posts_the_pick(qapp, keep, tmp_path):
+    """1.66.4 (variant A): realms left with counts, "Alle Maps" / "Zuletzt gespielt" on top, the tiles of the
+    chosen realm; the realm of the shown map first; the search shows all realms."""
+    from PIL import Image
+    from PySide6.QtCore import Qt
     from dbdmapscout import qt_window
     posted = queue.Queue()
     page = keep(qt_window.MapsPage(lambda a, arg=None: posted.put((a, arg))))
     items = [("MacMillan", "Coal Tower", "coal", 1), ("MacMillan", "Suffocation Pit", "pit", 1),
              ("Autohaven", "Azarov's Resting Place", "azarov", 1)]
-    page.show_maps(items, ("pit", 1))
-    assert page.tree.topLevelItemCount() == 2 and page.tree.topLevelItem(0).childCount() == 2
-    assert page.tree.topLevelItem(0).child(1).font(0).bold()
+    pic = tmp_path / "coal.png"
+    Image.new("RGBA", (300, 600), "red").save(pic)
+    page.show_maps(items, ("pit", 1), {("coal", 1): str(pic)}, ["azarov"])
+    rows = [page.realms.item(i).text() for i in range(page.realms.count())]
+    assert rows == ["Alle Maps\t3", "Zuletzt gespielt\t1", "MacMillan\t2", "Autohaven\t1"]
+    assert page.realms.currentItem().data(Qt.UserRole) == "MacMillan"           # the realm of the shown map
+    assert set(page._tiles) == {("coal", 1), ("pit", 1)} and page._tiles[("pit", 1)].property("current")
+    while page._todo:
+        page._load_some()
+    assert not page._tiles[("coal", 1)].pic.pixmap().isNull()
+    page.realms.setCurrentRow(1)
+    assert set(page._tiles) == {("azarov", 1)}
+    page.realms.setCurrentRow(0)
+    assert len(page._tiles) == 3
     page.search.setText("coal")
-    page._picked(page.tree.topLevelItem(0).child(0))
+    page.show_in_game(("coal", 1))
     page._pick_first()
     assert [posted.get_nowait() for _i in range(3)] == [("search", "coal"), ("show_map", ("coal", 1)),
                                                         ("show_map", ("coal", 1))]
 
 
-def test_maps_page_previews_the_selected_map(qapp, keep):
+def test_maps_page_shows_a_map_big_after_a_click(qapp, keep):
     from PIL import Image
     from dbdmapscout import qt_window
     posted = queue.Queue()
     page = keep(qt_window.MapsPage(lambda a, arg=None: posted.put((a, arg))))
     page.resize(900, 700)
-    items = [("MacMillan", "Coal Tower", "coal", 1), ("MacMillan", "Suffocation Pit", "pit", 1),
-             ("Autohaven", "Azarov's Resting Place", "azarov", 1)]
-    assert not page.p_show.isEnabled()                        # nothing selected yet: a hint, no button
+    items = [("MacMillan", "Coal Tower", "coal", 1), ("MacMillan", "Suffocation Pit", "pit", 1)]
     page.show_maps(items, ("pit", 1))
-    pit = page.tree.topLevelItem(0).child(1)
-    assert page.tree.topLevelItem(0).isExpanded() and page.tree.currentItem() is pit   # the shown map, opened
-    assert posted.empty()                                     # marking it is no click
-    page.tree.setCurrentItem(page.tree.topLevelItem(0).child(0))
-    assert posted.get_nowait() == ("map_preview", ("coal", 1))
+    assert posted.empty() and page.stack.currentIndex() == 0          # marking the shown map is no click
+    page.clicked(("coal", 1))
+    page.show_in_game(("coal", 1))                                     # a double click: no big view
+    page._clicker.timeout.emit()
+    assert posted.get_nowait() == ("show_map", ("coal", 1)) and page.stack.currentIndex() == 0
+    page.clicked(("coal", 1))
+    page._clicker.timeout.emit()
+    assert posted.get_nowait() == ("map_preview", ("coal", 1)) and page.stack.currentIndex() == 1
     page.show_preview(("coal", 1, "Coal Tower", "The MacMillan Estate", Image.new("RGBA", (200, 400), "red")))
     assert page.p_name.text() == "Coal Tower" and page.p_show.isEnabled()
     assert page.p_pic.pixmap() is not None and not page.p_pic.pixmap().isNull()
     page.p_show.click()
     assert posted.get_nowait() == ("show_map", ("coal", 1))
+    page.p_back.click()
+    assert page.stack.currentIndex() == 0
 
 
 # ------------------------------------------------------------------ pages built from a tab of the UI model
@@ -741,10 +762,8 @@ def test_search_finds_a_setting_and_lights_its_card(qapp, keep):
     win.go_to_found(hits[0])
     assert win.current_key() == "overlay" and win.search.text() == ""
     qapp.processEvents()
-    card = win.forms["overlay"].controls["ov.caption"][1]
-    while card.property("class") != "card":
-        card = card.parentWidget()
-    assert card.property("found") is True
+    tabs = win.forms["overlay"].controls["ov.look"][1]      # 1.66.4: on another tab – that tab is opened
+    assert tabs.currentIndex() == win.forms["overlay"].controls["ov.look"][2] and tabs.property("found") is True
 
 
 def test_tiles_view_shows_the_system_averages(qapp, keep):

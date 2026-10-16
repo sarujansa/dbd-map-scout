@@ -18,7 +18,7 @@ from PySide6.QtGui import QColor, QFontDatabase, QIcon, QImage, QPalette, QPixma
 from PySide6.QtWidgets import (QAbstractScrollArea, QAbstractSlider, QAbstractSpinBox, QApplication, QComboBox,
                                QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel,
                                QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QPlainTextEdit, QProgressBar,
-                               QPushButton, QRadioButton,
+                               QPushButton, QRadioButton, QStyle, QStyledItemDelegate, QStyleOptionViewItem,
                                QScrollArea, QSizePolicy, QSlider, QStackedWidget, QTabWidget, QTreeWidget,
                                QTreeWidgetItem, QVBoxLayout, QWidget)
 
@@ -42,31 +42,37 @@ SLIDER_MAX = 420                  # px (logical): longest slider (overlay positi
 # Hand-made pages: every key names a widget of the UI model registered with App._reg; texts, values,
 # enabled/shown come from it (App._qt_refresh → show_states), a click is done on it (post("act", (key, value))).
 # ("card", frame key, rows) – a row is one control or ("row", [controls]); controls: ("check"|"button"|"combo"|
-# "slider"|"label"|"hint", key), ("stretch",).
+# "slider"|"label"|"hint", key), ("stretch",). ("panel", rows) = a card without title; ("tabs", [(frame key, tab
+# label, rows)]) = one tab per frame (hidden with the frame).
 SPECS = {
     "overlay": (
-        ("card", "ov.pos", (
-            ("preview", "ov.preview"),
-            ("row", (("label", "ov.sel.label"), ("combo", "ov.sel"), ("stretch",))), ("slider", "ov.sel_size"),
-            ("hint", "ov.size_scope"), ("hint", "ov.size_cap"),
-            ("row", (("label", "ov.anchor.label"), ("combo", "ov.anchor"), ("stretch",), ("button", "ov.reset"))),
-            ("slider", "ov.posx"), ("slider", "ov.posy"),
-            ("row", (("button", "ov.edit"), ("button", "ov.test"), ("button", "ov.undo"), ("stretch",))),
-            ("hint", "ov.pos_hint"), ("check", "ov.keep_bar"), ("check", "ov.grow"), ("check", "ov.per_size"), ("hint", "ov.per_size_hint"))),
-        ("card", "ov.look", (
-            ("row", (("hint", "ov.map_size"), ("stretch",), ("button", "ov.map_size_reset"))),
-            ("slider", "ov.opacity"),
-            ("row", (("label", "ov.map_style.label"), ("combo", "ov.map_style"), ("stretch",))),
-            ("sub", N_("Karte")), ("check", "ov.show_map"), ("check", "ov.caption"), ("check", "ov.floors"),
-            ("check", "ov.transparent"),
-            ("sub", N_("Unter der Karte")), ("check", "ov.timer"), ("check", "ov.server"), ("check", "ov.record"),
-            ("sub", N_("Wann zeigen")), ("check", "ov.focus"), ("check", "ov.waiting"))),
-        ("card", "ov.sys", (
-            ("row", (("label", "ov.sysinfo.label"), ("combo", "ov.sysinfo"), ("stretch",))),
-            ("hint", "ov.sys_text"), ("hint", "ov.sys_hint"), ("check", "ov.today"),
-            ("check", "ov.media"), ("row", (("label", "ov.media_pos.label"), ("combo", "ov.media_pos"), ("stretch",))),
-            ("row", (("label", "ov.media_style.label"), ("combo", "ov.media_style"), ("stretch",))),
-            ("check", "ov.media_cover"), ("check", "ov.media_progress"))),
+        # 1.66.4 (user: "6 passt"): the preview stays on top, the settings below in three tabs
+        ("panel", (("preview", "ov.preview"),)),
+        ("tabs", (
+            ("ov.pos", N_("Position & Grösse"), (
+                ("row", (("label", "ov.sel.label"), ("combo", "ov.sel"), ("stretch",))), ("slider", "ov.sel_size"),
+                ("hint", "ov.size_scope"), ("hint", "ov.size_cap"),
+                ("row", (("label", "ov.anchor.label"), ("combo", "ov.anchor"), ("stretch",), ("button", "ov.reset"))),
+                ("slider", "ov.posx"), ("slider", "ov.posy"),
+                ("row", (("button", "ov.edit"), ("button", "ov.test"), ("button", "ov.undo"), ("stretch",))),
+                ("hint", "ov.pos_hint"), ("check", "ov.keep_bar"), ("check", "ov.grow"), ("check", "ov.per_size"),
+                ("hint", "ov.per_size_hint"))),
+            ("ov.look", N_("Aussehen"), (
+                ("row", (("hint", "ov.map_size"), ("stretch",), ("button", "ov.map_size_reset"))),
+                ("slider", "ov.opacity"),
+                ("row", (("label", "ov.map_style.label"), ("combo", "ov.map_style"), ("stretch",))),
+                ("sub", N_("Karte")), ("check", "ov.show_map"), ("check", "ov.caption"), ("check", "ov.floors"),
+                ("check", "ov.transparent"),
+                ("sub", N_("Unter der Karte")), ("check", "ov.timer"), ("check", "ov.server"), ("check", "ov.record"),
+                ("sub", N_("Wann zeigen")), ("check", "ov.focus"), ("check", "ov.waiting"))),
+            ("ov.sys", N_("Systemwerte & Musik"), (
+                ("sub", N_("Systemwerte")),
+                ("row", (("label", "ov.sysinfo.label"), ("combo", "ov.sysinfo"), ("stretch",))),
+                ("hint", "ov.sys_text"), ("hint", "ov.sys_hint"), ("check", "ov.today"),
+                ("sub", N_("Musik")),
+                ("check", "ov.media"), ("row", (("label", "ov.media_pos.label"), ("combo", "ov.media_pos"), ("stretch",))),
+                ("row", (("label", "ov.media_style.label"), ("combo", "ov.media_style"), ("stretch",))),
+                ("check", "ov.media_cover"), ("check", "ov.media_progress"))))),
     ),
     "settings": (
         ("card", "st.look", (
@@ -134,8 +140,12 @@ def _spec_keys(items):
         if kind == "card":
             yield it[1]
             yield from _spec_keys(it[2])
-        elif kind == "row":
+        elif kind in ("row", "panel"):
             yield from _spec_keys(it[1])
+        elif kind == "tabs":
+            for frame, _label_, rows in it[1]:
+                yield frame
+                yield from _spec_keys(rows)
         elif kind == "grid":
             yield from _spec_keys(it[2])
         elif kind in ("check", "button", "combo", "slider", "label", "hint", "value", "plain", "hotkey", "preview",
@@ -582,6 +592,10 @@ def make_control(kind, key, post):
 
 def show_control(kind, w, extra, st):
     """Put a model widget's state (app_qt.ui_state) into its Qt control – never sends anything back."""
+    if kind == "tab":                    # a tab of a hand-made page: hidden with its frame
+        if w.isTabVisible(extra) != bool(st.get("visible", True)):
+            w.setTabVisible(extra, bool(st.get("visible", True)))
+        return
     if kind == "title":                  # 1.66.3: a card whose frame is folded away ("Mehr" closed) is not shown
         card, shown = w.parentWidget(), bool(st.get("visible", True))
         if card is not None and card.isHidden() == shown:
@@ -829,6 +843,37 @@ class _Arranged:
             col.apply((saved or {}).get(str(n)))
 
 
+class FitTabs(QTabWidget):
+    """Tabs as tall as the open tab, not the tallest one (QStackedLayout asks every page): no empty room below
+    a short tab."""
+
+    def __init__(self):
+        super().__init__()
+        self.currentChanged.connect(lambda _i: self.updateGeometry())
+
+    def _extra(self):
+        return self.tabBar().sizeHint().height() + 2
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, w):
+        page = self.currentWidget()
+        if page is None:
+            return super().heightForWidth(w)
+        return self._extra() + (page.heightForWidth(w - 2) if page.hasHeightForWidth() else page.sizeHint().height())
+
+    def sizeHint(self):
+        hint = super().sizeHint()
+        page = self.currentWidget()
+        return hint if page is None else QSize(hint.width(), self._extra() + page.sizeHint().height())
+
+    def minimumSizeHint(self):
+        hint = super().minimumSizeHint()
+        page = self.currentWidget()
+        return hint if page is None else QSize(hint.width(), self._extra() + page.minimumSizeHint().height())
+
+
 class FormPage(QWidget, _Arranged):
     """A hand-made page (SPECS): one control per widget of the UI model, which does the work."""
 
@@ -859,6 +904,27 @@ class FormPage(QWidget, _Arranged):
                 for row in item[2]:
                     self._add(row, cl)
                 col.add(item[1], card, hrow)
+            elif kind == "panel":
+                card = _card()
+                cl = QVBoxLayout(card)
+                cl.setContentsMargins(14, 12, 14, 12)
+                for row in item[1]:
+                    self._add(row, cl)
+                lay.addWidget(card)
+            elif kind == "tabs":
+                tabs = FitTabs()
+                tabs.setObjectName("formtabs")
+                for frame, label, rows in item[1]:
+                    body = QWidget()
+                    body.setObjectName("page")
+                    bl = QVBoxLayout(body)
+                    bl.setContentsMargins(14, 12, 14, 12)
+                    bl.setSpacing(6)
+                    for row in rows:
+                        self._add(row, bl)
+                    bl.addStretch()
+                    self.controls[frame] = ("tab", tabs, tabs.addTab(body, _(label).replace("&", "&&")))
+                lay.addWidget(tabs)
             elif kind == "links":
                 row = QHBoxLayout()
                 for c in item[1]:
@@ -2049,9 +2115,78 @@ class AutoPage(QWidget, _Arranged):
                 show_control(kind, w, extra, st)
 
 
+TILE_W, TILE_H = 150, 172          # px (logical) of a map tile on the maps page
+TILE_PIC = 124                     # the picture in it
+ALL_MAPS, RECENT = "\x00all", "\x00recent"     # the two entries above the realms in the list
+
+
+class MapTile(QFrame):
+    """One map of the grid: its picture and name; a click shows it big, a double click shows it in the game."""
+
+    def __init__(self, page, key, label):
+        super().__init__()
+        self.setProperty("class", "tile")
+        self.setFixedSize(TILE_W, TILE_H)
+        self.setCursor(Qt.PointingHandCursor)
+        self._page, self.key = page, key
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(8, 8, 8, 8)
+        lay.setSpacing(6)
+        self.pic = QLabel()
+        self.pic.setObjectName("tilepic")
+        self.pic.setAlignment(Qt.AlignCenter)
+        self.pic.setFixedHeight(TILE_PIC)
+        lay.addWidget(self.pic)
+        self.name = _label(label, "tile")
+        self.name.setToolTip(label)
+        fm = self.name.fontMetrics()
+        self.name.setText(fm.elidedText(label, Qt.ElideRight, TILE_W - 16))
+        lay.addWidget(self.name)
+
+    def set_current(self, on: bool):
+        if bool(self.property("current")) != on:
+            self.setProperty("current", on)
+            self.style().unpolish(self)
+            self.style().polish(self)
+
+    def mouseReleaseEvent(self, e):
+        # the big view only after the double-click time: it covers the tiles, the second click would miss
+        if e.button() == Qt.LeftButton and self.rect().contains(e.position().toPoint()):
+            self._page.clicked(self.key)
+
+    def mouseDoubleClickEvent(self, e):
+        if e.button() == Qt.LeftButton:
+            self._page.show_in_game(self.key)
+
+
+class RealmDelegate(QStyledItemDelegate):
+    """Realm list: the name left, the number of maps right (dim) – text "name\tcount"."""
+
+    def paint(self, p, opt, index):
+        name, _tab, count = str(index.data() or "").partition("\t")
+        o = QStyleOptionViewItem(opt)
+        self.initStyleOption(o, index)
+        o.text = ""
+        o.widget.style().drawControl(QStyle.CE_ItemViewItem, o, p, o.widget)
+        r = o.rect.adjusted(10, 0, -10, 0)
+        p.save()
+        font = o.font
+        font.setBold(bool(o.state & QStyle.State_Selected))
+        p.setFont(font)
+        p.setPen(o.palette.color(QPalette.Text))
+        p.drawText(r, Qt.AlignVCenter | Qt.AlignLeft, p.fontMetrics().elidedText(name, Qt.ElideRight, r.width() - 36))
+        p.setPen(o.palette.color(QPalette.PlaceholderText))
+        p.drawText(r, Qt.AlignVCenter | Qt.AlignRight, count)
+        p.restore()
+
+    def sizeHint(self, opt, index):                 # as wide as the list: the count stays in sight
+        return QSize(1, super().sizeHint(opt, index).height())
+
+
 class MapsPage(QWidget):
-    """Search + list of maps (grouped by realm) and a preview of the selected one (1.58.1); double click / Enter /
-    "Anzeigen" shows a map."""
+    """1.66.4 (user picked variant A): realms on the left (with "Alle Maps" and "Zuletzt gespielt" on top), the
+    maps of the chosen one as tiles with their picture; a click shows a map big (with "Anzeigen"), a double click
+    shows it in the game. The search filters over all realms. Pictures load bit by bit (``thumbs``: key -> path)."""
 
     def __init__(self, post):
         super().__init__()
@@ -2059,30 +2194,65 @@ class MapsPage(QWidget):
         self._preview_key = None
         self._preview_src = None
         self._shown_current = None
+        self._items = None
+        self._recent = []
+        self._thumbs = {}                  # (map_id, variant) -> picture path
+        self._pix = {}                     # path -> QPixmap (made once)
+        self._todo = []                    # tiles still waiting for their picture
+        self._tiles = {}
+        self._realm = None                 # chosen entry of the list (None: not yet – the shown map's realm)
         page, lay = _scroll_page("Maps", scroll=False)
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(page)
         row = QHBoxLayout()
-        row.addWidget(_label(_("Suche")))
         self.search = QLineEdit()
+        self.search.setPlaceholderText(_("Suchen: Name, Realm, Abkürzung …"))
         self.search.setClearButtonEnabled(True)
-        self.search.textChanged.connect(lambda t: self._post("search", t))
+        self.search.textChanged.connect(self._searched)
         self.search.returnPressed.connect(self._pick_first)
         row.addWidget(self.search, 1)
         lay.addLayout(row)
         body = QHBoxLayout()
-        body.setSpacing(12)
-        self.tree = QTreeWidget()
-        self.tree.setHeaderHidden(True)
-        self.tree.setMinimumWidth(220)
-        self.tree.itemActivated.connect(self._picked)
-        self.tree.currentItemChanged.connect(self._selected)
-        body.addWidget(self.tree, 2)
-        card = _card()
-        cl = QVBoxLayout(card)
+        body.setSpacing(16)
+        self.realms = QListWidget()
+        self.realms.setObjectName("realms")
+        self.realms.setFixedWidth(230)
+        self.realms.setItemDelegate(RealmDelegate(self.realms))
+        self.realms.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.realms.currentItemChanged.connect(self._realm_picked)
+        body.addWidget(self.realms)
+        self.stack = QStackedWidget()
+        # the grid of tiles
+        grid_page = QScrollArea()
+        grid_page.setWidgetResizable(True)
+        grid_page.setFrameShape(QFrame.NoFrame)
+        inner = QWidget()
+        inner.setObjectName("page")
+        self.grid_lay = QVBoxLayout(inner)
+        self.grid_lay.setContentsMargins(0, 0, 4, 0)
+        self.grid_lay.setSpacing(10)
+        self.grid_lay.addStretch()
+        grid_page.setWidget(inner)
+        self.grid_scroll = grid_page
+        self.stack.addWidget(grid_page)
+        # one map big
+        big = _card()
+        cl = QVBoxLayout(big)
         cl.setContentsMargins(14, 12, 14, 12)
         cl.setSpacing(6)
+        top = QHBoxLayout()
+        self.p_back = QPushButton("← " + _("Zurück"))
+        self.p_back.setToolTip(_tip("Zurück"))
+        self.p_back.clicked.connect(self.close_big)
+        top.addWidget(self.p_back)
+        top.addStretch()
+        self.p_show = QPushButton(_("Anzeigen"))
+        self.p_show.setObjectName("primary")
+        self.p_show.setToolTip(_tip("Anzeigen"))
+        self.p_show.clicked.connect(self._show_selected)
+        top.addWidget(self.p_show)
+        cl.addLayout(top)
         self.p_name = _label(cls="map", wrap=True)
         self.p_realm = _label(cls="dim", wrap=True)
         self.p_pic = QLabel()
@@ -2090,18 +2260,15 @@ class MapsPage(QWidget):
         self.p_pic.setAlignment(Qt.AlignCenter)
         self.p_pic.setMinimumSize(160, 160)
         self.p_pic.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)   # scales with the card, not the image
-        self.p_show = QPushButton(_("Anzeigen"))
-        self.p_show.setObjectName("primary")
-        self.p_show.setToolTip(_tip("Anzeigen"))
-        self.p_show.clicked.connect(self._show_selected)
         cl.addWidget(self.p_name)
         cl.addWidget(self.p_realm)
         cl.addWidget(self.p_pic, 1)
-        cl.addWidget(self.p_show, 0, Qt.AlignLeft)
-        body.addWidget(card, 3)
+        self.stack.addWidget(big)
+        body.addWidget(self.stack, 1)
         lay.addLayout(body, 1)
-        lay.addWidget(_label(_("Doppelklick oder „Anzeigen“ zeigt die Map. Die Erkennung übernimmt beim nächsten "
-                               "Match wieder."), "dim", wrap=True))
+        self.hint = _label(_("Klick = groß ansehen · Doppelklick = jetzt anzeigen. Die Erkennung übernimmt beim "
+                             "nächsten Match wieder."), "dim", wrap=True)
+        lay.addWidget(self.hint)
         prow = QHBoxLayout()
         b = QPushButton(_("Kartenbild hinzufügen …"))
         b.setToolTip(_tip("Kartenbild hinzufügen …"))
@@ -2110,13 +2277,157 @@ class MapsPage(QWidget):
         prow.addWidget(_label(_("eigenes Bild für eine Map (Hintergrund wird entfernt)"), "dim"))
         prow.addStretch()
         lay.addLayout(prow)
-        self._items = None
+        self._loader = QTimer(self)
+        self._loader.setInterval(10)
+        self._loader.timeout.connect(self._load_some)
+        self._click_key = None
+        self._clicker = QTimer(self)
+        self._clicker.setSingleShot(True)
+        self._clicker.timeout.connect(self._clicked_once)
         self.show_preview(None)
 
-    def _selected(self, item, _prev=None):
-        data = item.data(0, Qt.UserRole) if item is not None else None
-        if data:
-            self._post("map_preview", tuple(data))
+    # ------------------------------------------------------------------ list of realms
+    def _searched(self, text):
+        self._post("search", text)
+
+    def _fill_realms(self):
+        counts = {}
+        for realm, _label_, _mid, _v in self._items:
+            counts[realm] = counts.get(realm, 0) + 1
+        want = [(ALL_MAPS, _("Alle Maps"), sum(counts.values()))]
+        if self._recent:
+            want.append((RECENT, _("Zuletzt gespielt"), len(self._recent)))
+        want += [(r, r, n) for r, n in counts.items()]
+        have = [(self.realms.item(i).data(Qt.UserRole), self.realms.item(i).text())
+                for i in range(self.realms.count())]
+        texts = [(k, f"{t}\t{n}") for k, t, n in want]
+        if have == texts:
+            return
+        self.realms.blockSignals(True)
+        self.realms.clear()
+        for k, text in texts:
+            it = QListWidgetItem(text)
+            it.setData(Qt.UserRole, k)
+            self.realms.addItem(it)
+        self.realms.blockSignals(False)
+
+    def _select_realm(self, key):
+        for i in range(self.realms.count()):
+            if self.realms.item(i).data(Qt.UserRole) == key:
+                self.realms.blockSignals(True)
+                self.realms.setCurrentRow(i)
+                self.realms.blockSignals(False)
+                return
+
+    def _realm_picked(self, item, _prev=None):
+        if item is None:
+            return
+        self._realm = item.data(Qt.UserRole)
+        self.close_big()
+        self._build_grid()
+
+    # ------------------------------------------------------------------ the tiles
+    def _visible_items(self):
+        """[(heading, [(label, key)])] for the chosen entry (a search shows everything it found)."""
+        items = self._items or []
+        if self._realm == RECENT and not self.search.text():
+            by_mid = {}
+            for _r, label, mid, v in items:
+                by_mid.setdefault(mid, (label, (mid, v)))
+            return [(_("Zuletzt gespielt"), [by_mid[m] for m in self._recent if m in by_mid])]
+        groups = {}
+        for realm, label, mid, v in items:
+            if self._realm in (None, ALL_MAPS, RECENT) or self.search.text() or realm == self._realm:
+                groups.setdefault(realm, []).append((label, (mid, v)))
+        return list(groups.items())
+
+    def _build_grid(self):
+        self._loader.stop()
+        while self.grid_lay.count() > 1:                    # all but the stretch at the end
+            it = self.grid_lay.takeAt(0)
+            w = it.widget()
+            if w is not None:
+                w.deleteLater()
+            elif it.layout() is not None:
+                lay = it.layout()
+                while lay.count():
+                    sub = lay.takeAt(0).widget()
+                    if sub is not None:
+                        sub.deleteLater()
+        self._tiles = {}
+        self._todo = []
+        for heading, maps in self._visible_items():
+            self.grid_lay.insertWidget(self.grid_lay.count() - 1, _label(heading.upper(), "h2"))
+            flow = FlowRow(spacing=12)
+            for label, key in maps:
+                t = MapTile(self, key, label)
+                flow.addWidget(t)
+                self._tiles[key] = t
+                self._todo.append(t)
+            self.grid_lay.insertLayout(self.grid_lay.count() - 1, flow)
+        self._mark_current()
+        if self._todo:
+            self._loader.start()
+
+    def _load_some(self):
+        """A few pictures per tick, so that the page shows at once and fills in (52 maps ≈ 1 s in all)."""
+        done = 0
+        while self._todo and done < 2:
+            t = self._todo.pop(0)
+            path = self._thumbs.get(t.key)
+            if not path:
+                continue
+            pm = self._pix.get(path)
+            if pm is None:
+                try:
+                    with Image.open(path) as im:
+                        im.seek(0)
+                        pic = im.convert("RGBA")
+                    bw, bh = TILE_W - 24, TILE_PIC - 8
+                    ratio = self.devicePixelRatioF()
+                    pic.thumbnail((round(2 * bw * ratio), round(2 * bh * ratio)))      # fast, then sharp
+                    pm = pixmap_from_pil(pic, max(1, min(bh, round(bw * pic.height / pic.width))), ratio)
+                except (OSError, ValueError):
+                    pm = QPixmap()
+                self._pix[path] = pm
+                done += 1
+            if not pm.isNull():
+                t.pic.setPixmap(pm)
+        if not self._todo:
+            self._loader.stop()
+
+    def _mark_current(self):
+        cur = tuple(self._shown_current) if self._shown_current else None
+        for key, t in self._tiles.items():
+            t.set_current(key == cur)
+
+    # ------------------------------------------------------------------ one map big
+    def clicked(self, key):
+        self._click_key = tuple(key)
+        self._clicker.start(QApplication.doubleClickInterval())
+
+    def _clicked_once(self):
+        key, self._click_key = self._click_key, None
+        if key:
+            self.open_big(key)
+
+    def open_big(self, key):
+        self._post("map_preview", tuple(key))
+        self.stack.setCurrentIndex(1)
+
+    def close_big(self):
+        self.stack.setCurrentIndex(0)
+
+    def show_in_game(self, key):
+        self._clicker.stop()
+        self._click_key = None
+        self._post("show_map", tuple(key))
+
+    def keyPressEvent(self, e):
+        if e.key() == Qt.Key_Escape and self.stack.currentIndex() == 1:
+            self.close_big()
+            return
+        super().keyPressEvent(e)
 
     def _show_selected(self):
         if self._preview_key:
@@ -2129,7 +2440,7 @@ class MapsPage(QWidget):
             return
         self._preview_key, self._preview_src = key, (p[4] if p else None)
         _set(self.p_name, p[2] if p else _("Keine Map gewählt"))
-        _set(self.p_realm, p[3] if p else _("Links eine Map wählen – hier erscheint ihre Karte."))
+        _set(self.p_realm, p[3] if p else "")
         self.p_show.setEnabled(p is not None)
         self._scale_preview()
 
@@ -2146,47 +2457,34 @@ class MapsPage(QWidget):
         super().resizeEvent(e)
         self._scale_preview()
 
-    def _picked(self, item, _col=0):
-        data = item.data(0, Qt.UserRole)
-        if data:
-            self._post("show_map", tuple(data))
-
     def _pick_first(self):
         if self._items:
             self._post("show_map", (self._items[0][2], self._items[0][3]))
 
-    def show_maps(self, items, current):
-        if items != self._items:
-            self._items = list(items)
-            self.tree.blockSignals(True)
-            self.tree.clear()
-            self.tree.blockSignals(False)
-            groups = {}
-            for realm, label, mid, v in items:
-                if realm not in groups:
-                    groups[realm] = QTreeWidgetItem([realm])
-                    self.tree.addTopLevelItem(groups[realm])
-                child = QTreeWidgetItem([label])
-                child.setData(0, Qt.UserRole, [mid, v])
-                groups[realm].addChild(child)
-            if self.search.text():
-                self.tree.expandAll()
-        for i in range(self.tree.topLevelItemCount()):
-            g = self.tree.topLevelItem(i)
-            for j in range(g.childCount()):
-                c = g.child(j)
-                on = current is not None and list(current) == c.data(0, Qt.UserRole)
-                font = c.font(0)
-                if font.bold() != on:
-                    font.setBold(on)
-                    c.setFont(0, font)
-                if on and current != self._shown_current:     # a new map is shown: open its realm, mark it
-                    g.setExpanded(True)
-                    self.tree.blockSignals(True)
-                    self.tree.setCurrentItem(c)
-                    self.tree.blockSignals(False)
-                    self.tree.scrollToItem(c)
-        self._shown_current = current
+    # ------------------------------------------------------------------ from the app
+    def show_maps(self, items, current, thumbs=None, recent=None):
+        """items [(realm, label, map_id, variant)] (already searched), the map on display, picture paths, the
+        map ids played last (newest first)."""
+        if thumbs is not None and dict(thumbs) != self._thumbs:
+            old, self._thumbs = self._thumbs, dict(thumbs)
+            again = [t for k, t in self._tiles.items() if self._thumbs.get(k) != old.get(k) and t not in self._todo]
+            if again:                                  # e.g. the dark pictures are made now: the tiles get them
+                self._todo += again
+                self._loader.start()
+        recent = list(recent or [])
+        changed = items != self._items or recent != self._recent
+        self._items, self._recent = list(items), recent
+        if changed:
+            self._fill_realms()
+            if self._realm is None or not any(self.realms.item(i).data(Qt.UserRole) == self._realm
+                                              for i in range(self.realms.count())):
+                realm = next((r for r, _l, m, v in self._items if current and (m, v) == tuple(current)), None)
+                self._realm = realm or ALL_MAPS            # first look: the realm of the map on display
+            self._select_realm(self._realm)
+            self._build_grid()
+        if current != self._shown_current:
+            self._shown_current = current
+            self._mark_current()
 
 
 class DialogWindow(QDialog):
@@ -2344,6 +2642,30 @@ class SetupPage(QWidget):
 SEARCH_KINDS = ("check", "radio", "button", "title", "label", "slider")   # what the search finds on a page
 
 
+def _tab_of(w):
+    """[(QTabWidget, its tab page holding w)] for every tab widget above w, innermost first."""
+    out, child, p = [], w, w.parentWidget()
+    while p is not None:
+        if isinstance(p, QStackedWidget) and isinstance(p.parentWidget(), QTabWidget):
+            out.append((p.parentWidget(), child))
+        child, p = p, p.parentWidget()
+    return out
+
+
+def _reachable(w, page) -> bool:
+    """Shown on the page, or on a tab that is not open now (the search goes there)."""
+    tabs = _tab_of(w)
+    if not tabs:
+        return w.isVisibleTo(page)
+    return (w.isVisibleTo(tabs[0][1]) and all(tw.isTabVisible(tw.indexOf(body)) for tw, body in tabs)
+            and tabs[-1][0].isVisibleTo(page))
+
+
+def _open_tabs(w):
+    for tw, body in reversed(_tab_of(w)):
+        tw.setCurrentWidget(body)
+
+
 class MainWindow(QMainWindow):
     def __init__(self, post, icon_path: str | None = None, layouts: dict | None = None):
         super().__init__()
@@ -2478,7 +2800,7 @@ class MainWindow(QMainWindow):
                     continue
                 target = extra[0] if kind == "slider" else w
                 text = " ".join(target.text().split())
-                if len(text) < 3 or not w.isVisibleTo(page) or text.startswith("▸"):
+                if len(text) < 3 or not _reachable(w, page) or text.startswith("▸"):
                     continue
                 entry = f"{text}  ·  {_(labels[key])}"
                 out.setdefault(entry, (key, w))
@@ -2518,13 +2840,14 @@ class MainWindow(QMainWindow):
             self._compact_nav(self.width() < NAV_COMPACT_BELOW)
 
         def scroll():
+            _open_tabs(w)
             sa = w.parentWidget()
             while sa is not None and not isinstance(sa, QScrollArea):
                 sa = sa.parentWidget()
             if sa is not None:
                 sa.ensureWidgetVisible(w, 0, 120)
             card = w
-            while card is not None and card.property("class") != "card":
+            while card is not None and card.property("class") != "card" and card.objectName() != "formtabs":
                 card = card.parentWidget()
             target = card or w
             target.setProperty("found", True)
@@ -2598,8 +2921,8 @@ class MainWindow(QMainWindow):
         for key, page in self.forms.items():
             page.apply_order((orders or {}).get(key, {}))
 
-    def show_maps(self, items, current, preview=None):
-        self.maps.show_maps(items, current)
+    def show_maps(self, items, current, preview=None, thumbs=None, recent=None):
+        self.maps.show_maps(items, current, thumbs, recent)
         self.maps.show_preview(preview)
 
     def show_page(self, key, search=None):
