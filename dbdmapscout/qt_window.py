@@ -46,42 +46,44 @@ SLIDER_MAX = 420                  # px (logical): longest slider (overlay positi
 # label, rows)]) = one tab per frame (hidden with the frame).
 SPECS = {
     "overlay": (
-        # 1.66.4 (user: "6 passt"): the preview stays on top, the settings below in three tabs
+        # 1.66.4 (user: "6 passt"): the preview stays on top; 1.2.12 (analysis point 9): below it the tools for the
+        # element picked (list, size, opacity, move/test/undo – on every tab), then one tab per element and
+        # "Allgemein"; a click on an element in the preview opens its tab (MainWindow.open_tab)
         ("panel", (("preview", "ov.preview"),)),
+        ("panel", (
+            ("row", (("label", "ov.sel.label"), ("combo", "ov.sel"), ("stretch",))), ("slider", "ov.sel_size"),
+            ("slider", "ov.opacity"), ("hint", "ov.size_scope"), ("hint", "ov.size_cap"),
+            ("row", (("button", "ov.edit"), ("button", "ov.test"), ("button", "ov.undo"), ("stretch",))))),
         ("tabs", (
-            ("ov.pos", N_("Position & Grösse"), (
-                ("row", (("label", "ov.sel.label"), ("combo", "ov.sel"), ("stretch",))), ("slider", "ov.sel_size"),
-                ("slider", "ov.opacity"), ("slider", "ov.gap"),
-                ("row", (("label", "ov.bar_align.label"), ("combo", "ov.bar_align"), ("stretch",))),
-                ("row", (("label", "ov.preset.label"), ("combo", "ov.preset"), ("button", "ov.preset_apply"),
-                         ("stretch",))),
-                ("hint", "ov.size_scope"), ("hint", "ov.size_cap"),
+            ("ov.look", N_("Karte"), (
                 ("row", (("label", "ov.anchor.label"), ("combo", "ov.anchor"), ("stretch",), ("button", "ov.reset"))),
-                ("slider", "ov.posx"), ("slider", "ov.posy"),
-                ("row", (("button", "ov.edit"), ("button", "ov.test"), ("button", "ov.undo"), ("stretch",))),
-                ("hint", "ov.pos_hint"), ("check", "ov.keep_bar"), ("check", "ov.grow"), ("check", "ov.per_size"),
-                ("hint", "ov.per_size_hint"))),
-            ("ov.look", N_("Aussehen"), (
+                ("slider", "ov.posx"), ("slider", "ov.posy"), ("hint", "ov.pos_hint"),
                 ("row", (("hint", "ov.map_size"), ("stretch",), ("button", "ov.map_size_reset"))),
                 ("row", (("label", "ov.map_style.label"), ("combo", "ov.map_style"), ("stretch",))),
                 ("sub", N_("Karte")), ("check", "ov.show_map"), ("check", "ov.caption"), ("check", "ov.floors"),
-                ("check", "ov.transparent"), ("check", "ov.fade"), ("check", "ov.map_backdrop"),
+                ("check", "ov.transparent"), ("check", "ov.map_backdrop"), ("check", "ov.keep_bar"), ("check", "ov.grow"),
                 ("sub", N_("Unter der Karte")), ("check", "ov.timer"), ("check", "ov.server"), ("check", "ov.record"),
                 ("sub", N_("Wann zeigen")), ("check", "ov.focus"), ("check", "ov.waiting"))),
-            ("ov.sys", N_("Systemwerte & Musik"), (
-                ("sub", N_("Systemwerte")),
+            ("ov.sys", N_("Systemwerte"), (
                 ("row", (("label", "ov.sysinfo.label"), ("combo", "ov.sysinfo"), ("stretch",))),
                 ("hint", "ov.sys_text"), ("hint", "ov.sys_hint"), ("check", "ov.hud_backdrop"),
                 ("check", "ov.hud_row_cpu"), ("check", "ov.hud_row_gpu"), ("check", "ov.hud_row_spot"),
-                ("check", "ov.hud_row_vram"), ("check", "ov.hud_row_ram"),
-                ("sub", N_("Heute")), ("check", "ov.today"),
+                ("check", "ov.hud_row_vram"), ("check", "ov.hud_row_ram"))),
+            ("ov.today_f", N_("Heute"), (
+                ("check", "ov.today"),
                 ("row", (("label", "ov.today_pos.label"), ("combo", "ov.today_pos"), ("stretch",))),
-                ("check", "ov.today_backdrop"),
-                ("sub", N_("Musik")),
+                ("check", "ov.today_backdrop"))),
+            ("ov.music_f", N_("Musik"), (
                 ("check", "ov.media"), ("row", (("label", "ov.media_pos.label"), ("combo", "ov.media_pos"), ("stretch",))),
                 ("row", (("label", "ov.media_style.label"), ("combo", "ov.media_style"), ("stretch",))),
                 ("check", "ov.media_cover"), ("check", "ov.media_progress"), ("check", "ov.media_accent"),
-                ("check", "ov.media_remaining"), ("check", "ov.media_backdrop"), ("check", "ov.media_fade"))))),
+                ("check", "ov.media_remaining"), ("check", "ov.media_backdrop"), ("check", "ov.media_fade"))),
+            ("ov.pos", N_("Allgemein"), (
+                ("slider", "ov.gap"),
+                ("row", (("label", "ov.bar_align.label"), ("combo", "ov.bar_align"), ("stretch",))),
+                ("row", (("label", "ov.preset.label"), ("combo", "ov.preset"), ("button", "ov.preset_apply"),
+                         ("stretch",))),
+                ("check", "ov.fade"), ("check", "ov.per_size"), ("hint", "ov.per_size_hint"))))),
     ),
     "settings": (
         ("card", "st.look", (
@@ -2946,6 +2948,14 @@ class MainWindow(QMainWindow):
         keys = [k for k, _l in PAGES]
         if key in keys:
             self.nav.setCurrentRow(keys.index(key))
+
+    def open_tab(self, page: str, frame: str):
+        """1.2.12 (analysis point 10): open the tab of a hand-made page that holds ``frame`` (an element picked in
+        the overlay preview opens its settings)."""
+        form = self.forms.get(page)
+        ctl = form.controls.get(frame) if form is not None else None
+        if ctl is not None and ctl[0] == "tab" and ctl[1].currentIndex() != ctl[2]:
+            ctl[1].setCurrentIndex(ctl[2])
 
     def apply_theme(self, dark: bool, zoom: float):
         pal = QPalette()
