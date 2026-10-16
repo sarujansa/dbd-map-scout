@@ -17,6 +17,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from .capture import is_above
+from .layout import fit_height
 from .mapimage import FONT as FIRA, floor_frames, floor_view
 from .overlay import BACKDROP, MAX_LOAD_H, load_frames
 
@@ -969,18 +970,23 @@ class PictureOverlay:
             timer, self._timer = self._timer, key[3]
             try:
                 self.text_height = text_h
-                w, _h = self.render(height, push=False)
+                pad2 = 2 * self.backdrop_pad(text_h)
                 iw, ih = self.map_size()
-                map_w = (round(iw * height / ih) if ih else 0) + 2 * self.backdrop_pad(text_h)
-                for _try in range(3):           # the lines below are wider than the bar: smaller text, same map
-                    if w <= avail or w <= map_w or self.text_height <= 40:    # (the area's edge does not scale)
+                if pad2 and ih:                 # the dark area's edge does not scale: the map makes room for it
+                    height = fit_height(height, avail - pad2, iw, ih)
+                w, _h = self.render(height, push=False)
+                for _try in range(4):           # the lines below are wider than the bar: smaller text, same map
+                    if w <= avail or self.text_height <= 40:
                         break
-                    self.text_height = max(40, int(self.text_height * avail / w))
+                    pad2 = 2 * self.backdrop_pad(self.text_height)
+                    self.text_height = max(40, int(self.text_height * (avail - pad2) / max(1, w - pad2)) - 1)
                     w, _h = self.render(height, push=False)
-                for _try in range(6):           # still too wide (the map with the area's edge): the map too
+                for _try in range(10):          # still too wide (the map with the area's edge): the map too
                     if w <= avail or height <= 80:
                         break
-                    height = max(80, min(height - 1, int(height * avail / w)))
+                    # at least 2 px smaller each time: the area's edge and the text's shadow do not scale with the
+                    # map, a 1-px step could stall a few px too wide (sweep 1.2.10: 12 maps at text 160 %)
+                    height = max(80, min(height - 2, int(height * avail / w)))
                     w, _h = self.render(height, push=False)
             finally:
                 self._timer = timer
