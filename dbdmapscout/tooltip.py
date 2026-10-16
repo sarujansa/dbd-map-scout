@@ -68,6 +68,7 @@ TIPS = {
         "Hintergründe in echtem Schwarz statt Dunkelgrau – passt zu OLED-Bildschirmen und geht mit jeder "
         "Akzentfarbe. Im hellen Modus ohne Wirkung.",
     "Anordnung zurücksetzen": "Stellt die Kästen auf allen Seiten wieder in die ursprüngliche Reihenfolge.",
+    "Zurück": "Zurück zu den Karten des Realms (Esc).",
     "Anzeigen": "Blendet die gewählte Map jetzt als Overlay ein – die Erkennung übernimmt beim nächsten Match "
                 "wieder.",
     "Killer setzen": "Setzt den Killer nur für die markierte Runde und zählt sie als Killer-Runde – z. B. wenn sie "

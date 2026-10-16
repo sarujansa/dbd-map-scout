@@ -67,7 +67,6 @@ EN = {
     "Karte eingeblendet": "Map shown",
 
     # ------------------------------------------------------------------ tab maps
-    "Suche": "Search",
     "Kartenbild hinzufügen …": "Add map picture …",
     "eigenes Bild für eine Map (Hintergrund wird entfernt)": "your own picture for a map (background is removed)",
     "Eigene Bilder": "Own pictures",
@@ -1051,13 +1050,10 @@ EN = {
     'Ø Rundendauer': 'Avg. round length',
     # 1.58.1: maps page with preview
     'Anzeigen': 'Show',
-    'Doppelklick oder „Anzeigen“ zeigt die Map. Die Erkennung übernimmt beim nächsten Match wieder.':
-        'Double-click or "Show" shows the map. Detection takes over again at the next match.',
     'Kartenbild nicht lesbar: {error}': 'Map picture not readable: {error}',
     'Keine Map gewählt': 'No map selected',
     'Blendet die gewählte Map jetzt als Overlay ein – die Erkennung übernimmt beim nächsten Match wieder.':
         'Shows the selected map in the overlay now – detection takes over again at the next match.',
-    'Links eine Map wählen – hier erscheint ihre Karte.': 'Pick a map on the left – its picture appears here.',
     # 1.59: own order of the cards
     'Ziehen, um den Kasten zu verschieben': 'Drag to move this box',
     'Anordnung zurücksetzen': 'Reset arrangement',
@@ -1187,4 +1183,13 @@ EN = {
         'Own position: "Move with the mouse" and drag in the preview – or the preset "own position".',
     'Unter der Karte': 'Below the map',
     'Wann zeigen': 'When to show',
+    'Alle Maps': 'All maps',
+    'Zuletzt gespielt': 'Played last',
+    'Suchen: Name, Realm, Abkürzung …': 'Search: name, realm, abbreviation …',
+    'Klick = groß ansehen · Doppelklick = jetzt anzeigen. Die Erkennung übernimmt beim nächsten Match wieder.':
+        'Click = view big · double click = show now. Detection takes over again at the next match.',
+    'Zurück zu den Karten des Realms (Esc).': "Back to the realm's maps (Esc).",
+    'Position & Grösse': 'Position & size',
+    'Aussehen': 'Look',
+    'Systemwerte & Musik': 'System values & music',
 }
