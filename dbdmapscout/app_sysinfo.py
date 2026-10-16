@@ -46,7 +46,8 @@ HUD_SCALE = (60, 200)                       # size of the system values / "today
 MAP_SCALE = (15, 90)                        # size of the map, percent of the game height
 # 1.64.9 (user: one size for what was picked instead of three sliders): the elements of the preview
 SELECTABLE = (("map", N_("Karte")), ("text", N_("Schrift der Karte (Name, Timer, Infos)")),
-              ("hud", N_("Systemwerte · Heute")), ("music", N_("Musik")))
+              ("hud", N_("Systemwerte")), ("today", N_("Heute")), ("music", N_("Musik")))
+TODAY_SCALE = (60, 200)                     # size of "today", percent (1.2.6)
 TEXT_SCALE = (50, 200)                      # size of the map's name/timer/info lines, percent (1.65)
 TEXT_BASE = 0.36                            # … of the text at the standard map size (share of the game height)
 
@@ -54,6 +55,11 @@ TEXT_BASE = 0.36                            # … of the text at the standard ma
 def text_scale(o: dict) -> float:
     """Size factor of the map's name, timer and info lines (setting overlay.text_scale, 1.65)."""
     return min(TEXT_SCALE[1], max(TEXT_SCALE[0], float(o.get("text_scale", 1.0)) * 100)) / 100
+
+
+def today_scale(o: dict) -> float:
+    """Size factor of "today" (setting overlay.today_scale, 1.2.6)."""
+    return min(TODAY_SCALE[1], max(TODAY_SCALE[0], float(o.get("today_scale", 1.0)) * 100)) / 100
 
 
 def hud_scale(o: dict) -> float:
@@ -87,6 +93,11 @@ class SysInfo:
         if self.media_win is not None:
             self.media_win.on_moved = lambda x, y: self.events.put(("call", self._media_dragged, (x, y)))
             self.media_win.edit_label = _("MUSIK")
+        self.today_win = make_hud("DbD Map Scout Heute")     # 1.2.6: "today", a card of its own
+        if self.today_win is not None:
+            self.today_win.on_moved = lambda x, y: self.events.put(("call", self._today_dragged, (x, y)))
+            self.today_win.edit_label = _("HEUTE")
+        self._today_box = None             # (x, y, w, h) of "today" on screen (the music card hangs below it)
         self._media_ctx = None             # (gx, gy, gw, gh, show) of the last placement
         self._media_fader = media.Fader()  # 1.2.4: the music card fades in/out
         self._media_fade_job = None
@@ -99,19 +110,14 @@ class SysInfo:
         """Show/hide the system values; returns (side, height) when they take the top of a bar."""
         side = self.settings.get("sysinfo", "off")
         sys_on = side in HUD_SHOWN
-        today = bool(self.settings["overlay"].get("show_today", True))
-        self._media_ctx = (gx, gy, gw, gh, show)            # the music card is placed after the map
-        if not sys_on and today:                            # only "today": top of the right bar or dragged
-            side = "custom" if self.settings.get("today_side") == "custom" else "right"
-        on = (sys_on or today) and self.hud is not None
+        self._media_ctx = (gx, gy, gw, gh, show)            # "today" and the music card are placed after the map
+        on = sys_on and self.hud is not None
         self.sysmon.active = sys_on and self.hud is not None and self.game is not None
         bar = layout.bar_width(gw, gh)
         snap = self.sysmon.snapshot
         if self._hist is not None and self._sysrec is not None and sys_on and time.time() - snap.t < 3:
             self._sysrec.add(snap)
-        rows = sysinfo.hud_rows(snap) if sys_on and self.hud is not None else []
-        if on and today:
-            rows = rows + ([[(" ", sysinfo.DIM)]] if rows else []) + self._today_rows(time.time())
+        rows = sysinfo.hud_rows(snap) if on else []
         editing = on and self.overlay.editing          # 1.64.1: always draggable while moving, like the music
         if self.hud is not None:
             self.hud.set_editing(editing)
@@ -163,6 +169,77 @@ class SysInfo:
         if cache is None or cache[0] is not j or cache[1] != int(now // 60):
             self._today_cache = cache = (j, int(now // 60), today_rows(j, now))
         return cache[2] + [[(_("UHR "), sysinfo.DIM), (time.strftime("%H:%M", time.localtime(now)), sysinfo.WHITE)]]
+
+    def _today_height(self, gh: int) -> int:
+        """Height "today" takes below the system values (a map at the top of that bar moves down by it), 0 when it
+        does not hang there (1.2.6)."""
+        o = self.settings["overlay"]
+        win = self.today_win
+        if win is None or not o.get("show_today", True) or o.get("today_pos", "below") != "below":
+            return 0
+        look = ("backdrop",) if o.get("today_backdrop", False) else ()
+        _w, h = win.render(self._today_rows(time.time()), int(gh * today_scale(o)), look=look)
+        return h + max(2, int(gh * o["margin"]) // 2)
+
+    def _today_place(self):
+        """"Today" (1.2.6, user: "unter dem GPU/CPU-Zähler macht keinen Sinn"): a card of its own like the music –
+        below the system values (default), bottom right / left in the bar, or an own place; shown with the map."""
+        o = self.settings["overlay"]
+        win = self.today_win
+        on = bool(o.get("show_today", True)) and win is not None
+        ctx = self._media_ctx
+        if win is None:
+            return
+        editing = on and self.overlay.editing
+        win.set_editing(editing)
+        rows = self._today_rows(time.time()) if on else []
+        spot = o.get("today_pos", "below")
+        gx, gy, gw, gh, show = ctx or (0, 0, 0, 0, False)
+        bar = layout.bar_width(gw, gh) if gh else 0
+        if not (ctx and rows and (show or editing) and (self.game is not None or editing)
+                and (bar >= layout.MIN_BAR or spot == "custom" or editing)):
+            win.hide()
+            self.worker.today_rect = None
+            self._today_box = None
+            return
+        margin = int(gh * o["margin"])
+        win.opacity = o["opacity"]
+        look = ("backdrop",) if o.get("today_backdrop", False) else ()
+        height = int(gh * today_scale(o))
+        w, h = win.render(rows, height, look=look)
+        avail = layout.max_width(bar, margin) if bar >= layout.MIN_BAR and spot != "custom" else gw / 3
+        if w > avail:                                       # never wider than the black bar
+            w, h = win.render(rows, max(200, int(height * avail / w)), look=look)
+        hud = self.worker.hud_rect if self.hud is not None and self.hud.shown else None
+        box = getattr(self, "_hud_box", None)
+        if hud and box and box[:2] == hud[:2]:
+            hud = box                                       # by its widest width: no wobble when values change
+        x, y = layout.media_xy(spot, (gx, gy, gw, gh), (w, h), margin, hud, o.get("today_xy"))
+        win.show_at(int(x), int(y))
+        self.worker.today_rect = (int(x), int(y), w, h)
+        self._today_box = (int(x), int(y), w, h)
+
+    def _today_dragged(self, x, y):
+        """"Today" dropped somewhere (edit mode): from now on its own place there."""
+        self._layout_mark()
+        gx, gy, gw, gh = self._game_rect()
+        self._today_own_place(*layout.media_own(gw, gh, self.today_win.size, x - gx, y - gy))
+
+    def _today_own_place(self, fx, fy):
+        """"Today" dragged in the preview or the game: its own place (its centre) from now on."""
+        o = self.settings["overlay"]
+        o["today_xy"], o["today_pos"] = [fx, fy], "custom"
+        if hasattr(self, "today_pos_var"):
+            self.today_pos_var.set(_(dict(MEDIA_SPOTS)["custom"]))
+        self._save_soon()
+        self._tick_overlay(reschedule=False)
+
+    def _today_spot_changed(self):
+        self._layout_mark()
+        key = dict((_(label), k) for k, label in MEDIA_SPOTS).get(self.today_pos_var.get(), "below")
+        self.settings["overlay"]["today_pos"] = key
+        self._save_soon()
+        self._tick_overlay(reschedule=False)
 
     def _hud_follow_map(self, rect, gx, gy, gw, gh, margin):
         """"Direkt über der Karte": centred right above the map on display (below it when there is no room);
@@ -254,6 +331,8 @@ class SysInfo:
         box = getattr(self, "_hud_box", None)
         if hud and box and box[:2] == hud[:2]:
             hud = box                                       # by its widest width: no wobble when values change
+        if self._today_box and o.get("today_pos", "below") == "below":
+            hud = self._today_box                           # "today" hangs below them: the music below that
         x, y = layout.media_xy(spot, (gx, gy, gw, gh), (w, h), margin, hud, o.get("media_xy"))
         song = (now.title, now.artist)
         if not fade:
@@ -329,15 +408,12 @@ class SysInfo:
         self._save_soon()
 
     def _hud_own_place(self, fx, fy):
-        """System values (or "today" alone) dragged in the preview: their own place from now on (1.64.1). With
-        the system values off only "today" moves – they are not switched on by it."""
+        """System values dragged in the preview: their own place from now on (1.64.1)."""
         self.settings.set("sysinfo_pos", [fx, fy])
         if self.settings.get("sysinfo", "off") in HUD_SHOWN:
             self.settings.set("sysinfo", "custom")
             if hasattr(self, "sysinfo_var"):
                 self.sysinfo_var.set(_(dict(HUD_SIDES)["custom"]))
-        else:
-            self.settings.set("today_side", "custom")
         self._save_soon()
         self._tick_overlay(reschedule=False)
 
@@ -380,6 +456,8 @@ class SysInfo:
             return TEXT_SCALE + (text_scale(o) * 100,)
         if name == "music":
             return MEDIA_SCALE + (min(MEDIA_SCALE[1], max(MEDIA_SCALE[0], o.get("media_scale", 1.0) * 100)),)
+        if name == "today":
+            return TODAY_SCALE + (today_scale(o) * 100,)
         return MAP_SCALE + (self._map_height() * 100,)
 
     def _select(self, name):
@@ -435,6 +513,8 @@ class SysInfo:
         elif name == "music":
             o["media_scale"] = round(percent / 100, 2)
             self.media_size_var.set(round(percent))
+        elif name == "today":
+            o["today_scale"] = round(percent / 100, 2)
         else:
             value = round(percent / 100, 3)
             mid = self._own_size_map()

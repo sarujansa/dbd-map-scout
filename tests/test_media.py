@@ -209,3 +209,18 @@ def test_an_own_place_of_the_music_card_is_its_centre():
     assert narrow[0] + 135 == wide[0] + 200 and abs(narrow[1] + 45 - (wide[1] + 60)) <= 1    # same centre
     assert layout.media_xy("custom", game, (400, 120), 17, own=(1.0, 1.0)) == (3040, 1320)   # never off screen
     assert layout.media_own(3440, 1440, (270, 90), 3170, 1350) == (0.9608, 0.9688)
+
+
+def test_old_today_at_its_own_place_becomes_a_card_at_that_place(tmp_path):
+    """1.2.6: "today" alone (system values off) dragged somewhere → its own card at that place."""
+    import json
+    from dbdmapscout.config import Settings
+    p = tmp_path / "settings.json"
+    p.write_text(json.dumps({"settings_version": 4, "sysinfo": "off", "today_side": "custom",
+                             "sysinfo_pos": [0.2, 0.7], "overlay": {}, "hotkeys": {}}))
+    s = Settings(str(p))
+    assert s["overlay"]["today_pos"] == "custom" and s["overlay"]["today_xy"] == [0.2, 0.7]
+    assert "today_side" not in s.data
+    p.write_text(json.dumps({"settings_version": 4, "sysinfo": "right", "today_side": "custom",
+                             "sysinfo_pos": [0.2, 0.7], "overlay": {}, "hotkeys": {}}))
+    assert Settings(str(p))["overlay"]["today_pos"] == "below"          # it hung below the system values

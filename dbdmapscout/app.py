@@ -351,15 +351,27 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self.sysinfo_hint_var = ui.StringVar(value="")
         self._reg("ov.sys_hint", ui.Label(sysf, textvariable=self.sysinfo_hint_var, style="Dim.TLabel",
                                            wraplength=520)).pack(anchor="w")
-        self.today_var = ui.BooleanVar(value=o.get("show_today", True))
-        self._reg("ov.today", ui.Checkbutton(sysf, text=_("Darunter „Heute“: Runden, Spielzeit, Ø Kills/Entkommen, "
-                                                           "Uhrzeit (auch wenn die Systemwerte aus sind: rechts oben)"),
-                                             variable=self.today_var, command=self._today_flag_changed)
-                  ).pack(anchor="w", pady=(6, 0))
         self.hud_backdrop_var = ui.BooleanVar(value=o.get("hud_backdrop", False))
         self._reg("ov.hud_backdrop", ui.Checkbutton(sysf, text=_("Dunkle Fläche hinter den Systemwerten"),
                                                     variable=self.hud_backdrop_var, command=self._today_flag_changed)
                   ).pack(anchor="w", pady=(2, 0))
+        self.today_var = ui.BooleanVar(value=o.get("show_today", True))
+        self._reg("ov.today", ui.Checkbutton(sysf, text=_("„Heute“: Runden, Spielzeit, Ø Kills/Entkommen, Uhrzeit"),
+                                             variable=self.today_var, command=self._today_flag_changed)
+                  ).pack(anchor="w", pady=(6, 0))
+        tr = ui.Frame(sysf)
+        tr.pack(fill="x", pady=(4, 0))
+        self._reg("ov.today_pos.label", ui.Label(tr, text=_("Heute"), width=12)).pack(side="left")
+        spots = dict(MEDIA_SPOTS)
+        self.today_pos_var = ui.StringVar(value=_(spots.get(o.get("today_pos", "below"), spots["below"])))
+        tcb = self._reg("ov.today_pos", ui.Combobox(tr, textvariable=self.today_pos_var, state="readonly", width=38,
+                                                     values=[_(t) for _k, t in MEDIA_SPOTS]))
+        tcb.pack(side="left", padx=6)
+        tcb.bind("<<ComboboxSelected>>", lambda e: self._today_spot_changed())
+        self.today_backdrop_var = ui.BooleanVar(value=o.get("today_backdrop", False))
+        self._reg("ov.today_backdrop", ui.Checkbutton(sysf, text=_("Dunkle Fläche hinter „Heute“"),
+                                                      variable=self.today_backdrop_var,
+                                                      command=self._today_flag_changed)).pack(anchor="w", pady=(2, 0))
         self.media_var = ui.BooleanVar(value=o.get("show_media", True))
         self._reg("ov.media", ui.Checkbutton(sysf, text=_("„Läuft gerade“: Titel, Interpret und Cover der Musik "
                                                            "(Spotify, Browser … – nur während sie spielt)"),
@@ -416,6 +428,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         for key, var in self.media_look_vars.items():
             self.settings["overlay"][key] = bool(var.get())
         self.settings["overlay"]["hud_backdrop"] = bool(self.hud_backdrop_var.get())
+        self.settings["overlay"]["today_backdrop"] = bool(self.today_backdrop_var.get())
         self.settings["overlay"]["map_backdrop"] = bool(self.map_backdrop_var.get())
         self.overlay.set_backdrop(self.settings["overlay"]["map_backdrop"])
         self._save_soon()
@@ -1192,7 +1205,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         try:
             self._place_overlay_map()
         finally:
-            self._media_place()                     # the music card goes where the map and system values are
+            self._today_place()                     # "today" goes where the map and system values are (1.2.6)
+            self._media_place()                     # … and the music card below it
             self._guides_place()                    # centre cross while moving (1.64.5)
 
     def _place_overlay_map(self):
@@ -1233,6 +1247,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         elif not forced:
             self._log_visibility(reason, (gx, gy, gw, gh))
         hud = self._hud_place(gx, gy, gw, gh, show=not reason and not wait)
+        if hud:                                     # "today" below the system values: the map moves down by it too
+            hud = (hud[0], hud[1] + self._today_height(gh))
         self._sysinfo_status()
         if reason:
             self.overlay.hide()
@@ -1498,13 +1514,11 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         if sys_on:
             snap = self.sysmon.snapshot
             rows = sysinfo.hud_rows(snap if now - snap.t < 3 else preview.sample_snapshot())
-        if today:
-            rows = rows + ([[(" ", sysinfo.DIM)]] if rows else []) + self._today_rows(now)
-        hud_side = side if sys_on else (("custom" if self.settings.get("today_side") == "custom" else "right")
-                                        if today else "")
+        today_rows = self._today_rows(now) if today else None
+        hud_side = side if sys_on else ""
         music = preview.music_rows(self.media.now, now) if o.get("show_media", True) else None
         key = (gw, gh, repr(sorted((k, v) for k, v in o.items() if not isinstance(v, dict))), hud_side,
-               repr(rows), repr(self.settings.get("sysinfo_pos")), id(pic), caption, repr(info),
+               repr(rows), repr(today_rows), repr(self.settings.get("sysinfo_pos")), id(pic), caption, repr(info),
                self._map_height(), repr(music[0]) if music else None, id(music[1]) if music else None)
         cached = getattr(self, "_preview_cache", None)
         if cached is None or cached[0] != key:
@@ -1512,7 +1526,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
             f = min(1.0, preview.RENDER_H / max(1, gh))
             layers, rect = preview.layers(round(gw * f), round(gh * f), o, hud_side, rows,
                                           self.settings.get("sysinfo_pos"), pic, caption, info, self._map_height(),
-                                          music)
+                                          music, today_rows)
             self._preview_cache = cached = (key, layers, tuple(round(v / f) for v in rect), f)
         _key, layers, (x, y, w, h), f = cached
         return {"screen": (gw, gh), "bar": layout.bar_width(gw, gh), "rect": (x, y, w, h, h),
@@ -1567,12 +1581,14 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
                 return
             fx = round(min(1.0, max(0.0, x / max(1, gw - size[0]))), 4)
             fy = round(min(1.0, max(0.0, y / max(1, gh - size[1]))), 4)
-            if name == "music":
+            if name in ("music", "today"):
                 fx, fy = layout.media_own(gw, gh, size, x, y)       # by its centre (1.2.5)
             if name == "hud":
                 self._hud_own_place(fx, fy)
             elif name == "music":
                 self._music_own_place(fx, fy)
+            elif name == "today":
+                self._today_own_place(fx, fy)
             elif name == "map":
                 self._map_own_place(fx, fy)
             return

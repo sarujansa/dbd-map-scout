@@ -54,9 +54,12 @@ TIPS = {
         "Anteil Escapes – aus den Runden mit Daten der Stats-Seite, ab 3 Runden.",
     "Einrichtung starten": "Öffnet noch einmal die Einrichtung vom ersten Start: Spielsprache, Overlay-Position "
                            "und die wichtigsten Tasten.",
-    "Darunter „Heute“: Runden, Spielzeit, Ø Kills/Entkommen, Uhrzeit (auch wenn die Systemwerte aus sind: rechts oben)":
-        "Zeigt im schwarzen Balken, solange eine Karte im Match zu sehen ist, wie viele Runden du heute gespielt "
-        "hast, wie lange, Ø Kills bzw. Entkommen laut Stats-Seite und die Uhrzeit.",
+    "„Heute“: Runden, Spielzeit, Ø Kills/Entkommen, Uhrzeit":
+        "Eine eigene Karte, solange eine Map im Match zu sehen ist: wie viele Runden du heute gespielt hast, wie "
+        "lange, Ø Kills bzw. Entkommen laut Stats-Seite und die Uhrzeit. Position darunter, Größe über den "
+        "Größenregler („Heute“ wählen).",
+    "Dunkle Fläche hinter „Heute“":
+        "Eine halb durchsichtige dunkle Fläche mit runden Ecken hinter „Heute“.",
     "„Läuft gerade“: Titel, Interpret und Cover der Musik (Spotify, Browser … – nur während sie spielt)":
         "Liest Titel und Interpret aus der Windows-Mediensteuerung (dieselbe Liste wie beim Lautstärkeregler von "
         "Windows) – nur Anzeige, das Programm steuert nichts und speichert nichts.",
