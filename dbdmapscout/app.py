@@ -464,6 +464,10 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         if key == "floor":
             return _("Wechselt die Anzeige bei Karten mit Etagen (Midwich): beide untereinander → "
                      "unten → oben → beide. Gilt bis zur nächsten Map.") + self._hk_hint("next_floor")
+        if key == "scan":                              # 1.2.17: the hotkeys show up where the buttons are
+            return tooltip.tip_for_label("Scannen") + self._hk_hint("scan_now")
+        if key == "reject":
+            return tooltip.tip_for_label("Falsch erkannt") + self._hk_hint("reject_map")
         return None
 
     def _tip_lookup(self, w):
@@ -481,6 +485,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         if w is self.edit_btn:
             return lambda: (_("Verschieben beenden.") if self.edit_btn.cget("text") == _("Fertig") else
                             _("Karte direkt mit der Maus ziehen, Mausrad ändert die Grösse.")
+                            + self._hk_hint("edit_position")
                             + self._hk_hint("edit_position"))
         if w in hk:
             return _("Klicken und die neue Tastenkombination drücken: Strg/Alt + Taste, oder eine Taste allein "

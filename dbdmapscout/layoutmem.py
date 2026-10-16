@@ -17,6 +17,17 @@ PRESETS = {
     "spread": {"overlay": {"anchor": "auto", "bar_align": "centre", "today_pos": "below", "media_pos": "bottom_left"},
                "sysinfo": "right"},
 }
+STANDARD = "standard"   # 1.2.17: the preset "Standard" = the layout as delivered (config.DEFAULTS)
+
+
+def standard_layout(defaults: dict) -> dict:
+    """The layout part of the program's defaults – the preset "Standard" (every layout key, so applying it
+    puts back positions, sizes, stacking and alignment at once; map-specific sizes go too)."""
+    snap = snapshot(defaults)
+    snap["overlay"].setdefault("map_heights", {})
+    return snap
+
+
 UNDO_KEPT = 50
 GESTURE_GAP = 0.8      # s: changes closer together than this are one step (a drag, a row of arrow keys)
 SNAP_PX = 6            # px in the preview: this close to a line, an element snaps to it (1.65.2: was 8)
