@@ -89,7 +89,7 @@ def music_rows(now: media.NowPlaying, wall: float):
 
 
 def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, map_pic, caption: str,
-           info: dict, height_frac: float, music=None, today=None):
+           info: dict, height_frac: float, music=None, today=None, editing: bool = False):
     """[(name, picture, x, y)] in screen pixels, bottom to top, + the map's (x, y, w, h) for clicks.
     ``o`` = settings["overlay"], ``hud_side`` = settings["sysinfo"] ("" for none), ``info`` = timer/server/ping/
     record lines, ``music`` = (rows, cover) or None, ``today`` = rows of "today" (its own card, 1.2.6) or None."""
@@ -99,6 +99,10 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
     align, gap = o.get("bar_align", "centre"), layout.stack_gap(o, gh)        # 1.2.8
     out = []
     hud = None
+    if bar < layout.MIN_BAR and not editing:                # like the App: without black bars only own places
+        hud_side = hud_side if hud_side == "custom" else ""   # (in the move mode everything shows, to drag it)
+        today = today if o.get("today_pos", "below") == "custom" else None
+        music = music if o.get("media_pos", "below") == "custom" else None
     if hud_side and hud_rows:
         hh = int(gh * min(2.0, max(0.6, float(o.get("hud_scale", 1.0)))))      # its own size (1.64.9)
         boxed = bool(o.get("hud_backdrop", False))
@@ -124,21 +128,30 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
                                  avail if spot != "custom" else gw / 3,
                                  ("music", repr(rows_m), id(show_cover), style, prog, look)),
                           spot, o.get("media_xy"))
-    order = layout.stack_order({n: s for n, (_p, s, _own) in cards.items()})
-    drop = hud.height + margin if hud is not None and hud_side != "custom" \
-        and layout.below_hud(hud_side, o["anchor"]) else 0
-    if drop:                                                # cards hanging below them: the map below all of them
-        chain = {"hud"}
-        for name, anchor in order:
-            if anchor in chain:
-                drop += cards[name][0].height + gap
-                chain.add(name)
+    # system values and cards first (1.2.11: like the App), the map moves below / above what stands at the
+    # top / bottom of its bar – except with the system values right above the map: those follow it afterwards
+    hud_rect = None
+    placed = {}
+    if hud is not None and hud_side != "above":
+        hx, hy = layout.hud_preview_xy(hud_side, gw, gh, margin, hud.size, hud_own, None, align, gap)
+        hud_rect = (hx, hy, hud.width, hud.height)
+    spots = {n: c[1] for n, c in cards.items()}
+    free = {n: (c[0].size, c[1], c[2]) for n, c in cards.items()
+            if hud_side != "above" or not layout.hangs_on_hud(n, spots)}  # the rest waits for the values
+    placed = layout.place_cards((0, 0, gw, gh), free, hud_rect, margin, align, gap)
+    drop = lift = 0
+    span = layout.map_bar_range(o["anchor"], o.get("pos_x", 0.0), 0, gw, bar)
+    if span and o["anchor"] != "custom":
+        fixed = [hud_rect] + [placed[n] for n in placed if cards[n][1] != "custom"]
+        drop, lift = layout.bar_stack(fixed, span[0], span[1], 0, gh, margin, gap)
+        drop = drop + margin if drop else 0
+        lift = lift + margin if lift else 0
     aspect = map_pic.width / map_pic.height if map_pic is not None else 0.8
     rows = sum(1 for k in ("timer", "server", "record") if info.get(k))
     rows += 1 if info.get("timer") else 0
     _x, _y, _w, _h, mh = layout.preview_rect(gw, gh, o["anchor"], o.get("pos_x", 0.0), o.get("pos_y", 0.0),
                                              height_frac, o["margin"], o.get("keep_in_bar", True), aspect, rows,
-                                             drop, bool(o.get("grow_past_bar", False)))
+                                             drop, bool(o.get("grow_past_bar", False)), lift)
     text_h = int(gh * 0.36 * min(2.0, max(0.5, float(o.get("text_scale", 1.0)))))     # App._text_height
     dark = bool(o.get("map_backdrop", False))
     def map_pic_at(h, th):
@@ -153,8 +166,9 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
     in_bar = (o["anchor"] == "auto" or o.get("keep_in_bar", True)) and \
         layout.bar_side(o["anchor"], x0, over.width, 0, gw, bar)
     edge = min(backdrop_pad(text_h), max(0, margin - 2)) if dark else 0      # the dark area may use the margin
+    th = text_h
     if in_bar and over.width > avail + 2 * edge and not o.get("grow_past_bar", False):
-        th, map_w = text_h, round(mh * aspect) + 2 * edge
+        map_w = round(mh * aspect) + 2 * edge
         for _try in range(3):                           # lines wider: smaller text (the area's edge does not scale)
             if over.width <= avail + 2 * edge or over.width <= map_w or th <= 40:
                 break
@@ -163,23 +177,22 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
         if over.width > avail + 2 * edge:               # still too wide: the map too
             g = (avail + 2 * edge) / over.width
             over = map_pic_at(max(80, int(mh * g)), max(40, int(th * g)))
+    over_h_room = gh - drop - lift - 2 * margin if o["anchor"] != "custom" else gh
+    if over.height > over_h_room and mh > 80:               # the lines below the map made it too tall: smaller
+        over = map_pic_at(max(80, mh - (over.height - over_h_room)), th)
     mx, my = layout.preview_place(gw, gh, o["anchor"], o.get("pos_x", 0.0), o.get("pos_y", 0.0), margin,
-                                  o.get("keep_in_bar", True), over.width, over.height, drop, align)
+                                  o.get("keep_in_bar", True), over.width, over.height, drop, align, lift)
     if in_bar and edge:                                 # the area's edge may stand in the margin (like the App)
         mx = int(layout.clamp_x(in_bar, mx, over.width, 0, gw, bar, margin - edge))
     map_rect = (mx, my, over.width, over.height)
     out.append(("map", over, mx, my))
-    hud_rect = None
-    if hud is not None:
+    if hud is not None and hud_side == "above":             # right above the map, the cards below them
         hx, hy = layout.hud_preview_xy(hud_side, gw, gh, margin, hud.size, hud_own, map_rect, align, gap)
-        out.append(("hud", hud, hx, hy))
         hud_rect = (hx, hy, hud.width, hud.height)
-    boxes = {"hud": hud_rect}
-    for name, anchor in order:                              # stacked in order (1.2.7)
-        card, spot, own = cards[name]
-        under = (boxes.get(anchor) or boxes.get("hud")) if anchor else None
-        cx, cy = layout.media_xy("below" if anchor else spot, (0, 0, gw, gh), card.size, margin, under, own, align,
-                                 gap)
-        out.append((name, card, int(cx), int(cy)))
-        boxes[name] = (int(cx), int(cy), card.width, card.height)
+        placed = layout.place_cards((0, 0, gw, gh), {n: (c[0].size, c[1], c[2]) for n, c in cards.items()},
+                                    hud_rect, margin, align, gap, up=hy < my, below_box=map_rect)
+    if hud_rect is not None:
+        out.append(("hud", hud, hud_rect[0], hud_rect[1]))
+    for name, (cx, cy, _w, _h) in placed.items():       # stacked in order (1.2.7), like the App
+        out.append((name, cards[name][0], cx, cy))
     return out, map_rect
