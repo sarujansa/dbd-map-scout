@@ -5,7 +5,8 @@ import copy
 import json
 import os
 
-SETTINGS_VERSION = 4
+HUD_SHOWN = ("above", "left", "right", "custom")    # settings.sysinfo values that show the system values
+SETTINGS_VERSION = 5
 
 DEFAULTS = {
     "settings_version": SETTINGS_VERSION,
@@ -55,7 +56,11 @@ DEFAULTS = {
         "media_fade": True,             # … fades in/out (also on a new song)
         "text_scale": 1.0,              # name/timer/info lines of the map, independent of its size (1.65)
         "hud_scale": 1.0,               # size of the system values / "today" (60–200 %, 1.64.9)
-        "show_today": True,             # block "today" with the system values at the top of a black bar (1.62)
+        "show_today": True,             # block "today" (rounds, play time, kills/escaped, clock; 1.62)
+        "today_pos": "below",           # 1.2.6: its own element – below the system values / bottom_right /
+        "today_xy": [1.0, 0.0],         #   bottom_left / custom (centre of the card as a share of the window)
+        "today_scale": 1.0,             # size of "today" (slider 60–200 %)
+        "today_backdrop": False,        # dark area behind "today"
     },
     "hotkeys": {
         "toggle_overlay": "ctrl+alt+m",
@@ -98,7 +103,6 @@ DEFAULTS = {
     "official_dir": "",                 # where the userscript's files land ("" = the Windows download folder)
     "official_notify": True,
     "sysinfo": "right",                 # system values at the top of a black bar: off | left | right | custom
-    "today_side": "right",              # "today" alone (system values off): right, or custom = at sysinfo_pos
     "sysinfo_pos": [1.0, 0.0],          # sysinfo = custom: 0..1 of the free space in the DBD window (x, y)
 }
 
@@ -164,6 +168,11 @@ class Settings:
                     ov["pos_y"] = min(1.0, max(0.0, float(ov.pop("custom_y", 0.0))))
                 if raw.get("settings_version", 1) < 4 and ov.get("media_pos") == "below":
                     ov["media_pos"] = "bottom_right"  # 1.64.7: the music card stands on its own (user's wish)
+                if raw.get("settings_version", 1) < 5:                # 1.2.6: "today" is an element of its own
+                    if self.data.pop("today_side", None) == "custom" and raw.get("sysinfo") not in HUD_SHOWN:
+                        ov["today_pos"] = "custom"                    # it stood alone at its own place
+                        fx, fy = (self.data.get("sysinfo_pos") or [1.0, 0.0])[:2]
+                        ov["today_xy"] = [float(fx), float(fy)]
                 if self.data.get("color_theme") == "oled":            # 1.62.0: OLED was a theme of its own
                     self.data["color_theme"], self.data["oled_black"] = "gold", True
                 self.data["settings_version"] = SETTINGS_VERSION

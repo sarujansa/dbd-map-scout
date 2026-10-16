@@ -65,7 +65,7 @@ def test_centre_guides_are_thin_lines_and_blacked_out_for_the_detection():
     assert v.size == (3, 1440) and h.size == (3440, 3)
     assert v.getpixel((1, 0))[:3] == (255, 255, 255) and v.getpixel((0, 0))[:3] == (0, 0, 0)
     w = DetectionWorker.__new__(DetectionWorker)
-    w.overlay_rect = w.hud_rect = w.media_rect = None
+    w.overlay_rect = w.hud_rect = w.media_rect = w.today_rect = None
     w.guide_rects = ((1719, 0, 3, 1440), (0, 719, 3440, 3))
     img = np.full((1440, 3440, 3), 200, np.uint8)
     w._mask_overlay(img, 0, 0)
@@ -138,3 +138,31 @@ def test_a_map_wider_than_the_bar_stays_at_its_outer_edge():
     x, _y, w, _h, _mh = layout.preview_rect(3440, 1440, "auto", 0, 0, 0.6, 0.012, True, 0.9, grow=True)
     assert w > 440 and x == 17                                     # bigger than the bar, from its outer edge
     assert layout.preview_rect(3440, 1440, "auto", 0, 0, 0.6, 0.012, True, 0.9)[2] <= 440 - 2 * 17
+
+
+def test_today_is_a_card_of_its_own():
+    """1.2.6 (user: rounds/kills under the GPU/CPU counter made no sense): "today" is its own layer – below the
+    system values by default (the music "below" then hangs under it), in the bar or at an own place."""
+    today = [[("HEUTE ", sysinfo.DIM), ("3 RUNDEN · 1:12", sysinfo.WHITE)], [("UHR ", sysinfo.DIM), ("15:54", sysinfo.WHITE)]]
+    pic = Image.new("RGBA", (400, 500), (120, 120, 200, 255))
+    m = preview.music_rows(media.NowPlaying(), 0.0)
+    layers, _r = preview.layers(W, H, _o(media_pos="below"), "right", ROWS, None, pic, "", INFO, 0.36, m, today)
+    by = {n: (x, y, im.width, im.height) for n, im, x, y in layers}
+    assert set(by) == {"map", "hud", "today", "music"}
+    hx, hy, hw, hh = by["hud"]
+    tx, ty, tw, th = by["today"]
+    mx, my, mw, mh = by["music"]
+    assert ty > hy + hh and abs((tx + tw / 2) - (hx + hw / 2)) <= 1          # centred right under the system values
+    assert my > ty + th                                                      # the music below "today"
+    layers, _r = preview.layers(W, H, _o(today_pos="bottom_left", today_backdrop=True), "right", ROWS, None, pic,
+                                "", INFO, 0.36, None, today)
+    by = {n: (x, y, im.width, im.height) for n, im, x, y in layers}
+    assert by["today"][0] + by["today"][2] < 440 and by["today"][1] + by["today"][3] <= H - 17   # bottom of the left bar
+    layers, _r = preview.layers(W, H, _o(today_pos="custom", today_xy=[0.5, 0.5]), "", [], None, pic, "", INFO,
+                                0.36, None, today)
+    by = {n: (x, y, im.width, im.height) for n, im, x, y in layers}
+    assert "hud" not in by and abs(by["today"][0] + by["today"][2] / 2 - W / 2) <= 1   # its centre where asked
+    # at the top of the left bar the map moves below the system values and "today"
+    layers, (mx, my, _w, _h) = preview.layers(W, H, _o(), "left", ROWS, None, pic, "", INFO, 0.36, None, today)
+    by = {n: (x, y, im.width, im.height) for n, im, x, y in layers}
+    assert my >= by["today"][1] + by["today"][3]
