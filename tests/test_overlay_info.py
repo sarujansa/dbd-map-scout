@@ -174,3 +174,30 @@ def test_dark_area_behind_the_map_fits_the_bar_and_keeps_every_frame_the_same_si
     frames[1].paste((200, 200, 200, 255), (40, 30, 90, 70))
     out = ow.map_backdrop(frames, 400)
     assert out[0].size == out[1].size == (80 + 2 * (400 // 45), 60 + 2 * (400 // 45))   # union of both, padded
+
+
+def test_the_dark_area_does_not_make_the_map_smaller():
+    """1.2.5 (user: "Warum wird die Map kleiner?"): the area's edge may use the margin around the map."""
+    class Root:
+        def after(self, *a):
+            return None
+
+        def after_cancel(self, *a):
+            pass
+
+    class Overlay(ow.PictureOverlay):
+        def _push(self, *a):
+            pass
+
+    ov = Overlay(Root())
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    ov.set_map(os.path.join(root, "maps", "Forsaken Boneyard", "Eyrie of Crows.webp"), "")
+    ov.set_timer("1:23")
+    from dbdmapscout import layout
+    height = layout.fit_height(470, 406, *ov.map_size())           # the map alone fits the bar (as the App does)
+    plain_h = ov.fit_width(height, 518, 406)
+    ov.set_backdrop(True)
+    edge = ov.backdrop_pad(518)
+    assert 0 < edge < 17                                           # fits into the 17-px margin of 1440p
+    boxed_h = ov.fit_width(height, 518, 406 + 2 * edge)
+    assert boxed_h == plain_h and ov.render(boxed_h)[0] <= 406 + 2 * edge

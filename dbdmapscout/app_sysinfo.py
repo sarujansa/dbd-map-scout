@@ -321,10 +321,8 @@ class SysInfo:
         """Music card dropped somewhere (edit mode): from now on its own place there."""
         self._layout_mark()
         gx, gy, gw, gh = self._game_rect()
-        w, h = self.media_win.size
         o = self.settings["overlay"]
-        o["media_xy"] = [round(min(1.0, max(0.0, (x - gx) / max(1, gw - w))), 4),
-                         round(min(1.0, max(0.0, (y - gy) / max(1, gh - h))), 4)]
+        o["media_xy"] = list(layout.media_own(gw, gh, self.media_win.size, x - gx, y - gy))
         o["media_pos"] = "custom"
         if hasattr(self, "media_pos_var"):
             self.media_pos_var.set(_(dict(MEDIA_SPOTS)["custom"]))

@@ -195,3 +195,17 @@ def test_fader_eases_in_and_out():
     f.go(0, 20.0)
     assert not f.step(20.1) and 0.3 < f.value < 1
     assert f.step(20.0 + f.OUT_S) and f.value == 0.0
+
+
+def test_an_own_place_of_the_music_card_is_its_centre():
+    """1.2.5 (user: a wider card for a long title moved and was no longer centred): the own place is where the
+    card's centre is, so a card of another width or height stays around the same spot."""
+    from dbdmapscout import layout
+    game = (0, 0, 3440, 1440)
+    own = layout.media_own(3440, 1440, (270, 90), 1585, 600)
+    assert own == (0.5, round(645 / 1440, 4))
+    narrow = layout.media_xy("custom", game, (270, 90), 17, own=own)
+    wide = layout.media_xy("custom", game, (400, 120), 17, own=own)
+    assert narrow[0] + 135 == wide[0] + 200 and abs(narrow[1] + 45 - (wide[1] + 60)) <= 1    # same centre
+    assert layout.media_xy("custom", game, (400, 120), 17, own=(1.0, 1.0)) == (3040, 1320)   # never off screen
+    assert layout.media_own(3440, 1440, (270, 90), 3170, 1350) == (0.9608, 0.9688)
