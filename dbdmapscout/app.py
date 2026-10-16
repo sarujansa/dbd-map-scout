@@ -1256,16 +1256,13 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         # 1.65.4 (user: "die Grösse beliebig ändern"): a map bigger than the bar may reach into the game picture;
         # it stays at the bar's outer edge
         grow = bool(o.get("grow_past_bar", False)) and side in ("left", "right")
+        text_h = self._text_height(gh)
         if side and not grow:
             height = layout.fit_height(height, avail, iw, ih)
-        text_h = self._text_height(gh)
-        self.overlay.text_height = text_h
+            height = self.overlay.fit_width(height, text_h, avail)      # sets the text height too
+        else:
+            self.overlay.text_height = text_h
         w, h = self.overlay.render(height)
-        if side and w > avail and not grow:     # the lines below are wider than the bar: smaller text, same map
-            self.overlay.text_height = max(40, int(text_h * avail / w))
-            w, h = self.overlay.render(height)
-            if w > avail:                       # still too wide (very long line): the map too, as before
-                w, h = self.overlay.render(max(80, int(height * avail / w)))
         x, y = place(w, h)
         if side and side != "slot":
             x = layout.clamp_x(side, x, w, gx, gw, bar, margin)
@@ -1281,14 +1278,15 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         avail_w, avail_h = gw - 2 * margin, bottom - 2 * margin
         height = min(height, avail_h)
         self.overlay.text_height = min(self._text_height(gh), height)
-        w, h = self.overlay.render(height)
+        w, h = self.overlay.render(height, push=False)      # measured first: only the final size is shown
         for _try in range(3):                    # the info block below the map needs room too (not quite linear)
             f = layout.fit_scale(w, h, avail_w, avail_h)
             if f >= 1 or height <= 40:
                 break
             height = max(40, int(height * f))
             self.overlay.text_height = max(40, int(self.overlay.text_height * f))
-            w, h = self.overlay.render(height)
+            w, h = self.overlay.render(height, push=False)
+        w, h = self.overlay.render(height)
         x, y = gx + margin, gy + gh - bottom + margin
         self.overlay.show_at(int(x), int(y))
         self._last_place = (int(x), int(y), w, h)

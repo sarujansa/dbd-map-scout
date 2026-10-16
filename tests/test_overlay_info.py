@@ -107,3 +107,37 @@ def test_warning_note_below_the_timer():
     noted = ow.add_info(pic, "07:32", "", 400, note="? unsicher")
     assert noted.height > plain.height
     assert ow.add_info(pic, "", "", 400, note="? unsicher").height > pic.height     # a note alone is shown too
+
+
+def test_a_map_in_the_bar_is_put_on_screen_once_per_change_at_its_final_size():
+    """User (1.2.2): "die Map hat sich ständig vergrössert und verkleinert" – the timer line at full text size is
+    wider than the 406-px bar; the App rendered it big, pushed it, then rendered smaller: two sizes on every tick."""
+    pushes = []
+
+    class Root:
+        def after(self, *a):
+            return None
+
+        def after_cancel(self, *a):
+            pass
+
+    class Overlay(ow.PictureOverlay):
+        def _push(self, *a):
+            pushes.append(self._size)
+
+    ov = Overlay(Root())
+    ov._shown = True
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    ov.set_map(os.path.join(root, "maps", "Forsaken Boneyard", "Eyrie of Crows.webp"), "")
+    ov.set_server("Frankfurt", 28)
+    ov.set_record("Ø 2.8 Kills · 12 Runden")
+    widths = set()
+    for s in range(55, 65):                       # "0:59" → "1:00": other digits, other widths
+        ov.set_timer(f"{s // 60}:{s % 60:02d}")
+        for _tick in range(4):                    # the App places the overlay 4× a second
+            height = ov.fit_width(470, 518, 406)
+            w, _h = ov.render(height)
+            widths.add(w)
+    assert widths == {406}                        # never wider than the bar
+    assert len(pushes) == 10                      # once per timer text, never an in-between size
+    assert {w for w, _h in pushes} == {406}
