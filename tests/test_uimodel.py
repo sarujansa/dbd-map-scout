@@ -498,3 +498,52 @@ def test_size_changes_with_a_map_on_display_are_for_that_map(app_root):
         app.toggle_edit()
     finally:
         app.quit()
+
+
+def test_position_sliders_only_for_an_own_position_and_folded_cards_are_gone(app_root):
+    """1.66.3 (user: "GUI user friendly"): the sliders "Horizontal/Vertikal" stood there at 1 % with "automatisch";
+    the cards under "Mehr" showed as empty headings while folded."""
+    from dbdmapscout import uimodel as ui
+    from dbdmapscout.app import App, anchor_label
+    from dbdmapscout.app_qt import ui_shown, ui_state
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        x, y = (app._qt_reg[k] for k in ("ov.posx", "ov.posy"))
+        app.anchor_var.set(anchor_label("auto"))
+        app._anchor_changed()
+        assert not ui_shown(x) and not ui_shown(y) and "Mit der Maus verschieben" in app.pos_hint_var.get()
+        app.anchor_var.set(anchor_label("custom"))
+        app._anchor_changed()
+        assert ui_shown(x) and ui_shown(y)
+        rows = [w.master for w in (x, y)]                     # back in their place: above the buttons
+        kids = [k for k in rows[0].master.winfo_children() if k.winfo_manager()]
+        assert kids.index(rows[1]) == kids.index(rows[0]) + 1 and kids.index(app.edit_btn.master) > kids.index(rows[1])
+        app.anchor_var.set(anchor_label("top-left"))
+        app._anchor_changed()
+        assert not ui_shown(x)
+        app._overlay_dragged(500, 300)                        # dragged in the game: own position, sliders there
+        assert ui_shown(x) and app.settings["overlay"]["anchor"] == "custom"
+        card = app._qt_reg["st.more.backup"]
+        assert isinstance(card, ui.LabelFrame) and not ui_state(card)["visible"]
+        app._toggle_more()
+        assert ui_state(card)["visible"]
+    finally:
+        app.quit()
+
+
+_KEEP = []
+
+
+def test_a_card_is_hidden_with_its_frame():
+    """The window hides a card whose model frame is folded away (its title says so) and shows it again."""
+    pytest.importorskip("PySide6")
+    from dbdmapscout import qt_window
+    qt_window.application()
+    page = qt_window.FormPage(lambda *a: None, "T", (("card", "c1", (("hint", "h"),)),))
+    _KEEP.append(page)                         # a page without a parent freed by Python mid-run crashes Qt later
+    kind, head, extra = page.controls["c1"]
+    card = head.parentWidget()
+    qt_window.show_control(kind, head, extra, {"visible": False, "text": "Karte"})
+    assert card.isHidden()
+    qt_window.show_control(kind, head, extra, {"visible": True, "text": "Karte"})
+    assert not card.isHidden()

@@ -38,7 +38,6 @@ EN = {
 
     # ------------------------------------------------------------------ main window
     "Noch keine Map": "No map yet",
-    "Wird beim Match-Start automatisch erkannt.": "Detected automatically when a match starts.",
     "Overlay ausblenden": "Hide overlay",
     "Overlay einblenden": "Show overlay",
     "Scannen": "Scan",
@@ -285,10 +284,6 @@ EN = {
     "Aus": "Off",
     "Zeigt Region und Ping des Spielservers, auch im Overlay (braucht Administratorrechte).":
         "Shows region and ping of the game server, also in the overlay (needs administrator rights).",
-    "Automatisch: im schwarzen Rand neben dem Spielbild, im Fenstermodus neben dem DBD-Fenster "
-    "(falls dort Platz ist). Regler bewegen = eigene Position.":
-        "Automatic: in the black border next to the game picture, in window mode next to the DBD window "
-        "(if there is room). Moving a slider = own position.",
     "DBD läuft mit {w}×{h}, kleiner als 1920×1080: die Erkennung ist unsicherer (vor allem "
     "Lobby-Knopf und Killername). Fenster größer ziehen oder „Fenster-Vollbild“ nutzen.":
         "DBD runs at {w}×{h}, smaller than 1920×1080: detection is less reliable (above all the lobby "
@@ -297,7 +292,6 @@ EN = {
     "Rundenende-Erkennung können danebenliegen. Am sichersten: 16:9 oder breiter.":
         "DBD window is narrower than 16:9 ({w}×{h}): this shape is untested, map and round-end "
         "detection may be off. Safest: 16:9 or wider.",
-    "Regler bewegen = eigene Position.": "Moving a slider = own position.",
     "Selten gebrauchte Einstellungen ein- oder ausklappen.": "Show or hide rarely used settings.",
     "Verbunden mit: {server}": "Connected to: {server}",
     "pausiert, bis DBD läuft": "paused until DBD runs",
@@ -1182,4 +1176,15 @@ EN = {
     'Dunkel – wie Fallen Refuge (durchsichtiger Boden)': 'Dark – like Fallen Refuge (see-through floor)',
     'Kartenstil': 'Map style',
     'Kartenstil: {style}.': 'Map style: {style}.',
+    'Map wählen …': 'Choose map …',
+    "Zur Seite Maps: eine Map von Hand anzeigen (Doppelklick oder „Anzeigen“). Beim nächsten Match übernimmt die automatische Erkennung wieder.":
+        'To the Maps page: show a map by hand (double-click or "Show"). At the next match the automatic detection takes over again.',
+    "Erscheint automatisch, sobald im Match das Map-Banner kommt – oder von Hand über „Map wählen“.":
+        'Appears by itself as soon as the map banner comes in the match – or by hand with "Choose map".',
+    "Automatisch: im schwarzen Rand neben dem Spielbild, im Fenstermodus neben dem DBD-Fenster (falls dort Platz ist). Eigene Position: „Mit der Maus verschieben“ und in der Vorschau ziehen – oder Vorgabe „eigene Position“.":
+        'Automatic: in the black border next to the game picture, in window mode next to the DBD window (if there is room). Own position: "Move with the mouse" and drag in the preview – or the preset "own position".',
+    "Eigene Position: „Mit der Maus verschieben“ und in der Vorschau ziehen – oder Vorgabe „eigene Position“.":
+        'Own position: "Move with the mouse" and drag in the preview – or the preset "own position".',
+    'Unter der Karte': 'Below the map',
+    'Wann zeigen': 'When to show',
 }

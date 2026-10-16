@@ -255,6 +255,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self.posy_label = self._slider(pos, _("Vertikal"), self.posy_var, 0, 100, self._pos_changed, key="ov.posy")
         r2 = ui.Frame(pos)
         r2.pack(fill="x", pady=(4, 0))
+        self._pos_rows = (self.posx_label.master, self.posy_label.master, r2)   # 1.66.3: only for "eigene Position"
         self.edit_btn = self._reg("ov.edit", ui.Button(r2, text=_("Mit der Maus verschieben"), command=self.toggle_edit))
         self.edit_btn.pack(side="left")
         self.test_btn = self._reg("ov.test", ui.Button(r2, text=_("Overlay testen"), command=self.test_overlay))
@@ -758,6 +759,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         o["pos_y"] = min(1.0, max(0.0, (y - gy) / max(1, gh - h)))
         self.anchor_var.set(anchor_label("custom"))
         self._set_pos_sliders(o["pos_x"], o["pos_y"])
+        self._pos_hint()
         self._save_soon()
 
     def _text_height(self, gh):
@@ -1374,14 +1376,26 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self.overlay.set_show_map(o.get("show_map", True))
 
     def _pos_hint(self):
-        """The sliders always work: moving one switches to "eigene Position" – say so while a preset is set."""
-        if self.settings["overlay"].get("anchor", "auto") == "custom":
+        """1.66.3 (user: the sliders at 1 % with "automatisch" looked dead): the sliders only for "eigene Position";
+        with a preset the hint says how to get one."""
+        anchor = self.settings["overlay"].get("anchor", "auto")
+        rows = getattr(self, "_pos_rows", None)
+        if rows:
+            x, y, after = rows
+            for row in (x, y):
+                if anchor == "custom" and not row.winfo_manager():
+                    row.pack(fill="x", pady=3, before=after)
+                elif anchor != "custom" and row.winfo_manager():
+                    row.pack_forget()
+        if anchor == "custom":
             text = _("0 % = links/oben, 100 % = rechts/unten")
-        elif self.settings["overlay"].get("anchor", "auto") == "auto":
+        elif anchor == "auto":
             text = _("Automatisch: im schwarzen Rand neben dem Spielbild, im Fenstermodus neben dem DBD-Fenster "
-                     "(falls dort Platz ist). Regler bewegen = eigene Position.")
+                     "(falls dort Platz ist). Eigene Position: „Mit der Maus verschieben“ und in der Vorschau "
+                     "ziehen – oder Vorgabe „eigene Position“.")
         else:
-            text = _("Regler bewegen = eigene Position.")
+            text = _("Eigene Position: „Mit der Maus verschieben“ und in der Vorschau ziehen – oder Vorgabe "
+                     "„eigene Position“.")
         self.pos_hint_var.set(text)
 
     def _anchor_text(self, key):

@@ -380,6 +380,8 @@ class QtShell:
             self.add_picture(from_unknown=True)
         elif action == "dismiss_unknown":
             self._hide_unknown()
+        elif action == "choose":                     # overview without a map: to the maps page
+            self.qt.show_page("maps")
         else:
             {"scan": self.scan_now, "rotate": self.rotate_map, "toggle": self.toggle_overlay,
              "reject": self.reject_detection, "confirm": self._confirm_unsure, "layout": self.next_variant,
