@@ -32,9 +32,9 @@ from .app_hotkeys import Hotkeys
 from .app_settings import SettingsTab
 from .app_layout import LayoutMemory
 from .app_sysinfo import TEXT_BASE, text_scale
-from .app_sysinfo import (BAR_ALIGNS, HUD_ROW_LABELS, HUD_SHOWN, HUD_SIDES, MAP_SCALE, MEDIA_SCALE, MEDIA_SPOTS,
-                          MEDIA_STYLES, OPACITY_KEYS, PRESET_LABELS, SELECTABLE, TODAY_SPOTS, SysInfo)
+from .app_sysinfo import HUD_SHOWN, OPACITY_KEYS, SysInfo
 from .app_qt import QtShell
+from .app_overlay import OverlayTab, anchor_label
 
 LANGS = [("en", "EN"), ("de", "DE"), ("fr", "FR"), ("es", "ES"), ("es-MX", "ES-MX"), ("it", "IT"),
          ("pl", "PL"), ("pt-BR", "PT"), ("tr", "TR")]
@@ -43,10 +43,6 @@ UNSURE_DELAY = 2.5        # s: a doubtful read is shown only if the banner did n
 SMALL_PICTURE = 1080      # 16:9 picture lines below which detection gets less reliable (log hint)
 QUIT_WATCHDOG_S = 15     # s: quitting takes longer than this -> the process ends anyway (1.65.1)
 MAX_HEIGHT = 0.9          # overlay at most this share of the game height (room for the timer below)
-ANCHORS = [("auto", N_("automatisch")), ("top-left", N_("oben links")), ("top-right", N_("oben rechts")),
-           ("bottom-left", N_("unten links")), ("bottom-right", N_("unten rechts")), ("custom", N_("eigene Position"))]
-MAP_STYLES = [("classic", N_("Original (lila Boden)")),
-              ("dark", N_("Dunkel – wie Fallen Refuge (durchsichtiger Boden)"))]    # 1.66, mapstyle.py
 STYLE_CACHE = os.path.join("cache", "maps_dark")      # below the program folder, made from maps/ (gitignored)
 CATS = [N_("Erkennung"), N_("Overlay"), N_("System"), N_("Fehler")]   # log categories (keys; shown translated)
 
@@ -59,13 +55,10 @@ def _event_name(ev) -> str:
     return str(getattr(ev, "kind", type(ev).__name__))
 
 
-def anchor_label(key: str) -> str:
-    return _(dict(ANCHORS).get(key, "automatisch"))
-
 log = logging.getLogger("dbdmapscout")
 
 
-class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutMemory, QtShell):
+class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutMemory, OverlayTab, QtShell):
     def __init__(self, root_dir: str, simulate: str | None = None, start_in_tray: bool = False):
         self.root_dir = root_dir
         self.simulate = simulate
@@ -216,268 +209,6 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
             self._reg(key, scale)
         return val
 
-    def _tab_overlay(self):
-        outer, f = self._scroll_tab()
-        o = self.settings["overlay"]
-        pos = self._reg("ov.pos", ui.LabelFrame(f, text=_("Position"), padding=8))
-        pos.pack(fill="x")
-        # 1.61: the screen with the map on it – where and how big, live; a click or drag places it there
-        self._reg("ov.preview", ui.Preview(pos, source=self._preview_data, command=self._preview_pick)).pack(fill="x")
-        # 1.64.9: the element picked in the preview (or here) – one slider sizes it
-        rs = ui.Frame(pos)
-        rs.pack(fill="x", pady=(4, 0))
-        self._reg("ov.sel.label", ui.Label(rs, text=_("Element"), width=12)).pack(side="left")
-        self._sel = "map"
-        self.sel_var = ui.StringVar(value=_(dict(SELECTABLE)["map"]))
-        scb = self._reg("ov.sel", ui.Combobox(rs, textvariable=self.sel_var, state="readonly", width=24,
-                                               values=[_(t) for _k, t in SELECTABLE]))
-        scb.pack(side="left", padx=6)
-        scb.bind("<<ComboboxSelected>>", lambda e: self._sel_picked())
-        self.sel_size_var = ui.DoubleVar(value=o["height"] * 100)
-        self.sel_size_label = self._slider(pos, _("Grösse"), self.sel_size_var, *MAP_SCALE, self._sel_size_changed,
-                                           key="ov.sel_size")
-        self.sel_scale = self._qt_reg["ov.sel_size"]
-        self.opacity_var = ui.DoubleVar(value=o["opacity"] * 100)        # 1.2.7: of the element picked
-        self.opacity_label = self._slider(pos, _("Deckkraft"), self.opacity_var, 25, 100, self._opacity_changed,
-                                          key="ov.opacity")
-        # 1.2.8: one gap for stacked cards, and where everything sits in the bar
-        self.gap_var = ui.DoubleVar(value=float(o.get("stack_gap", 8)))
-        self._slider(pos, _("Abstand"), self.gap_var, 0, 40, self._gap_changed, fmt="{:.0f} px", key="ov.gap")
-        ar = ui.Frame(pos)
-        ar.pack(fill="x", pady=(4, 0))
-        self._reg("ov.bar_align.label", ui.Label(ar, text=_("Im Balken"), width=12)).pack(side="left")
-        aligns = dict(BAR_ALIGNS)
-        self.bar_align_var = ui.StringVar(value=_(aligns.get(o.get("bar_align", "centre"), aligns["centre"])))
-        acb = self._reg("ov.bar_align", ui.Combobox(ar, textvariable=self.bar_align_var, state="readonly", width=24,
-                                                     values=[_(t) for _k, t in BAR_ALIGNS]))
-        acb.pack(side="left", padx=6)
-        acb.bind("<<ComboboxSelected>>", lambda e: self._bar_align_changed())
-        pr = ui.Frame(pos)                              # 1.2.9: ready-made arrangements
-        pr.pack(fill="x", pady=(4, 0))
-        self._reg("ov.preset.label", ui.Label(pr, text=_("Vorlage"), width=12)).pack(side="left")
-        self.preset_var = ui.StringVar(value=_(PRESET_LABELS[0][1]))
-        pcb = self._reg("ov.preset", ui.Combobox(pr, textvariable=self.preset_var, state="readonly", width=30,
-                                                  values=[_(t) for _k, t in PRESET_LABELS]))
-        pcb.pack(side="left", padx=6)
-        self._reg("ov.preset_apply", ui.Button(pr, text=_("Vorlage anwenden"), command=self._preset_apply)
-                  ).pack(side="left")
-        self.size_scope_var = ui.StringVar(value="")     # 1.65.5: this map only / all maps
-        self._reg("ov.size_scope", ui.Label(pos, textvariable=self.size_scope_var, style="Dim.TLabel"))
-        self.size_cap_var = ui.StringVar(value="")       # 1.65.2: the bar is what limits the map's size
-        self._reg("ov.size_cap", ui.Label(pos, textvariable=self.size_cap_var, style="Dim.TLabel"))
-        r = ui.Frame(pos)
-        r.pack(fill="x", pady=(0, 4))
-        self._reg("ov.anchor.label", ui.Label(r, text=_("Vorgabe"), width=12)).pack(side="left")
-        self.anchor_var = ui.StringVar(value=anchor_label(o["anchor"]))
-        cb = self._reg("ov.anchor", ui.Combobox(r, textvariable=self.anchor_var, values=[_(a[1]) for a in ANCHORS],
-                                                 state="readonly", width=16))
-        cb.pack(side="left", padx=6)
-        cb.bind("<<ComboboxSelected>>", lambda e: self._anchor_changed())
-        self._reg("ov.reset", ui.Button(r, text=_("Zurücksetzen"), command=self._reset_position)).pack(side="right")
-        self.posx_var = ui.DoubleVar(value=o.get("pos_x", 0.0) * 100)
-        self.posy_var = ui.DoubleVar(value=o.get("pos_y", 0.0) * 100)
-        self.posx_label = self._slider(pos, _("Horizontal"), self.posx_var, 0, 100, self._pos_changed, key="ov.posx")
-        self.posy_label = self._slider(pos, _("Vertikal"), self.posy_var, 0, 100, self._pos_changed, key="ov.posy")
-        r2 = ui.Frame(pos)
-        r2.pack(fill="x", pady=(4, 0))
-        self._pos_rows = (self.posx_label.master, self.posy_label.master, r2)   # 1.66.3: only for "eigene Position"
-        self.edit_btn = self._reg("ov.edit", ui.Button(r2, text=_("Mit der Maus verschieben"), command=self.toggle_edit))
-        self.edit_btn.pack(side="left")
-        self.test_btn = self._reg("ov.test", ui.Button(r2, text=_("Overlay testen"), command=self.test_overlay))
-        self.test_btn.pack(side="left", padx=(6, 0))
-        self.undo_btn = self._reg("ov.undo", ui.Button(r2, text=_("Rückgängig"), command=self.undo_layout))
-        self.undo_btn.pack(side="left", padx=(6, 0))
-        self.undo_btn.state(["disabled"])
-        self.per_size_var = ui.BooleanVar(value=self.settings.get("layout_per_size", True))
-        self._reg("ov.per_size", ui.Checkbutton(pos, text=_("Position und Grösse je DBD-Fenstergrösse merken"),
-                                                variable=self.per_size_var, command=self._per_size_changed)
-                  ).pack(anchor="w", pady=(4, 0))
-        self.per_size_text = ui.StringVar(value="")
-        self._reg("ov.per_size_hint", ui.Label(pos, textvariable=self.per_size_text, style="Dim.TLabel"))
-        self.pos_hint_var = ui.StringVar(value="")
-        self._reg("ov.pos_hint", ui.Label(pos, textvariable=self.pos_hint_var, style="Dim.TLabel",
-                                           wraplength=520)).pack(anchor="w", pady=(4, 0))
-        self._pos_hint()
-
-        look = self._reg("ov.look", ui.LabelFrame(f, text=_("Darstellung"), padding=8))
-        look.pack(fill="x", pady=(8, 0))
-        self.size_var = ui.DoubleVar(value=o["height"] * 100)
-        self.size_label = self._slider(look, _("Grösse"), self.size_var, *MAP_SCALE, self._size_changed, key="ov.size")
-        self.map_size_row = ui.Frame(look)
-        self.map_size_var = ui.StringVar(value="")
-        self._reg("ov.map_size", ui.Label(self.map_size_row, textvariable=self.map_size_var, style="Dim.TLabel",
-                                           wraplength=330)).pack(side="left")
-        self._reg("ov.map_size_reset", ui.Button(self.map_size_row, text=_("Für diese Map zurücksetzen"),
-                                                  command=self._reset_map_size)).pack(side="right")
-        self._size_row_after = self.size_label.master
-        sr = ui.Frame(look)
-        sr.pack(fill="x", pady=(4, 0))
-        self._reg("ov.map_style.label", ui.Label(sr, text=_("Kartenstil"), width=12)).pack(side="left")
-        styles = dict(MAP_STYLES)
-        self.map_style_var = ui.StringVar(value=_(styles.get(o.get("map_style", "classic"), styles["classic"])))
-        mscb = self._reg("ov.map_style", ui.Combobox(sr, textvariable=self.map_style_var, state="readonly", width=38,
-                                                      values=[_(t) for _k, t in MAP_STYLES]))
-        mscb.pack(side="left", padx=6)
-        mscb.bind("<<ComboboxSelected>>", lambda e: self._map_style_changed())
-        self.focus_var = ui.BooleanVar(value=o["only_when_game_focused"])
-        self.caption_var = ui.BooleanVar(value=o["show_caption"])
-        self.transp_var = ui.BooleanVar(value=o.get("transparent", True))
-        self.timer_show_var = ui.BooleanVar(value=o.get("show_timer", True))
-        self.server_show_var = ui.BooleanVar(value=o.get("show_server", True))
-        self.keep_bar_var = ui.BooleanVar(value=o.get("keep_in_bar", True))
-        self.show_map_var = ui.BooleanVar(value=o.get("show_map", True))
-        self.waiting_var = ui.BooleanVar(value=o.get("show_waiting", True))
-        self.floor_auto_var = ui.BooleanVar(value=o.get("floor_auto", True))
-        self.record_var = ui.BooleanVar(value=o.get("show_record", True))
-        self._reg("ov.keep_bar", ui.Checkbutton(
-            pos, text=_("Karte im schwarzen Rand halten (Ultrawide: nie ins Spielbild ragen)"),
-            variable=self.keep_bar_var, command=self._overlay_flags_changed)).pack(anchor="w", pady=(4, 0))
-        self.grow_var = ui.BooleanVar(value=o.get("grow_past_bar", False))
-        self._reg("ov.grow", ui.Checkbutton(
-            pos, text=_("Karte darf grösser als der Balken werden (ragt dann ins Spielbild)"),
-            variable=self.grow_var, command=self._overlay_flags_changed)).pack(anchor="w", pady=(2, 0))
-        for key, text, var in (("show_map", N_("Karte anzeigen (aus: nur Timer, Ort und Ping)"), self.show_map_var),
-                               ("focus", N_("Nur zeigen, wenn DBD das aktive Fenster ist"), self.focus_var),
-                               ("caption", N_("Map-Namen über der Karte anzeigen"), self.caption_var),
-                               ("timer", N_("Rundentimer unter der Karte anzeigen"), self.timer_show_var),
-                               ("server", N_("Verbundenen Server unter der Karte anzeigen (Tab Server)"),
-                                self.server_show_var),
-                               ("waiting", N_("Ohne Karte: „Warte auf Map“ und Lobby-Status anzeigen"), self.waiting_var),
-                               ("floors", N_("Etagen (Midwich) untereinander zeigen (aus: nur die untere)"),
-                                self.floor_auto_var),
-                               ("record", N_("Eigene Bilanz auf der Map unter dem Timer (Stats-Seite)"), self.record_var),
-                               ("transparent", N_("Transparenter Rand um die Karte"), self.transp_var)):
-            self._reg(f"ov.{key}", ui.Checkbutton(look, text=_(text), variable=var,
-                                                   command=self._overlay_flags_changed)).pack(anchor="w", pady=1)
-        self.fade_var = ui.BooleanVar(value=o.get("fade", True))
-        self._reg("ov.fade", ui.Checkbutton(look, text=_("Weich ein- und ausblenden (Karte, Systemwerte, Heute)"),
-                                            variable=self.fade_var, command=self._today_flag_changed)
-                  ).pack(anchor="w", pady=1)
-        self.map_backdrop_var = ui.BooleanVar(value=o.get("map_backdrop", False))
-        self._reg("ov.map_backdrop", ui.Checkbutton(look, text=_("Dunkle Fläche hinter Karte und Infos"),
-                                                    variable=self.map_backdrop_var,
-                                                    command=self._today_flag_changed)).pack(anchor="w", pady=1)
-        sysf = self._reg("ov.sys", ui.LabelFrame(f, text=_("Systemwerte (CPU/GPU-Temperatur, Auslastung, VRAM, RAM)"),
-                                                  padding=8))
-        sysf.pack(fill="x", pady=(8, 0))
-        r = ui.Frame(sysf)
-        r.pack(fill="x")
-        self._reg("ov.sysinfo.label", ui.Label(r, text=_("Anzeige"), width=12)).pack(side="left")
-        labels = dict(HUD_SIDES)
-        self.sysinfo_var = ui.StringVar(value=_(labels.get(self.settings.get("sysinfo", "off"), labels["off"])))
-        cb = self._reg("ov.sysinfo", ui.Combobox(r, textvariable=self.sysinfo_var, values=[_(t) for _k, t in HUD_SIDES],
-                                                  state="readonly", width=38))
-        cb.pack(side="left", padx=6)
-        cb.bind("<<ComboboxSelected>>", lambda e: self._sysinfo_changed())
-        self._reg("ov.sys_text", ui.Label(sysf, text=_("Oben im schwarzen Rand, solange eine Karte im Match zu sehen ist. „Eigene Position“: "
-                               "mit „Mit der Maus verschieben“ (Tab Overlay) zusammen mit der Karte ziehen; im "
-                               "schmalen Fenster bleibt die Anzeige im Balken oben. GPU-Werte von NVIDIA-Karten "
-                               "(Treiber), CPU-Temperatur nur mit HWiNFO („Shared Memory Support“ an) – das "
-                               "Programm lädt keinen eigenen Treiber."),
-                  style="Dim.TLabel", wraplength=520)).pack(anchor="w", pady=(4, 0))
-        self.sysinfo_hint_var = ui.StringVar(value="")
-        self._reg("ov.sys_hint", ui.Label(sysf, textvariable=self.sysinfo_hint_var, style="Dim.TLabel",
-                                           wraplength=520)).pack(anchor="w")
-        self.hud_backdrop_var = ui.BooleanVar(value=o.get("hud_backdrop", False))
-        self._reg("ov.hud_backdrop", ui.Checkbutton(sysf, text=_("Dunkle Fläche hinter den Systemwerten"),
-                                                    variable=self.hud_backdrop_var, command=self._today_flag_changed)
-                  ).pack(anchor="w", pady=(2, 0))
-        shown = o.get("hud_rows") or {}
-        self.hud_row_vars = {}
-
-        def row_check(key, text):                      # 1.2.8: rows of the system values, each its own tick box
-            var = self.hud_row_vars[key] = ui.BooleanVar(value=bool(shown.get(key, True)))
-            return ui.Checkbutton(sysf, text=text, variable=var, command=self._hud_rows_changed)
-        labels = dict(HUD_ROW_LABELS)
-        self._reg("ov.hud_row_cpu", row_check("cpu", _(labels["cpu"]))).pack(anchor="w", pady=(2, 0))
-        self._reg("ov.hud_row_gpu", row_check("gpu", _(labels["gpu"]))).pack(anchor="w", pady=(2, 0))
-        self._reg("ov.hud_row_spot", row_check("spot", _(labels["spot"]))).pack(anchor="w", pady=(2, 0))
-        self._reg("ov.hud_row_vram", row_check("vram", _(labels["vram"]))).pack(anchor="w", pady=(2, 0))
-        self._reg("ov.hud_row_ram", row_check("ram", _(labels["ram"]))).pack(anchor="w", pady=(2, 0))
-        # 1.2.12: "Heute" and the music each have their own frame (= tab of the Qt page)
-        tf = self._reg("ov.today_f", ui.LabelFrame(f, text=_("Heute"), padding=8))
-        tf.pack(fill="x", pady=(8, 0))
-        self.today_var = ui.BooleanVar(value=o.get("show_today", True))
-        self._reg("ov.today", ui.Checkbutton(tf, text=_("„Heute“: Runden, Spielzeit, Ø Kills/Entkommen, Uhrzeit"),
-                                             variable=self.today_var, command=self._today_flag_changed)
-                  ).pack(anchor="w", pady=(6, 0))
-        tr = ui.Frame(tf)
-        tr.pack(fill="x", pady=(4, 0))
-        self._reg("ov.today_pos.label", ui.Label(tr, text=_("Heute"), width=12)).pack(side="left")
-        spots = dict(TODAY_SPOTS)
-        self.today_pos_var = ui.StringVar(value=_(spots.get(o.get("today_pos", "below"), spots["below"])))
-        tcb = self._reg("ov.today_pos", ui.Combobox(tr, textvariable=self.today_pos_var, state="readonly", width=38,
-                                                     values=[_(t) for _k, t in TODAY_SPOTS]))
-        tcb.pack(side="left", padx=6)
-        tcb.bind("<<ComboboxSelected>>", lambda e: self._today_spot_changed())
-        self.today_backdrop_var = ui.BooleanVar(value=o.get("today_backdrop", False))
-        self._reg("ov.today_backdrop", ui.Checkbutton(tf, text=_("Dunkle Fläche hinter „Heute“"),
-                                                      variable=self.today_backdrop_var,
-                                                      command=self._today_flag_changed)).pack(anchor="w", pady=(2, 0))
-        mf = self._reg("ov.music_f", ui.LabelFrame(f, text=_("Musik"), padding=8))
-        mf.pack(fill="x", pady=(8, 0))
-        self.media_var = ui.BooleanVar(value=o.get("show_media", True))
-        self._reg("ov.media", ui.Checkbutton(mf, text=_("„Läuft gerade“: Titel, Interpret und Cover der Musik "
-                                                           "(Spotify, Browser … – nur während sie spielt)"),
-                                             variable=self.media_var, command=self._today_flag_changed)
-                  ).pack(anchor="w", pady=(2, 0))
-        mr = ui.Frame(mf)
-        mr.pack(fill="x", pady=(4, 0))
-        self._reg("ov.media_pos.label", ui.Label(mr, text=_("Musik"), width=12)).pack(side="left")
-        spots = dict(MEDIA_SPOTS)
-        self.media_pos_var = ui.StringVar(value=_(spots.get(o.get("media_pos", "below"), spots["below"])))
-        mcb = self._reg("ov.media_pos", ui.Combobox(mr, textvariable=self.media_pos_var, state="readonly", width=38,
-                                                     values=[_(t) for _k, t in MEDIA_SPOTS]))
-        mcb.pack(side="left", padx=6)
-        mcb.bind("<<ComboboxSelected>>", lambda e: self._media_spot_changed())
-        sr = ui.Frame(mf)
-        sr.pack(fill="x", pady=(4, 0))
-        self._reg("ov.media_style.label", ui.Label(sr, text=_("Stil"), width=12)).pack(side="left")
-        styles = dict(MEDIA_STYLES)
-        self.media_style_var = ui.StringVar(value=_(styles.get(o.get("media_style", "big"), styles["big"])))
-        scb = self._reg("ov.media_style", ui.Combobox(sr, textvariable=self.media_style_var, state="readonly",
-                                                       width=38, values=[_(t) for _k, t in MEDIA_STYLES]))
-        scb.pack(side="left", padx=6)
-        scb.bind("<<ComboboxSelected>>", lambda e: self._media_style_changed())
-        self.media_size_var = ui.DoubleVar(value=round(float(o.get("media_scale", 1.0)) * 100))
-        self._slider(mf, _("Größe Musik"), self.media_size_var, *MEDIA_SCALE, self._media_size_changed,
-                     key="ov.media_size")
-        self.media_cover_var = ui.BooleanVar(value=o.get("media_cover", True))
-        self._reg("ov.media_cover", ui.Checkbutton(mf, text=_("Albumcover zeigen"), variable=self.media_cover_var,
-                                                   command=self._today_flag_changed)).pack(anchor="w", pady=(2, 0))
-        self.media_progress_var = ui.BooleanVar(value=o.get("media_progress", True))
-        self._reg("ov.media_progress", ui.Checkbutton(mf, text=_("Fortschritt des Lieds zeigen (Zeit und Balken)"),
-                                                      variable=self.media_progress_var,
-                                                      command=self._today_flag_changed)).pack(anchor="w", pady=(2, 0))
-        self.media_look_vars = {}
-
-        def look_check(key, text):                     # 1.2.4: the music card's look
-            var = self.media_look_vars[key] = ui.BooleanVar(value=o.get(key, True))
-            return ui.Checkbutton(mf, text=text, variable=var, command=self._today_flag_changed)
-        self._reg("ov.media_accent", look_check("media_accent", _("Balken in der Farbe des Covers"))
-                  ).pack(anchor="w", pady=(2, 0))
-        self._reg("ov.media_remaining", look_check("media_remaining", _("Restzeit statt Länge (−1:46)"))
-                  ).pack(anchor="w", pady=(2, 0))
-        self._reg("ov.media_backdrop", look_check("media_backdrop", _("Dunkle Fläche hinter der Musikkarte"))
-                  ).pack(anchor="w", pady=(2, 0))
-        self._reg("ov.media_fade", look_check("media_fade", _("Weich ein- und ausblenden (auch beim nächsten Lied)"))
-                  ).pack(anchor="w", pady=(2, 0))
-        return outer
-
-    def _today_flag_changed(self):
-        self.settings["overlay"]["show_today"] = bool(self.today_var.get())
-        self.settings["overlay"]["show_media"] = bool(self.media_var.get())
-        self.settings["overlay"]["media_cover"] = bool(self.media_cover_var.get())
-        self.settings["overlay"]["media_progress"] = bool(self.media_progress_var.get())
-        for key, var in self.media_look_vars.items():
-            self.settings["overlay"][key] = bool(var.get())
-        self.settings["overlay"]["hud_backdrop"] = bool(self.hud_backdrop_var.get())
-        self.settings["overlay"]["today_backdrop"] = bool(self.today_backdrop_var.get())
-        self.settings["overlay"]["fade"] = bool(self.fade_var.get())
-        self.settings["overlay"]["map_backdrop"] = bool(self.map_backdrop_var.get())
-        self.overlay.set_backdrop(self.settings["overlay"]["map_backdrop"])
-        self._save_soon()
-        self._tick_overlay(reschedule=False)
 
     # ------------------------------------------------------- tab: detection
     def _tab_detect(self):
@@ -923,21 +654,6 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
             self._qt_maps_rev = getattr(self, "_qt_maps_rev", 0) + 1     # the tiles of the maps page: dark now
         threading.Thread(target=run, daemon=True, name="mapstyle").start()
 
-    def _map_style_changed(self):
-        key = dict((_(label), k) for k, label in MAP_STYLES).get(self.map_style_var.get(), "classic")
-        o = self.settings["overlay"]
-        if o.get("map_style", "classic") == key:
-            return
-        o["map_style"] = key
-        self._save_soon()
-        self._preview_pic = None                 # the preview's sample and the maps page picture anew
-        self._qt_preview_cache = None
-        self._style_warm()
-        self._log(_("Kartenstil: {style}.", style=_(dict(MAP_STYLES)[key])), "Overlay")
-        if self.current and self._map_on():
-            self._reload_picture()
-        else:
-            self._tick_overlay(reschedule=False)
 
     def _reload_picture(self):
         """Load the map on display again (rotation/caption changed) without touching visibility or timer."""
@@ -958,36 +674,6 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self._set_thumb(frames[0][0])
         self._tick_overlay(reschedule=False)
 
-    def _show_map_size(self):
-        """Hint below the size slider when the map on display has a size or rotation of its own."""
-        o = self.settings["overlay"]
-        own = (o.get("map_heights") or {}).get(self.current[0]) if self.current else None
-        deg = self._map_rotation()
-        if own or deg:
-            m = self.catalog.maps.get(self.current[0])
-            parts = ([_("eigene Grösse {n} % (Hotkeys/Mausrad)", n=f"{own * 100:.0f}")] if own else []) + \
-                ([_("gedreht um {deg}°", deg=deg)] if deg else [])
-            self.map_size_var.set((m.name if m else "") + ": " + " · ".join(parts))
-            if not self.map_size_row.winfo_manager():
-                self.map_size_row.pack(fill="x", pady=(0, 3), after=self._size_row_after)
-        elif self.map_size_row.winfo_manager():
-            self.map_size_row.pack_forget()
-        self._sel_sync()                          # the size slider shows the size of the map on display
-
-    def _reset_map_size(self):
-        if not self.current:
-            return
-        o = self.settings["overlay"]
-        m = self.catalog.maps.get(self.current[0])
-        name = m.name if m else self.current[0]
-        if (o.get("map_heights") or {}).pop(self.current[0], None):
-            self._log(_("Eigene Grösse für {map} entfernt – es gilt wieder der Schieberegler.", map=name), "Overlay")
-        if (o.get("map_rotations") or {}).pop(self.current[0], None):
-            self._log(_("Drehung für {map} entfernt.", map=name), "Overlay")
-            self._reload_picture()
-        self._show_map_size()
-        self._save_soon()
-        self._tick_overlay(reschedule=False)
 
     # ============================================================= events
     def _poll(self):
@@ -1486,79 +1172,6 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
             self._log(_("Overlay pausiert: {reason}.", reason=reason), "Overlay")
 
     # ============================================================ settings
-    def _apply_overlay_settings(self):
-        o = self.settings["overlay"]
-        self.overlay.opacity = o["opacity"]
-        self.overlay.show_caption = o["show_caption"]
-        self.overlay.set_transparent(o.get("transparent", True))
-        self.overlay.set_backdrop(o.get("map_backdrop", False))
-        self.overlay.set_show_map(o.get("show_map", True))
-
-    def _pos_hint(self):
-        """1.66.3 (user: the sliders at 1 % with "automatisch" looked dead): the sliders only for "eigene Position";
-        with a preset the hint says how to get one."""
-        anchor = self.settings["overlay"].get("anchor", "auto")
-        rows = getattr(self, "_pos_rows", None)
-        if rows:
-            x, y, after = rows
-            for row in (x, y):
-                if anchor == "custom" and not row.winfo_manager():
-                    row.pack(fill="x", pady=3, before=after)
-                elif anchor != "custom" and row.winfo_manager():
-                    row.pack_forget()
-        if anchor == "custom":
-            text = _("0 % = links/oben, 100 % = rechts/unten")
-        elif anchor == "auto":
-            text = _("Automatisch: im schwarzen Rand neben dem Spielbild, im Fenstermodus neben dem DBD-Fenster "
-                     "(falls dort Platz ist). Eigene Position: „Mit der Maus verschieben“ und in der Vorschau "
-                     "ziehen – oder Vorgabe „eigene Position“.")
-        else:
-            text = _("Eigene Position: „Mit der Maus verschieben“ und in der Vorschau ziehen – oder Vorgabe "
-                     "„eigene Position“.")
-        self.pos_hint_var.set(text)
-
-    def _anchor_text(self, key):
-        return anchor_label(key)
-
-    def _anchor_changed(self):
-        self._layout_mark()
-        rev = {_(v): k for k, v in ANCHORS}
-        self.settings["overlay"]["anchor"] = rev.get(self.anchor_var.get(), "auto")
-        self._pos_hint()
-        self._save_soon()
-        self._tick_overlay(reschedule=False)
-
-    def _reset_position(self):
-        self.anchor_var.set(anchor_label("auto"))
-        self._anchor_changed()
-        self._log(_("Position zurückgesetzt (automatisch)."), "Overlay")
-
-    def _set_pos_sliders(self, fx, fy):
-        fx, fy = min(1.0, max(0.0, fx)), min(1.0, max(0.0, fy))
-        if abs(self.posx_var.get() - fx * 100) < 0.5 and abs(self.posy_var.get() - fy * 100) < 0.5:
-            return
-        self._syncing = True
-        try:
-            self.posx_var.set(round(fx * 100, 1))
-            self.posy_var.set(round(fy * 100, 1))
-            self.posx_label.configure(text=f"{fx * 100:.0f} %")
-            self.posy_label.configure(text=f"{fy * 100:.0f} %")
-        finally:
-            self._syncing = False
-
-    def _pos_changed(self):
-        if self._syncing:
-            return
-        self._layout_mark()
-        o = self.settings["overlay"]
-        if o["anchor"] != "custom":
-            o["anchor"] = "custom"
-            self.anchor_var.set(anchor_label("custom"))
-            self._pos_hint()
-        o["pos_x"] = round(self.posx_var.get() / 100, 4)
-        o["pos_y"] = round(self.posy_var.get() / 100, 4)
-        self._save_soon()
-        self._tick_overlay(reschedule=False)
 
     def _preview_data(self) -> dict:
         """What the overlay tab's preview draws (1.64: every element, rendered like in the game): the screen DBD
@@ -1685,52 +1298,11 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
             self._syncing = False
         self._pos_changed()
 
-    def _size_changed(self):
-        self._layout_mark()
-        self.settings["overlay"]["height"] = round(self.size_var.get() / 100, 3)
-        self._sel_sync()
-        self._save_soon()
-        self._tick_overlay(reschedule=False)
-
-    def _opacity_changed(self):
-        """The opacity slider: the element picked (1.2.7; "text" is part of the map's window)."""
-        key = OPACITY_KEYS.get(getattr(self, "_sel", "map"), "opacity")
-        self.settings["overlay"][key] = round(self.opacity_var.get() / 100, 2)
-        self._save_soon()
-        self._tick_overlay(reschedule=False)
 
     def _rate_changed(self):
         self.settings.set("scans_per_second", int(round(self.rate_var.get())))
         self._save_soon()
 
-    def _overlay_flags_changed(self):
-        o = self.settings["overlay"]
-        o["only_when_game_focused"] = bool(self.focus_var.get())
-        o["show_caption"] = bool(self.caption_var.get())
-        o["show_timer"] = bool(self.timer_show_var.get())
-        o["show_server"] = bool(self.server_show_var.get())
-        o["keep_in_bar"] = bool(self.keep_bar_var.get())
-        o["grow_past_bar"] = bool(self.grow_var.get())
-        o["show_waiting"] = bool(self.waiting_var.get())
-        if bool(self.record_var.get()) != o.get("show_record", True):
-            o["show_record"] = bool(self.record_var.get())
-            self._update_record()
-        if bool(self.floor_auto_var.get()) != o.get("floor_auto", True):
-            o["floor_auto"] = bool(self.floor_auto_var.get())
-            self._floor = None if o["floor_auto"] else 0          # the map on display follows right away
-        if bool(self.show_map_var.get()) != o.get("show_map", True):
-            o["show_map"] = bool(self.show_map_var.get())
-            self.overlay.set_show_map(o["show_map"])
-            self._log(_("Karte im Overlay eingeblendet.") if o["show_map"] else
-                      _("Karte im Overlay aus – es werden nur Timer, Ort und Ping angezeigt."), "Overlay")
-        if bool(self.transp_var.get()) != o.get("transparent", True):
-            o["transparent"] = bool(self.transp_var.get())
-            self.overlay.set_transparent(o["transparent"])
-        if self.current:
-            self.overlay.show_caption = o["show_caption"]
-            self._reload_picture()
-        self._save_soon()
-        self._tick_overlay(reschedule=False)
 
     def _detect_flags_changed(self):
         self.settings.set("auto_detect", bool(self.auto_var.get()))
