@@ -208,6 +208,8 @@ class SettingsTab:
                                                command=self._export_settings)).pack(side="left")
         self._reg("st.more.import", ui.Button(bk, text=_("Einstellungen importieren …"),
                                                command=self._import_settings)).pack(side="left", padx=6)
+        self._reg("st.more.clear_hist", ui.Button(bk, text=_("Verlauf löschen"),      # 1.2.16: moved from the
+                                                   command=self._stats_clear)).pack(side="right")   # statistics
 
         folders = self._reg("st.more.folders", ui.LabelFrame(more, text=_("Ordner"), padding=8))
         folders.pack(fill="x", pady=(8, 0))

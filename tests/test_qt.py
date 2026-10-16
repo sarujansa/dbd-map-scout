@@ -1106,3 +1106,31 @@ def test_reveal_opens_the_page_and_lights_the_card(qapp, keep):
         card = card.parentWidget()
     assert card is not None and card.property("found") is True
     win.reveal("settings", "no.such.key")                     # unknown key: nothing happens
+
+
+def test_dashboard_clicks_post_the_map_and_the_cell(qapp, keep):
+    """1.2.16: a click on a map bar posts ("map", name), on a heatmap cell ("cell", map, killer) – the App turns
+    them into the map / killer filter of the statistics."""
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtTest import QTest
+    from dbdmapscout import dashboard, qt_window
+    posted = queue.Queue()
+    view = keep(qt_window.DashboardView("stats.dash", lambda a, arg=None: posted.put((a, arg))))
+    d = dashboard.Dashboard(tiles=[], maps=[("Coal Tower", 6, "Ø 2.4"), ("Gas Heaven", 3, "")], maps_max=6,
+                            rows=["Coal Tower"], columns=["Nurse"], cells={("Coal Tower", "Nurse"): (3.0, 4)})
+    view.resize(700, 500)
+    view.show()
+    view.show_state({"data": d, "dark": True})
+    qapp.processEvents()
+    QTest.mouseClick(view.maps, Qt.LeftButton, pos=QPoint(20, int(qt_window.MapBars.ROW * 1.5)))
+    assert posted.get_nowait() == ("act", ("stats.dash", ("map", "Gas Heaven")))
+    view.heat.repaint()                                       # the cells' rectangles come from painting
+    qapp.processEvents()
+    assert view.heat._hits, "the heatmap painted its cell"
+    rect = view.heat._hits[0][0]
+    QTest.mouseClick(view.heat, Qt.LeftButton, pos=rect.center().toPoint())
+    assert posted.get_nowait() == ("act", ("stats.dash", ("cell", "Coal Tower", "Nurse")))
+    QTest.mouseClick(view.maps, Qt.LeftButton, pos=QPoint(20, qt_window.MapBars.ROW * 5))   # below the rows
+    assert posted.empty()
+    plain = keep(qt_window.DashboardView())                   # without post: no cursor, no clicks
+    assert plain.maps.cursor().shape() != Qt.PointingHandCursor

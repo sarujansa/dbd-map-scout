@@ -323,7 +323,7 @@ def make_control(kind, key, post):
     elif kind == "chart":
         w = Chart()
     elif kind == "dashboard":
-        w = DashboardView()
+        w = DashboardView(key, post)
     elif kind == "tiles":
         w = TilesView()
     elif kind == "preview":
