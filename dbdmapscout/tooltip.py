@@ -62,6 +62,21 @@ TIPS = {
         "Windows) – nur Anzeige, das Programm steuert nichts und speichert nichts.",
     "Fortschritt des Lieds zeigen (Zeit und Balken)":
         "Unter Titel und Künstler: wie weit das Lied ist, mit Balken und Länge – wie in Spotify.",
+    "Dunkle Fläche hinter Karte und Infos":
+        "Eine halb durchsichtige dunkle Fläche mit runden Ecken hinter Karte, Timer und Infozeilen (auch hinter "
+        "„Warte auf Map“) – gut lesbar über hellen Stellen im Spiel.",
+    "Dunkle Fläche hinter den Systemwerten":
+        "Eine halb durchsichtige dunkle Fläche mit runden Ecken hinter Systemwerten und „Heute“.",
+    "Balken in der Farbe des Covers":
+        "Der Fortschrittsbalken nimmt die Hauptfarbe des Albumcovers an, wie bei Spotify. Graue Cover: weiss.",
+    "Restzeit statt Länge (−1:46)":
+        "Rechts neben dem Balken steht, wie lange das Lied noch läuft, statt seiner Gesamtlänge.",
+    "Dunkle Fläche hinter der Musikkarte":
+        "Eine halb durchsichtige dunkle Fläche mit runden Ecken hinter Cover und Text – gut lesbar, wenn die "
+        "Karte über hellen Stellen im Spiel liegt.",
+    "Weich ein- und ausblenden (auch beim nächsten Lied)":
+        "Die Musikkarte blendet in einer Drittelsekunde ein und aus, statt hart zu erscheinen – auch wenn ein "
+        "neues Lied beginnt.",
     "Albumcover zeigen":
         "Das Bild zum Lied links neben Titel und Interpret – Windows liefert es mit; es bleibt nur im Speicher.",
     "OLED-Schwarz (echtes Schwarz statt Grau im Dark Mode)":

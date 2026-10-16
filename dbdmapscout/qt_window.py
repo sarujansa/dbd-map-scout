@@ -62,17 +62,19 @@ SPECS = {
                 ("slider", "ov.opacity"),
                 ("row", (("label", "ov.map_style.label"), ("combo", "ov.map_style"), ("stretch",))),
                 ("sub", N_("Karte")), ("check", "ov.show_map"), ("check", "ov.caption"), ("check", "ov.floors"),
-                ("check", "ov.transparent"),
+                ("check", "ov.transparent"), ("check", "ov.map_backdrop"),
                 ("sub", N_("Unter der Karte")), ("check", "ov.timer"), ("check", "ov.server"), ("check", "ov.record"),
                 ("sub", N_("Wann zeigen")), ("check", "ov.focus"), ("check", "ov.waiting"))),
             ("ov.sys", N_("Systemwerte & Musik"), (
                 ("sub", N_("Systemwerte")),
                 ("row", (("label", "ov.sysinfo.label"), ("combo", "ov.sysinfo"), ("stretch",))),
                 ("hint", "ov.sys_text"), ("hint", "ov.sys_hint"), ("check", "ov.today"),
+                ("check", "ov.hud_backdrop"),
                 ("sub", N_("Musik")),
                 ("check", "ov.media"), ("row", (("label", "ov.media_pos.label"), ("combo", "ov.media_pos"), ("stretch",))),
                 ("row", (("label", "ov.media_style.label"), ("combo", "ov.media_style"), ("stretch",))),
-                ("check", "ov.media_cover"), ("check", "ov.media_progress"))))),
+                ("check", "ov.media_cover"), ("check", "ov.media_progress"), ("check", "ov.media_accent"),
+                ("check", "ov.media_remaining"), ("check", "ov.media_backdrop"), ("check", "ov.media_fade"))))),
     ),
     "settings": (
         ("card", "st.look", (

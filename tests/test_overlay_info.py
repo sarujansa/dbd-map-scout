@@ -141,3 +141,36 @@ def test_a_map_in_the_bar_is_put_on_screen_once_per_change_at_its_final_size():
     assert widths == {406}                        # never wider than the bar
     assert len(pushes) == 10                      # once per timer text, never an in-between size
     assert {w for w, _h in pushes} == {406}
+
+
+def test_dark_area_behind_the_map_fits_the_bar_and_keeps_every_frame_the_same_size():
+    """1.2.4 (user: "einen Hintergrund dahinter, z. B. bei der Map – als Option für jedes UI-Element")."""
+    class Root:
+        def after(self, *a):
+            return None
+
+        def after_cancel(self, *a):
+            pass
+
+    class Overlay(ow.PictureOverlay):
+        def _push(self, *a):
+            pass
+
+    ov = Overlay(Root())
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    ov.set_map(os.path.join(root, "maps", "Forsaken Boneyard", "Eyrie of Crows.webp"), "")
+    ov.set_timer("1:23")
+    plain = ov.render(ov.fit_width(470, 518, 406))
+    ov.set_backdrop(True)
+    w, h = ov.render(ov.fit_width(470, 518, 406))
+    assert w <= 406 and (w, h) != plain
+    pic = ov._prepared[0]
+    corner = pic[0][:4]                                  # BGRA of the top left pixel: rounded corner, see-through
+    assert corner[3] == 0
+    middle_left = (pic[2] // 2 * pic[1] + 2) * 4         # left edge, half way down: the dark area
+    assert pic[0][middle_left + 3] == ow.CARD_BACKDROP[3]
+    frames = [Image.new("RGBA", (100, 80), (0, 0, 0, 0)) for _i in range(2)]
+    frames[0].paste((200, 200, 200, 255), (10, 10, 50, 50))
+    frames[1].paste((200, 200, 200, 255), (40, 30, 90, 70))
+    out = ow.map_backdrop(frames, 400)
+    assert out[0].size == out[1].size == (80 + 2 * (400 // 45), 60 + 2 * (400 // 45))   # union of both, padded
