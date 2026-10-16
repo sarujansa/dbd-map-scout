@@ -126,6 +126,10 @@ TIPS = {
                       "gezählt. Geht auch im Spiel mit dem Hotkey (Standard Strg+Alt+X).",
     "Stimmt": "Die Map stimmt – Hinweis „unsicher“ ausblenden.",
     # maps tab
+    "Server-Tab öffnen": "Zum Tab Server: dort „Anzeigen, mit welchem Server DBD verbunden ist“ anhaken – Region "
+                         "und Ping stehen dann hier und im Overlay.",
+    "Match-Daten einrichten …": "Zu Einstellungen → Mehr → Offizielle Match-Daten: einmal das Userscript in den "
+                                "Browser, danach zählen Kills, Entkommen und Bloodpoints in der Statistik.",
     "Kartenbild hinzufügen …": "Eigenes Bild für eine Map wählen: vorhandenes Bild ersetzen oder neue Map "
                                "anlegen. Rand und Hintergrund werden automatisch entfernt.",
     # overlay tab

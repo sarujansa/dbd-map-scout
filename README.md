@@ -25,7 +25,7 @@ In DBD unter **Einstellungen → Grafik** den Anzeigemodus **„Fenster-Vollbild
 
 ## Benutzung
 
-Beim **ersten Start** führt eine kurze **Einrichtung** (seit 1.60) durch drei Schritte: Spielsprache, Overlay-Position (mit „Overlay testen“) und die wichtigsten Tasten – „Überspringen“ geht jederzeit, wieder öffnen unter Einstellungen → Start und Infobereich → „Einrichtung starten“. **Suche:** das Feld über der Navigation (Strg+F) findet jede Einstellung auf allen Seiten, springt hin und hebt den Kasten kurz hervor.
+Beim **ersten Start** führt eine kurze **Einrichtung** (seit 1.60) durch vier Schritte: Spielsprache, Overlay-Position (mit „Overlay testen“), die wichtigsten Tasten und seit 1.2.15 die Match-Daten (Userscript für die Stats-Seite) – „Überspringen“ geht jederzeit, wieder öffnen unter Einstellungen → Start und Infobereich → „Einrichtung starten“. **Suche:** das Feld über der Navigation (Strg+F) findet jede Einstellung auf allen Seiten, springt hin und hebt den Kasten kurz hervor.
 
 Programm starten und DBD spielen. Wenn beim Match-Start unten links der Map-Name erscheint (z. B. „KOHLELAGER / DAS MACMILLAN-ANWESEN“), wird die Karte automatisch eingeblendet.
 

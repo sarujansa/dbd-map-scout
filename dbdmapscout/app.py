@@ -195,9 +195,11 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
     def _slider(self, parent, label, var, lo, hi, cmd, fmt="{:.0f} %", key=None):
         row = ui.Frame(parent)
         row.pack(fill="x", pady=3)
-        ui.Label(row, text=label, width=12).pack(side="left")
+        name = ui.Label(row, text=label, width=12)
+        name.pack(side="left")
         val = ui.Label(row, text=fmt.format(var.get()), width=6, anchor="e")
         val.pack(side="right")
+        name._dbdms_slider_part = val._dbdms_slider_part = True    # 1.2.15: the Qt slider draws both itself
 
         def changed(_=None):
             val.configure(text=fmt.format(var.get()))

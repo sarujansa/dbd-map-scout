@@ -1253,6 +1253,21 @@ EN = {
         'Click = view big · double click = show now. Detection takes over again at the next match.',
     'Zurück zu den Karten des Realms (Esc).': "Back to the realm's maps (Esc).",
     'Allgemein': 'General',
+    'Server-Tab öffnen': 'Open the server tab',
+    'Match-Daten einrichten …': 'Set up match data …',
+    'Kills und Entkommen kommen von der Stats-Seite': 'Kills and escapes come from the stats page',
+    'Match-Daten': 'Match data',
+    'Kills, Entkommen und Bloodpoints deiner Runden kommen von stats.deadbydaylight.com – geladen von deinem '
+    'Browser, nicht vom Programm. Lässt sich auch später einrichten (Einstellungen → Mehr → Offizielle Match-Daten).':
+        'Kills, escapes and bloodpoints of your rounds come from stats.deadbydaylight.com – loaded by your browser, '
+        'not by the program. Can be set up later too (Settings → More → Official match data).',
+    'Zum Tab Server: dort „Anzeigen, mit welchem Server DBD verbunden ist“ anhaken – Region und Ping stehen dann '
+    'hier und im Overlay.': 'To the server tab: tick "Show which server DBD is connected to" there – region and '
+                            'ping then show here and in the overlay.',
+    'Zu Einstellungen → Mehr → Offizielle Match-Daten: einmal das Userscript in den Browser, danach zählen Kills, '
+    'Entkommen und Bloodpoints in der Statistik.': 'To Settings → More → Official match data: the userscript into '
+                                                   'the browser once, then kills, escapes and bloodpoints count in '
+                                                   'the statistics.',
     'CPU DROSSELT (TEMP.)': 'CPU THROTTLED (TEMP.)',
     'CPU gedr.': 'CPU thr.',
     'GPU gedr.': 'GPU thr.',

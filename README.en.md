@@ -25,7 +25,7 @@ In DBD, use the display mode **"Windowed Fullscreen"** under **Settings → Grap
 
 ## Usage
 
-On the **first start** a short **setup** (since 1.60) goes through three steps: game language, overlay position (with "Test overlay") and the most important keys – "Skip" works any time, open it again under Settings → Start and notification area → "Start setup". **Search:** the field above the navigation (Ctrl+F) finds any setting on all pages, jumps there and lights up its box for a moment.
+On the **first start** a short **setup** (since 1.60) goes through four steps: game language, overlay position (with "Test overlay"), the most important keys and since 1.2.15 the match data (userscript for the stats page) – "Skip" works any time, open it again under Settings → Start and notification area → "Start setup". **Search:** the field above the navigation (Ctrl+F) finds any setting on all pages, jumps there and lights up its box for a moment.
 
 Start the program and play DBD. When the map name appears at the bottom left at the start of a match (e.g. "COAL TOWER / THE MACMILLAN ESTATE"), the map is shown automatically.
 

@@ -524,7 +524,19 @@ class MainWindow(QMainWindow):
         if self._nav_kept:
             self._nav_kept = False
             self._compact_nav(self.width() < NAV_COMPACT_BELOW)
+        self._reveal_widget(w)
 
+    def reveal(self, page: str, key: str):
+        """1.2.15: open ``page``, scroll to the control ``key`` of a hand-made page and light up its card (the
+        overview's "Match-Daten einrichten" leads to the card under "Mehr")."""
+        form = self.forms.get(page)
+        ctl = form.controls.get(key) if form is not None else None
+        if ctl is None:
+            return
+        self.show_page(page)
+        self._reveal_widget(ctl[1], delay=50)          # after the App's refresh has shown the card
+
+    def _reveal_widget(self, w, delay: int = 0):
         def scroll():
             _open_tabs(w)
             sa = w.parentWidget()
@@ -545,7 +557,7 @@ class MainWindow(QMainWindow):
                 target.style().unpolish(target)
                 target.style().polish(target)
             QTimer.singleShot(FOUND_MS, done)
-        QTimer.singleShot(0, scroll)
+        QTimer.singleShot(delay, scroll)
 
     def show_states(self, page, states):
         if page == "setup":
