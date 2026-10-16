@@ -206,6 +206,7 @@ QFrame[class="tile"][current="true"] {{ border: 2px solid {c['accent']}; }}
 QFrame[class="tile"] QLabel {{ background: transparent; border: none; }}
 QFrame[class="tile"] QLabel#tilepic {{ background: {DARK['field']}; border-radius: 6px; }}
 QLabel[class="tile"] {{ font-size: {px(12)}; font-weight: 600; color: {c['head']}; }}
+QLabel[class="tileinfo"] {{ font-size: {px(11)}; color: {c['dim']}; }}
 QListWidget#realms {{ border: 1px solid {c['border']}; border-radius: 8px; padding: 4px; outline: 0; }}
 QListWidget#realms::item {{ padding: 7px 0; border-radius: 6px; }}
 QListWidget#realms::item:selected {{ background: {c['nav_sel']}; }}

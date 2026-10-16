@@ -1134,3 +1134,28 @@ def test_dashboard_clicks_post_the_map_and_the_cell(qapp, keep):
     assert posted.empty()
     plain = keep(qt_window.DashboardView())                   # without post: no cursor, no clicks
     assert plain.maps.cursor().shape() != Qt.PointingHandCursor
+
+
+def test_map_tiles_show_marks_and_a_context_menu(qapp, keep):
+    """1.2.18: a tile carries rounds / Ø kills and the map's own settings; the right click offers show, rotate,
+    reset (only with own values) and replace picture, each posting ("map_action", (action, key))."""
+    from dbdmapscout import qt_window
+    posted = queue.Queue()
+    page = keep(qt_window.MapsPage(lambda a, arg=None: posted.put((a, arg))))
+    items = [("MacMillan", "Coal Tower", "coal", 1), ("MacMillan", "Suffocation Pit", "pit", 1)]
+    marks = {("coal", 1): ("6 Runden · Ø 2.4 Kills · 90°", "6 Runden · Ø 2.4 Kills · 90°\nEigene …", True)}
+    page.show_maps(items, None, marks=marks)
+    coal, pit = page._tiles[("coal", 1)], page._tiles[("pit", 1)]
+    assert coal.info.text().startswith("6 Runden") and coal.info.toolTip().endswith("Eigene …") and pit.info.text() == ""
+    entries = page.menu_entries(("coal", 1))
+    assert [a for a, _l, _e in entries] == ["show", "rotate", "size_reset", "picture"]
+    assert all(e for _a, _l, e in entries)
+    assert [e for _a, _l, e in page.menu_entries(("pit", 1))] == [True, True, False, True]
+    page.open_menu(("coal", 1), coal.mapToGlobal(coal.rect().center()))
+    acts = page._menu.actions()
+    assert [a.text() for a in acts][:2] == ["Anzeigen", "Drehen ↻"]
+    acts[1].trigger()
+    assert posted.get_nowait() == ("map_action", ("rotate", ("coal", 1)))
+    page._menu.close()
+    page.show_maps(items, None, marks={})                      # marks gone: the line empties
+    assert coal.info.text() == ""

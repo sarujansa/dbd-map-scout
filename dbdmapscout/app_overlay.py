@@ -317,17 +317,20 @@ class OverlayTab:
             self.map_size_row.pack_forget()
         self._sel_sync()                          # the size slider shows the size of the map on display
 
-    def _reset_map_size(self):
-        if not self.current:
+    def _reset_map_size(self, map_id=None):
+        """The map's own size and rotation go (button under the slider; 1.2.18 also the tiles' right click)."""
+        map_id = map_id or (self.current[0] if self.current else None)
+        if not map_id:
             return
         o = self.settings["overlay"]
-        m = self.catalog.maps.get(self.current[0])
-        name = m.name if m else self.current[0]
-        if (o.get("map_heights") or {}).pop(self.current[0], None):
+        m = self.catalog.maps.get(map_id)
+        name = m.name if m else map_id
+        if (o.get("map_heights") or {}).pop(map_id, None):
             self._log(_("Eigene Grösse für {map} entfernt – es gilt wieder der Schieberegler.", map=name), "Overlay")
-        if (o.get("map_rotations") or {}).pop(self.current[0], None):
+        if (o.get("map_rotations") or {}).pop(map_id, None):
             self._log(_("Drehung für {map} entfernt.", map=name), "Overlay")
-            self._reload_picture()
+            if self.current and self.current[0] == map_id:
+                self._reload_picture()
         self._show_map_size()
         self._save_soon()
         self._tick_overlay(reschedule=False)
