@@ -37,9 +37,13 @@ def today_rows(j, now: float) -> list:
     return rows
 
 
-MEDIA_SPOTS = [("below", N_("Unter den Systemwerten")), ("bottom_right", N_("Rechts unten im Balken")),
-               ("bottom_left", N_("Links unten im Balken")),
+MEDIA_SPOTS = [("below", N_("Unter den Systemwerten")), ("under_today", N_("Unter „Heute“")),
+               ("bottom_right", N_("Rechts unten im Balken")), ("bottom_left", N_("Links unten im Balken")),
                ("custom", N_("Eigene Position (mit der Maus verschieben)"))]
+TODAY_SPOTS = [("below", N_("Unter den Systemwerten")), ("under_music", N_("Unter der Musik")),
+               ("bottom_right", N_("Rechts unten im Balken")), ("bottom_left", N_("Links unten im Balken")),
+               ("custom", N_("Eigene Position (mit der Maus verschieben)"))]
+OPACITY_KEYS = {"hud": "hud_opacity", "today": "today_opacity", "music": "media_opacity"}   # 1.2.7; else "opacity"
 MEDIA_STYLES = [("big", N_("Groß – Cover oben, Titel darunter")), ("compact", N_("Kompakt – Cover links"))]
 MEDIA_SCALE = (60, 200)                     # slider of the music card, percent
 HUD_SCALE = (60, 200)                       # size of the system values / "today", percent (1.64.9)
@@ -138,7 +142,7 @@ class SysInfo:
         margin = int(gh * o["margin"])
         avail_w, avail_h = (gw / 2 - 2 * margin, vb[1 if beside else 0] - 2 * margin) if vb else \
             (layout.max_width(bar, margin) if bar >= layout.MIN_BAR else gw / 3, gh)
-        self.hud.opacity = o["opacity"]
+        self.hud.opacity = o.get("hud_opacity", o["opacity"])
         hh = int(gh * hud_scale(o))
         look = ("backdrop",) if o.get("hud_backdrop", False) else ()
         w, h = self.hud.render(rows, hh, look=look)
@@ -170,26 +174,52 @@ class SysInfo:
             self._today_cache = cache = (j, int(now // 60), today_rows(j, now))
         return cache[2] + [[(_("UHR "), sysinfo.DIM), (time.strftime("%H:%M", time.localtime(now)), sysinfo.WHITE)]]
 
-    def _today_height(self, gh: int) -> int:
-        """Height "today" takes below the system values (a map at the top of that bar moves down by it), 0 when it
-        does not hang there (1.2.6)."""
+    def _stack_height(self, gh: int) -> int:
+        """Height the cards hanging below the system values take (a map at the top of that bar moves down by it;
+        1.2.6, stacking 1.2.7): "today" as it would be rendered now, the music card as last shown."""
         o = self.settings["overlay"]
-        win = self.today_win
-        if win is None or not o.get("show_today", True) or o.get("today_pos", "below") != "below":
-            return 0
-        look = ("backdrop",) if o.get("today_backdrop", False) else ()
-        _w, h = win.render(self._today_rows(time.time()), int(gh * today_scale(o)), look=look)
-        return h + max(2, int(gh * o["margin"]) // 2)
+        gap = max(2, int(gh * o["margin"]) // 2)
+        total, chain = 0, {"hud"}
+        for name, anchor in layout.stack_order({"today": o.get("today_pos", "below"),
+                                                "music": o.get("media_pos", "below")}):
+            if anchor not in chain:
+                continue
+            h = 0
+            if name == "today" and self.today_win is not None and o.get("show_today", True):
+                look = ("backdrop",) if o.get("today_backdrop", False) else ()
+                h = self.today_win.render(self._today_rows(time.time()), int(gh * today_scale(o)), look=look)[1]
+            elif name == "music" and self.media_win is not None and self.media_win.shown:
+                h = self.media_win.size[1]
+            if h:
+                total += h + gap
+                chain.add(name)
+        return total
 
-    def _today_place(self):
+    def _cards_place(self):
+        """"Today" and the music card, each below the system values / another card / in the bar / at its own place
+        (1.2.7: stacking in order – the card another one hangs on is placed first)."""
+        o = self.settings["overlay"]
+        hud = self.worker.hud_rect if self.hud is not None and self.hud.shown else None
+        box = getattr(self, "_hud_box", None)
+        if hud and box and box[:2] == hud[:2]:
+            hud = box                                       # by its widest width: no wobble when values change
+        boxes = {"hud": hud}
+        for name, anchor in layout.stack_order({"today": o.get("today_pos", "below"),
+                                                "music": o.get("media_pos", "below")}):
+            under = (boxes.get(anchor) or boxes.get("hud")) if anchor else None
+            boxes[name] = self._today_place(under, bool(anchor)) if name == "today" \
+                else self._media_place(under, bool(anchor))
+
+    def _today_place(self, under=None, stacked: bool = False):
         """"Today" (1.2.6, user: "unter dem GPU/CPU-Zähler macht keinen Sinn"): a card of its own like the music –
-        below the system values (default), bottom right / left in the bar, or an own place; shown with the map."""
+        below the system values (default) or another card (``under`` = its box), bottom right / left in the bar,
+        or an own place; shown with the map. Returns its box on screen, or None."""
         o = self.settings["overlay"]
         win = self.today_win
         on = bool(o.get("show_today", True)) and win is not None
         ctx = self._media_ctx
         if win is None:
-            return
+            return None
         editing = on and self.overlay.editing
         win.set_editing(editing)
         rows = self._today_rows(time.time()) if on else []
@@ -201,23 +231,20 @@ class SysInfo:
             win.hide()
             self.worker.today_rect = None
             self._today_box = None
-            return
+            return None
         margin = int(gh * o["margin"])
-        win.opacity = o["opacity"]
+        win.opacity = o.get("today_opacity", o["opacity"])
         look = ("backdrop",) if o.get("today_backdrop", False) else ()
         height = int(gh * today_scale(o))
         w, h = win.render(rows, height, look=look)
         avail = layout.max_width(bar, margin) if bar >= layout.MIN_BAR and spot != "custom" else gw / 3
         if w > avail:                                       # never wider than the black bar
             w, h = win.render(rows, max(200, int(height * avail / w)), look=look)
-        hud = self.worker.hud_rect if self.hud is not None and self.hud.shown else None
-        box = getattr(self, "_hud_box", None)
-        if hud and box and box[:2] == hud[:2]:
-            hud = box                                       # by its widest width: no wobble when values change
-        x, y = layout.media_xy(spot, (gx, gy, gw, gh), (w, h), margin, hud, o.get("today_xy"))
+        x, y = layout.media_xy("below" if stacked else spot, (gx, gy, gw, gh), (w, h), margin, under,
+                               o.get("today_xy"))
         win.show_at(int(x), int(y))
-        self.worker.today_rect = (int(x), int(y), w, h)
-        self._today_box = (int(x), int(y), w, h)
+        self.worker.today_rect = self._today_box = (int(x), int(y), w, h)
+        return self._today_box
 
     def _today_dragged(self, x, y):
         """"Today" dropped somewhere (edit mode): from now on its own place there."""
@@ -230,13 +257,13 @@ class SysInfo:
         o = self.settings["overlay"]
         o["today_xy"], o["today_pos"] = [fx, fy], "custom"
         if hasattr(self, "today_pos_var"):
-            self.today_pos_var.set(_(dict(MEDIA_SPOTS)["custom"]))
+            self.today_pos_var.set(_(dict(TODAY_SPOTS)["custom"]))
         self._save_soon()
         self._tick_overlay(reschedule=False)
 
     def _today_spot_changed(self):
         self._layout_mark()
-        key = dict((_(label), k) for k, label in MEDIA_SPOTS).get(self.today_pos_var.get(), "below")
+        key = dict((_(label), k) for k, label in TODAY_SPOTS).get(self.today_pos_var.get(), "below")
         self.settings["overlay"]["today_pos"] = key
         self._save_soon()
         self._tick_overlay(reschedule=False)
@@ -283,9 +310,10 @@ class SysInfo:
         self._hud_own_place(round(min(1.0, max(0.0, (x - gx) / max(1, gw - w))), 4),
                             round(min(1.0, max(0.0, (y - gy) / max(1, gh - h))), 4))
 
-    def _media_place(self):
-        """The music card (1.64, user: own place, cover, size slider): below the system values (default), bottom
-        right / left in the black bar, or an own place dragged in the map's edit mode. Shown with the map."""
+    def _media_place(self, under=None, stacked: bool = False):
+        """The music card (1.64, user: own place, cover, size slider): below the system values or another card
+        (``under`` = its box, 1.2.7), bottom right / left in the black bar, or an own place dragged in the map's
+        edit mode. Shown with the map. Returns its box on screen, or None."""
         o = self.settings["overlay"]
         win = self.media_win
         music = bool(o.get("show_media", True)) and win is not None
@@ -293,7 +321,7 @@ class SysInfo:
         self.media.want_cover = bool(o.get("media_cover", True))
         ctx = self._media_ctx
         if win is None:
-            return
+            return None
         editing = music and self.overlay.editing
         win.set_editing(editing)
         now = self.media.now
@@ -313,9 +341,9 @@ class SysInfo:
                 win.hide()
             self._media_song = None
             self.worker.media_rect = None
-            return
+            return None
         margin = int(gh * o["margin"])
-        win.opacity = o["opacity"]
+        win.opacity = o.get("media_opacity", o["opacity"])
         cover = now.cover if o.get("media_cover", True) and not (editing and not media.playing(now, time.time())) \
             else None
         height = int(gh * max(MEDIA_SCALE[0], min(MEDIA_SCALE[1], o.get("media_scale", 1.0) * 100)) / 100)
@@ -327,13 +355,8 @@ class SysInfo:
         if w > avail:                                       # never wider than the black bar
             w, h = win.render(rows, max(200, int(height * avail / w)), cover, o.get("media_style", "big"), prog,
                               look)
-        hud = self.worker.hud_rect if self.hud is not None and self.hud.shown else None
-        box = getattr(self, "_hud_box", None)
-        if hud and box and box[:2] == hud[:2]:
-            hud = box                                       # by its widest width: no wobble when values change
-        if self._today_box and o.get("today_pos", "below") == "below":
-            hud = self._today_box                           # "today" hangs below them: the music below that
-        x, y = layout.media_xy(spot, (gx, gy, gw, gh), (w, h), margin, hud, o.get("media_xy"))
+        x, y = layout.media_xy("below" if stacked else spot, (gx, gy, gw, gh), (w, h), margin, under,
+                               o.get("media_xy"))
         song = (now.title, now.artist)
         if not fade:
             self._media_fade_stop()
@@ -344,6 +367,7 @@ class SysInfo:
         self._media_song = song
         win.show_at(int(x), int(y))
         self.worker.media_rect = (int(x), int(y), w, h)
+        return self.worker.media_rect
 
     def _media_fade(self, target, start=None):
         f = self._media_fader
@@ -487,14 +511,20 @@ class SysInfo:
         return _("Gilt nur für {map}", map=m.name) if m else _("Gilt für alle Maps (keine Map eingeblendet)")
 
     def _sel_sync(self):
-        """Slider range, label and value for the element picked (also when its size changed elsewhere)."""
+        """Slider range, label and value for the element picked (also when its size changed elsewhere); since
+        1.2.7 the opacity slider shows that element's opacity too."""
         scale = getattr(self, "sel_scale", None)
         if scale is None:
             return
-        lo, hi, value = self._sel_range(getattr(self, "_sel", "map"))
+        name = getattr(self, "_sel", "map")
+        lo, hi, value = self._sel_range(name)
         scale.configure(from_=lo, to=hi)
         self.sel_size_var.set(round(value))
         self.sel_size_label.configure(text=f"{value:.0f} %")
+        o = self.settings["overlay"]
+        op = float(o.get(OPACITY_KEYS.get(name, "opacity"), o["opacity"])) * 100
+        self.opacity_var.set(round(op))
+        self.opacity_label.configure(text=f"{op:.0f} %")
 
     def _sel_size_changed(self):
         self._set_size(getattr(self, "_sel", "map"), float(self.sel_size_var.get()))

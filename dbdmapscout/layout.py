@@ -219,6 +219,29 @@ def media_xy(spot: str, game, size, margin: int, hud=None, own=None):
     return hud_x("right", gx, gw, margin, w, bar), gy + margin
 
 
+STACK_ANCHORS = {"below": "hud", "under_today": "today", "under_music": "music"}
+
+
+def stack_order(spots: dict) -> list:
+    """[(name, anchor)] for the cards that may hang below another element (1.2.7, user: "Elemente stapeln"), in
+    the order to place them: an anchor before the card below it. ``spots`` = {name: its position setting};
+    ``anchor`` = "hud" / another name / None (a place of its own). A card under a card that is not there, or in a
+    loop (today under music, music under today), hangs below the system values instead."""
+    rest = {n: STACK_ANCHORS.get(s) for n, s in spots.items()}
+    order = list(spots)
+    out, done = [], {"hud"}
+    while rest:
+        ready = [n for n, a in rest.items() if a is None or a in done]
+        if not ready:                                       # a loop: the first one goes below the system values
+            rest[min(rest, key=order.index)] = "hud"
+            continue
+        for n in sorted(ready, key=order.index):
+            a = rest.pop(n)
+            out.append((n, "hud" if a is not None and a != "hud" and a not in spots else a))
+            done.add(n)
+    return out
+
+
 def media_own(gw: float, gh: float, size, x: float, y: float):
     """``media_xy`` of a music card of ``size`` whose top-left corner is at (x, y) in the game window (1.2.5: the
     share of the window where its centre is – before, the share of the free room, so a card that got wider with

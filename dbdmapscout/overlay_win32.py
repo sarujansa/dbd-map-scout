@@ -132,9 +132,12 @@ def compose(img: Image.Image, height: int, caption: str, transparent: bool, bord
     if split and text_h and text_h != height and 0 < split < img.height:
         title = img.crop((0, 0, img.width, split))
         body = img.crop((0, split, img.width, img.height))
+        tb = title.getchannel("A").getbbox()        # 1.2.7: the name itself, not the empty strip beside it – the
+        if tb:                                      # whole strip made the overlay as wide as the name's size, and
+            title = title.crop((tb[0], 0, tb[2], split))     # the lines below were shrunk for nothing
         th = max(1, round(split * text_h / img.height))
         bh = max(1, round(body.height * height / img.height))
-        title = title.resize((max(1, round(img.width * text_h / img.height)), th), Image.LANCZOS)
+        title = title.resize((max(1, round(title.width * text_h / img.height)), th), Image.LANCZOS)
         body = body.resize((max(1, round(img.width * height / img.height)), bh), Image.LANCZOS)
         w = max(title.width, body.width)
         pic = Image.new("RGBA", (w, th + bh), (0, 0, 0, 0))

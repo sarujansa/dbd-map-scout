@@ -146,7 +146,7 @@ def test_today_is_a_card_of_its_own():
     today = [[("HEUTE ", sysinfo.DIM), ("3 RUNDEN · 1:12", sysinfo.WHITE)], [("UHR ", sysinfo.DIM), ("15:54", sysinfo.WHITE)]]
     pic = Image.new("RGBA", (400, 500), (120, 120, 200, 255))
     m = preview.music_rows(media.NowPlaying(), 0.0)
-    layers, _r = preview.layers(W, H, _o(media_pos="below"), "right", ROWS, None, pic, "", INFO, 0.36, m, today)
+    layers, _r = preview.layers(W, H, _o(media_pos="under_today"), "right", ROWS, None, pic, "", INFO, 0.36, m, today)
     by = {n: (x, y, im.width, im.height) for n, im, x, y in layers}
     assert set(by) == {"map", "hud", "today", "music"}
     hx, hy, hw, hh = by["hud"]
@@ -166,3 +166,36 @@ def test_today_is_a_card_of_its_own():
     layers, (mx, my, _w, _h) = preview.layers(W, H, _o(), "left", ROWS, None, pic, "", INFO, 0.36, None, today)
     by = {n: (x, y, im.width, im.height) for n, im, x, y in layers}
     assert my >= by["today"][1] + by["today"][3]
+
+
+def test_cards_stack_in_any_order_and_a_loop_falls_back():
+    """1.2.7 (user's pick: "Elemente stapeln"): each card may hang below another; the preview places them in
+    dependency order, a loop goes below the system values."""
+    assert layout.stack_order({"today": "below", "music": "under_today"}) == [("today", "hud"), ("music", "today")]
+    assert layout.stack_order({"today": "under_music", "music": "below"}) == [("music", "hud"), ("today", "music")]
+    assert layout.stack_order({"today": "under_music", "music": "under_today"}) == [("today", "hud"), ("music", "today")]
+    assert layout.stack_order({"today": "bottom_left", "music": "custom"}) == [("today", None), ("music", None)]
+    assert layout.stack_order({"music": "under_today"}) == [("music", "hud")]        # no "today" card: the system values
+    today = [[("HEUTE ", sysinfo.DIM), ("3 RUNDEN", sysinfo.WHITE)]]
+    pic = Image.new("RGBA", (400, 500), (120, 120, 200, 255))
+    m = preview.music_rows(media.NowPlaying(), 0.0)
+    layers, _r = preview.layers(W, H, _o(media_pos="below", today_pos="under_music"), "right", ROWS, None, pic, "",
+                                INFO, 0.36, m, today)
+    by = {n: (x, y, im.width, im.height) for n, im, x, y in layers}
+    assert by["music"][1] > by["hud"][1] + by["hud"][3] and by["today"][1] > by["music"][1] + by["music"][3]
+    # the map at the top of the left bar: below the whole stack
+    layers, (mx, my, _w, _h) = preview.layers(W, H, _o(media_pos="below", today_pos="under_music"), "left", ROWS,
+                                               None, pic, "", INFO, 0.36, m, today)
+    by = {n: (x, y, im.width, im.height) for n, im, x, y in layers}
+    assert my >= by["today"][1] + by["today"][3]
+
+
+def test_the_name_strip_no_longer_widens_the_map():
+    """1.2.7 (idea 1): the map's name scaled apart from the map took the whole strip's width – wider than the map,
+    so the lines below were shrunk for nothing. Now only the name itself counts."""
+    from dbdmapscout.overlay_win32 import compose
+    pic = Image.new("RGBA", (1000, 1200), (0, 0, 0, 0))
+    pic.paste((255, 255, 255, 255), (300, 20, 700, 120))                 # the name: 400 px of a 1000-px strip
+    pic.paste((140, 147, 232, 255), (100, 200, 900, 1100))               # the map body
+    out = compose(pic, 300, "", True, False, 600, 160)                   # body at 300 px, name at 600 px
+    assert out.width == round(1000 * 300 / 1200) and out.height > 300    # the body's strip (250), not the name's (500)
