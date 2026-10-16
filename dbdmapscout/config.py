@@ -47,6 +47,12 @@ DEFAULTS = {
         "media_style": "big",           # music card: big = cover on top (1.64.7) / compact = cover left (1.64)
         "media_scale": 1.0,             # size of the music card (slider 60–200 %)
         "media_cover": True,            # album cover left of title and artist
+        "map_backdrop": False,          # dark area with rounded corners behind the map and its lines (1.2.4)
+        "hud_backdrop": False,          # … behind the system values / "today"
+        "media_accent": True,           # music card: progress bar in the cover's main colour (1.2.4)
+        "media_remaining": True,        # … time left ("−1:46") right of the bar instead of the length
+        "media_backdrop": True,         # … on a dark half-transparent area
+        "media_fade": True,             # … fades in/out (also on a new song)
         "text_scale": 1.0,              # name/timer/info lines of the map, independent of its size (1.65)
         "hud_scale": 1.0,               # size of the system values / "today" (60–200 %, 1.64.9)
         "show_today": True,             # block "today" with the system values at the top of a black bar (1.62)

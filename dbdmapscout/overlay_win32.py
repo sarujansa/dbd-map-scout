@@ -398,9 +398,11 @@ def render_hud(rows, height: int) -> Image.Image:
     return pic
 
 
-def progress_strip(width: int, elapsed: float, total: float, height: int) -> Image.Image:
+def progress_strip(width: int, elapsed: float, total: float, height: int, accent=None,
+                   remaining: bool = False) -> Image.Image:
     """The song's progress (1.64.7, user's screenshot of Spotify): "1:10 ──────── 2:56" – times grey, the bar
-    white on a faint track, with the soft dark edge of the other text. ``height``: game height."""
+    white on a faint track, with the soft dark edge of the other text. ``height``: game height. 1.2.4: ``accent``
+    = colour of the bar (from the cover), ``remaining`` = time left on the right ("−1:46") instead of the length."""
     from .media import clock
     size = max(11, height // 75)
     try:
@@ -410,7 +412,7 @@ def progress_strip(width: int, elapsed: float, total: float, height: int) -> Ima
     blur = max(2, height // 300)
     pad = 3 * blur
     halo = max(1, height // 400)
-    left, right = clock(elapsed), clock(total)
+    left, right = clock(elapsed), ("\u2212" + clock(total - elapsed) if remaining else clock(total))
     d0 = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
     lw, rw = d0.textlength(left, font=font), d0.textlength(right, font=font)
     asc, desc = font.getmetrics()
@@ -435,8 +437,35 @@ def progress_strip(width: int, elapsed: float, total: float, height: int) -> Ima
     d.rounded_rectangle((x0, cy - bar / 2, x1, cy + bar / 2), radius=bar, fill=(255, 255, 255, 70))
     if frac > 0:
         d.rounded_rectangle((x0, cy - bar / 2, x0 + (x1 - x0) * frac, cy + bar / 2), radius=bar,
-                            fill=(255, 255, 255, 235))
+                            fill=tuple(accent[:3]) + (235,) if accent else (255, 255, 255, 235))
     return pic
+
+
+CARD_BACKDROP = (14, 14, 18, 165)    # the music card's own dark area (1.2.4): readable over a bright game picture
+
+
+def backdrop(pic: Image.Image, height: int, pad: int = 0, radius: int = 0) -> Image.Image:
+    """``pic`` on a dark half-transparent area with rounded corners (1.2.4, user's pick: "Hintergrund-Kachel";
+    since 1.2.4 also behind the map and the system values, user: "Hintergrund dahinter, für jedes UI-Element").
+    ``height``: game height (sets padding and corners unless given)."""
+    pad = pad or max(4, height // 160)
+    out = Image.new("RGBA", (pic.width + 2 * pad, pic.height + 2 * pad), (0, 0, 0, 0))
+    ImageDraw.Draw(out).rounded_rectangle((0, 0, out.width - 1, out.height - 1),
+                                          radius=radius or max(6, height // 90), fill=CARD_BACKDROP)
+    out.alpha_composite(pic, (pad, pad))
+    return out
+
+
+def map_backdrop(pics, text_h: int) -> list:
+    """The map window's pictures (all frames of one map) on the dark area: cut to what all of them show (map
+    pictures have empty transparent margins), the same size for every frame; ``text_h``: size of its lines."""
+    box = None
+    for pic in pics:
+        b = pic.getchannel("A").getbbox()
+        if b:
+            box = b if box is None else (min(box[0], b[0]), min(box[1], b[1]), max(box[2], b[2]), max(box[3], b[3]))
+    pad, radius = max(6, text_h // 45), max(8, text_h // 30)
+    return [backdrop(pic.crop(box) if box else pic, 0, pad, radius) for pic in pics]
 
 
 def _below(pic: Image.Image, strip: Image.Image, centred: bool) -> Image.Image:
@@ -514,15 +543,26 @@ def render_music_compact(rows, cover, height: int) -> Image.Image:
     return pic
 
 
-def render_music(rows, cover, height: int, style: str = "big", progress=None) -> Image.Image:
+def render_music(rows, cover, height: int, style: str = "big", progress=None, look=()) -> Image.Image:
     """"Läuft gerade": style "big" (1.64.7, user's choice "A") = the cover big on top, below it the title (a bit
     larger) and the artist, centred; "compact" = the card of 1.64 (cover left). Text like the system values, the
-    cover slightly rounded with the same soft shadow."""
+    cover slightly rounded with the same soft shadow. ``look`` (1.2.4): "accent" = bar in the cover's colour,
+    "remaining" = time left, "backdrop" = on a dark area."""
+    pic = _render_music(rows, cover, height, style, progress, look)
+    return backdrop(pic, height) if "backdrop" in look else pic
+
+
+def _render_music(rows, cover, height, style, progress, look):
+    accent = None
+    if progress and "accent" in look:
+        from .media import accent as cover_accent
+        accent = cover_accent(cover)
+    strip = (lambda w: progress_strip(w, *progress, height, accent, "remaining" in look)) if progress else None
     if style == "compact":
         pic = render_music_compact(rows, cover, height)
-        if progress:
+        if strip:
             pad = 3 * max(2, height // 300)
-            pic = _below(pic, progress_strip(pic.width - 2 * pad, *progress, height), False)
+            pic = _below(pic, strip(pic.width - 2 * pad), False)
         return pic
     blur = max(2, height // 300)
     pad = 3 * blur
@@ -548,8 +588,8 @@ def render_music(rows, cover, height: int, style: str = "big", progress=None) ->
     for im in lines:
         pic.alpha_composite(im, ((w - im.width) // 2, y))
         y += im.height - pad
-    if progress:
-        pic = _below(pic, progress_strip(max(side, text_w - 2 * pad), *progress, height), True)
+    if strip:
+        pic = _below(pic, strip(max(side, text_w - 2 * pad)), True)
     return pic
 
 
@@ -590,6 +630,7 @@ class HudWindow:
         self.last_error = ""
         self.editing = False
         self.edit_label = ""                   # name on the edit frame ("SYSTEMWERTE", "MUSIK")
+        self.fade = 1.0                        # share of the opacity while fading in/out (music card, 1.2.4)
         self.on_moved = None
         self._proc = WNDPROC(self._wndproc)                    # keep a reference!
         self._old_proc = _SetLong(self._hwnd, GWLP_WNDPROC, ctypes.cast(self._proc, ctypes.c_void_p).value)
@@ -629,18 +670,21 @@ class HudWindow:
             self._pos = None
         return self.size
 
-    def render(self, rows, height: int, cover=None, style=None, progress=None):
-        """Prepare the picture; returns its size (0, 0 without rows). ``cover``/``style``/``progress``: the music
-        card (progress = (elapsed, total) seconds; redrawn once a second while a song plays)."""
+    def render(self, rows, height: int, cover=None, style=None, progress=None, look=()):
+        """Prepare the picture; returns its size (0, 0 without rows). ``cover``/``style``/``progress``/``look``: the
+        music card (progress = (elapsed, total) seconds; redrawn once a second while a song plays)."""
         progress = (int(progress[0]), int(progress[1])) if progress else None
-        key = (tuple(tuple(r) for r in rows), int(height), self.editing, id(cover), style, progress)
+        look = tuple(sorted(look))
+        key = (tuple(tuple(r) for r in rows), int(height), self.editing, id(cover), style, progress, look)
         if key != self._key:
             self._key = key
             if not rows:
                 self._data, self.size = None, (0, 0)
             else:
                 pic = render_hud(rows, height) if style is None else render_music(rows, cover, height, style,
-                                                                                  progress)
+                                                                                  progress, look)
+                if style is None and "backdrop" in look:
+                    pic = backdrop(pic, height)
                 if self.editing:
                     pic = add_border(pic, self.edit_label)
                 self._data, self.size = premultiplied_bgra(pic), pic.size
@@ -654,7 +698,8 @@ class HudWindow:
         pos = (int(x), int(y), round(self.opacity, 3))
         if pos != self._pos:
             self._pos = pos
-            err = push_layered(self._hwnd, self._data, self.size[0], self.size[1], pos[:2], self.opacity)
+            err = push_layered(self._hwnd, self._data, self.size[0], self.size[1], pos[:2],
+                               self.opacity * self.fade)
             if err:
                 self.last_error = err
         flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
@@ -671,6 +716,18 @@ class HudWindow:
         if self._shown:
             _u.ShowWindow(self._hwnd, SW_HIDE)
             self._shown = False
+
+    def set_fade(self, fade: float):
+        """Opacity share 0…1 while fading (1.2.4); pushed again at once when shown."""
+        fade = min(1.0, max(0.0, fade))
+        if fade == self.fade:
+            return
+        self.fade = fade
+        if self._shown and self._data and self._pos:
+            err = push_layered(self._hwnd, self._data, self.size[0], self.size[1], self._pos[:2],
+                               self.opacity * fade)
+            if err:
+                self.last_error = err
 
     @property
     def shown(self):
@@ -701,6 +758,7 @@ class PictureOverlay:
         self.edit_label = ""            # name on the edit frame (1.64.7: "KARTE · Mausrad = Grösse")
         self.info_beside = False        # timer/server right of the map (low bar above/below the picture)
         self.text_height = 0            # px the timer/name/info are sized for (1.65: not the map's size); 0 = map
+        self.backdrop = False           # dark area with rounded corners behind map and lines (1.2.4)
         self.on_moved = None
         self.on_wheel = None
         self.game_hwnd = None
@@ -812,6 +870,10 @@ class PictureOverlay:
         self.transparent = bool(on)
         self._key = None
 
+    def set_backdrop(self, on: bool):
+        self.backdrop = bool(on)
+        self._key = None
+
     def render(self, height: int, push: bool = True):
         """Prepare pictures for this height; returns (w, h) of the overlay. ``push=False``: only measure – the
         screen keeps the picture it has (the App tries sizes before it settles; pushing each one made the
@@ -838,14 +900,19 @@ class PictureOverlay:
                 self._base = [(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), 0)]
             self._base_key = base_key
         key = (base_key, self._editing, self._timer, self._server, self._ping, self._note, self._record,
-               self.info_beside)
+               self.info_beside, self.backdrop)
         if key != self._key:
             self._prepared = []
+            pics = []
             for pic, dur in self._base:
                 if self.has_info():
                     pic = add_info(pic, self._timer, self._server, text_h, backdrop=not self.transparent,
                                    ping=self._ping, note=self._note, record=self._record,
                                    beside=self.info_beside and self.show_map)
+                pics.append(pic)
+            if self.backdrop:
+                pics = map_backdrop(pics, text_h)
+            for pic, (_b, dur) in zip(pics, self._base):
                 if self._editing:
                     pic = add_border(pic.copy(), self.edit_label)
                 self._prepared.append((premultiplied_bgra(pic), pic.width, pic.height, dur))
@@ -870,7 +937,7 @@ class PictureOverlay:
         the App rendered big, showed it, then smaller: the map grew and shrank on every tick."""
         key = (height, text_h, avail, re.sub(r"\d", "0", self._timer), self._server, self._ping, self._note,
                self._record, self.info_beside, self._editing, self.show_map, self.show_caption, self._caption,
-               self.transparent, self._floor, id(self._frames[0][0]) if self._frames else None)
+               self.transparent, self.backdrop, self._floor, id(self._frames[0][0]) if self._frames else None)
         if self._fit is None or self._fit[0] != key:
             timer, self._timer = self._timer, key[3]
             try:
@@ -879,8 +946,11 @@ class PictureOverlay:
                 if w > avail:                   # the lines below are wider than the bar: smaller text, same map
                     self.text_height = max(40, int(text_h * avail / w))
                     w, _h = self.render(height, push=False)
-                    if w > avail:               # still too wide (very long line): the map too
-                        height = max(80, int(height * avail / w))
+                    for _try in range(6):       # still too wide (long line, the dark area's edge): the map too
+                        if w <= avail or height <= 80:
+                            break
+                        height = max(80, min(height - 1, int(height * avail / w)))
+                        w, _h = self.render(height, push=False)
             finally:
                 self._timer = timer
             self._fit = (key, self.text_height, height)
@@ -888,11 +958,14 @@ class PictureOverlay:
         return self._fit[2]
 
     def _render_waiting(self, height: int):
-        key = ("waiting", height, self.transparent, self._editing, self._waiting, self._server, self._ping)
+        key = ("waiting", height, self.transparent, self._editing, self._waiting, self._server, self._ping,
+               self.backdrop)
         if key != self._key:
             self._stop_anim()
             pic = add_info(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), "", self._server, height,
                            backdrop=not self.transparent, ping=self._ping, status=self._waiting)
+            if self.backdrop:
+                pic = map_backdrop([pic], height)[0]
             if self._editing:
                 pic = add_border(pic.copy(), self.edit_label)
             self._prepared = [(premultiplied_bgra(pic), pic.width, pic.height, 0)]

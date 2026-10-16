@@ -27,6 +27,9 @@ LONGEST = 90                # characters kept of a title (beyond that "…")
 PLAYING = 4                 # GlobalSystemMediaTransportControlsSessionPlaybackStatus.PLAYING
 COVER_PX = 160              # cover kept at most this big (the card shows it at ~70 px on 1440p)
 MAX_COVER_BYTES = 4_000_000     # a bigger "thumbnail" is not read
+ACCENT_SAT, ACCENT_VAL = 0.3, 0.25  # accent(): pixels at least this colourful / bright count
+ACCENT_SHARE = 0.03         # … and the main colour weighs at least this much (else the bar stays white)
+ACCENT_LIGHT = 0.62         # HLS lightness the accent is lifted to: readable on black
 
 
 @dataclass(frozen=True)
@@ -68,6 +71,66 @@ def decode_cover(data: bytes):
         return img
     except Exception:
         return None
+
+
+def accent(cover):
+    """Main colour of the cover for the progress bar (1.2.4, user's pick from a list: "Farbe aus dem Cover"),
+    as (r, g, b, 255) light enough to read on the dark game edge, or None for a grey cover (pure)."""
+    if cover is None:
+        return None
+    import colorsys
+    raw = cover.convert("RGB").resize((24, 24)).tobytes()
+    px = [tuple(raw[i:i + 3]) for i in range(0, len(raw), 3)]
+    bins = {}
+    for r, g, b in px:
+        h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+        if s < ACCENT_SAT or v < ACCENT_VAL:              # grey, black, white: no colour
+            continue
+        k = int(h * 18) % 18
+        w = s * v
+        acc = bins.setdefault(k, [0.0, 0.0, 0.0, 0.0])
+        acc[0] += w
+        acc[1] += r * w
+        acc[2] += g * w
+        acc[3] += b * w
+    if not bins:
+        return None
+    total, r, g, b = max(bins.values(), key=lambda a: a[0])
+    if total < ACCENT_SHARE * len(px):                   # a few coloured pixels are no main colour
+        return None
+    h, light, s = colorsys.rgb_to_hls(r / total / 255, g / total / 255, b / total / 255)
+    r, g, b = colorsys.hls_to_rgb(h, min(0.8, max(ACCENT_LIGHT, light)), min(0.9, max(0.5, s)))
+    return int(r * 255), int(g * 255), int(b * 255), 255
+
+
+def look(o: dict) -> tuple:
+    """Options of the music card's look from the overlay settings (1.2.4, pure)."""
+    return tuple(k for k, key in (("accent", "media_accent"), ("remaining", "media_remaining"),
+                                  ("backdrop", "media_backdrop")) if o.get(key, True))
+
+
+class Fader:
+    """Fading the music card in and out (1.2.4, user's pick: "sanft ein- und ausblenden"), pure: ``value`` = share
+    of the opacity, moved towards ``target`` by step(now) – eased, IN_S / OUT_S long."""
+    IN_S, OUT_S = 0.35, 0.25
+    STEP_MS = 30
+
+    def __init__(self):
+        self.value = self.start = self.target = 1.0
+        self.t = 0.0
+
+    def go(self, target: float, now: float, start=None):
+        if start is not None:
+            self.value = start
+        self.start, self.target, self.t = self.value, target, now
+
+    def step(self, now: float) -> bool:
+        """Advance; True when the target is reached."""
+        span = self.IN_S if self.target > self.start else self.OUT_S
+        f = 1.0 if span <= 0 else min(1.0, max(0.0, (now - self.t) / span))
+        f = f * f * (3 - 2 * f)                              # smooth start and end
+        self.value = self.start + (self.target - self.start) * f
+        return f >= 1.0
 
 
 def playing(now: NowPlaying, wall: float) -> bool:

@@ -9,7 +9,7 @@ from functools import lru_cache
 from PIL import Image, ImageDraw
 
 from . import layout, media, sysinfo
-from .overlay_win32 import add_info, compose, render_hud, render_music
+from .overlay_win32 import add_info, backdrop, compose, map_backdrop, render_hud, render_music
 
 SAMPLE_SNAPSHOT = dict(cpu_load=38, cpu_temp=64, gpu_temp=71, gpu_load=92, gpu_name="GPU",
                        vram_used=7.1, vram_total=16, ram_used=17.2, ram_total=32, gpu_power=241)
@@ -35,7 +35,7 @@ def sample_snapshot():
 
 
 def overlay_picture(pic, map_h: int, caption: str, transparent: bool, timer: str, server: str, ping, record: str,
-                    text_h: int = 0):
+                    text_h: int = 0, dark_area: bool = False):
     """The map window's picture (PictureOverlay.render for one frame); ``pic`` None = info only; ``text_h``: size
     of the name and the lines below (1.65: its own, not the map's)."""
     text_h = max(40, text_h or map_h)
@@ -43,7 +43,7 @@ def overlay_picture(pic, map_h: int, caption: str, transparent: bool, timer: str
         else Image.new("RGBA", (1, 1), (0, 0, 0, 0))
     if timer or server or record:
         base = add_info(base, timer, server, text_h, backdrop=not transparent, ping=ping, record=record)
-    return base
+    return map_backdrop([base], text_h)[0] if dark_area else base
 
 
 _SPLITS: dict = {}
@@ -100,7 +100,9 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
     hud = None
     if hud_side and hud_rows:
         hh = int(gh * min(2.0, max(0.6, float(o.get("hud_scale", 1.0)))))      # its own size (1.64.9)
-        hud = fitted(lambda h: render_hud(hud_rows, h), hh, avail, ("hud", repr(hud_rows)))
+        boxed = bool(o.get("hud_backdrop", False))
+        hud = fitted(lambda h: backdrop(render_hud(hud_rows, h), h) if boxed else render_hud(hud_rows, h), hh, avail,
+                     ("hud", repr(hud_rows), boxed))
     drop = hud.height + margin if hud is not None and hud_side != "custom" \
         and layout.below_hud(hud_side, o["anchor"]) else 0
     aspect = map_pic.width / map_pic.height if map_pic is not None else 0.8
@@ -110,10 +112,11 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
                                              height_frac, o["margin"], o.get("keep_in_bar", True), aspect, rows,
                                              drop, bool(o.get("grow_past_bar", False)))
     text_h = int(gh * 0.36 * min(2.0, max(0.5, float(o.get("text_scale", 1.0)))))     # App._text_height
+    dark = bool(o.get("map_backdrop", False))
     over = fitted(lambda h: overlay_picture(map_pic, h, caption, o.get("transparent", True), info.get("timer", ""),
                                             info.get("server", ""), info.get("ping"), info.get("record", ""),
-                                            text_h),
-                  mh, 0, ("map", id(map_pic), caption, o.get("transparent", True), repr(info), text_h))
+                                            text_h, dark),
+                  mh, 0, ("map", id(map_pic), caption, o.get("transparent", True), dark, repr(info), text_h))
     x0, _y0 = layout.preview_place(gw, gh, o["anchor"], o.get("pos_x", 0.0), o.get("pos_y", 0.0), margin, False,
                                    over.width, over.height, drop)
     in_bar = (o["anchor"] == "auto" or o.get("keep_in_bar", True)) and \
@@ -122,16 +125,16 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
         f = avail / over.width
         over = fitted(lambda h: overlay_picture(map_pic, h, caption, o.get("transparent", True),
                                                 info.get("timer", ""), info.get("server", ""), info.get("ping"),
-                                                info.get("record", ""), max(40, int(text_h * f))),
+                                                info.get("record", ""), max(40, int(text_h * f)), dark),
                       mh, 0,
-                      ("map", id(map_pic), caption, o.get("transparent", True), repr(info), int(text_h * f)))
+                      ("map", id(map_pic), caption, o.get("transparent", True), dark, repr(info), int(text_h * f)))
         if over.width > avail:                          # still too wide: the map too
             g = avail / over.width
             over = fitted(lambda h: overlay_picture(map_pic, h, caption, o.get("transparent", True),
                                                     info.get("timer", ""), info.get("server", ""), info.get("ping"),
-                                                    info.get("record", ""), max(40, int(text_h * f * g))),
+                                                    info.get("record", ""), max(40, int(text_h * f * g)), dark),
                           max(80, int(mh * g)), 0,
-                          ("map", id(map_pic), caption, o.get("transparent", True), repr(info),
+                          ("map", id(map_pic), caption, o.get("transparent", True), dark, repr(info),
                            int(text_h * f * g)))
     mx, my = layout.preview_place(gw, gh, o["anchor"], o.get("pos_x", 0.0), o.get("pos_y", 0.0), margin,
                                   o.get("keep_in_bar", True), over.width, over.height, drop)
@@ -149,8 +152,10 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
         spot = o.get("media_pos", "below")
         show_cover = cover if o.get("media_cover", True) else None
         style = o.get("media_style", "big")
-        card = fitted(lambda h: render_music(rows_m, show_cover, h, style, prog), int(gh * scale),
-                      avail if spot != "custom" else gw / 3, ("music", repr(rows_m), id(show_cover), style, prog))
+        look = media.look(o)
+        card = fitted(lambda h: render_music(rows_m, show_cover, h, style, prog, look), int(gh * scale),
+                      avail if spot != "custom" else gw / 3,
+                      ("music", repr(rows_m), id(show_cover), style, prog, look))
         cx, cy = layout.media_xy(spot, (0, 0, gw, gh), card.size, margin, hud_rect, o.get("media_xy"))
         out.append(("music", card, int(cx), int(cy)))
     return out, map_rect
