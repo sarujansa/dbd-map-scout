@@ -51,7 +51,9 @@ SPECS = {
         ("tabs", (
             ("ov.pos", N_("Position & Grösse"), (
                 ("row", (("label", "ov.sel.label"), ("combo", "ov.sel"), ("stretch",))), ("slider", "ov.sel_size"),
-                ("slider", "ov.opacity"), ("hint", "ov.size_scope"), ("hint", "ov.size_cap"),
+                ("slider", "ov.opacity"), ("slider", "ov.gap"),
+                ("row", (("label", "ov.bar_align.label"), ("combo", "ov.bar_align"), ("stretch",))),
+                ("hint", "ov.size_scope"), ("hint", "ov.size_cap"),
                 ("row", (("label", "ov.anchor.label"), ("combo", "ov.anchor"), ("stretch",), ("button", "ov.reset"))),
                 ("slider", "ov.posx"), ("slider", "ov.posy"),
                 ("row", (("button", "ov.edit"), ("button", "ov.test"), ("button", "ov.undo"), ("stretch",))),
@@ -68,6 +70,8 @@ SPECS = {
                 ("sub", N_("Systemwerte")),
                 ("row", (("label", "ov.sysinfo.label"), ("combo", "ov.sysinfo"), ("stretch",))),
                 ("hint", "ov.sys_text"), ("hint", "ov.sys_hint"), ("check", "ov.hud_backdrop"),
+                ("check", "ov.hud_row_cpu"), ("check", "ov.hud_row_gpu"), ("check", "ov.hud_row_spot"),
+                ("check", "ov.hud_row_vram"), ("check", "ov.hud_row_ram"),
                 ("sub", N_("Heute")), ("check", "ov.today"),
                 ("row", (("label", "ov.today_pos.label"), ("combo", "ov.today_pos"), ("stretch",))),
                 ("check", "ov.today_backdrop"),
