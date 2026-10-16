@@ -30,7 +30,7 @@ def _hwinfo(readings, poll=1000, sig=0x53695748, sensors=()):
     return head + body
 
 
-NONE = {"cpu_power": None, "core_max": None, "cpu_throttle": ""}
+NONE = {"cpu_power": None, "core_max": None, "cpu_throttle": "", "fps": None}
 
 
 def test_hwinfo_picks_cpu_package_and_gpu_temperature():
@@ -256,3 +256,26 @@ def test_statistics_know_cpu_throttling_only_from_rounds_with_hwinfo():
     peaks = {key: v for key, v, _r in history.sys_peaks(rounds)}
     assert peaks["cpu_power_max"] == 140 and peaks["cpu_throttle_s"] == 30.0
     assert "CPU gedrosselt" not in {t.title for t in sys_tiles(history.sys_average(rounds[2:]))}
+
+
+def test_frame_rate_from_hwinfo_and_the_slowest_seconds_of_a_round():
+    """1.2.2 (user's decision): FPS only from HWiNFO's shared memory (PresentMon / RivaTuner there); 0 = no 3D
+    picture and does not count. FPS low = the slowest 1 % of the seconds, the worst round is the lowest."""
+    from types import SimpleNamespace
+    from dbdmapscout import history
+    from dbdmapscout.sysinfo import MIN_SAMPLES, Snapshot, SysRecorder
+    rows = [(8, "Framerate (Displayed)", "FPS", 140.0), (8, "Framerate (Presented)", "FPS", 143.5),
+            (8, "Frame Time", "ms", 7.0)]
+    assert sysinfo.parse_hwinfo(_hwinfo(rows), now=1000)["fps"] == 143.5
+    assert sysinfo.parse_hwinfo(_hwinfo([(8, "Framerate", "FPS", 0.0)]), now=1000)["fps"] is None
+    rec = SysRecorder()
+    for i in range(200):
+        rec.add(Snapshot(t=i + 1, fps=40.0 if i < 2 else 140.0 if i % 2 else None))
+    out = rec.summary()
+    assert out["fps_low"] == 40.0 and out["fps"] == 138.0          # zeros (None) are no samples
+    assert MIN_SAMPLES <= 101
+    rounds = [SimpleNamespace(t=1, map="A", sys={"fps": 140, "fps_low": 90}),
+              SimpleNamespace(t=2, map="B", sys={"fps": 120, "fps_low": 55})]
+    peaks = {key: (v, r.map) for key, v, r in history.sys_peaks(rounds)}
+    assert peaks["fps_low"] == (55, "B")
+    assert history.sys_average(rounds)["fps_low"] == 72.5

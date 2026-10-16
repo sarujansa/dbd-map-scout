@@ -1200,4 +1200,9 @@ EN = {
     'Kern Ø %': 'Core avg %',
     'Ø CPU-Leistung': 'Avg. CPU power',
     'Ø stärkster CPU-Kern': 'Avg. busiest CPU core',
+    'Niedrigstes FPS-Tief': 'Lowest FPS low',
+    'Ø FPS': 'Avg. FPS',
+    'Ø FPS-Tief': 'Avg. FPS low',
+    'FPS Ø': 'FPS avg',
+    'FPS Tief': 'FPS low',
 }
