@@ -51,6 +51,13 @@ SETUP = (
         ("grid", 1, tuple(("row", (("label", f"st.hk.{k}.label"), ("stretch",), ("hotkey", f"st.hk.{k}")))
                           for k in SETUP_HOTKEYS)),
         ("check", "st.autostart"), ("check", "st.lobby_notify"))),
+    # 1.2.15: the stats-page link was only under Einstellungen → Mehr; new users never found it
+    (N_("Match-Daten"), (
+        ("note", N_("Kills, Entkommen und Bloodpoints deiner Runden kommen von stats.deadbydaylight.com – geladen "
+                    "von deinem Browser, nicht vom Programm. Lässt sich auch später einrichten (Einstellungen → "
+                    "Mehr → Offizielle Match-Daten).")),
+        ("row", (("button", "setup.script"), ("button", "setup.open_site"), ("stretch",))),
+        ("check", "setup.off_notify"), ("check", "setup.off_open"), ("hint", "setup.off_text"))),
 )
 
 
@@ -104,7 +111,7 @@ class OverviewPage(QWidget):
         info.addWidget(self.queue)
         info.addSpacing(8)
         grid = TileGrid(min_width=110, columns=4, spacing=20)    # four values side by side, or two by two
-        self.facts = [FactBox() for _i in range(4)]
+        self.facts = [FactBox(post=post) for _i in range(4)]
         for box in self.facts:
             grid.addWidget(box)
         info.addLayout(grid)
@@ -150,7 +157,7 @@ class OverviewPage(QWidget):
             t = _card()
             tl = QVBoxLayout(t)
             tl.setContentsMargins(14, 12, 14, 12)
-            box = FactBox(bar=True)
+            box = FactBox(bar=True, post=post)
             box.sub.setWordWrap(True)
             tl.addWidget(box)
             tiles.addWidget(t)
