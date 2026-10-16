@@ -814,13 +814,14 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self._save_soon()
 
     # ------------------------------------------------------------ map style (1.66)
-    def _map_file(self, map_id, variant=1):
+    def _map_file(self, map_id, variant=1, make=True):
         """(picture path, variant shown) – in the dark style the converted picture from the cache (made now if the
-        warm-up has not got there yet, ~0.5 s); own pictures (user_maps/) always as they are."""
+        warm-up has not got there yet, ~0.5 s; ``make=False``: the original then); own pictures (user_maps/)
+        always as they are."""
         path, shown = self.catalog.image_path(map_id, variant)
         if path and self.settings["overlay"].get("map_style", "classic") == "dark" \
                 and not self.catalog.is_own(map_id, variant):
-            path = mapstyle.styled_path(path, os.path.join(self.root_dir, STYLE_CACHE))
+            path = mapstyle.styled_path(path, os.path.join(self.root_dir, STYLE_CACHE), make)
         return path, shown
 
     def _style_warm(self):
@@ -831,7 +832,11 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
                         if not self.catalog.is_own(m.id, v) for p in [self.catalog.image_path(m.id, v)[0]] if p})
         cache = os.path.join(self.root_dir, STYLE_CACHE)
         stop = lambda: self.settings["overlay"].get("map_style", "classic") != "dark"   # noqa: E731
-        threading.Thread(target=mapstyle.warm, args=(paths, cache, stop), daemon=True, name="mapstyle").start()
+
+        def run():
+            mapstyle.warm(paths, cache, stop)
+            self._qt_maps_rev = getattr(self, "_qt_maps_rev", 0) + 1     # the tiles of the maps page: dark now
+        threading.Thread(target=run, daemon=True, name="mapstyle").start()
 
     def _map_style_changed(self):
         key = dict((_(label), k) for k, label in MAP_STYLES).get(self.map_style_var.get(), "classic")

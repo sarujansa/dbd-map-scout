@@ -58,7 +58,10 @@ def test_pictures_of_another_style_and_animations_stay(tmp_path):
 
 def test_the_dark_picture_is_made_once_and_then_taken_from_the_cache(tmp_path):
     path = os.path.join(MAPS, "McMillan", "Coal Tower.webp")
+    assert mapstyle.styled_path(path, str(tmp_path), make=False) == path       # tiles of the maps page: no waiting
+    assert not any(tmp_path.rglob("*.webp"))
     first = mapstyle.styled_path(path, str(tmp_path))
+    assert mapstyle.styled_path(path, str(tmp_path), make=False) == first
     assert first != path and first.startswith(str(tmp_path)) and f"-v{mapstyle.STYLE_VERSION}." in first
     stamp = os.stat(first).st_mtime_ns
     assert mapstyle.styled_path(path, str(tmp_path)) == first and os.stat(first).st_mtime_ns == stamp

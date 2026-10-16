@@ -188,6 +188,11 @@ QLabel[class="h2"] {{ font-size: {px(12)}; font-weight: 700; color: {c['accent']
 QLabel[class="big"] {{ font-size: {px(16)}; font-weight: 700; color: {c['head']}; }}
 QFrame#question {{ background: {rgba(c['accent'], 0.18)}; border-bottom: 1px solid {c['accent']}; }}
 QTabWidget::pane {{ border: 1px solid {c['border']}; border-radius: 8px; top: -1px; }}
+QTabWidget#formtabs::pane {{ background: {c['card']}; border: 1px solid {c['border']}; border-radius: 10px; top: -1px;
+    border-top-left-radius: 0; }}
+QTabWidget#formtabs[found="true"]::pane {{ border: 1px solid {c['accent']}; }}
+QTabWidget#formtabs QWidget#page {{ background: {c['card']}; }}
+QTabWidget#formtabs > QTabBar::tab {{ font-weight: 600; padding: 8px 16px; }}
 QTabBar::tab {{ background: transparent; color: {c['dim']}; padding: 7px 14px; border: none; }}
 QTabBar::tab:selected {{ color: {c['accent']}; border-bottom: 2px solid {c['accent']}; }}
 QTabBar::tab:hover:!selected {{ color: {c['fg']}; }}
@@ -195,6 +200,16 @@ QLabel[class="kpi"] {{ font-size: {px(24)}; font-weight: 700; color: {c['head']}
 QLabel[class="sub"] {{ color: {c['dim']}; font-size: {px(11)}; font-weight: 700; letter-spacing: 1px; padding-top: 6px; }}
 QLabel[class="note"] {{ color: {DOT['warn']}; }}
 QLabel#thumb {{ background: {DARK['field']}; border-radius: 8px; }}  /* map pictures need a dark backdrop */
+QFrame[class="tile"] {{ background: {c['card']}; border: 1px solid {c['border']}; border-radius: 8px; }}
+QFrame[class="tile"]:hover {{ background: {c['hover']}; }}
+QFrame[class="tile"][current="true"] {{ border: 2px solid {c['accent']}; }}
+QFrame[class="tile"] QLabel {{ background: transparent; border: none; }}
+QFrame[class="tile"] QLabel#tilepic {{ background: {DARK['field']}; border-radius: 6px; }}
+QLabel[class="tile"] {{ font-size: {px(12)}; font-weight: 600; color: {c['head']}; }}
+QListWidget#realms {{ border: 1px solid {c['border']}; border-radius: 8px; padding: 4px; outline: 0; }}
+QListWidget#realms::item {{ padding: 7px 0; border-radius: 6px; }}
+QListWidget#realms::item:selected {{ background: {c['nav_sel']}; }}
+QListWidget#realms::item:hover:!selected {{ background: {c['hover']}; }}
 QLabel#pill {{ border-radius: 10px; padding: 3px 12px; font-size: {px(12)}; font-weight: 600; }}
 QPushButton {{ background: {c['btn']}; border: 1px solid {c['border']}; border-radius: 6px; padding: 6px 14px; }}
 QPushButton:hover {{ background: {c['btn_hover']}; }}
