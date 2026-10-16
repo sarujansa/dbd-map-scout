@@ -213,3 +213,32 @@ def test_more_room_below_the_timer_than_between_the_small_lines():
     gaps = np.diff(rows)
     big = sorted(gaps[gaps > 1])
     assert len(big) >= 2 and big[-1] >= 2 * big[-2]        # the gap after the timer is the clearly largest one
+
+
+def test_a_big_text_with_the_dark_area_still_fits_the_bar():
+    """1.2.10 (combination sweep: 12 maps at text 160 % with the dark area were 1–4 px too wide): the area's edge
+    does not scale – the map makes room for it and the text shrinks with the edge taken out."""
+    class Root:
+        def after(self, *a):
+            return None
+
+        def after_cancel(self, *a):
+            pass
+
+    class Overlay(ow.PictureOverlay):
+        def _push(self, *a):
+            pass
+
+    ov = Overlay(Root())
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    ov.set_map(os.path.join(root, "maps", "Azarovs", "Gas Heaven.webp"), "")
+    ov.set_timer("0:59")
+    ov.set_server("Frankfurt", 28)
+    ov.set_record("Ø 2.8 Kills · 12 Runden")
+    ov.set_backdrop(True)
+    from dbdmapscout import layout
+    text_h = int(1440 * 0.36 * 1.6)
+    edge = min(ov.backdrop_pad(text_h), 17 - 2)
+    height = layout.fit_height(518, 406, *ov.map_size())
+    h = ov.fit_width(height, text_h, 406 + 2 * edge)
+    assert ov.render(h)[0] <= 406 + 2 * edge and ov.text_height >= 40
