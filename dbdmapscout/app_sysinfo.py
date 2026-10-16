@@ -18,6 +18,8 @@ HUD_SIDES = [("off", N_("Aus")), ("above", N_("Direkt über der Karte (wandert m
              ("custom", N_("Eigene Position (mit der Maus verschieben)"))]
 HUD_SHOWN = ("above", "left", "right", "custom")
 BAR_ALIGNS = [("left", N_("Links")), ("centre", N_("Mittig")), ("right", N_("Rechts"))]     # 1.2.8
+PRESET_LABELS = [("left", N_("Alles links")), ("right", N_("Alles rechts")),
+                 ("spread", N_("Verteilt: Karte links, Werte rechts"))]                      # 1.2.9 (layoutmem.PRESETS)
 HUD_ROW_LABELS = [("cpu", N_("Zeile CPU (Temperatur, Last)")), ("gpu", N_("Zeile GPU (Temperatur, Last)")),
                   ("spot", N_("Zeile Hotspot / GPU-Speicher (HWiNFO)")), ("vram", N_("Zeile VRAM")),
                   ("ram", N_("Zeile RAM"))]
@@ -107,8 +109,7 @@ class SysInfo:
             self.today_win.edit_label = _("HEUTE")
         self._today_box = None             # (x, y, w, h) of "today" on screen (the music card hangs below it)
         self._media_ctx = None             # (gx, gy, gw, gh, show) of the last placement
-        self._media_fader = media.Fader()  # 1.2.4: the music card fades in/out
-        self._media_fade_job = None
+        self._fades = {}                   # name: [media.Fader, timer job] – 1.2.4 music, 1.2.9 every element
         self._media_song = None            # (title, artist) on the card – a new song fades in
         self._hud_reserved = None          # (side, height) taken at the top of a bar, for the map below
         self._hud_pending = ""             # "above"/"beside": rendered, placed once the map's place is known
@@ -140,10 +141,11 @@ class SysInfo:
         follow = side == "above" and not vb                 # right above the map, wherever it is
         beside = side == "above" and bool(vb)               # narrow window: right of the map in the bottom bar
         self._hud_pending = ""
+        fade = bool(self.settings["overlay"].get("fade", True)) and not editing
         if not (on and (show or editing) and rows and (bar >= layout.MIN_BAR or vb or own or follow)
                 and (self.game is not None or editing or forced)):
             if self.hud is not None:
-                self.hud.hide()
+                self._fade_hide("hud", fade)
             self.worker.hud_rect = None
             return None
         o = self.settings["overlay"]
@@ -168,6 +170,7 @@ class SysInfo:
         else:                                               # own place in the narrow window: the bar above
             x, y = layout.hud_x("left" if side == "left" else "right", gx, gw, margin, sw, 0 if vb else bar,
                                 o.get("bar_align", "centre")), gy + margin
+        self._fade_show("hud", fade)
         self.hud.show_at(int(x), int(y))
         self.worker.hud_rect = (int(x), int(y), w, h)
         self._hud_box = (int(x), int(y), sw, h)             # steady box: the music card centres below it
@@ -235,9 +238,10 @@ class SysInfo:
         gx, gy, gw, gh, show = ctx or (0, 0, 0, 0, False)
         bar = layout.bar_width(gw, gh) if gh else 0
         forced = getattr(self, "_forced", False)
+        fade = bool(o.get("fade", True)) and not editing
         if not (ctx and rows and (show or editing) and (self.game is not None or editing or forced)
                 and (bar >= layout.MIN_BAR or spot == "custom" or editing)):
-            win.hide()
+            self._fade_hide("today", fade)
             self.worker.today_rect = None
             self._today_box = None
             return None
@@ -251,6 +255,7 @@ class SysInfo:
             w, h = win.render(rows, max(200, int(height * avail / w)), look=look)
         x, y = layout.media_xy("below" if stacked else spot, (gx, gy, gw, gh), (w, h), margin, under,
                                o.get("today_xy"), o.get("bar_align", "centre"), layout.stack_gap(o, gh))
+        self._fade_show("today", fade)
         win.show_at(int(x), int(y))
         self.worker.today_rect = self._today_box = (int(x), int(y), w, h)
         return self._today_box
@@ -269,6 +274,14 @@ class SysInfo:
             self.today_pos_var.set(_(dict(TODAY_SPOTS)["custom"]))
         self._save_soon()
         self._tick_overlay(reschedule=False)
+
+    def _preset_apply(self):
+        """Button "Vorlage anwenden" (1.2.9): one of layoutmem.PRESETS as a layout change (undo works)."""
+        from . import layoutmem
+        key = dict((_(label), k) for k, label in PRESET_LABELS).get(self.preset_var.get(), "left")
+        self._layout_mark()
+        self._layout_apply(layoutmem.PRESETS[key])
+        self._log(_("Vorlage „{name}“ angewendet.", name=self.preset_var.get()), "Overlay")
 
     def _hud_rows_changed(self):
         """Rows of the system values switched on/off (1.2.8)."""
@@ -303,8 +316,9 @@ class SysInfo:
         mode, self._hud_pending = self._hud_pending, ""
         if not mode or self.hud is None:
             return
+        fade = bool(self.settings["overlay"].get("fade", True)) and not self.overlay.editing
         if rect is None or not self.overlay.shown:
-            self.hud.hide()
+            self._fade_hide("hud", fade)
             self.worker.hud_rect = None
             return
         x, y, w, h = rect
@@ -314,6 +328,7 @@ class SysInfo:
         gap = layout.stack_gap(self.settings["overlay"], gh)
         if mode == "beside":
             hx, hy = min(x + w + 3 * gap, gx + gw - gap - hw), y + max(0, (h - hh) // 2)
+            self._fade_show("hud", fade)
             self.hud.show_at(int(hx), int(hy))
             self.worker.hud_rect = (int(hx), int(hy), hw, hh)
             return
@@ -326,6 +341,7 @@ class SysInfo:
             lo, hi = gx + gw - bar + gap, gx + gw - gap - hw
         hx = min(max(hx, lo), max(lo, hi))
         hy = y - gap - hh if y - gap - hh >= gy else y + h + gap
+        self._fade_show("hud", fade)
         self.hud.show_at(int(hx), int(hy))
         self.worker.hud_rect = (int(hx), int(hy), hw, hh)
 
@@ -368,11 +384,7 @@ class SysInfo:
         fade = bool(o.get("media_fade", True)) and not editing
         if not (ctx and rows and (show or editing) and (self.game is not None or editing or forced)
                 and (bar >= layout.MIN_BAR or spot == "custom" or editing)):
-            if fade and win.shown:
-                if self._media_fader.target != 0:
-                    self._media_fade(0)                     # hidden at the end of the fade
-            else:
-                win.hide()
+            self._fade_hide("music", fade)                  # hidden at the end of the fade
             self._media_song = None
             self.worker.media_rect = None
             return None
@@ -392,43 +404,79 @@ class SysInfo:
         x, y = layout.media_xy("below" if stacked else spot, (gx, gy, gw, gh), (w, h), margin, under,
                                o.get("media_xy"), o.get("bar_align", "centre"), layout.stack_gap(o, gh))
         song = (now.title, now.artist)
-        if not fade:
-            self._media_fade_stop()
-        elif not win.shown or song != self._media_song:
-            self._media_fade(1, start=0.0)                  # appears / a new song: from nothing
-        elif self._media_fader.target != 1:
-            self._media_fade(1)                             # back while fading out: from where it is
+        self._fade_show("music", fade, restart=song != self._media_song)    # a new song: from nothing
         self._media_song = song
         win.show_at(int(x), int(y))
         self.worker.media_rect = (int(x), int(y), w, h)
         return self.worker.media_rect
 
-    def _media_fade(self, target, start=None):
-        f = self._media_fader
-        f.go(target, time.monotonic(), start)
-        self.media_win.set_fade(f.value)
-        if self._media_fade_job is None:
-            self._media_fade_job = self.root.after(f.STEP_MS, self._media_fade_tick)
+    # ---- fading (1.2.4 the music card, 1.2.9 map, system values and "today" too): media.Fader per window
+    def _fade_win(self, name):
+        attr = {"map": "overlay", "hud": "hud", "today": "today_win", "music": "media_win"}[name]
+        return getattr(self, attr, None)
 
-    def _media_fade_tick(self):
-        self._media_fade_job = None
-        f, win = self._media_fader, self.media_win
+    def _fade_state(self, name):
+        st = self._fades.get(name)
+        if st is None:
+            st = self._fades[name] = [media.Fader(), None]
+        return st
+
+    def _fade_to(self, name, target, start=None):
+        st = self._fade_state(name)
+        st[0].go(target, time.monotonic(), start)
+        self._fade_win(name).set_fade(st[0].value)
+        if st[1] is None:
+            st[1] = self.root.after(st[0].STEP_MS, lambda: self._fade_tick(name))
+
+    def _fade_tick(self, name):
+        st = self._fade_state(name)
+        st[1] = None
+        win = self._fade_win(name)
         if win is None:
             return
-        done = f.step(time.monotonic())
-        win.set_fade(f.value)
+        done = st[0].step(time.monotonic())
+        win.set_fade(st[0].value)
         if not done:
-            self._media_fade_job = self.root.after(f.STEP_MS, self._media_fade_tick)
-        elif f.target == 0:
+            st[1] = self.root.after(st[0].STEP_MS, lambda: self._fade_tick(name))
+        elif st[0].target == 0:
             win.hide()
             win.set_fade(1.0)
 
-    def _media_fade_stop(self):
-        if self._media_fade_job is not None:
-            self.root.after_cancel(self._media_fade_job)
-            self._media_fade_job = None
-        self._media_fader.go(1, time.monotonic(), 1.0)
-        self.media_win.set_fade(1.0)
+    def _fade_stop(self, name):
+        """No fading: cancel a running one, full opacity."""
+        st = self._fade_state(name)
+        if st[1] is not None:
+            self.root.after_cancel(st[1])
+            st[1] = None
+        st[0].go(1, time.monotonic(), 1.0)
+        win = self._fade_win(name)
+        if win is not None:
+            win.set_fade(1.0)
+
+    def _fade_show(self, name, on: bool, restart: bool = False):
+        """Right before ``show_at``: a window that appears (or ``restart``: new content) fades in from nothing,
+        one caught while fading out comes back from where it is; ``on`` False = no fading at all."""
+        win = self._fade_win(name)
+        if win is None:
+            return
+        if not on:
+            self._fade_stop(name)
+        elif not win.shown or restart:
+            self._fade_to(name, 1, start=0.0)
+        elif self._fade_state(name)[0].target != 1:
+            self._fade_to(name, 1)
+
+    def _fade_hide(self, name, on: bool):
+        """Hide the window – fading out when ``on`` and it is shown (hidden at the end of the fade)."""
+        win = self._fade_win(name)
+        if win is None:
+            return
+        if on and win.shown:
+            if self._fade_state(name)[0].target != 0:
+                self._fade_to(name, 0)
+        else:
+            self._fade_stop(name)
+            win.hide()
 
     def _guides_place(self):
         """Centre cross over the DBD window while moving (1.64.5): two thin click-through windows, hidden

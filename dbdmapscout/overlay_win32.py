@@ -770,6 +770,7 @@ class PictureOverlay:
         self.info_beside = False        # timer/server right of the map (low bar above/below the picture)
         self.text_height = 0            # px the timer/name/info are sized for (1.65: not the map's size); 0 = map
         self.backdrop = False           # dark area with rounded corners behind map and lines (1.2.4)
+        self.fade = 1.0                 # share of the opacity while fading in/out (1.2.9)
         self.on_moved = None
         self.on_wheel = None
         self.game_hwnd = None
@@ -884,6 +885,16 @@ class PictureOverlay:
     def set_backdrop(self, on: bool):
         self.backdrop = bool(on)
         self._key = None
+
+    def set_fade(self, fade: float):
+        """Opacity share 0…1 while fading (1.2.9); pushed at once when shown."""
+        fade = min(1.0, max(0.0, float(fade)))
+        if fade == self.fade:
+            return
+        self.fade = fade
+        if self._shown:
+            self._push()
+            self._pushed_opacity = round(self.opacity * self.fade, 3)
 
     def backdrop_pad(self, text_h: int) -> int:
         """Edge the dark area adds around the map (0 without it) – the App lets it use the margin, so the map
@@ -1023,7 +1034,7 @@ class PictureOverlay:
             self.hide()
             return
         pos = (int(x), int(y))
-        opacity_key = round(self.opacity, 3)
+        opacity_key = round(self.opacity * self.fade, 3)
         if not self._shown or pos != self._pos or opacity_key != getattr(self, "_pushed_opacity", None):
             self._pos = pos
             self._push(pos)
@@ -1112,7 +1123,7 @@ class Win32Overlay(PictureOverlay):
         if not self._prepared:
             return
         data, w, h, _ = self._prepared[self._frame_i]
-        err = push_layered(self._hwnd, data, w, h, pos or self._pos or (0, 0), self.opacity)
+        err = push_layered(self._hwnd, data, w, h, pos or self._pos or (0, 0), self.opacity * self.fade)
         if err:
             self.last_error = err
 
