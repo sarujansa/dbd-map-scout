@@ -9,7 +9,8 @@ grey laid over the lilac floor (``unblend``); the conversion takes the floor off
 over lilac again gives back the original wherever no black backing was added – tests/test_mapstyle.py checks that
 for every map.
 
-Pictures in another style (Fallen Refuge, Freddy, Trickster's Delusion) and animated ones (Midwich) stay unchanged.
+Pictures in another style (Fallen Refuge, Freddy, Trickster's Delusion) stay unchanged; Midwich (animated, floors,
+framed) has its own way since 1.66.2 (``restyle_floors``).
 """
 from __future__ import annotations
 
@@ -19,11 +20,11 @@ from functools import lru_cache
 
 import cv2
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageSequence
 
 from .mapimage import FONT, title_split
 
-STYLE_VERSION = 6                     # raise when the conversion changes: the cache is made anew
+STYLE_VERSION = 7                     # raise when the conversion changes: the cache is made anew
 FILL = np.array([140, 148, 232])      # the lilac floor of the supplied maps
 FILL_SHARE = 0.3                      # at least this share of the outline must be lilac, else: another style
 M_COLOUR, S_COLOUR = (100, 48, 48), (100, 100, 48)    # as on Fallen Refuge
@@ -82,12 +83,12 @@ def _disk(r: int):
     return cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1))
 
 
-def unblend(rgb):
+def unblend(rgb, fill=None):
     """Every pixel of the supplied maps is a neutral grey g laid over the lilac floor with cover a:
     P = a·g + (1 − a)·FILL (checked on all 52 maps: no pixel off by 30 or more). Solved per pixel (least squares
     over the three channels) → (g, a, misfit). With it the floor comes off exactly – soft edges and the drop
     shadow of the digits included – and the picture laid over lilac again is the original."""
-    fill = FILL.astype(float)
+    fill = (FILL if fill is None else np.asarray(fill)).astype(float)
     p = rgb.astype(float) - fill
     basis = np.stack([np.ones(3), fill], axis=1)                  # P − FILL = c0·1 + c1·FILL
     coef = p @ np.linalg.pinv(basis).T
@@ -102,7 +103,7 @@ def unblend(rgb):
     return g, a, misfit
 
 
-def restyle(img: Image.Image) -> Image.Image:
+def restyle(img: Image.Image, fill=None) -> Image.Image:
     """The picture in the dark style; unchanged if it is not one of the lilac callout maps."""
     a = np.asarray(img.convert("RGBA")).copy()
     split = title_split(img)
@@ -110,10 +111,11 @@ def restyle(img: Image.Image) -> Image.Image:
     body = a[top:]
     rgb = body[..., :3].astype(int)
     shape = _outline(body[..., 3])
-    dist = np.abs(rgb - FILL).sum(axis=2)
+    fill = FILL if fill is None else np.asarray(fill)
+    dist = np.abs(rgb - fill).sum(axis=2)
     if not shape.any() or (dist[shape] < 30).mean() < FILL_SHARE:
         return img                                             # another style: leave it
-    grey, cover, misfit = unblend(rgb)
+    grey, cover, misfit = unblend(rgb, fill)
     if ((misfit >= MISFIT) & (rgb.max(axis=2) > 80))[shape].mean() > MISFIT_SHARE:   # (blue-black line rims: no colour)
         return img                                             # colours the conversion cannot keep: leave it
     cover = cover * body[..., 3] / 255                         # holes in the original stay holes
@@ -197,10 +199,114 @@ def restyle(img: Image.Image) -> Image.Image:
     return Image.fromarray(a)
 
 
+# ------------------------------------------------------------------ Midwich (1.66.2, user: "kann ebenfalls geändert werden")
+# A picture of its own kind: an animated GIF (floors), fully opaque, the map in a white frame on a dark patterned
+# background, the floor a grey-blue, the name in another font. Each floor is cut out of its frame, the background
+# seen through holes in the floor (the top floor's middle) becomes see-through, then it goes the same way as the
+# others with its own floor colour; the name is set anew like on every other map. The frames in between only
+# fade from one floor to the next – they are made anew from the dark floors.
+FRAME_WHITE = 230            # the white frame: all channels above this
+HOLE = (52, 52, 58)          # holes in a floor (top floor's middle: a drop) – see-through would look like floor
+FLOOR_TITLES = ("Midwich - Bottom", "Midwich - Top")
+
+
+def framed_floor(img: Image.Image):
+    """(map inside the white frame as RGBA with holes see-through, floor colour) or None if it is not that kind."""
+    a = np.asarray(img.convert("RGB")).astype(int)
+    h, w = a.shape[:2]
+    white = a.min(axis=2) > FRAME_WHITE
+    rows = np.flatnonzero(white.sum(axis=1) > 0.75 * w)
+    cols = np.flatnonzero(white.sum(axis=0) > 0.75 * h)
+    if len(rows) < 2 or len(cols) < 2 or rows[-1] - rows[0] < h / 2 or cols[-1] - cols[0] < w / 2:
+        return None
+    # the frame's own thickness: the white rows/columns next to each outer edge
+    def inner(lines, first):
+        step = 1 if first else -1
+        i = 0 if first else len(lines) - 1
+        while 0 <= i + step < len(lines) and lines[i + step] == lines[i] + step:
+            i += step
+        return lines[i] + step
+    y0, y1 = inner(rows, True), inner(rows, False) + 1
+    x0, x1 = inner(cols, True), inner(cols, False) + 1
+    pad = 2                                               # anti-aliased inner edge of the frame
+    body = a[y0 + pad:y1 - pad, x0 + pad:x1 - pad]
+    outside = np.concatenate([a[:max(1, rows[0] - 4)].reshape(-1, 3), a[rows[-1] + 4:].reshape(-1, 3)])
+    colours, counts = np.unique(body.reshape(-1, 3), axis=0, return_counts=True)
+    fill = colours[np.argmax(counts)]
+    outside = outside[outside.max(axis=1) < FRAME_WHITE]  # not the name and the frame
+    bgc, bgn = np.unique(outside, axis=0, return_counts=True)
+    background = bgc[np.argsort(-bgn)[:4]]                # the background and its "+" pattern
+    if (counts.max() / counts.sum()) < 0.4 or np.abs(background[0] - fill).sum() < 40:
+        return None
+    # the background seen through a hole (its colours, not the floor's; "half black over floor" would fit it too)
+    near_bg = np.min([np.abs(body - c).sum(axis=2) for c in background], axis=0) < 25
+    hole = (near_bg & (np.abs(body - fill).sum(axis=2) > 60)).astype(np.uint8)
+    # the whole hole: closed over the soft edges of the "+" pattern, but not into the black walls round it
+    wall = body.max(axis=2) < 40
+    k = max(3, round(body.shape[0] / 250))
+    hole = cv2.morphologyEx(hole, cv2.MORPH_CLOSE, _disk(k)).astype(bool) & ~wall
+    n, lab, stats, _c = cv2.connectedComponentsWithStats(hole.astype(np.uint8))
+    big = stats[:, cv2.CC_STAT_AREA] >= (k * 4) ** 2     # specks of a soft edge are no hole
+    big &= np.minimum(stats[:, cv2.CC_STAT_WIDTH], stats[:, cv2.CC_STAT_HEIGHT]) >= 3 * k   # thin strips at the frame
+    big[0] = False
+    filled = np.zeros(hole.shape, np.uint8)               # each hole whole (also the "+" inside it)
+    cs, _h = cv2.findContours(big[lab].astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    cv2.drawContours(filled, cs, -1, 1, -1)
+    hole = filled.astype(bool) & ~wall
+    out = np.dstack([body, np.full(body.shape[:2], 255)]).astype(np.uint8)
+    out[hole] = (*fill, 255)                              # floor for the conversion, the grey comes on top after it
+    return Image.fromarray(out), tuple(int(v) for v in fill), hole
+
+
+def restyle_floors(frames):
+    """[(image, duration)] of an animated map with floors in the dark style, or None if it is not that kind.
+    The floors (shown ≥ 1 s) are converted, the fading frames between them made anew from those."""
+    from .mapimage import FLOOR_MIN_MS, REF_MAP_H, add_title
+    floors = [i for i, (_im, d) in enumerate(frames) if d >= FLOOR_MIN_MS]
+    if len(floors) != len(FLOOR_TITLES):
+        return None
+    dark = {}
+    for n, i in enumerate(floors):
+        cut = framed_floor(frames[i][0])
+        if cut is None:
+            return None
+        body, fill, hole = cut
+        size = (round(body.width * REF_MAP_H / body.height), REF_MAP_H)
+        body = body.resize(size, Image.LANCZOS)
+        titled = add_title(body, FLOOR_TITLES[n])
+        styled = restyle(titled, fill)
+        if styled is titled:
+            return None
+        # the holes, dark grey on top (where the conversion made floor of them)
+        mask = Image.fromarray(hole.astype(np.uint8) * 255).resize(size, Image.LANCZOS)
+        full = Image.new("L", styled.size, 0)
+        full.paste(mask, ((styled.width - size[0]) // 2, styled.height - size[1]))
+        grey = Image.new("RGBA", styled.size, (*HOLE, 255))
+        styled = Image.composite(grey, styled, full)
+        dark[i] = styled
+    w = max(p.width for p in dark.values())                # one size for all frames (the names differ in width)
+    h = max(p.height for p in dark.values())
+    for i, pic in dark.items():
+        canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        canvas.paste(pic, ((w - pic.width) // 2, h - pic.height))
+        dark[i] = canvas
+    out = []
+    for i, (_im, d) in enumerate(frames):
+        if i in dark:
+            out.append((dark[i], d))
+            continue
+        before = max((f for f in floors if f < i), default=floors[-1])
+        after = min((f for f in floors if f > i), default=floors[0])
+        span = (after - before) % len(frames)
+        t = ((i - before) % len(frames)) / span           # how far from the floor before to the one after
+        out.append((Image.blend(dark[before], dark[after], t), d))
+    return out
+
+
 def styled_path(path: str, cache_dir: str) -> str:
     """The dark version of a map picture (made once, kept in ``cache_dir``); the original when the picture is
-    animated, cannot be read or is of another style."""
-    if not path or path.lower().endswith(".gif"):
+    cannot be read or is of another style (an animation: Midwich's kind only)."""
+    if not path:
         return path
     try:
         st = os.stat(path)
@@ -213,14 +319,27 @@ def styled_path(path: str, cache_dir: str) -> str:
         return target
     try:
         with Image.open(path) as im:
-            im.load()
-            src = im.convert("RGBA")
-        dark = restyle(src)
-        if dark is src:
-            return path
+            if getattr(im, "is_animated", False):
+                frames = []
+                for fr in ImageSequence.Iterator(im):
+                    pic = fr.convert("RGBA")
+                    frames.append((pic, int(fr.info.get("duration", 100) or 100)))
+                dark = restyle_floors(frames)
+                if dark is None:
+                    return path                                # an animation of another kind: as it is
+            else:
+                im.load()
+                src = im.convert("RGBA")
+                dark = restyle(src)
+                if dark is src:
+                    return path
+                dark = [(dark, 0)]
         os.makedirs(os.path.dirname(target), exist_ok=True)
         tmp = f"{target}.{os.getpid()}-{threading.get_ident()}.tmp"     # the warm-up thread may make it too
-        dark.save(tmp, "WEBP", lossless=True, exact=True)    # exact: also the invisible pixels as they were
+        first, rest = dark[0][0], [f for f, _d in dark[1:]]
+        # exact: also the invisible pixels as they were; several frames: an animated WebP with the same timing
+        first.save(tmp, "WEBP", lossless=True, exact=True, save_all=bool(rest), append_images=rest,
+                   duration=[d for _f, d in dark] if rest else 0, loop=0)
         os.replace(tmp, target)
         return target
     except Exception:
