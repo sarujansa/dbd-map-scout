@@ -381,10 +381,10 @@ def ping_by_region(rounds) -> dict:
 
 # ------------------------------------------------------------------ system values (tab Statistik → System)
 SYS_COLUMNS = ("gpu_temp", "gpu_temp_max", "gpu_hot_max", "cpu_temp", "cpu_temp_max", "gpu_load", "gpu_power",
-               "vram_used_max", "throttle_s")
-SYS_PEAKS = ("gpu_temp_max", "gpu_hot_max", "gpu_mem_max", "cpu_temp_max", "gpu_power_max", "vram_used_max",
-             "ram_used_max", "throttle_s")
-SYS_SUMS = ("throttle_s",)      # added up over a group, not averaged
+               "vram_used_max", "throttle_s", "core_max", "cpu_power", "cpu_throttle_s")
+SYS_PEAKS = ("gpu_temp_max", "gpu_hot_max", "gpu_mem_max", "cpu_temp_max", "gpu_power_max", "cpu_power_max",
+             "vram_used_max", "ram_used_max", "throttle_s", "cpu_throttle_s")
+SYS_SUMS = ("throttle_s", "cpu_throttle_s")      # added up over a group, not averaged
 
 
 def _sys_key(r, by: str):
@@ -432,12 +432,15 @@ def sys_average(rounds) -> dict:
     """Average of the round averages over the selection: {"gpu_temp": …, "cpu_temp": …, "n": rounds}."""
     items = [r.sys for r in rounds if r.sys]
     out = {"n": len(items)}
-    for col in ("gpu_temp", "cpu_temp", "gpu_load", "cpu_load", "gpu_power"):
+    for col in ("gpu_temp", "cpu_temp", "gpu_load", "cpu_load", "gpu_power", "core_max", "cpu_power"):
         got = [s[col] for s in items if col in s]
         if got:
             out[col] = sum(got) / len(got)
     throttled = [s["throttle_s"] for s in items if s.get("throttle_s")]
     out["throttle_rounds"], out["throttle_s"] = len(throttled), sum(throttled)
+    known = [s["cpu_throttle_s"] for s in items if "cpu_throttle_s" in s]      # rounds with HWiNFO
+    out["cpu_known"] = len(known)
+    out["cpu_throttle_rounds"], out["cpu_throttle_s"] = sum(1 for v in known if v), sum(known)
     return out
 
 
