@@ -187,6 +187,15 @@ SPECS = {
                                      ("row", (("label", "st.more.farm_region.label"), ("combo", "st.more.farm_region"),
                                               ("stretch",))),
                                      ("hint", "st.more.farm_text"))),
+        ("card", "st.more.rec", (("check", "st.more.rec_on"),                              # 1.4: OBS recordings
+                                 ("row", (("label", "st.more.rec_port.label"), ("entry", "st.more.rec_port"),
+                                          ("label", "st.more.rec_pw.label"), ("entry", "st.more.rec_pw"),
+                                          ("button", "st.more.rec_test"), ("stretch",))),
+                                 ("row", (("button", "st.more.rec_dir"), ("hint", "st.more.rec_folder"))),
+                                 ("row", (("label", "st.more.rec_limit.label"), ("combo", "st.more.rec_limit"),
+                                          ("stretch",))),
+                                 ("check", "st.more.rec_pre"), ("hint", "st.more.rec_status"),
+                                 ("hint", "st.more.rec_text"))),
         ("card", "st.more.backup", (("row", (("button", "st.more.export"), ("button", "st.more.import"), ("stretch",),
                                              ("button", "st.more.clear_hist"), ("button", "st.more.reset_all"))),)),
         ("card", "st.more.folders", (("row", (("button", "st.more.dir"), ("button", "st.more.maps_dir"), ("stretch",))),)),
@@ -208,7 +217,7 @@ def _spec_keys(items):
                 yield from _spec_keys(rows)
         elif kind == "grid":
             yield from _spec_keys(it[2])
-        elif kind in ("check", "button", "combo", "slider", "label", "hint", "value", "plain", "hotkey", "preview",
+        elif kind in ("check", "button", "combo", "slider", "label", "hint", "value", "plain", "hotkey", "preview", "entry",
                       "swatches"):
             yield it[1]
 
@@ -616,10 +625,14 @@ class MainWindow(QMainWindow):
         """Non-modal file dialog (Qt's own, not the system one: no second message loop); the result goes out as
         post("file", path or None)."""
         from PySide6.QtWidgets import QFileDialog
-        dlg = QFileDialog(self, title, initial, f"{pattern};;* (*.*)")
+        dlg = QFileDialog(self, title, initial, "" if mode == "dir" else f"{pattern};;* (*.*)")
         dlg.setOption(QFileDialog.DontUseNativeDialog, True)
         dlg.setAcceptMode(QFileDialog.AcceptSave if mode == "save" else QFileDialog.AcceptOpen)
-        dlg.setFileMode(QFileDialog.AnyFile if mode == "save" else QFileDialog.ExistingFile)
+        if mode == "dir":                             # 1.4: a folder (the recordings)
+            dlg.setFileMode(QFileDialog.Directory)
+            dlg.setOption(QFileDialog.ShowDirsOnly, True)
+        else:
+            dlg.setFileMode(QFileDialog.AnyFile if mode == "save" else QFileDialog.ExistingFile)
         if mode == "save":
             dlg.setDefaultSuffix("json")
         dlg.fileSelected.connect(lambda path: self._post("file", path))

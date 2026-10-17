@@ -10,7 +10,7 @@ import threading
 import time
 import traceback
 
-from . import i18n, layout, mapimage, mapstyle, regions, restart, tooltip
+from . import i18n, layout, mapimage, mapstyle, obsrec, regions, restart, tooltip
 from . import uimodel as ui
 from .capture import IS_WIN, describe_window, find_game_window, foreground_root, is_game_window
 from .catalog import Catalog
@@ -111,6 +111,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self._srv_busy = False
         self._srv_last_ping = 0.0
         self.conn = ConnectionWatch()      # "Verbunden mit": which game server DBD talks to (needs admin rights)
+        self.recorder = obsrec.Recorder(lambda kind, **d: self.events.put(("obs", kind, d)))   # 1.4: OBS on this PC
+        self.recorder.start()
         self._conn_busy = False
         self._conn_next = 0.0
         self._conn_last = None
@@ -749,6 +751,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
             self._srv_job_done(ev[1], ev[2])
         elif isinstance(ev, tuple) and ev[0] == "ui":
             self._qt_event(ev[1], ev[2])
+        elif isinstance(ev, tuple) and ev[0] == "obs":
+            self._rec_event(ev[1], ev[2])
         elif isinstance(ev, tuple) and ev[0] == "call":       # from a window procedure (overlay, HUD)
             ev[1](*ev[2])
         else:
@@ -1382,6 +1386,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self._clear_unsure()
         if self._hist is not None:
             self._hist = None
+            self.recorder.stop_round()               # 1.4: the recording ends with the round
             used = self._queue.get("used")           # the lobby goes to the next (real) round
             if used is not None and self._queue.get("found") is None:
                 self._queue = dict(self._queue, found=used, used=None)
@@ -1615,6 +1620,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
             self.conn.stop()
             self.sysmon.stop()
             self.media.stop()
+            self.recorder.quit()
             self.worker.stop()
             self.hotkeys.stop()
             self.worker.join(timeout=4)      # let a running OCR call finish cleanly
