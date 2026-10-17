@@ -186,8 +186,9 @@ def crossplay_off(img, W: int, H: int):
 
 
 def _digits_end(bright, vw) -> bool:
-    """The bright things at the right end of the zone are digits ("x1.00", cross-play on): the last two runs of
-    bright columns are glyph-high, narrower than high and stand on the same line."""
+    """The bright things at the right end of the zone are digits ("x1.00", "x2.5" … – the multiplier varies;
+    cross-play on): the last two runs of bright columns (the decimal point left out) are glyph-high, narrower
+    than high and stand on the same line."""
     cols = np.nonzero(bright.any(axis=0))[0]
     runs, start = [], None
     for i, c in enumerate(cols):
@@ -197,6 +198,8 @@ def _digits_end(bright, vw) -> bool:
             rows = np.nonzero(bright[:, start:c + 1].any(axis=1))[0]
             runs.append((int(start), int(c), int(rows[0]), int(rows[-1])))
             start = None
+    tall = max((y1 - y0 + 1 for _x0, _x1, y0, y1 in runs), default=0)
+    runs = [r for r in runs if r[3] - r[2] + 1 >= tall / 2]       # the decimal point is no digit ("x1.5")
     if len(runs) < 2:
         return False
     for x0, x1, y0, y1 in runs[-2:]:
