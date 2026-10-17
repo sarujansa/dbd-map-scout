@@ -120,6 +120,9 @@ class StatsTab:
         # (1.58.1 – before, dashboard and buttons stood above the tables and left them a few rows)
         self.stats_nb = ui.Notebook(f)
         self.stats_nb.pack(fill="both", expand=True)
+        self.stats_nb.bind("<<NotebookTabChanged>>", lambda e: self._stats_render_tab())
+        self._stats_ctx = None                   # 1.3.5: the selection, worked out once per filter change
+        self._stats_dirty = set()                # sub-tabs (index) not drawn for it yet
         box_d = self._stats_page(_("Übersicht"))
         self.stats_dash = ui.Dashboard(box_d, command=self._dash_clicked)   # 1.58: key figures, maps, killer × map
         self.stats_dash.pack(fill="x")
@@ -381,6 +384,27 @@ class StatsTab:
                            "nicht gezählt. Zuletzt: {map}, {when}.", n=len(ghosts), map=ghosts[-1].map,
                            when=time.strftime("%d.%m.%y %H:%M", time.localtime(ghosts[-1].t))))
         pairs = [(r, off[id(r)]) for r in rounds if id(r) in off and (role in ("custom", "farming") or history.normal(r))]
+        # 1.3.5: only the sub-tab on display is drawn now, the others when they are opened – with 5000 rounds all
+        # of them together took 360 ms per filter click (system and trend alone 170 ms)
+        self._stats_ctx = SimpleNamespace(rounds=rounds, pairs=pairs, off=off, period=period, notes=notes,
+                                          all_rounds=all_rounds)
+        self._stats_dirty = set(range(len(self.stats_nb.tabs())))
+        self._stats_render_tab()
+
+    def _stats_render_tab(self, index=None):
+        """Draw a sub-tab of the statistics for the current selection, if it has not been drawn for it yet."""
+        c = self._stats_ctx
+        i = self.stats_nb.index("current") if index is None else index
+        if c is None or i not in self._stats_dirty:
+            return
+        self._stats_dirty.discard(i)
+        part = (self._stats_part_dash, self._stats_part_maps, self._stats_part_killers, self._stats_part_trend,
+                self._stats_part_sys, self._stats_part_regions, self._stats_part_wait, self._stats_part_last)
+        if i < len(part):
+            part[i](c)
+
+    def _stats_part_dash(self, c):
+        rounds, pairs, notes, all_rounds = c.rounds, c.pairs, c.notes, c.all_rounds
         self.stats_lost_var.set("\n".join(notes))
         if self.stats_lost_var.get():
             self.stats_lost_label.pack(anchor="w", after=self.stats_dash, pady=(6, 0))
@@ -391,6 +415,9 @@ class StatsTab:
             dash.empty = _("Noch keine Runden gespeichert.")
         self.stats_dash.data = dash
         self.stats_dash.dark = bool(self.settings.get("dark_mode", True))
+
+    def _stats_part_maps(self, c):
+        rounds, pairs = c.rounds, c.pairs
         roles = history.roles_per_map(rounds)               # rounds = killer + survivor + custom/unknown
         res = official.results(pairs, lambda r: r.map)
         rows = []
@@ -407,6 +434,9 @@ class StatsTab:
             t.insert("", "end", values=(name, n, k, f"{kills:.2f}" if kills is not None else "–", s_,
                                         f"{esc:.0%}" if esc is not None else "–", fmt_duration(avg),
                                         _bp(bp) if bp is not None else "–"))
+
+    def _stats_part_killers(self, c):
+        rounds, pairs = c.rounds, c.pairs
         res = official.results([(r, m) for r, m in pairs if r.role == "killer"], lambda r: r.killer)
         t = self.stats_kill
         t.delete(*t.get_children())
@@ -418,8 +448,15 @@ class StatsTab:
         if keep and t.exists(keep[0]):
             t.selection_set(keep[0])
         self._stats_alias_buttons()
-        self._trend_render(pairs, TREND_UNIT.get(period, "week"))
-        self._stats_sys_render(rounds, TREND_UNIT.get(period, "week"))
+
+    def _stats_part_trend(self, c):
+        self._trend_render(c.pairs, TREND_UNIT.get(c.period, "week"))
+
+    def _stats_part_sys(self, c):
+        self._stats_sys_render(c.rounds, TREND_UNIT.get(c.period, "week"))
+
+    def _stats_part_regions(self, c):
+        rounds = c.rounds
         t = self.stats_regs
         t.delete(*t.get_children())
         pings = history.ping_by_region(rounds)
@@ -427,6 +464,9 @@ class StatsTab:
             p = pings.get(code)
             t.insert("", "end", values=(self._stats_region_name(code), n, fmt_duration(avg), f"{share:.0%}",
                                         f"{p:.0f} ms" if p is not None else "–"))
+
+    def _stats_part_wait(self, c):
+        rounds = c.rounds
         ws = history.wait_summary(rounds)
         self.stats_wait_var.set("" if ws["count"] else _("Noch keine Wartezeiten in dieser Auswahl."))
         n_txt = _("{n} Runden", n=ws["count"])
@@ -445,6 +485,9 @@ class StatsTab:
             else:
                 label = self._stats_region_name(key)
             t.insert("", "end", values=(label, n, fmt_duration(avg), fmt_duration(shortest)))
+
+    def _stats_part_last(self, c):
+        rounds, off = c.rounds, c.off
         t = self.stats_last
         keep = t.selection()                     # the marked round stays marked (e.g. after changing its role)
         t.delete(*t.get_children())
