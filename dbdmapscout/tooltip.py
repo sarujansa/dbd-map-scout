@@ -125,6 +125,18 @@ TIPS = {
     "Developer-Portal öffnen": "Öffnet discord.com/developers im Browser: „New Application“ anlegen (Name z. B. „Dead by "
                                "Daylight“), die Application-ID kopieren und links eintragen.",
     "Killer in Discord anzeigen": "Als Killer steht dein Killer im Status („Killer · The Nurse“); aus = nur „Killer“.",
+    # 1.8: "Als nächstes" from Spotify
+    "„Als nächstes“ aus Spotify in der Musikkarte zeigen": "Die nächsten Titel deiner Spotify-Warteschlange unter oder "
+                                                           "neben dem laufenden Lied. Braucht eine eigene App im Spotify-"
+                                                           "Developer-Dashboard (Client-ID) und einmal die Anmeldung im "
+                                                           "Browser; nur solange Spotify spielt.",
+    "Developer-Dashboard öffnen": "Öffnet developer.spotify.com/dashboard im Browser: „Create app“, Redirect URI wie "
+                                  "unten angegeben eintragen, die Client-ID kopieren und links einfügen.",
+    "Mit Spotify verbinden": "Öffnet die Spotify-Anmeldung im Browser. Nach dem Zustimmen kommt der Browser auf "
+                             "127.0.0.1 zurück und das Programm merkt sich die Freigabe (verschlüsselt, nur auf diesem "
+                             "PC). Dafür hört es nur während der Anmeldung einmal auf diesem Port.",
+    "Spotify-Verbindung trennen": "Vergisst die Spotify-Freigabe auf diesem PC; die Liste verschwindet. In Spotify selbst "
+                                  "lässt sich die App unter Konto → Apps ebenfalls entfernen.",
     "Auch Lobby, Suche und Menü anzeigen": "Aus = der Status erscheint nur während einer Runde; sonst auch „Sucht ein "
                                            "Match“, „In der Lobby“ und „Im Menü“, solange DBD läuft.",
     "Jede Runde mit OBS aufnehmen": "Das Programm startet die OBS-Aufnahme beim Map-Banner und stoppt sie beim "

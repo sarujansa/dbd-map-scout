@@ -116,10 +116,12 @@ def music_rows(now: media.NowPlaying, wall: float):
 
 
 def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, map_pic, caption: str,
-           info: dict, height_frac: float, music=None, today=None, editing: bool = False, accent=None):
+           info: dict, height_frac: float, music=None, today=None, editing: bool = False, accent=None,
+           upnext=None):
     """[(name, picture, x, y)] in screen pixels, bottom to top, + the map's (x, y, w, h) for clicks.
     ``o`` = settings["overlay"], ``hud_side`` = settings["sysinfo"] ("" for none), ``info`` = timer/server/ping/
-    record lines, ``music`` = (rows, cover) or None, ``today`` = rows of "today" (its own card, 1.2.6) or None."""
+    record lines, ``music`` = (rows, cover) or None, ``today`` = rows of "today" (its own card, 1.2.6) or None,
+    ``upnext`` = (label, items) of the Spotify queue on the music card (1.8) or None."""
     margin = int(gh * o["margin"])
     bar = layout.bar_width(gw, gh)
     avail = layout.max_width(bar, margin) if bar >= layout.MIN_BAR else gw / 3
@@ -155,11 +157,14 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
         show_cover = cover if o.get("media_cover", True) else None
         look = media.look(o)
         mstyle = o.get("media_style", "big")
-        cards["music"] = (fitted((lambda h: skin.music(rows_m, show_cover, h, style, prog, look, accent, mstyle)) if modern
+        npos = o.get("media_next_pos", "below")
+        cards["music"] = (fitted((lambda h: skin.music(rows_m, show_cover, h, style, prog, look, accent, mstyle,
+                                                       upnext, npos)) if modern
                                  else (lambda h: music_card(_music_body(rows_m, show_cover, h, mstyle, look), h,
-                                                            mstyle, prog, look)),
+                                                            mstyle, prog, look, upnext, npos)),
                                  int(gh * scale), avail if spot != "custom" else gw / 3,
-                                 ("music", repr(rows_m), id(show_cover), mstyle, prog, look, style, accent)),
+                                 ("music", repr(rows_m), id(show_cover), mstyle, prog, look, style, accent,
+                                  repr(upnext), npos)),
                           spot, o.get("media_xy"))
     # system values and cards first (1.2.11: like the App), the map moves below / above what stands at the
     # top / bottom of its bar – except with the system values right above the map: those follow it afterwards
