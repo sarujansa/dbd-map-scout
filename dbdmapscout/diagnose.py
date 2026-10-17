@@ -116,7 +116,10 @@ def collect(app) -> str:
         q = getattr(w, "queue", None)
         lines.append(f"Lobby: letzter Blick {getattr(w, 'lobby_info', '?')} · Zustand "
                      f"{getattr(q, 'state', '?')}, Rolle {getattr(q, 'role', None)}, "
-                     f"Crossplay aus={getattr(q, 'crossplay_off', None)}")
+                     f"Crossplay aus={getattr(q, 'crossplay_off', None)} (Blicke mit/ohne Kreuz "
+                     f"{getattr(q, 'cross_looks', None)}), letzte Lobby={getattr(q, 'found', None)}")
+        lines.append(f"Runde: {getattr(app, '_hist', None)} · Lobby der App: "
+                     f"{ {k: v for k, v in getattr(app, '_queue', {}).items() if k != 'since'} }")
         seen = list(getattr(w, "banner_history", []))
         lines.append(f"Letzte Banner ({len(seen)}):" if seen else "Letzte Banner: keine")
         lines.extend("  " + h for h in seen)

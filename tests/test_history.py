@@ -267,4 +267,7 @@ def test_farming_rounds_count_only_in_their_own_filter(tmp_path):
     assert h.set_farming(path, 100, True).farming is True
     assert [r.farming for r in h.load(path)] == [True, True]
     assert h.set_farming(path, 200, False).role == "killer"                # the role stays
+    h.append(path, h.Round(t=300, map_id="x", map="X", seconds=400, role="", custom=True))
+    r = h.set_farming(path, 300, True)                                     # 1.5.5: farming drops "custom game"
+    assert r.farming and not r.custom and [x.t for x in h.select(h.load(path), role="farming")] == [100, 300]
     assert h.set_farming(path, 999, True) is None

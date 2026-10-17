@@ -315,6 +315,7 @@ class Found:
     custom: bool = False
     killer: str = ""                 # the own killer (role killer only)
     crossplay_off: bool | None = None   # cross-play was off while searching / in the lobby (None: not seen)
+    cross_looks: tuple = (0, 0)         # 1.5.5: looks that showed the globe (with the red cross, without)
 
 
 @dataclass
@@ -327,6 +328,7 @@ class QueueTracker:
     CONFIRM: int = 2
     REMIND: float = 15                # lobby countdown at/below this and READY not pressed -> remind once
     MAX_SEARCH: float = 3 * 3600      # a "search" older than this is stale (DBD closed meanwhile …)
+    QUICK_LOBBY_S: float = 3.0        # 1.5.5: READY with nothing below at most this long after PLAY / a search look
     state: str = "idle"               # idle | search | lobby | custom
     role: str | None = None
     search_start: float | None = None
@@ -337,17 +339,28 @@ class QueueTracker:
     _killers: dict = field(default_factory=dict)   # name -> looks (the most read one wins)
     _cross: dict = field(default_factory=dict)     # cross-play off? -> looks while searching / in the lobby
     _cross_last: bool | None = None                # … and the last look that could tell (PLAY screen too)
+    _last_button: tuple | None = None              # (kind, t) of the last look that showed a lobby button
+    _cross_run: dict = field(default_factory=dict)   # cross-play looks since _pending was last restarted
 
     @property
     def killer(self) -> str:
         return max(self._killers, key=self._killers.get) if self.role == "killer" and self._killers else ""
 
+    CROSS_SHARE: float = 1 / 3        # 1.5.5: looks with the red cross needed among the looks that showed the globe
+
+    @property
+    def cross_looks(self) -> tuple:
+        return self._cross.get(True, 0), self._cross.get(False, 0)
+
     @property
     def crossplay_off(self) -> bool | None:
-        """Cross-play off for the search / lobby at hand: the majority of the looks since the search started,
-        else the last look that showed the globe (the PLAY screen before)."""
-        if self._cross:
-            return max(self._cross, key=self._cross.get)
+        """Cross-play off for the search / lobby at hand: decided by the looks since the search started, else by
+        the last look that showed the globe (the PLAY screen before). 1.5.5 (user: farming rounds with a long
+        search not recognised): the red cross is read with strict colour limits, so a look that misses it is far
+        likelier than one that invents it – CROSS_SHARE of the looks with the cross are enough, not a majority."""
+        off, on = self.cross_looks
+        if off or on:
+            return off >= max(1, (off + on) * self.CROSS_SHARE)
         return self._cross_last
 
     def update(self, view: LobbyView | None, t: float) -> list:
@@ -356,21 +369,33 @@ class QueueTracker:
         before is gone (left, dodged, or the match is over) and must not stick to anything."""
         events = []
         kind = view.kind if view is not None else None
-        if kind == "custom" and self.state in ("search", "lobby"):
+        if kind == "custom" and (self.state in ("search", "lobby") or self._quick_lobby(t)
+                                 or (self._pending is not None and self._pending[0] == "lobby")):
             # 1.64.4 (user: "Custom Game" in a normal match): a public lobby shows READY with nothing below until
-            # its countdown starts, and again when someone leaves – a custom game never comes from a search
+            # its countdown starts, and again when someone leaves – a custom game never comes from a search.
+            # 1.5.5 (user: farming rounds counted as custom games): with cross-play off the search often lasts
+            # under two looks – READY right after the PLAY screen or a single search look is a lobby as well,
+            # a custom game needs other screens (mode menu, create lobby) in between
             kind = "lobby"
         if kind is None:
             if self.state == "search" and self.search_start is not None and t - self.search_start > self.MAX_SEARCH:
                 self._reset()
             return events
+        self._last_button, before = (kind, t), self._last_button
+        if self._pending and self._pending[0] == kind:
+            self._pending = (kind, self._pending[1] + 1, self._pending[2])
+        else:
+            self._pending, self._cross_run = (kind, 1, t), {}
         role = view.role
+        if role is None and kind == "lobby" and view.kind == "custom" and before is not None:
+            role = "killer" if view.has_name else "survivor"   # 1.5.5: a lobby, read like any lobby look
         if role == "killer" and view.killer:
             self._killers[view.killer] = self._killers.get(view.killer, 0) + 1
         if view.crossplay_off is not None:
             self._cross_last = view.crossplay_off
             if kind in ("search", "lobby"):
                 self._cross[view.crossplay_off] = self._cross.get(view.crossplay_off, 0) + 1
+                self._cross_run[view.crossplay_off] = self._cross_run.get(view.crossplay_off, 0) + 1
         if role and role != self.role and kind in ("search", "lobby"):
             self.role = role
             events.append(("role", role))
@@ -382,16 +407,12 @@ class QueueTracker:
                 and view.countdown is not None and 0 < view.countdown <= self.REMIND):
             self._reminded = True                    # READY still not pressed, the lobby is about to start
             events.append(("remind", view.countdown))
-        if self._pending and self._pending[0] == kind:
-            self._pending = (kind, self._pending[1] + 1, self._pending[2])
-        else:
-            self._pending = (kind, 1, t)
         if self._pending[1] < self.CONFIRM or self._state_of(kind) == self.state:
             return events
         first = self._pending[2]
         if kind == "search":
-            if self.state != "search":
-                self._cross = {}                     # a new search: count its looks afresh
+            if self.state != "search":               # a new search: count its looks afresh – only the looks of
+                self._cross = dict(self._cross_run)  # this run (1.5.5: the first looks were thrown away before)
             self.state = "search"
             if not self._starts:
                 self._starts.append(first)
@@ -402,7 +423,10 @@ class QueueTracker:
             if self.state == "search" and self.search_start is not None:
                 start = sorted(self._starts)[len(self._starts) // 2] if self._starts else self.search_start
                 wait = max(0.0, first - start)
-            self.found = Found(first, wait, self.role, killer=self.killer, crossplay_off=self.crossplay_off)
+            elif self._starts:                       # 1.5.5: a single search look with DBD's counter is enough
+                wait = max(0.0, first - sorted(self._starts)[len(self._starts) // 2])
+            self.found = Found(first, wait, self.role, killer=self.killer, crossplay_off=self.crossplay_off,
+                               cross_looks=self.cross_looks)
             self.state = "lobby"
             self._reminded = False
             self._starts = []
@@ -425,6 +449,12 @@ class QueueTracker:
     @staticmethod
     def _state_of(kind):
         return {"play": "idle"}.get(kind, kind)
+
+    def _quick_lobby(self, t: float) -> bool:
+        """READY with nothing below right after the PLAY screen or a search look (even a single one): the
+        matchmaking was instant (cross-play off, farming) – a public lobby, not a custom game."""
+        lb = self._last_button
+        return lb is not None and lb[0] in ("play", "search") and 0 <= t - lb[1] <= self.QUICK_LOBBY_S
 
     def _reset(self):
         self.state, self.search_start, self._starts, self.role, self._killers = "idle", None, [], None, {}

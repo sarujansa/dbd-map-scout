@@ -6,7 +6,7 @@ import json
 import os
 
 HUD_SHOWN = ("above", "left", "right", "custom")    # settings.sysinfo values that show the system values
-SETTINGS_VERSION = 6
+SETTINGS_VERSION = 7
 
 DEFAULTS = {
     "settings_version": SETTINGS_VERSION,
@@ -121,10 +121,10 @@ DEFAULTS = {
     "rec_rel": "",
     "rec_folder": "",
     "rec_limit_gb": 0,                  # 0 = the whole drive (older recordings go when it fills up)
-    "rec_pre": True,                    # save OBS's replay buffer at the banner (the seconds before it)
+    "rec_pre": False,                   # save OBS's replay buffer at the banner (1.5.5: off – it holds the lobby)
     "rec_tail_s": 5,                    # 1.4.1: seconds recorded after the detected end (result screen)
     "rec_buffer_auto": True,            # 1.4.1: start/stop OBS's replay buffer with DBD
-    "rec_merge": True,                  # 1.4.2: pre-roll + round → one file (ffmpeg from imageio-ffmpeg, stream copy)
+    "rec_merge": False,                 # 1.4.2: pre-roll + round → one file (1.5.5: off – played too fast at the user's PC)
     "rec_farming_dir": True,            # 1.5.3: recordings of farming rounds go into the subfolder "Farming"
     "clip_mode": "copy",                # 1.5.1: clip editor – "copy" (key frames, fast) / "exact" (re-encoded)
     "clip_sound": True,                 # 1.5.1: clip editor plays the sound while previewing (Windows)
@@ -219,6 +219,9 @@ class Settings:
                     if ov.get("media_pos") == "below" and ov.get("today_pos", "below") == "below" \
                             and ov.get("show_today", True):
                         ov["media_pos"] = "under_today"               # 1.2.6 hung the music below "today"
+                if raw.get("settings_version", 1) < 7:                # 1.5.5 (user: "no lobby in the recording",
+                    self.data["rec_pre"] = False                      # joined files played too fast in the round)
+                    self.data["rec_merge"] = False
                 if self.data.get("color_theme") == "oled":            # 1.62.0: OLED was a theme of its own
                     self.data["color_theme"], self.data["oled_black"] = "gold", True
                 self.data["settings_version"] = SETTINGS_VERSION

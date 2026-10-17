@@ -815,13 +815,19 @@ class StatsTab:
                       "region": "", "source": source}
         self._sysrec = sysinfo.SysRecorder()          # system values during this round
         f = self._queue.get("found")                  # the lobby this match came from (once, max. 15 min old)
+        farm_on = bool(self.settings.get("farming_crossplay", True))
         if f is not None and 0 <= now - f.t <= 900:
             self._hist.update(wait=f.wait, role=f.role or "", custom=f.custom, killer=f.killer,
-                              farming=bool(f.crossplay_off) and not f.custom
-                              and bool(self.settings.get("farming_crossplay", True)))
+                              farming=bool(f.crossplay_off) and not f.custom and farm_on)
             self._queue = dict(self._queue, found=None, used=f)
             if self._hist["farming"]:
                 self._log(_("Crossplay war aus – die Runde zählt als Farming-Runde."), "Erkennung")
+            elif farm_on and f.custom:               # 1.5.5: say why a round is no farming round (user diagnosis)
+                self._log(_("Als Custom Game erkannt – die Runde zählt nicht als Farming (unter „Letzte Runden“ "
+                            "mit „Farming an/aus“ korrigierbar)."), "Erkennung")
+        elif farm_on and (self._queue.get("crossplay_off") or f is not None):
+            self._log(_("Keine Lobby zur Runde ({why}) – sie zählt nicht als Farming.",
+                        why=_("Lobby zu alt") if f is not None else _("Lobby nicht gesehen")), "Erkennung")
         self.recorder.start_round(t=now, map_id=map_id, label=self._hist["map"], role=self._hist.get("role", ""),
                                   killer=self._hist.get("killer", ""),         # 1.4: OBS records the round
                                   farming=bool(self._hist.get("farming")))     # 1.4.2: goes first when room is needed

@@ -147,6 +147,29 @@ def test_lobby_before_its_countdown_is_no_custom_game():
     assert found[0].role == "survivor" and q.state == "lobby"
 
 
+def test_an_instant_lobby_after_play_is_no_custom_game():
+    """1.5.5 (user: farming rounds with cross-play off were counted as custom games): the search lasted under
+    two looks, so READY with nothing below came without a confirmed search – right after the PLAY screen or a
+    single search look it is a public lobby (with the wait from DBD's own counter and the cross-play state)."""
+    q = QueueTracker()
+    one_search = LobbyView("cancel", 0.0, "", "0:11 EST. 0:00", crossplay_off=True)
+    ev = run(q, [(0, LobbyView("play", 0.0, crossplay_off=True)), (1, LobbyView("play", 0.0, crossplay_off=True)),
+                 (2, one_search), (3, V("custom")), (4, V("custom")), (5, V("custom"))])
+    found = [e[1] for e in ev if e[0] == "found"]
+    assert len(found) == 1 and not found[0].custom and found[0].crossplay_off is True
+    assert found[0].wait == pytest.approx(12, abs=1) and found[0].role == "survivor" and q.state == "lobby"
+    q2 = QueueTracker()                                                      # PLAY -> READY, no search look seen
+    ev = run(q2, [(0, V("play")), (1, V("play")), (2, V("custom")), (3, V("custom"))])
+    found = [e[1] for e in ev if e[0] == "found"]
+    assert len(found) == 1 and not found[0].custom and found[0].wait is None and found[0].role == "survivor"
+    q3 = QueueTracker()                                                      # a real custom game: other screens between
+    ev = run(q3, [(0, V("play")), (1, V("play")), (2, None), (3, None), (4, None), (5, V("custom")), (6, V("custom"))])
+    assert [e[1] for e in ev if e[0] == "found"] == [Found(5, None, None, custom=True)]
+    q4 = QueueTracker()                                                      # READY out of nowhere: still custom
+    ev = run(q4, [(0, V("custom")), (1, V("custom"))])
+    assert [e[1] for e in ev if e[0] == "found"] == [Found(0, None, None, custom=True)]
+
+
 def test_lobby_without_seen_search_has_no_wait():
     q = QueueTracker()
     ev = run(q, [(0, V("lobby", "survivor")), (1, V("lobby", "survivor"))])
@@ -320,6 +343,16 @@ def test_found_lobby_carries_crossplay_off():
     for i in range(2):
         q.update(on, t + 2 + i)
     assert q.crossplay_off is False
+    # 1.5.5: a third of the looks with the cross is enough (a missed cross is likelier than an invented one)
+    q2 = QueueTracker()
+    for i, off in enumerate([False, True, False, False, True, False]):
+        q2.update(LobbyView(button="cancel", time_text="0:05 EST. 2:00", crossplay_off=off), 10.0 + i)
+    assert q2.crossplay_off is True and q2.cross_looks == (2, 4)
+    q2.update(LobbyView(button="cancel", time_text="0:05 EST. 2:00", crossplay_off=False), 20.0)
+    assert q2.crossplay_off is False                                        # 2 of 7: below a third
+    q2.update(ready, 21.0)
+    q2.update(ready, 22.0)
+    assert q2.found.cross_looks == (4, 5) and q2.found.crossplay_off is True   # both READY looks count
     for i in range(2):
         ev = q.update(LobbyView(button="ready", time_text="00:50"), t + 4 + i)
     assert [e for e in ev if e[0] == "found"][0][1].crossplay_off is False
