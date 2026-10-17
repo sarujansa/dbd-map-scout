@@ -1467,6 +1467,9 @@ EN = {
     'Eine behaltene Aufnahme wird nie fürs Aufräumen gelöscht, wenn die Platte Platz braucht. Nochmal drücken hebt es auf.': 'A kept recording is never deleted by the clean-up when the drive needs room. Press again to undo.',
     'Löscht die markierte Aufnahme (und ihren Vorlauf) von der Platte – nach Rückfrage.': 'Deletes the marked recording (and its pre-roll) from the drive – after a confirmation.',
     'Öffnet den Aufnahmeordner im Explorer.': 'Opens the recording folder in Explorer.',
+    # 1.5.3 – farming subfolder
+    'Farming-Runden im Unterordner „Farming“ ablegen': 'Put farming rounds into the subfolder "Farming"',
+    'Runden, die das Programm als Farming erkennt (Crossplay aus oder die Farming-Region), landen im Unterordner „Farming“ des Aufnahmeordners statt zwischen den normalen Runden. Clips gehen immer in den Ordner „Clips“.': 'Rounds the program recognises as farming (cross-play off or the farming region) land in the subfolder "Farming" of the recording folder instead of among the normal rounds. Clips always go into the folder "Clips".',
     # 1.5.1 – clip editor
     'Clip schneiden …': 'Cut a clip …',
     'Öffnet den Clip-Editor für die markierte Aufnahme: Vorschau, Zeitleiste mit Marken, Start/Ende setzen, Ausschnitt als MP4 in den Ordner „Clips“ speichern.': 'Opens the clip editor for the marked recording: preview, timeline with marks, set start/end, save the cut as MP4 into the folder "Clips".',

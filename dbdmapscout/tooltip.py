@@ -133,6 +133,10 @@ TIPS = {
                                                       "– ohne Neukodierung, in Sekunden, Bild und Ton bleiben wie "
                                                       "von OBS. Klappt es nicht, bleiben beide Dateien liegen.",
     "Aufnahmen einrichten …": "Öffnet die Einstellungen für die Aufnahmen mit OBS (Ordner, Verbindung).",
+    "Farming-Runden im Unterordner „Farming“ ablegen": "Runden, die das Programm als Farming erkennt (Crossplay aus "
+                                                        "oder die Farming-Region), landen im Unterordner „Farming“ "
+                                                        "des Aufnahmeordners statt zwischen den normalen Runden. "
+                                                        "Clips gehen immer in den Ordner „Clips“.",
     "Abspielen": "Spielt die markierte Aufnahme im Standard-Videoplayer ab.",
     "Im Explorer zeigen": "Öffnet den Explorer mit der markierten Datei.",
     "Behalten": "Eine behaltene Aufnahme wird nie fürs Aufräumen gelöscht, wenn die Platte Platz braucht. Nochmal "
