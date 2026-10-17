@@ -178,10 +178,12 @@ def system(app, now: float, is_win: bool) -> tuple[list, str]:
     if not app.sysmon.active or now - s.t > 3:
         return [], _("Erscheinen, sobald DBD läuft.")
     rows = []
-    for name, temp, load, warm, hot, power in (("GPU", s.gpu_temp, s.gpu_load, sysinfo.GPU_WARM, sysinfo.GPU_HOT,
-                                                s.gpu_power),
-                                               ("CPU", s.cpu_temp, s.cpu_load, sysinfo.CPU_WARM, sysinfo.CPU_HOT,
-                                                None)):
+    # same order as the in-game card (sysinfo.hud_rows): CPU, GPU, hot spot/MEM, VRAM, RAM (1.7.5, user: "why are
+    # GPU/CPU/hot spot in another place here?")
+    for name, temp, load, warm, hot, power in (("CPU", s.cpu_temp, s.cpu_load, sysinfo.CPU_WARM, sysinfo.CPU_HOT,
+                                                None),
+                                               ("GPU", s.gpu_temp, s.gpu_load, sysinfo.GPU_WARM, sysinfo.GPU_HOT,
+                                                s.gpu_power)):
         parts = ([f"{temp:.0f} °C"] if temp is not None else []) + ([f"{load:.0f} %"] if load is not None else []) \
             + ([f"{power:.0f} W"] if power is not None else [])
         if parts:
