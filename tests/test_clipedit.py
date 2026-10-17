@@ -212,3 +212,19 @@ def test_the_clip_window_offers_discord_and_plays_just_the_clip(clip, tmp_path):
     finally:
         win.close()
         app.processEvents()
+
+
+def test_the_whole_strip_comes_from_one_ffmpeg_run(clip):
+    """1.7.1 (user: the strip loaded slowly): thumb_strip streams every picture of the strip from a single
+    key-frame-only run, in order and at the strip size; a stop ends it early without a hanging process."""
+    info = clipedit.probe(clip, FF)
+    times = clipedit.thumb_times(info.duration, clipedit.THUMBS)
+    t0 = time.time()
+    got = list(clipedit.thumb_strip(clip, times, 54, info, FF))
+    assert [i for i, _img in got] == list(range(clipedit.THUMBS))
+    assert all(img.size == (96, 54) and img.mode == "RGB" for _i, img in got)
+    assert time.time() - t0 < 10
+    assert got[0][1].tobytes() != got[-1][1].tobytes()            # key frames every second: the picture moves
+    assert list(clipedit.thumb_strip(clip, times[:1], 54, info, FF)) == []       # one moment: nothing to space
+    stopped = list(clipedit.thumb_strip(clip, times, 54, info, FF, stop=lambda: True))
+    assert stopped == []

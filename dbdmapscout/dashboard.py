@@ -5,6 +5,7 @@ Pure logic (no Qt): ``build()`` turns the selected rounds and their official mat
 """
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 
 from . import history, official
@@ -99,6 +100,49 @@ def bp_rows(pairs, killer_label=lambda k: k) -> list:
     for k, sub in sorted(killers.items(), key=lambda kv: (-len(kv[1]), kv[0])):
         rows.append(("   " + killer_label(k), bp_rate(sub)))
     return [(g, b) for g, b in rows if b.rounds]
+
+
+def bp_tiles(pairs, role_label=lambda r: r) -> list:
+    """1.7.1 (user: "a small dashboard for the bloodpoints too"): the tiles above the bloodpoints table – total,
+    per round, per hour (match / with waiting), the best round, Ø per role (bars relative to the higher one)."""
+    b = bp_rate(pairs)
+    if not b.rounds:
+        return []
+    n_txt = _("{n} Runden", n=b.rounds)
+    out = [Tile(_("Bloodpoints"), _bp(b.bp), n_txt + " · " + _("{time} gespielt", time=play_time(b.play_s))),
+           Tile(_("Ø pro Runde"), _bp(b.per_round), n_txt),
+           Tile(_("BP/h im Match"), _bp(b.per_hour) if b.per_hour else "–", _("Spielzeit laut Stats-Seite")),
+           Tile(_("BP/h mit Wartezeit"), _bp(b.per_hour_waiting) if b.per_hour_waiting else "–",
+                _("Match und Suche zusammen"))]
+    best_r, best_m = max(((r, m) for r, m in pairs if m.bp > 0), key=lambda p: (p[1].bp, p[0].t))
+    sub = best_r.map + " · " + time.strftime("%d.%m.%y", time.localtime(best_r.t))
+    if best_r.role in ("killer", "survivor"):
+        sub += " · " + role_label(best_r.role)
+    out.append(Tile(_("Beste Runde"), _bp(best_m.bp), sub))
+    per = {role: bp_rate([(r, m) for r, m in pairs if r.role == role]) for role in ("killer", "survivor")}
+    top = max((x.per_round or 0 for x in per.values()), default=0)
+    for role, label in (("killer", _("Ø BP als Killer")), ("survivor", _("Ø BP als Survivor"))):
+        x = per[role]
+        if x.rounds:
+            out.append(Tile(label, _bp(x.per_round), _("{n} Runden", n=x.rounds),
+                            frac=x.per_round / top if top else None))
+    return out
+
+
+def bp_trend(pairs, unit: str) -> list:
+    """Bloodpoints over time: [(bucket start, [bp …])] per hour / day / week from the first to the last round
+    with bloodpoints, empty buckets included, the newest MAX_BUCKETS (like official.trend)."""
+    groups = {}
+    for r, m in pairs:
+        if m.bp > 0:
+            groups.setdefault(official.bucket_start(r.t, unit), []).append(m.bp)
+    if not groups:
+        return []
+    out, b, last = [], min(groups), max(groups)
+    while b <= last:
+        out.append((b, groups.get(b, [])))
+        b = official._next_bucket(b, unit)
+    return out[-official.MAX_BUCKETS:]
 
 
 def tiles(rounds, pairs) -> list:

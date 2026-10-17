@@ -91,7 +91,7 @@ class RecordingsTab:
         self.rec_keep_btn.pack(side="left", padx=(6, 0))
         self.rec_delete_btn = ui.Button(row, text=_("Aufnahme löschen"), command=self._rec_delete, state="disabled")
         self.rec_delete_btn.pack(side="left", padx=(6, 0))
-        self.rec_clip_btn = ui.Button(row, text=_("Clip schneiden …"), command=self._rec_clip, state="disabled")   # 1.5.1
+        self.rec_clip_btn = ui.Button(row, text=_("Clip bearbeiten …"), command=self._rec_clip, state="disabled")   # 1.5.1
         self.rec_clip_btn.pack(side="left", padx=(6, 0))
         self._clip_windows = []
         self.rec_folder_btn = ui.Button(row, text=_("Aufnahmeordner öffnen"), command=self._rec_open_folder)
