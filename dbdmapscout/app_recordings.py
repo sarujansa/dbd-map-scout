@@ -172,7 +172,8 @@ class RecordingsTab:
             rnd = by_t.get(r.t)
             res = self._official_result(j.off.get(id(rnd))) if rnd is not None else "–"
             role_txt = self._rec_role(r, rnd)
-            exists = bool(folder) and os.path.exists(os.path.join(folder, r.file))
+            p = obsrec.rel_path(folder, r.file) if folder else None
+            exists = bool(p) and os.path.exists(p)
             size = fmt_bytes(r.size) if exists else _("fehlt")
             if (r.extra or {}).get("bad"):
                 size += " ⚠"
@@ -212,7 +213,7 @@ class RecordingsTab:
 
     def _rec_path(self, r):
         folder = self.recorder.folder()
-        return os.path.join(folder, r.file) if folder else None
+        return obsrec.rel_path(folder, r.file) if folder else None
 
     # ============================================================ actions
     def _rec_play(self):
@@ -271,8 +272,9 @@ class RecordingsTab:
             self._log(_("ffmpeg fehlt (Paket imageio-ffmpeg) – start.bat installiert es beim nächsten Start; "
                         "bis dahin bleibt der Vorlauf eine eigene Datei."), "Fehler")
             return
+        from .clipedit import CLIPS_DIR
         from .qt_clip import ClipWindow
-        win = ClipWindow(path, r.marks, os.path.join(os.path.dirname(path), "Clips"),
+        win = ClipWindow(path, r.marks, os.path.join(self.recorder.folder(), CLIPS_DIR),   # one "Clips" for all
                          mode=str(self.settings.get("clip_mode", "copy")), sound=bool(self.settings.get("clip_sound", True)),
                          on_saved=lambda out: self._rec_dirty_set(), on_setting=self.settings.set, log=self._log,
                          dark=bool(self.settings.get("dark_mode", True)),

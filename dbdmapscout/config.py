@@ -125,6 +125,7 @@ DEFAULTS = {
     "rec_tail_s": 5,                    # 1.4.1: seconds recorded after the detected end (result screen)
     "rec_buffer_auto": True,            # 1.4.1: start/stop OBS's replay buffer with DBD
     "rec_merge": True,                  # 1.4.2: pre-roll + round → one file (ffmpeg from imageio-ffmpeg, stream copy)
+    "rec_farming_dir": True,            # 1.5.3: recordings of farming rounds go into the subfolder "Farming"
     "clip_mode": "copy",                # 1.5.1: clip editor – "copy" (key frames, fast) / "exact" (re-encoded)
     "clip_sound": True,                 # 1.5.1: clip editor plays the sound while previewing (Windows)
     "sysinfo": "right",                 # system values at the top of a black bar: off | left | right | custom

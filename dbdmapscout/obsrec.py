@@ -57,6 +57,7 @@ FFMPEG_TIMEOUT = 600            # s for joining the two files (stream copy: seco
 SPACE_EVERY = 10.0              # s between two looks at the drive (Recorder.space)
 DURATION_RE = re.compile(rb"Duration: (\d+):(\d\d):(\d\d(?:\.\d+)?)")
 NAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+FARMING_DIR = "Farming"         # 1.5.3 (user's wish): recordings of farming rounds go into this subfolder
 
 
 class ObsError(Exception):
@@ -285,6 +286,17 @@ class Recording:
     pre_s: float = 0.0           # 1.4.2: seconds of pre-roll at the start of the file (0 = none or separate)
 
 
+def rel_path(folder: str, name: str) -> str | None:
+    """Absolute path of an index entry's file: a plain name or one inside a subfolder (``Farming/…``), never
+    outside ``folder`` (no absolute path, no ``..``) – None for anything else. Entries use "/" on every system."""
+    if not name or os.path.isabs(name) or name.startswith(("/", "\\")) or ":" in name:   # ":" = a drive letter
+        return None
+    parts = [p for p in re.split(r"[\\/]", name) if p]
+    if not parts or any(p in ("..", ".") for p in parts) or len(parts) > 2:
+        return None
+    return os.path.join(folder, *parts)
+
+
 def load_index(folder: str) -> list[Recording]:
     out = []
     try:
@@ -328,9 +340,10 @@ def prune(folder: str, recs: list[Recording], limit: int, reserve: int = RESERVE
     Returns (entries left, files deleted)."""
     left, deleted = [], []
     for r in recs:
-        if os.path.exists(os.path.join(folder, r.file)):
-            r.size = sum(os.path.getsize(os.path.join(folder, n)) for n in (r.file, r.pre)
-                         if n and os.path.exists(os.path.join(folder, n)))
+        main = rel_path(folder, r.file)
+        if main and os.path.exists(main):
+            paths = [p for p in (rel_path(folder, n) for n in (r.file, r.pre) if n) if p and os.path.exists(p)]
+            r.size = sum(os.path.getsize(p) for p in paths)
             left.append(r)
     if free is None:
         try:
@@ -342,9 +355,10 @@ def prune(folder: str, recs: list[Recording], limit: int, reserve: int = RESERVE
         if (limit <= 0 or total <= limit) and free >= reserve:
             break
         for n in (r.file, r.pre):
-            if n and os.path.dirname(os.path.normpath(n)) == "":          # a plain name: inside the folder
+            p = rel_path(folder, n) if n else None                        # only inside the folder
+            if p:
                 try:
-                    os.remove(os.path.join(folder, n))
+                    os.remove(p)
                     deleted.append(n)
                 except OSError:
                     pass
@@ -482,6 +496,7 @@ class Config:
     tail_s: float = DEFAULT_TAIL_S   # 1.4.1: keep recording this long after the end (result screen)
     buffer_auto: bool = True         # 1.4.1: start OBS's replay buffer with DBD, stop it when DBD is gone
     merge: bool = True               # 1.4.2: pre-roll + round → one file (ffmpeg, stream copy)
+    farming_sub: bool = True         # 1.5.3: farming rounds into the subfolder FARMING_DIR
 
 
 def check_file(path: str) -> str | None:
@@ -636,9 +651,10 @@ class Recorder(threading.Thread):
             return
         gone = []
         for n in (hit.file, hit.pre):
-            if n and os.path.dirname(os.path.normpath(n)) == "":          # a plain name: inside the folder
+            p = rel_path(folder, n) if n else None                        # only inside the folder
+            if p:
                 try:
-                    os.remove(os.path.join(folder, n))
+                    os.remove(p)
                     gone.append(n)
                 except FileNotFoundError:
                     pass
@@ -800,34 +816,43 @@ class Recorder(threading.Thread):
 
     def _file_away(self, rec, path):
         folder = self.folder() or os.path.dirname(path)
+        sub = FARMING_DIR if rec.get("farming") and self.cfg.farming_sub else ""     # 1.5.3: farming rounds apart
+        dest = os.path.join(folder, sub) if sub else folder
+        try:
+            os.makedirs(dest, exist_ok=True)
+        except OSError:
+            sub, dest = "", folder
         ext = os.path.splitext(path)[1] or ".mkv"
         who = rec.get("killer") or {"killer": "Killer", "survivor": "Survivor"}.get(rec.get("role") or "", "")
-        name = self._unique(folder, file_name(rec.get("t") or time.time(), rec.get("label", ""), who, ext))
-        target = os.path.join(folder, name)
+        name = self._unique(dest, file_name(rec.get("t") or time.time(), rec.get("label", ""), who, ext))
+        target = os.path.join(dest, name)
         final = self._move(path, target)
         pre = rec.get("pre") or ""
         pre_name = ""
         if pre and os.path.exists(pre):
-            pname = self._unique(folder, file_name(rec.get("t") or time.time(), rec.get("label", ""), who,
-                                                   os.path.splitext(pre)[1] or ext, " (Vorlauf)"))
-            moved = self._move(pre, os.path.join(folder, pname))
-            pre_name = os.path.basename(moved) if os.path.dirname(moved) == folder else ""
-        if os.path.dirname(final) != folder:          # another drive than the folder: leave it, still noted
+            pname = self._unique(dest, file_name(rec.get("t") or time.time(), rec.get("label", ""), who,
+                                                 os.path.splitext(pre)[1] or ext, " (Vorlauf)"))
+            moved = self._move(pre, os.path.join(dest, pname))
+            pre_name = os.path.basename(moved) if os.path.dirname(moved) == dest else ""
+        if os.path.dirname(final) != dest:            # another drive than the folder: leave it, still noted
             self._say(_("Aufnahme liegt in OBS' eigenem Ordner: {path}", path=final), False)
             return
         bad = check_file(final)                        # 1.4.1: OBS may have failed silently
         marks = list(rec.get("marks") or [])
         pre_s, extra = 0.0, {}
         if pre_name and not bad and self.cfg.merge:    # 1.4.2: pre-roll + round → one file
-            final, pre_name, pre_s, joined = self._join(folder, os.path.join(folder, pre_name), final)
+            final, pre_name, pre_s, joined = self._join(dest, os.path.join(dest, pre_name), final)
             if joined:
                 marks = [round(m + pre_s, 1) for m in marks]
             else:
                 extra["merge_failed"] = True
         if bad:
             extra["bad"] = bad
+        prefix = sub + "/" if sub else ""              # index names: "Farming/…" with "/" on every system
+        if pre_name:
+            pre_name = prefix + pre_name
         recs = load_index(folder)
-        recs.append(Recording(t=float(rec.get("t") or time.time()), file=os.path.basename(final), pre=pre_name,
+        recs.append(Recording(t=float(rec.get("t") or time.time()), file=prefix + os.path.basename(final), pre=pre_name,
                               map_id=rec.get("map_id", ""), label=rec.get("label", ""), role=rec.get("role", ""),
                               killer=rec.get("killer", ""), end=time.time(), extra=extra, marks=marks,
                               farming=bool(rec.get("farming")), pre_s=pre_s))
