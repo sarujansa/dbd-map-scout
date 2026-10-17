@@ -457,16 +457,17 @@ def test_the_pre_roll_is_joined_into_the_round_file_and_marks_move_with_it(tmp_p
         kind, d = posted.get(timeout=1)
         assert kind == "marked" and d["n"] == 1 and 99 <= d["pos"] <= 101
         r._finish({})
-        names = sorted(n for n in os.listdir(str(tmp_path)) if n != obsrec.INDEX)
+        assert sorted(os.listdir(str(tmp_path))) == ["Farming", obsrec.INDEX]       # 1.5.3: a farming round
+        names = os.listdir(os.path.join(str(tmp_path), "Farming"))
         assert len(names) == 1 and "Gas Heaven – Hag" in names[0] and "Vorlauf" not in names[0]   # one file
         rec = obsrec.load_index(str(tmp_path))[0]
-        assert rec.pre == "" and rec.pre_s == 20.5 and rec.farming and not rec.extra
-        assert rec.size == len(ROUND_BYTES) + len(PRE_BYTES)
+        assert rec.file == "Farming/" + names[0] and rec.pre == "" and rec.pre_s == 20.5 and rec.farming
+        assert not rec.extra and rec.size == len(ROUND_BYTES) + len(PRE_BYTES)
         assert len(rec.marks) == 1 and 119 <= rec.marks[0] <= 121      # shifted by the pre-roll
-        with open(os.path.join(str(tmp_path), rec.file), "rb") as f:
+        with open(obsrec.rel_path(str(tmp_path), rec.file), "rb") as f:
             assert f.read(len(PRE_BYTES)) == PRE_BYTES              # the pre-roll comes first
         concat = next(a for a in calls if "concat" in a)
-        assert concat[-3:] == ["-c", "copy", os.path.join(str(tmp_path), rec.file[:-4] + " (zusammen).mkv")]
+        assert concat[-3:] == ["-c", "copy", os.path.join(str(tmp_path), "Farming", names[0][:-4] + " (zusammen).mkv")]
         assert "-y" in concat and not os.path.exists(concat[concat.index("-i") + 1])          # the list file is gone
         saved = next(d for k, d in _drain(posted) if k == "saved")
         assert saved["marks"] == 1
@@ -633,3 +634,43 @@ def test_keep_and_delete_from_the_tab_go_through_the_recorder(tmp_path):
     r.quit()
     r.join(timeout=5)
     assert not os.path.exists(os.path.join(folder, "b.mkv")) and obsrec.load_index(folder) == []
+
+
+# ------------------------------------------------------------------ 1.5.3: farming subfolder, paths stay inside
+def test_index_paths_stay_inside_the_folder():
+    f = os.path.join("D", "DBD") if os.name == "nt" else "/d/DBD"
+    assert obsrec.rel_path(f, "a.mkv") == os.path.join(f, "a.mkv")
+    assert obsrec.rel_path(f, "Farming/a.mkv") == os.path.join(f, "Farming", "a.mkv")
+    assert obsrec.rel_path(f, "Farming\\a.mkv") == os.path.join(f, "Farming", "a.mkv")
+    for bad in ("", "../a.mkv", "Farming/../a.mkv", "/etc/passwd", "C:\\x.mkv", "a/b/c.mkv", "./a.mkv"):
+        assert obsrec.rel_path(f, bad) is None, bad
+
+
+def test_farming_rounds_go_into_their_own_subfolder_and_are_pruned_and_deleted_there(obs, tmp_path):
+    folder = str(tmp_path)
+    r, posted = _recorder(obs, folder, pre=False)
+    r._begin({"t": 1.0, "label": "Coal Tower", "role": "killer", "killer": "Nurse"})
+    r._finish({"farming": True})                                     # known at the end (region) counts too
+    r._begin({"t": 2.0, "label": "Gas Heaven", "role": "survivor"})
+    r._finish({})
+    recs = obsrec.load_index(folder)
+    assert [x.file.split("/")[0] for x in recs] == ["Farming", "1970-01-01 01-00 Gas Heaven – Survivor.mkv"] \
+        or [x.file.startswith("Farming/") for x in recs] == [True, False]
+    farm = next(x for x in recs if x.farming)
+    assert os.path.exists(os.path.join(folder, "Farming", farm.file.split("/", 1)[1]))
+    # room needed: the farming round goes first – from inside the subfolder
+    left, deleted = obsrec.prune(folder, recs, limit=len(ROUND_BYTES) + 10, reserve=0, free=10 ** 12)
+    assert deleted == [farm.file] and not os.path.exists(obsrec.rel_path(folder, farm.file)) and len(left) == 1
+    # the switch off: farming rounds stay among the others
+    r.cfg.farming_sub = False
+    r._begin({"t": 3.0, "label": "The Game", "role": "killer", "farming": True})
+    r._finish({})
+    assert all("/" not in x.file for x in obsrec.load_index(folder) if x.t == 3.0)
+    # delete from the tab reaches into the subfolder
+    r.cfg.farming_sub = True
+    r._begin({"t": 4.0, "label": "Ormond", "role": "killer", "farming": True})
+    r._finish({})
+    hit = next(x for x in obsrec.load_index(folder) if x.t == 4.0)
+    assert hit.file.startswith("Farming/")
+    r._delete_one(4.0)
+    assert not os.path.exists(obsrec.rel_path(folder, hit.file)) and all(x.t != 4.0 for x in obsrec.load_index(folder))

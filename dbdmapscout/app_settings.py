@@ -250,6 +250,9 @@ class SettingsTab:
         self.rec_merge_var = ui.BooleanVar(value=bool(self.settings.get("rec_merge", True)))       # 1.4.2
         self._reg("st.more.rec_merge", ui.Checkbutton(rc, text=_("Vorlauf und Runde zu einer Datei zusammenfügen"),
                                                        variable=self.rec_merge_var, command=self._rec_setting)).pack(anchor="w")
+        self.rec_farming_var = ui.BooleanVar(value=bool(self.settings.get("rec_farming_dir", True)))   # 1.5.3
+        self._reg("st.more.rec_farming", ui.Checkbutton(rc, text=_("Farming-Runden im Unterordner „Farming“ ablegen"),
+                                                         variable=self.rec_farming_var, command=self._rec_setting)).pack(anchor="w")
         self.rec_ffmpeg_var = ui.StringVar(value="")
         self._reg("st.more.rec_ffmpeg", ui.Label(rc, textvariable=self.rec_ffmpeg_var, wraplength=420,
                                                   style="Dim.TLabel")).pack(anchor="w")
@@ -453,7 +456,7 @@ class SettingsTab:
                              volume=str(self.settings.get("rec_volume", "")), rel=str(self.settings.get("rec_rel", "")),
                              folder=str(self.settings.get("rec_folder", "")), limit_gb=limit,
                              pre=bool(self.rec_pre_var.get()), tail_s=tail, buffer_auto=bool(self.rec_buffer_var.get()),
-                             merge=bool(self.rec_merge_var.get()))
+                             merge=bool(self.rec_merge_var.get()), farming_sub=bool(self.rec_farming_var.get()))
 
     def _rec_setting(self, save=True):
         cfg = self._rec_cfg()
@@ -466,6 +469,7 @@ class SettingsTab:
             self.settings.set("rec_tail_s", int(cfg.tail_s))
             self.settings.set("rec_buffer_auto", cfg.buffer_auto)
             self.settings.set("rec_merge", cfg.merge)
+            self.settings.set("rec_farming_dir", cfg.farming_sub)
             self._save_soon()
         self.recorder.configure(cfg)
         folder = cfg.folder

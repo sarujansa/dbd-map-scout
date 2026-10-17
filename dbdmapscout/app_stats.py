@@ -786,7 +786,10 @@ class StatsTab:
 
     def _hist_close(self, t, role=None):
         rec, self._hist = self._hist, None
-        self.recorder.stop_round(role=role or (rec or {}).get("role", ""), killer=(rec or {}).get("killer", ""))
+        farm_region = self.settings.get("farming_region") or None       # 1.5.3: the region counts as farming too
+        self.recorder.stop_round(role=role or (rec or {}).get("role", ""), killer=(rec or {}).get("killer", ""),
+                                 farming=bool(rec and (rec.get("farming")
+                                                       or (rec.get("region") and rec.get("region") == farm_region))))
         sysrec, self._sysrec = self._sysrec, None
         if rec is None:
             return
