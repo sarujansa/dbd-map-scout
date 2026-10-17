@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw
 from . import layout, media, sysinfo
 from . import skin
 from .i18n import _
-from .overlay_win32 import add_info, backdrop, backdrop_pad, compose, map_backdrop, render_hud, render_music
+from .overlay_win32 import add_info, backdrop, backdrop_pad, compose, map_backdrop, map_body, render_hud, render_music
 
 SAMPLE_SNAPSHOT = dict(cpu_load=38, cpu_temp=64, gpu_temp=71, gpu_load=92, gpu_name="GPU",
                        vram_used=7.1, vram_total=16, ram_used=17.2, ram_total=32, gpu_power=241)
@@ -37,12 +37,20 @@ def sample_snapshot():
 
 
 def overlay_picture(pic, map_h: int, caption: str, transparent: bool, timer: str, server: str, ping, record: str,
-                    text_h: int = 0, dark_area: bool = False):
+                    text_h: int = 0, dark_area: bool = False, style: str = "classic", accent=None, name: str = "",
+                    realm: str = ""):
     """The map window's picture (PictureOverlay.render for one frame); ``pic`` None = info only; ``text_h``: size
-    of the name and the lines below (1.65: its own, not the map's)."""
+    of the name and the lines below (1.65: its own, not the map's). ``style`` (1.3.1): glass / chips / line draw
+    the card in skin.map_card (``name``/``realm`` for its header)."""
     text_h = max(40, text_h or map_h)
-    base = compose(pic, map_h, caption, transparent, False, text_h, _split(pic)) if pic is not None \
-        else Image.new("RGBA", (1, 1), (0, 0, 0, 0))
+    if style in ("glass", "line"):
+        body = map_body(pic, map_h, _split(pic)) if pic is not None else None
+        return skin.map_card(body, name, realm, timer, "", record, server, ping, (), text_h, style, accent)
+    base = compose(pic, map_h, caption, transparent, False, text_h, _split(pic)) \
+        if pic is not None else Image.new("RGBA", (1, 1), (0, 0, 0, 0))
+    if style == "chips":
+        return skin.map_card(base if pic is not None else None, name, realm, timer, "", record, server, ping, (),
+                             text_h, style, accent)
     if timer or server or record:
         base = add_info(base, timer, server, text_h, backdrop=not transparent, ping=ping, record=record)
     return map_backdrop([base], text_h)[0] if dark_area else base
@@ -164,15 +172,17 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
     def map_pic_at(h, th):
         return fitted(lambda hh: overlay_picture(map_pic, hh, caption, o.get("transparent", True),
                                                  info.get("timer", ""), info.get("server", ""), info.get("ping"),
-                                                 info.get("record", ""), th, dark),
-                      h, 0, ("map", id(map_pic), caption, o.get("transparent", True), dark, repr(info), th))
+                                                 info.get("record", ""), th, dark, style, accent,
+                                                 info.get("name", ""), info.get("realm", "")),
+                      h, 0, ("map", id(map_pic), caption, o.get("transparent", True), dark, repr(info), th, style,
+                             accent))
 
     over = map_pic_at(mh, text_h)
     x0, _y0 = layout.preview_place(gw, gh, o["anchor"], o.get("pos_x", 0.0), o.get("pos_y", 0.0), margin, False,
                                    over.width, over.height, drop)
     in_bar = (o["anchor"] == "auto" or o.get("keep_in_bar", True)) and \
         layout.bar_side(o["anchor"], x0, over.width, 0, gw, bar)
-    edge = min(backdrop_pad(text_h), max(0, margin - 2)) if dark else 0      # the dark area may use the margin
+    edge = min(skin.frame_pad(style, text_h) if modern else backdrop_pad(text_h) if dark else 0, max(0, margin - 2))
     th = text_h
     if in_bar and over.width > avail + 2 * edge and not o.get("grow_past_bar", False):
         map_w = round(mh * aspect) + 2 * edge

@@ -295,6 +295,12 @@ class OverlayTab:
         self._save_soon()
         self._tick_overlay(reschedule=False)
 
+    @staticmethod
+    def _realm_name(m) -> str:
+        """The realm as the styled map card shows it in its header (English like the map names)."""
+        names = getattr(m, "realm_names", None) or {}
+        return names.get("en") or next(iter(names.values()), "") or getattr(m, "realm", "") or ""
+
     def _style_changed(self):
         """1.3: the look of the cards (system values, today, music) – classic or one of the modern styles."""
         key = dict((_(label), k) for k, label in STYLE_LABELS).get(self.style_var.get(), "classic")
