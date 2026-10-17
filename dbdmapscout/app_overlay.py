@@ -13,6 +13,7 @@ ANCHORS = [("auto", N_("automatisch")), ("top-left", N_("oben links")), ("top-ri
            ("bottom-left", N_("unten links")), ("bottom-right", N_("unten rechts")), ("custom", N_("eigene Position"))]
 
 
+STYLE_DEFER_MS = 30                     # 1.3.4: the window repaints before the slow part of a map style change
 MAP_STYLES = [("classic", N_("Original (lila Boden)")),
               ("dark", N_("Dunkel – wie Fallen Refuge (durchsichtiger Boden)"))]    # 1.66, mapstyle.py
 
@@ -330,6 +331,10 @@ class OverlayTab:
         self._qt_preview_cache = None
         self._style_warm()
         self._log(_("Kartenstil: {style}.", style=_(dict(MAP_STYLES)[key])), "Overlay")
+        # 1.3.4: the window shows the click first, the picture is loaded right after (60–175 ms)
+        self.root.after(STYLE_DEFER_MS, self._map_style_apply)
+
+    def _map_style_apply(self):
         if self.current and self._map_on():
             self._reload_picture()
         else:

@@ -22,6 +22,7 @@ from .mainloop import MainLoop
 
 log = logging.getLogger("dbdmapscout")
 
+WARM_AFTER_MS = 1500                 # 1.3.4: pages laid out once after the start
 GEOMETRY_DELAY = 1.0          # s after the last move/resize before the size is saved
 QT_HOTKEYS = {"scan": "scan_now", "reject": "reject_map"}
 PREVIEW_PX = 900              # map preview on the maps page: picture scaled to fit this box first
@@ -247,6 +248,21 @@ class QtShell:
             self.qt.show()
         elif not self.tray.active:
             self.qt.showMinimized()
+        self.root.after(WARM_AFTER_MS, self._qt_warm)
+
+    def _qt_warm(self):
+        """1.3.4: every page filled and laid out once while nothing happens, so the first visit is as quick as the
+        next ones (measured: settings 112 → ~11 ms)."""
+        if self.qt is None or self._quitting:
+            return
+        try:
+            reg, auto = self.__dict__.get("_qt_reg", {}), self._qt_auto
+            for page, form in self.qt.forms.items():
+                src = auto if page in self._qt_mod.AUTO_PAGES else reg
+                self.qt.show_states(page, {k: ui_state(src[k]) for k in form.controls if k in src})
+            self.qt.warm_pages()
+        except Exception:
+            log.debug("warm pages", exc_info=True)
 
     def _ask(self, title, text, retry, parent=None) -> bool:
         """OK/Cancel before something that cannot be undone: a bar at the top of the window (no modal dialog –
