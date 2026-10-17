@@ -274,6 +274,8 @@ TIPS = {
     'Discord': 'Ton von Discord (Sprachchat) in der Aufnahme.',
     'übriger Desktop-Ton': 'Alles andere, was am PC zu hören ist (Musik, Browser, Systemtöne) – die Quelle „Desktop-Audio“ in OBS.',
     'Mikrofon': 'Dein Mikrofon – die Quelle „Mikrofon/AUX“ in OBS.',
+    'Als Farming markieren': 'Markiert alle genannten Runden als Farming-Runden (und nicht mehr als Custom Game); ihre Aufnahmen wandern in den Ordner „Farming“. Einzeln zurück: „Farming an/aus“ unter „Letzte Runden“.',
+    'Ignorieren': 'Diese Runden nicht mehr vorschlagen – sie bleiben, wie sie sind.',
 }
 _PREFIX = [("Hintergrund entfernen", "Macht Dunkelblau (#282a42) und Graulila (#535781) der "
             "Community-Karten transparent, schneidet den gleichfarbigen Rand ab und bringt das Bild auf "

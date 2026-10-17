@@ -278,7 +278,8 @@ class RecordingsTab:
                          mode=str(self.settings.get("clip_mode", "copy")), sound=bool(self.settings.get("clip_sound", True)),
                          on_saved=lambda out: self._rec_dirty_set(), on_setting=self.settings.set, log=self._log,
                          dark=bool(self.settings.get("dark_mode", True)),
-                         qss=getattr(self.qt, "_qss", "") if self.qt is not None else "")
+                         qss=getattr(self.qt, "_qss", "") if self.qt is not None else "",
+                         target_mb=int(self.settings.get("clip_target_mb", 10) or 10))
         self._clip_windows = [w for w in self._clip_windows if w.isVisible()] + [win]
         win.show()
         win.raise_()

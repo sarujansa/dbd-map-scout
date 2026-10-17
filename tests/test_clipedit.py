@@ -153,3 +153,62 @@ def test_the_clip_window_shows_frames_cuts_at_the_marks_and_saves(clip, tmp_path
     finally:
         win.close()
         app.processEvents()
+
+
+def test_the_discord_plan_fits_the_size_and_drops_resolution_when_room_is_short():
+    info = clipedit.Info(duration=600, width=2560, height=1440, fps=60.0)
+    kbps, h, fps = clipedit.discord_plan(30, 10, info)               # 30 s in 10 MB: ~2.3 Mbit/s
+    assert 2000 <= kbps < 2500 and (h, fps) == (720, 30.0)
+    assert (kbps + clipedit.AUDIO_KBPS) * 30 / 8 / 1024 < 10          # fits with room to spare
+    assert clipedit.discord_plan(30, 500, info)[1:] == (1080, 60.0)   # Nitro: full HD, 60 fps
+    assert clipedit.discord_plan(120, 10, info)[1] == 360             # two minutes in 10 MB: small picture
+    small = clipedit.Info(duration=60, width=640, height=360, fps=24.0)
+    assert clipedit.discord_plan(10, 500, small)[1:] == (360, 24.0)   # never bigger than the recording
+
+
+def test_a_discord_cut_stays_under_its_target(clip, tmp_path):
+    out = str(tmp_path / "d.mp4")
+    ok, why = clipedit.cut(clip, 1.0, 9.0, out, "discord", target_mb=1, info=clipedit.probe(clip))
+    assert ok, why
+    assert os.path.getsize(out) < 1024 * 1024 and clipedit.probe(out).height <= 360
+
+
+def test_the_clip_window_offers_discord_and_plays_just_the_clip(clip, tmp_path):
+    """1.6.1: the format list has "Für Discord" with a target size (remembered), the size line says what comes
+    out, "Clip ansehen" plays the clip and lands on its start again, the saved clip can be shown."""
+    pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
+    from PySide6.QtWidgets import QApplication
+    from dbdmapscout import qt_clip
+    app = QApplication.instance() or QApplication([])
+    saved, settings = [], {}
+    win = qt_clip.ClipWindow(clip, [], str(tmp_path / "Clips"), mode="discord", sound=False, on_saved=saved.append,
+                             on_setting=lambda k, v: settings.__setitem__(k, v), target_mb=25)
+    try:
+        win.show()
+        assert win.mode_box.currentData() == "discord" and not win.target_box.isHidden()
+        assert win.target_box.currentData() == 25 and "unter 25 MB" in win.size_label.text()
+        win.target_box.setCurrentIndex(0)
+        assert settings == {"clip_target_mb": 10} and "unter 10 MB" in win.size_label.text()
+        win.mode_box.setCurrentIndex(0)
+        assert win.target_box.isHidden() and "MB" in win.size_label.text()
+        win.goto(2.0)
+        win.set_start()
+        win.goto(3.0)
+        win.set_end()
+        win.watch_clip()
+        assert win.playing and win.timeline.pos == 2.0
+        deadline = time.time() + 10
+        while time.time() < deadline and win.playing:
+            app.processEvents()
+            time.sleep(0.02)
+        assert not win.playing and win.timeline.pos == 2.0             # back at the clip's start
+        assert not win.show_btn.isEnabled()
+        win.save()
+        deadline = time.time() + 30
+        while time.time() < deadline and not saved:
+            app.processEvents()
+            time.sleep(0.02)
+        assert saved and win.show_btn.isEnabled() and "MB)" in win.status.text()
+    finally:
+        win.close()
+        app.processEvents()
