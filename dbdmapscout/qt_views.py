@@ -95,6 +95,74 @@ class Table(QTreeWidget):
         self.header().sectionClicked.connect(self._sort)
         self.itemClicked.connect(lambda item, _c: self._post("act", (self._key, ("click", item.data(0, Qt.UserRole)))))
         self._cols = []
+        self._titles = []
+        self._stretch = 0
+        self.hidden = set()               # 1.3.6: column ids the user hid (right-click on the heading)
+        self._hidden_map = {}             # setting hidden_columns: {column ids joined by "|": [hidden ids]}
+        self.header().setContextMenuPolicy(Qt.CustomContextMenu)
+        self.header().customContextMenuRequested.connect(self._column_menu)
+        self.header().setToolTip(_("Klick: sortieren · Rechtsklick: Spalten ein-/ausblenden"))
+
+    def col_key(self) -> str:
+        """The table's name in the setting: its columns – unlike the model path it stays the same when a later
+        version adds widgets elsewhere on the page."""
+        return "|".join(self._cols)
+
+    def set_hidden_map(self, hidden: dict):
+        """The setting hidden_columns; this table takes the entry of its columns (now or once it has them)."""
+        self._hidden_map = dict(hidden or {})
+        self.set_hidden(self._hidden_map.get(self.col_key(), ()))
+
+    def set_hidden(self, cols):
+        self.hidden = set(cols or ())
+        self._apply_hidden()
+
+    def _apply_hidden(self):
+        if not self._cols:
+            return
+        hide = [c in self.hidden for c in self._cols]
+        if all(hide):                     # never an empty table (an old setting, other columns now)
+            hide = [False] * len(hide)
+        for i, h in enumerate(hide):
+            self.setColumnHidden(i, h)
+        mode = self.header().ResizeMode
+        stretch = self._stretch if not hide[self._stretch] else next(i for i, h in enumerate(hide) if not h)
+        for i in range(len(hide)):          # the stretching column must be a shown one, or a gap stays
+            if i == stretch:
+                self.header().setSectionResizeMode(i, mode.Stretch)
+            elif self.header().sectionResizeMode(i) == mode.Stretch:
+                self.header().setSectionResizeMode(i, mode.Interactive)
+
+    def _column_menu(self, pos):
+        """Right-click on the heading: tick the columns to show (one stays), or show all again. popup, not exec."""
+        if not self._cols:
+            return
+        from PySide6.QtWidgets import QMenu
+        menu = QMenu(self)
+        shown = [c for c in self._cols if c not in self.hidden]
+        for cid, title in zip(self._cols, self._titles):
+            act = menu.addAction(title or cid)
+            act.setCheckable(True)
+            act.setChecked(cid not in self.hidden)
+            act.setEnabled(not (cid not in self.hidden and len(shown) == 1))
+            act.toggled.connect(lambda on, c=cid: self._toggle_column(c, on))
+        menu.addSeparator()
+        menu.addAction(_("Alle Spalten zeigen")).triggered.connect(lambda: self._show_all_columns())
+        menu.setAttribute(Qt.WA_DeleteOnClose)
+        menu.popup(self.header().mapToGlobal(pos))
+
+    def _toggle_column(self, cid, on):
+        (self.hidden.discard if on else self.hidden.add)(cid)
+        self._remember_hidden()
+
+    def _show_all_columns(self):
+        self.hidden.clear()
+        self._remember_hidden()
+
+    def _remember_hidden(self):
+        self._apply_hidden()
+        self._hidden_map[self.col_key()] = sorted(self.hidden)
+        self._post("table_cols", (self.col_key(), sorted(self.hidden)))
 
     def _sort(self, index):
         if 0 <= index < len(self._cols):
@@ -112,6 +180,8 @@ class Table(QTreeWidget):
         elif shape != self._shape:
             self._shape = shape
             self._cols = [c[0] for c in cols]
+            self._titles = [c[1] for c in cols]
+            self.hidden = set(self._hidden_map.get(self.col_key(), ()))
             tree = bool(cols) and cols[0][0] == "#0"
             self.setRootIsDecorated(tree and any(r[1] > 0 for r in rows))
             self.setHeaderLabels([c[1] for c in cols])
@@ -149,6 +219,8 @@ class Table(QTreeWidget):
                 self.setColumnWidth(i, max(self.columnWidth(i), fm.horizontalAdvance(c[1]) + 24, least))
             if cols:                  # the name column takes the rest (not always the first: "Wann" stays readable)
                 self.header().setSectionResizeMode(stretch, self.header().ResizeMode.Stretch)
+            self._stretch = stretch
+            self._apply_hidden()
             self._fit_height()
         self._select(st)
 
