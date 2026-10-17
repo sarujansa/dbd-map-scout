@@ -33,6 +33,9 @@ MID_MATCH_SPAN = 2.0              # … and it must stay on screen this long (a 
 SIGHTINGS_KEPT = 20               # mid-match sightings kept in debug/midmatch (picture + text each), newest first
 GLOBE_KEPT = 10                   # 1.5.4: unreadable cross-play globe crops kept in debug/lobby
 GLOBE_SAVE_EVERY = 120.0          # s between two saved crops (one per lobby is enough)
+MENU_RATE = 1.0                   # 1.6.4: banner scans per second in menus, store, bloodweb … (no banner there)
+FAST_AFTER_LOBBY = 120.0          # … full rate for this long after the lobby button was last on screen (READY → match)
+FAST_AFTER_LOADING = 90.0         # … and after a loading screen was seen (the banner follows it)
 START_LOOK_INTERVAL = 1.0         # 1.6: seconds between two looks for the end of the loading screen (armed only)
 LOBBY_INTERVAL = 1.0              # seconds between two looks at the lobby button (never during a match)
 LOBBY_RATE = 1.0                  # banner scans per second while the lobby button is on screen: the banner
@@ -54,6 +57,24 @@ def _wgc_grab(cap, window, box):
 class Event:
     kind: str          # status | detected | unknown | banner | menu | match_end | watch_info | warn | scan_result | error
     data: dict
+
+
+def scan_rate(base: float, *, in_match: bool, session: bool, since_button: float, since_loading: float,
+              live: bool, lobby_visible: bool) -> float:
+    """Banner scans per second (pure, 1.6.4). Full rate while a banner is being read, after a loading screen and in
+    the two minutes after the lobby button (READY, loading, spawn); 1/s in the match (banner only at its start), in
+    the lobby (no banner possible) and everywhere else in the menus – there a banner is read at most a second late,
+    after its first frame the session runs at full rate. Simulation (not live): full rate outside the match."""
+    base = max(1.0, base)
+    if session:
+        return base
+    if in_match:
+        return min(base, IN_MATCH_RATE)
+    if lobby_visible:
+        return min(base, LOBBY_RATE)
+    if not live or since_loading <= FAST_AFTER_LOADING or since_button <= FAST_AFTER_LOBBY:
+        return base
+    return min(base, MENU_RATE)
 
 
 class DetectionWorker(threading.Thread):
@@ -140,6 +161,7 @@ class DetectionWorker(threading.Thread):
         last_lobby = 0.0
         lobby_button_t = -1e9             # last look that saw PLAY / CANCEL / READY
         last_start_look = -1e9            # 1.6: last look for the end of the loading screen
+        last_loading = -1e9               # 1.6.4: last look that showed a loading screen (scan rate)
         source = ImageSource(self.simulate) if self.simulate else None
         grabber = None if source else ScreenGrabber()
         from .wincapture import CapturePolicy, WindowCapture, describe
@@ -149,6 +171,7 @@ class DetectionWorker(threading.Thread):
         wcap_told = False
         via = {"screen": True}            # last picture came from the screen (-> our overlay is in it)
         self.hidden_looks = 0
+        self.scan_rate = 0.0                                 # 1.6.4: banner scans per second right now (diagnosis)
         self._globe_saved = 0.0           # 1.5.4: last saved cross-play crop             # looks skipped: DBD in the background, another window over it
 
         window, window_checked = None, 0.0
@@ -365,10 +388,12 @@ class DetectionWorker(threading.Thread):
                     self._report("Lobby-Erkennung", traceback.format_exc())
 
             # ------------------------------------- 1.6: loading screen over -> the match begins (recording)
+            # 1.6.4: also unarmed – a loading screen tells the scan rate that a banner is coming
             ms = self.match_start
             if self.map_on_screen and ms.armed:
                 ms.disarm()                          # a banner came first: the recording starts there
-            elif (ms.armed and sep is None and not session and tick - last_start_look >= START_LOOK_INTERVAL
+            elif (not self.map_on_screen and sep is None and not session
+                    and tick - last_start_look >= START_LOOK_INTERVAL
                     and (source is not None or window is not None)):
                 last_start_look = tick
                 try:
@@ -376,8 +401,10 @@ class DetectionWorker(threading.Thread):
                     if look is not None:             # None: covered -> no look, nothing changes
                         if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect or self.today_rect or self.guide_rects):
                             self._mask_overlay(look, origin[0], origin[1])
-                        if ms.update(tick, has_loading_bar(look), is_dark(look),
-                                     tick - lobby_button_t < START_LOOK_INTERVAL * 1.5):
+                        bar, dark = has_loading_bar(look), is_dark(look)
+                        if bar and dark:
+                            last_loading = tick
+                        if ms.armed and ms.update(tick, bar, dark, tick - lobby_button_t < START_LOOK_INTERVAL * 1.5):
                             log.info("Ladebildschirm vorbei – das Match beginnt")
                             self.post("match_start", t=tick)
                 except Exception:
@@ -466,15 +493,15 @@ class DetectionWorker(threading.Thread):
                 self.watch_status = (_("Runde vorbei – wartet auf die nächste Map") if tracker.ended
                                      else _("keine Map angezeigt"))
 
-            rate = max(1.0, float(self.settings.get("scans_per_second", 5)))
-            if self.map_on_screen and tracker.in_trial and not session:
-                rate = min(rate, IN_MATCH_RATE)          # in the match: save CPU for the game
-                if watching and "Scan/s" not in self.watch_status:
-                    self.watch_status += f" · {IN_MATCH_RATE:.0f} Scan/s"
-            elif not session and tick - lobby_button_t < LOBBY_HOLD:
-                rate = min(rate, LOBBY_RATE)             # in the lobby / queue: no banner possible yet
-            elif source is None and window is None:
+            in_match = self.map_on_screen and tracker.in_trial
+            rate = scan_rate(float(self.settings.get("scans_per_second", 5)), in_match=in_match, session=session,
+                             since_button=tick - lobby_button_t, since_loading=tick - last_loading,
+                             live=source is None, lobby_visible=tick - lobby_button_t < LOBBY_HOLD)
+            if in_match and not session and watching and "Scan/s" not in self.watch_status:
+                self.watch_status += f" · {IN_MATCH_RATE:.0f} Scan/s"
+            if source is None and window is None:
                 rate = 1.0                               # no DBD: only looking for its window
+            self.scan_rate = rate                        # diagnosis
             try:
                 cmd = self.commands.get(timeout=max(0.02, 1.0 / rate - (time.time() - tick)))
                 self.commands.put(cmd)          # handled at the top of the next loop
