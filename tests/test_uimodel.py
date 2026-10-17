@@ -764,3 +764,51 @@ def test_custom_rounds_that_were_public_matches_are_offered_as_farming(app_root)
         assert not app._stats_farm_candidates() and app.settings.get("farming_ignored") == [repr(t0 + 1800)]
     finally:
         app.quit()
+
+
+def test_the_discord_state_follows_round_and_lobby_and_the_records_tab_draws(app_root):
+    """1.7: the game state for the Rich Presence comes from the open round (map, realm, role, killer, start),
+    else from the lobby, else the menu; the Discord boxes are saved and passed to the thread; the statistics'
+    sub-tab "Rekorde" renders from the same selection as the others."""
+    import json
+    from dbdmapscout import discordrpc, history
+    from dbdmapscout.app import App
+    from dbdmapscout.lobby import Found
+    t0 = time.time() - 3600
+    history.append(str(app_root / history.FILE), history.Round(t=t0, seconds=600, map_id="coal-tower",
+                                                               map="Coal Tower", role="killer", killer="The Nurse"))
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    cfgs = []
+    app.presence.configure = lambda *a: cfgs.append(a)
+    try:
+        app.simulate = None                                   # as with a real DBD window
+        app.game = object()
+        assert app._discord_state() == discordrpc.GameState(True, "menu")
+        app._queue = {"state": "search", "since": 100.0, "role": "killer", "killer": "The Nurse"}
+        st = app._discord_state()
+        assert (st.phase, st.role, st.killer, st.since) == ("search", "killer", "Nurse", 100.0)
+        f = Found(200.0, 12.0, "survivor")
+        app._queue = {"state": "lobby", "role": "survivor", "found": f}
+        assert app._discord_state().since == 200.0
+        app._hist = {"t": 300.0, "map_id": "coal-tower", "map": "Coal Tower", "role": "killer", "killer": "The Nurse"}
+        st = app._discord_state()
+        assert (st.phase, st.map, st.realm, st.killer, st.since) == ("match", "Coal Tower", "The MacMillan Estate",
+                                                                      "Nurse", 300.0)
+        app.game = None
+        assert not app._discord_state().running
+        app.dc_on_var.set(True)
+        app.dc_id_var.set(" 42 ")
+        app.dc_lobby_var.set(False)
+        app._discord_setting()
+        assert cfgs[-1] == (True, "42", True, False)
+        assert app.settings.get("discord_on") is True and app.settings.get("discord_client_id") == "42"
+        app._discord_status("Discord: verbunden", True)
+        assert app.dc_status_var.get() == "Discord: verbunden"
+        app._stats_render()
+        i = next(i for i, tab in enumerate(app.stats_nb.tabs()) if app.stats_nb.tab(tab, "text") == "Rekorde")
+        app._stats_render_tab(i)
+        titles = [t.title for t in app.stats_records.data]
+        assert titles[:2] == ["4K-Serie", "Entkommen-Serie"] and "Längste Runde" in titles
+    finally:
+        app.quit()

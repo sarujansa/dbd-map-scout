@@ -138,6 +138,10 @@ DEFAULTS = {
     "clip_mode": "copy",                # 1.5.1: clip editor – "copy" (key frames, fast) / "exact" (re-encoded)
     "clip_sound": True,                 # 1.5.1: clip editor plays the sound while previewing (Windows)
     "clip_target_mb": 10,               # 1.6.1: clip editor "Für Discord" – stays under this many MB
+    "discord_on": False,                # 1.7: Rich Presence over the local Discord client (user's pick)
+    "discord_client_id": "",            # the Application-ID the user registered in Discord's developer portal
+    "discord_killer": True,             # name the killer in the status
+    "discord_lobby": True,              # also show lobby / search / menu (else only the match)
     "sysinfo": "right",                 # system values at the top of a black bar: off | left | right | custom
     "sysinfo_pos": [1.0, 0.0],          # sysinfo = custom: 0..1 of the free space in the DBD window (x, y)
 }
