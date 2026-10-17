@@ -66,6 +66,7 @@ RESULT_ZONE = (0.05, 0.42, 0.198, 0.232)
 # the cross-play globe: right of "x1.00", above the right end of the button (same units as BUTTON_ZONE)
 CROSSPLAY_ZONE = (0.075, 0.030, 0.825, 0.878)
 GLOBE_W = (0.009, 0.020)      # width of the globe in 16:9 widths (measured 0.0128)
+GLYPH_H = (0.004, 0.010)      # 1.6.2: height of the "x1.00" digits in 16:9 widths (measured 0.0067)
 
 
 def _vw(W, H):
@@ -145,8 +146,11 @@ def crossplay_box(W: int, H: int):
 
 def crossplay_off(img, W: int, H: int):
     """Is cross-play switched off? ``img``: the picture of crossplay_box(W, H) (BGR).
-    True: a globe with the red cross at its lower right; False: a globe without it; None: no globe
-    (another screen, hidden by something) or red all over the zone (a red-tinted lobby) – can't tell."""
+    True: a globe with the red cross at its lower right. False: no globe, the multiplier "x1.00" is the
+    rightmost thing – 1.6.2, the user's screenshots: with cross-play **on** DBD shows no globe at all (the text
+    moves right into its place; before, the reader waited for a globe without a cross and always said "can't
+    tell"); a globe without the cross counts as on, too. None: neither (another screen, hidden by something) or
+    red all over the zone (a red-tinted lobby) – can't tell."""
     if img is None or img.size == 0 or img.ndim != 3:
         return None
     a = img[..., :3].astype(np.int16)
@@ -167,7 +171,7 @@ def crossplay_off(img, W: int, H: int):
     w, h = x1 - x0 + 1, y1 - y0 + 1
     vw = _vw(W, H)
     if not (GLOBE_W[0] * vw <= w <= GLOBE_W[1] * vw) or not 0.7 <= w / h <= 1.4:
-        return None
+        return False if _digits_end(bright, vw) else None
     if bright[y0:y1 + 1, x0:x1 + 1].sum() < 0.2 * w * h:
         return None
     red = (r >= 150) & (g <= 80) & (b <= 80) & (r - np.maximum(g, b) >= 90)
@@ -179,6 +183,27 @@ def crossplay_off(img, W: int, H: int):
     if outside > max(inside, 0.02 * w * h):
         return None                                            # red elsewhere too: not the cross
     return inside >= max(4, 0.04 * w * h)
+
+
+def _digits_end(bright, vw) -> bool:
+    """The bright things at the right end of the zone are digits ("x1.00", cross-play on): the last two runs of
+    bright columns are glyph-high, narrower than high and stand on the same line."""
+    cols = np.nonzero(bright.any(axis=0))[0]
+    runs, start = [], None
+    for i, c in enumerate(cols):
+        if start is None:
+            start = c
+        if i + 1 == len(cols) or cols[i + 1] - c > 1:
+            rows = np.nonzero(bright[:, start:c + 1].any(axis=1))[0]
+            runs.append((int(start), int(c), int(rows[0]), int(rows[-1])))
+            start = None
+    if len(runs) < 2:
+        return False
+    for x0, x1, y0, y1 in runs[-2:]:
+        h = y1 - y0 + 1
+        if not (GLYPH_H[0] * vw <= h <= GLYPH_H[1] * vw) or x1 - x0 + 1 > 1.2 * h:
+            return False
+    return abs(runs[-1][3] - runs[-2][3]) <= 2
 
 
 _CLOCK = re.compile(r"(\d{1,2})\s*[:.;：]+\s*(\d{2})")     # OCR sometimes doubles the colon
