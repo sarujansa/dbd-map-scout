@@ -13,6 +13,7 @@ from . import autostart
 from .connwatch import is_admin
 from .i18n import N_, _
 from .app_hotkeys import HOTKEY_LABELS
+from .textnorm import fmt_duration
 
 log = logging.getLogger("dbdmapscout")
 
@@ -246,6 +247,12 @@ class SettingsTab:
         self.rec_buffer_var = ui.BooleanVar(value=bool(self.settings.get("rec_buffer_auto", True)))   # 1.4.1
         self._reg("st.more.rec_buffer", ui.Checkbutton(rc, text=_("Wiederholungspuffer mit DBD starten und stoppen"),
                                                         variable=self.rec_buffer_var, command=self._rec_setting)).pack(anchor="w")
+        self.rec_merge_var = ui.BooleanVar(value=bool(self.settings.get("rec_merge", True)))       # 1.4.2
+        self._reg("st.more.rec_merge", ui.Checkbutton(rc, text=_("Vorlauf und Runde zu einer Datei zusammenfügen"),
+                                                       variable=self.rec_merge_var, command=self._rec_setting)).pack(anchor="w")
+        self.rec_ffmpeg_var = ui.StringVar(value="")
+        self._reg("st.more.rec_ffmpeg", ui.Label(rc, textvariable=self.rec_ffmpeg_var, wraplength=420,
+                                                  style="Dim.TLabel")).pack(anchor="w")
         rt = ui.Frame(rc)
         rt.pack(fill="x", pady=(4, 0))
         self._reg("st.more.rec_tail.label", ui.Label(rt, text=_("Nachlauf nach dem Rundenende"))).pack(side="left")
@@ -445,7 +452,8 @@ class SettingsTab:
         return obsrec.Config(on=bool(self.rec_on_var.get()), port=port, password=self.rec_pw_var.get(),
                              volume=str(self.settings.get("rec_volume", "")), rel=str(self.settings.get("rec_rel", "")),
                              folder=str(self.settings.get("rec_folder", "")), limit_gb=limit,
-                             pre=bool(self.rec_pre_var.get()), tail_s=tail, buffer_auto=bool(self.rec_buffer_var.get()))
+                             pre=bool(self.rec_pre_var.get()), tail_s=tail, buffer_auto=bool(self.rec_buffer_var.get()),
+                             merge=bool(self.rec_merge_var.get()))
 
     def _rec_setting(self, save=True):
         cfg = self._rec_cfg()
@@ -457,10 +465,14 @@ class SettingsTab:
             self.settings.set("rec_pre", cfg.pre)
             self.settings.set("rec_tail_s", int(cfg.tail_s))
             self.settings.set("rec_buffer_auto", cfg.buffer_auto)
+            self.settings.set("rec_merge", cfg.merge)
             self._save_soon()
         self.recorder.configure(cfg)
         folder = cfg.folder
         self.rec_folder_var.set(folder if folder else _("(kein Ordner gewählt)"))
+        self.rec_ffmpeg_var.set(_("ffmpeg fehlt (Paket imageio-ffmpeg) – start.bat installiert es beim nächsten Start; "
+                                  "bis dahin bleibt der Vorlauf eine eigene Datei.")
+                                if cfg.merge and cfg.pre and obsrec.ffmpeg_exe() is None else "")
 
     def _rec_pick_folder(self):
         self._qt_file("dir", _("Ordner für die Aufnahmen (z. B. auf der externen Platte)"),
@@ -495,6 +507,27 @@ class SettingsTab:
             self._log(_("Aufnahme gespeichert: {file}", file=d.get("file", "")), "System")
         elif kind == "deleted":
             self._log(_("Aufnahmen gelöscht (Platz): {n}", n=len(d.get("files") or [])), "System")
+        elif kind == "marked":                  # 1.4.2: F8
+            if d.get("pos") is None:
+                self._log(_("Keine Aufnahme läuft – keine Clip-Marke gesetzt."), "System")
+            else:
+                self._log(_("Clip-Marke {n} bei {pos} gesetzt.", n=d.get("n", 1), pos=fmt_duration(d["pos"])), "System")
+                self.root.bell()
+
+    def mark_clip(self):
+        """1.4.2: hotkey (F8) – note this moment in the running OBS recording; the clip editor jumps to it."""
+        if not self.recorder.recording:
+            self._log(_("Keine Aufnahme läuft – keine Clip-Marke gesetzt."), "System")
+            return
+        self.recorder.mark()
+
+    def _reveal_rec(self):
+        """Overview tile "Aufnahmen" → Settings, "Mehr" open, the card "Aufnahmen mit OBS" lit up."""
+        self.qt.show_page("settings")
+        if not self._more_open:
+            self._toggle_more()
+        self._qt_refresh(force=True)
+        self.qt.reveal("settings", "st.more.rec")
 
     # ---------------------------------------------------------- tray and autostart
     def _tray_start(self):

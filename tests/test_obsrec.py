@@ -217,7 +217,7 @@ def test_the_replay_buffer_becomes_the_pre_roll(tmp_path):
     obs = FakeObs(record_dir=str(tmp_path), replay=True)
     obs.start()
     try:
-        r, posted = _recorder(obs, str(tmp_path), pre=True)
+        r, posted = _recorder(obs, str(tmp_path), pre=True, merge=False)
         r._begin({"t": 1.0, "label": "Gas Heaven", "role": "killer", "killer": "Hag"})
         assert ("SaveReplayBuffer", {}) in obs.requests
         r._finish({})
@@ -399,3 +399,164 @@ def test_the_rec_dot_is_drawn_on_the_overlay_and_the_tray_icon():
     assert plain.tobytes() != rec.tobytes()
     r, g, b, a = rec.getpixel((52, 12))
     assert r > 180 and g < 120 and plain.getpixel((10, 50)) == rec.getpixel((10, 50))
+
+
+# ------------------------------------------------------------------ 1.4.2: one file, marks, room, prune order
+def _fake_ffmpeg(ok=True, duration=b"00:00:20.50"):
+    """Stands in for the ffmpeg binary: ``-i file`` answers with a duration, the concat call glues the files."""
+    calls = []
+
+    def run(args, timeout=None):
+        calls.append(args)
+        if "concat" not in args:
+            return 0, b"Input #0, matroska\n  Duration: " + duration + b", start: 0.000000, bitrate: 1 kb/s\n"
+        if not ok:
+            return 1, b"Invalid data found when processing input"
+        lst, out = args[args.index("-i") + 1], args[-1]
+        with open(out, "wb") as o:
+            for line in open(lst, encoding="utf-8"):
+                path = line.strip()[6:-1].replace("'\\''", "'")
+                o.write(open(path, "rb").read())
+        return 0, b""
+    return run, calls
+
+
+def test_the_pre_roll_is_joined_into_the_round_file_and_marks_move_with_it(tmp_path, monkeypatch):
+    run, calls = _fake_ffmpeg()
+    monkeypatch.setattr(obsrec, "ffmpeg_exe", lambda: "ffmpeg")
+    monkeypatch.setattr(obsrec, "_run", run)
+    obs = FakeObs(record_dir=str(tmp_path), replay=True)
+    obs.start()
+    try:
+        r, posted = _recorder(obs, str(tmp_path), pre=True, merge=True)
+        r._begin({"t": 1.0, "label": "Gas Heaven", "role": "killer", "killer": "Hag", "farming": True})
+        r.active["since"] -= 100                              # 100 s into the round …
+        r._mark()                                             # … F8
+        assert posted.get(timeout=1)[0] == "status" and posted.get(timeout=1)[0] == "started"
+        kind, d = posted.get(timeout=1)
+        assert kind == "marked" and d["n"] == 1 and 99 <= d["pos"] <= 101
+        r._finish({})
+        names = sorted(n for n in os.listdir(str(tmp_path)) if n != obsrec.INDEX)
+        assert len(names) == 1 and "Gas Heaven – Hag" in names[0] and "Vorlauf" not in names[0]   # one file
+        rec = obsrec.load_index(str(tmp_path))[0]
+        assert rec.pre == "" and rec.pre_s == 20.5 and rec.farming and not rec.extra
+        assert rec.size == len(ROUND_BYTES) + len(PRE_BYTES)
+        assert len(rec.marks) == 1 and 119 <= rec.marks[0] <= 121      # shifted by the pre-roll
+        with open(os.path.join(str(tmp_path), rec.file), "rb") as f:
+            assert f.read(len(PRE_BYTES)) == PRE_BYTES              # the pre-roll comes first
+        concat = next(a for a in calls if "concat" in a)
+        assert concat[-3:] == ["-c", "copy", os.path.join(str(tmp_path), rec.file[:-4] + " (zusammen).mkv")]
+        assert "-y" in concat and not os.path.exists(concat[concat.index("-i") + 1])          # the list file is gone
+        saved = next(d for k, d in _drain(posted) if k == "saved")
+        assert saved["marks"] == 1
+    finally:
+        obs.stop()
+
+
+def _drain(q):
+    out = []
+    while not q.empty():
+        out.append(q.get_nowait())
+    return out
+
+
+def test_a_failed_join_keeps_both_files(tmp_path, monkeypatch):
+    run, _calls = _fake_ffmpeg(ok=False)
+    monkeypatch.setattr(obsrec, "ffmpeg_exe", lambda: "ffmpeg")
+    monkeypatch.setattr(obsrec, "_run", run)
+    obs = FakeObs(record_dir=str(tmp_path), replay=True)
+    obs.start()
+    try:
+        r, posted = _recorder(obs, str(tmp_path), pre=True, merge=True)
+        r._begin({"t": 1.0, "label": "A"})
+        r._finish({})
+        rec = obsrec.load_index(str(tmp_path))[0]
+        assert rec.pre.endswith("(Vorlauf).mkv") and rec.extra == {"merge_failed": True} and rec.pre_s == 0
+        assert os.path.exists(os.path.join(str(tmp_path), rec.pre)) and os.path.exists(os.path.join(str(tmp_path), rec.file))
+        assert not [n for n in os.listdir(str(tmp_path)) if "zusammen" in n]
+        texts = [d.get("text", "") for k, d in _drain(posted) if k == "status"]
+        assert any("nicht angefügt" in t for t in texts)
+    finally:
+        obs.stop()
+
+
+def test_without_ffmpeg_or_a_recording_nothing_is_joined_or_marked(tmp_path, monkeypatch):
+    monkeypatch.setattr(obsrec, "ffmpeg_exe", lambda: None)
+    assert obsrec.merge_files(["a", "b"], str(tmp_path / "x.mkv")) is False
+    assert obsrec.media_duration("a") is None
+    r = obsrec.Recorder(lambda kind, **d: None)
+    posted = []
+    r._post = lambda kind, **d: posted.append((kind, d))
+    r._mark()
+    assert posted == [("marked", {"pos": None})]
+
+
+@pytest.mark.skipif(obsrec.ffmpeg_exe() is None, reason="imageio-ffmpeg not installed")
+def test_merge_files_joins_real_videos_without_re_encoding(tmp_path):
+    """The real ffmpeg from imageio-ffmpeg on two tiny generated clips: one file, twice as long."""
+    ff = obsrec.ffmpeg_exe()
+    parts = []
+    for i in range(2):
+        p = str(tmp_path / f"part {i}'s.mkv")                        # an apostrophe: the concat list must escape it
+        rc, err = obsrec._run([ff, "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi",
+                               "-i", "testsrc=duration=1:size=64x64:rate=10", "-c:v", "mpeg4", p], timeout=60)
+        assert rc == 0, err
+        parts.append(p)
+    d1 = obsrec.media_duration(parts[0], ff)
+    assert d1 is not None and 0.8 <= d1 <= 1.3
+    out = str(tmp_path / "both.mkv")
+    assert obsrec.merge_files(parts, out, ff)
+    d = obsrec.media_duration(out, ff)
+    assert d is not None and 1.8 <= d <= 2.3 and not os.path.exists(out + ".txt")
+
+
+def test_prune_goes_for_farming_and_short_rounds_first_and_marked_last(tmp_path):
+    folder = str(tmp_path)
+    recs = []
+    spec = [("old.mkv", 0.0, {}), ("farm.mkv", 100.0, {"farming": True}),
+            ("short.mkv", 200.0, {"end": 200.0 + 120}), ("marked.mkv", 50.0, {"marks": [12.5]}),
+            ("long.mkv", 300.0, {"end": 300.0 + 900})]
+    for name, t, kw in spec:
+        with open(os.path.join(folder, name), "wb") as f:
+            f.write(b"\0" * 100)
+        recs.append(obsrec.Recording(t=t, file=name, **kw))
+    assert [obsrec.prune_rank(r) for r in recs] == [1, 0, 0, 2, 1]
+    left, deleted = obsrec.prune(folder, recs, limit=150, reserve=0, free=10 ** 9)
+    assert deleted == ["farm.mkv", "short.mkv", "old.mkv", "long.mkv"] and [r.file for r in left] == ["marked.mkv"]
+
+
+def test_space_counts_the_index_and_the_drive(tmp_path):
+    folder = str(tmp_path)
+    for name in ("a.mkv", "b.mkv"):
+        with open(os.path.join(folder, name), "wb") as f:
+            f.write(b"\0" * 100)
+    recs = [obsrec.Recording(t=5.0, file="a.mkv", size=100), obsrec.Recording(t=3.0, file="b.mkv", size=100, marks=[1.0])]
+    obsrec.save_index(folder, recs)
+    sp = obsrec.space(folder)
+    assert sp.count == 2 and sp.used == 200 and sp.oldest == 3.0 and sp.marked == 1 and sp.folder == folder
+    assert sp.free > 0 and sp.total >= sp.free and sp.t > 0
+    assert obsrec.space(None).folder == "" and obsrec.space(None).count == 0
+
+
+def test_the_f8_hotkey_and_the_overview_tile_exist():
+    import inspect
+    from types import SimpleNamespace
+    from dbdmapscout import config, hotkeys, overview, qt_window
+    from dbdmapscout.app_hotkeys import HOTKEY_LABELS
+    assert config.DEFAULTS["hotkeys"]["mark_clip"] == "f8" and hotkeys.game_only("f8")
+    assert "mark_clip" in dict(HOTKEY_LABELS) and '"mark_clip"' in inspect.getsource(qt_window)
+    app = SimpleNamespace(settings={"rec_on": False}, recorder=SimpleNamespace(space=obsrec.Space()))
+    assert overview.recordings(app) is None
+    app.settings = {"rec_on": True, "rec_folder": "D:\\DBD"}
+    assert "gemessen" in overview.recordings(app).sub           # not measured yet
+    app.recorder.space = obsrec.Space(t=1.0)
+    f = overview.recordings(app)
+    assert f.action == "rec_setup" and "nicht angeschlossen" in f.sub
+    gb = 1024 ** 3
+    app.recorder.space = obsrec.Space(free=900 * gb, total=1000 * gb, used=60 * gb, count=2, oldest=1.0,
+                                      marked=1, folder="D:\\DBD", t=1.0)
+    f = overview.recordings(app)
+    assert f.value == "900 GB frei" and "2 Runden" in f.sub and "60 GB" in f.sub and "1 mit Marke" in f.sub
+    assert f.action == "" and abs(f.frac - 0.1) < 1e-9 and f.colour is None
+    app.recorder.space.free = 6 * gb
+    assert overview.recordings(app).colour is not None
