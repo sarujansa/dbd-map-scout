@@ -44,7 +44,7 @@ class PreviewView(QWidget):
         self.setCursor(Qt.PointingHandCursor)
         self.setToolTip(_("Klick auf Karte, Systemwerte oder Musik wählt das Element für den Regler „Grösse“. "
                           "Mit „Mit der Maus verschieben“: Element ziehen = verschieben, an der Ecke ziehen oder "
-                          "Mausrad = Grösse, Klick auf eine freie Stelle setzt die Karte dorthin. Ende mit „Fertig“."))
+                          "Strg+Mausrad = Grösse, Klick auf eine freie Stelle setzt die Karte dorthin. Ende mit „Fertig“."))
 
     def hasHeightForWidth(self):
         return True
@@ -135,7 +135,7 @@ class PreviewView(QWidget):
             p.setFont(nf)
             p.setPen(accent)
             p.drawText(game.adjusted(0, 6, 0, 0), Qt.AlignHCenter | Qt.AlignTop,
-                       _("Verschieben aktiv – ziehen (rastet ein, Alt = frei), Pfeiltasten = fein, Ecke/Mausrad = Grösse"))
+                       _("Verschieben aktiv – ziehen (rastet ein, Alt = frei), Pfeiltasten = fein, Ecke/Strg+Mausrad = Grösse"))
         if d.get("editing"):                       # every element named; the one under the mouse in accent colour
             accent = QColor(qt_theme.colours(True)["accent"])
             held = self._grab[0] if self._grab else self._hover
@@ -220,9 +220,11 @@ class PreviewView(QWidget):
         return sel if self._handle_rect(sel, ox, oy, s).adjusted(-3, -3, 3, 3).contains(e.position()) else None
 
     def wheelEvent(self, e):
-        """Moving mode: the wheel over an element sizes it (like the wheel over the map in the game); else the
-        page scrolls."""
-        pt = self._screen_pos(e) if self._data.get("editing") else None
+        """Moving mode: Ctrl + wheel over an element sizes it (like over the map in the game); else the page
+        scrolls. 1.3.2 (user: "nervt, dass sich die Fenster verstellen, wenn ich mit dem Mausrad drin drehe"):
+        the plain wheel never changes a size."""
+        ctrl = bool(e.modifiers() & Qt.ControlModifier)
+        pt = self._screen_pos(e) if self._data.get("editing") and ctrl else None
         hit = self.layer_at(*pt) if pt else None
         steps = e.angleDelta().y() / 120
         if not hit or not steps:

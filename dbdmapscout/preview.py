@@ -138,7 +138,7 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
         show_cover = cover if o.get("media_cover", True) else None
         look = media.look(o)
         mstyle = o.get("media_style", "big")
-        cards["music"] = (fitted((lambda h: skin.music(rows_m, show_cover, h, style, prog, look, accent)) if modern
+        cards["music"] = (fitted((lambda h: skin.music(rows_m, show_cover, h, style, prog, look, accent, mstyle)) if modern
                                  else (lambda h: render_music(rows_m, show_cover, h, mstyle, prog, look)),
                                  int(gh * scale), avail if spot != "custom" else gw / 3,
                                  ("music", repr(rows_m), id(show_cover), mstyle, prog, look, style, accent)),
