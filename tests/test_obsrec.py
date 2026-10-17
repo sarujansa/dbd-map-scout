@@ -37,6 +37,7 @@ class FakeObs(threading.Thread):
         self.recording = None
         self.files = 0
         self.stop_flag = False
+        self.inputs = {"Desktop-Audio": {"muted": False}, "Mic/Aux": {"muted": False}}
 
     def run(self):
         self.srv.settimeout(0.2)
@@ -136,6 +137,18 @@ class FakeObs(threading.Thread):
                 self._pending = [new, self.replay_delay]      # written (and reported) only after the delay
                 if not self.replay_delay:
                     self._write_replay()
+            elif kind == "GetInputList":              # 1.6: audio sources
+                out = {"inputs": [{"inputName": n} for n in self.inputs]}
+            elif kind == "GetCurrentProgramScene":
+                out = {"currentProgramSceneName": "Szene", "sceneName": "Szene"}
+            elif kind == "CreateInput":
+                self.inputs[data["inputName"]] = dict(data, muted=False)
+            elif kind == "SetInputMute":
+                ok = data["inputName"] in self.inputs
+                if ok:
+                    self.inputs[data["inputName"]]["muted"] = data["inputMuted"]
+            elif kind == "GetSpecialInputs":
+                out = {"desktop1": "Desktop-Audio", "desktop2": None, "mic1": "Mic/Aux"}
             elif kind == "GetLastReplayBufferReplay":
                 if self._pending and self._pending[1] > 0:
                     self._pending[1] -= 1
@@ -764,3 +777,138 @@ def test_a_farming_mark_from_the_statistics_moves_the_recording(tmp_path):
     assert rec.farming and rec.file == "a.mkv"
     r._set_farming(99.0, True)                                  # unknown round: nothing happens
     assert len(obsrec.load_index(folder)) == 1
+
+
+# ------------------------------------------------------------------ 1.6
+def test_the_match_start_comes_after_the_loading_screen_of_a_found_lobby_only():
+    from dbdmapscout.matchstart import MatchStart
+    m = MatchStart()
+    assert not m.update(0, True, True, False)                       # not armed: a loading screen does nothing
+    m.arm(10)
+    seq = [(11, False, False, True),    # lobby, READY pressed
+           (12, True, True, False), (13, True, True, False),        # loading screen
+           (14, False, True, False),                                 # black in between
+           (15, False, False, False), (16, False, False, False)]     # the match
+    fired = [t for t, bar, dark, btn in seq if m.update(t, bar, dark, btn)]
+    assert fired == [16] and not m.armed and m.started_t == 16
+    assert not m.update(30, True, True, False) and not m.update(31, False, False, False)   # back to the menus
+    m.arm(40)                                                        # bright lobby looks without a loading screen
+    assert not any(m.update(t, False, False, False) for t in range(41, 50))
+    m.arm(60)                                                        # loading screen, then a lobby again (dodge)
+    for t in (61, 62):
+        m.update(t, True, True, False)
+    m.update(63, False, False, True)
+    assert not m.update(64, False, False, False) and not m.update(65, False, False, False)
+    m.arm(0)
+    assert not m.update(16 * 60, True, True, False) and not m.armed  # an old lobby arms nothing any more
+
+
+def test_the_banner_names_the_recording_started_at_the_loading_screen(obs, tmp_path):
+    folder = str(tmp_path)
+    r, posted = _recorder(obs, folder, pre=True, early=True)
+    r._begin_early({"t": 100.0, "role": "survivor", "farming": True})
+    assert r.active["early"] and ("SaveReplayBuffer", {}) not in obs.requests     # no pre-roll, no lobby
+    r._mark()
+    r._begin({"t": 130.0, "map_id": "coal", "label": "Coal Tower", "role": "survivor", "killer": "",
+              "farming": False})
+    starts = [k for k, _d in obs.requests].count("StartRecord")
+    assert starts == 1 and not r.active["early"] and r.active["t"] == 130.0 and r.active["farming"]
+    assert len(r.active["marks"]) == 1
+    r._finish({})
+    rec = obsrec.load_index(folder)[0]
+    assert rec.t == 130.0 and rec.label == "Coal Tower" and rec.farming and rec.file.startswith("Farming/")
+    # off: the loading screen starts nothing
+    r.cfg.early = False
+    r._begin_early({"t": 200.0})
+    assert r.active is None
+
+
+def test_a_recording_from_the_loading_screen_without_a_banner_is_filed_as_it_is(obs, tmp_path, monkeypatch):
+    folder = str(tmp_path)
+    r, posted = _recorder(obs, folder, pre=False)
+    r._begin_early({"t": 100.0, "role": "killer", "killer": "Nurse"})
+    monkeypatch.setattr(obsrec, "EARLY_WAIT_S", -1)
+    r._watchdog()
+    assert r.active is None
+    rec = obsrec.load_index(folder)[0]
+    assert rec.label == "Unbekannte Map" and os.path.exists(os.path.join(folder, rec.file))
+    # a banner long after the start is a new round: the old one is closed first
+    r._begin_early({"t": 300.0})
+    r.active["since"] -= 10 ** 4
+    monkeypatch.setattr(obsrec, "EARLY_WAIT_S", 180)
+    r._begin({"t": 400.0, "label": "B"})
+    assert [k for k, _d in obs.requests].count("StopRecord") == 2 and r.active["t"] == 400.0
+
+
+def test_the_sound_sources_are_created_once_and_switched(obs, tmp_path):
+    r, posted = _recorder(obs, str(tmp_path), pre=False)
+    c = r._client()
+    try:
+        r._audio(c)
+        dbd, disc = obsrec.AUDIO_APPS["dbd"][0], obsrec.AUDIO_APPS["discord"][0]
+        assert obs.inputs[dbd]["inputKind"] == obsrec.AUDIO_KIND and obs.inputs[dbd]["sceneName"] == "Szene"
+        assert obs.inputs[dbd]["inputSettings"]["window"].endswith(":DeadByDaylight-Win64-Shipping.exe")
+        assert obs.inputs[dbd]["inputSettings"]["priority"] == obsrec.AUDIO_PRIORITY_EXE
+        assert not obs.inputs[dbd]["muted"] and not obs.inputs[disc]["muted"]
+        assert obs.inputs["Desktop-Audio"]["muted"] and obs.inputs["Mic/Aux"]["muted"]
+        r.cfg.audio_discord, r.cfg.audio_mic = False, True
+        r._audio(c)
+    finally:
+        c.close()
+    assert [k for k, _d in obs.requests].count("CreateInput") == 2           # not created again
+    assert obs.inputs[disc]["muted"] and not obs.inputs["Mic/Aux"]["muted"]
+    obs.requests.clear()
+    r._game = True
+    r.cfg.audio = False
+    r._audio_now()                                                           # switched off: OBS is left alone
+    assert not obs.requests
+
+
+def test_the_buffer_runs_for_instant_clips_without_a_pre_roll(obs, tmp_path):
+    r, posted = _recorder(obs, str(tmp_path), pre=False, instant=True, buffer_auto=True)
+    r._game_changed(True)
+    assert obs.replay and r._buffer_ours
+
+
+def _instant(tmp_path, monkeypatch, ffmpeg):
+    obs = FakeObs(record_dir=str(tmp_path), replay=True)
+    obs.start()
+    try:
+        r, posted = _recorder(obs, str(tmp_path), pre=False, instant=True, clip_s=45)
+        monkeypatch.setattr(obsrec, "ffmpeg_exe", lambda: ffmpeg)
+        calls = []
+
+        def run(args, timeout=0):
+            calls.append(args)
+            with open(args[-1], "wb") as f:
+                f.write(b"clip")
+            return 0, b""
+        monkeypatch.setattr(obsrec, "_run", run)
+        r._instant_clip({"label": "Coal Tower", "role": "killer", "killer": "Nurse"})
+        return posted, calls
+    finally:
+        obs.stop()
+
+
+def test_f8_cuts_the_last_seconds_of_the_buffer_into_the_clips_folder(tmp_path, monkeypatch):
+    posted, calls = _instant(tmp_path, monkeypatch, "ffmpeg")
+    kind, d = _drain(posted)[-1]
+    clips = os.listdir(os.path.join(str(tmp_path), obsrec.CLIPS_DIR))
+    assert kind == "clip" and d["ok"] and d["seconds"] == 45 and clips == [d["file"]]
+    assert d["file"].endswith("Coal Tower – Nurse (Sofort-Clip).mp4")
+    assert calls[0][calls[0].index("-sseof") + 1] == "-45" and "copy" in calls[0]
+    assert not [f for f in os.listdir(str(tmp_path)) if f.startswith("Replay_")]   # our replay is gone
+
+
+def test_without_ffmpeg_the_whole_buffer_becomes_the_clip(tmp_path, monkeypatch):
+    posted, calls = _instant(tmp_path, monkeypatch, None)
+    kind, d = _drain(posted)[-1]
+    assert d["ok"] and d["file"].endswith("(Sofort-Clip).mkv") and not calls
+    assert os.listdir(os.path.join(str(tmp_path), obsrec.CLIPS_DIR)) == [d["file"]]
+
+
+def test_no_instant_clip_without_the_replay_buffer(obs, tmp_path):
+    r, posted = _recorder(obs, str(tmp_path), pre=False, instant=True)
+    r._instant_clip({})
+    kind, d = _drain(posted)[-1]
+    assert kind == "clip" and not d["ok"] and "Wiederholungspuffer" in d["why"]
