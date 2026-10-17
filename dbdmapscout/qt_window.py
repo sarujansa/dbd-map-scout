@@ -90,7 +90,8 @@ __all__ = (
 
 # key, label (the navigation's icons are drawn by nav_icon: same size and place for all)
 PAGES = (("overview", N_("Übersicht")), ("maps", "Maps"), ("overlay", N_("Overlay")), ("stats", N_("Statistik")),
-         ("server", N_("Server")), ("settings", N_("Einstellungen")), ("detect", N_("Erkennung")), ("log", "Log"))
+         ("recordings", N_("Aufnahmen")), ("server", N_("Server")), ("settings", N_("Einstellungen")),
+         ("detect", N_("Erkennung")), ("log", "Log"))
 
 
 NAV_ICON = 18                     # px (logical): every icon of the navigation in the same box
@@ -102,7 +103,7 @@ NAV_W, NAV_COMPACT_W = 190, 62    # px (logical): navigation with names / only i
 NAV_COMPACT_BELOW = 960           # px (logical) window width from which the navigation shows only icons
 
 
-AUTO_PAGES = ("stats", "server", "detect", "log")   # built from the tab's structure (app_qt.ui_layout)
+AUTO_PAGES = ("stats", "recordings", "server", "detect", "log")   # built from the tab's structure (app_qt.ui_layout)
 
 
 FOUND_MS = 1800                   # ms a search hit's card stays lit
@@ -322,6 +323,11 @@ def nav_icon(key: str, colour: str, ratio: float = 1.0, alert: bool = False) -> 
             a = i * math.pi / 4 + math.pi / 8
             p.drawLine(QPointF(c + 5.2 * math.cos(a), c + 5.2 * math.sin(a)),
                        QPointF(c + 7.4 * math.cos(a), c + 7.4 * math.sin(a)))
+    elif key == "recordings":                  # 1.5: a clapper/film frame with a REC dot
+        p.drawRoundedRect(QRectF(m, m + 1.5, size - 2 * m, size - 2 * m - 3), 2.5, 2.5)
+        p.drawLine(QPointF(m, m + 5.5), QPointF(size - m, m + 5.5))
+        p.setBrush(col)
+        p.drawEllipse(QPointF(c, c + 2.2), 2.4, 2.4)
     elif key == "detect":                      # scan frame: four corners + a dot
         k = 4.0
         for (x, y, dx, dy) in ((m, m, 1, 1), (size - m, m, -1, 1), (m, size - m, 1, -1), (size - m, size - m, -1, -1)):

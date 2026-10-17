@@ -133,6 +133,14 @@ TIPS = {
                                                       "– ohne Neukodierung, in Sekunden, Bild und Ton bleiben wie "
                                                       "von OBS. Klappt es nicht, bleiben beide Dateien liegen.",
     "Aufnahmen einrichten …": "Öffnet die Einstellungen für die Aufnahmen mit OBS (Ordner, Verbindung).",
+    "Abspielen": "Spielt die markierte Aufnahme im Standard-Videoplayer ab.",
+    "Im Explorer zeigen": "Öffnet den Explorer mit der markierten Datei.",
+    "Behalten": "Eine behaltene Aufnahme wird nie fürs Aufräumen gelöscht, wenn die Platte Platz braucht. Nochmal "
+                "drücken hebt es auf.",
+    "Nicht mehr behalten": "Eine behaltene Aufnahme wird nie fürs Aufräumen gelöscht, wenn die Platte Platz braucht. "
+                           "Nochmal drücken hebt es auf.",
+    "Aufnahme löschen": "Löscht die markierte Aufnahme (und ihren Vorlauf) von der Platte – nach Rückfrage.",
+    "Aufnahmeordner öffnen": "Öffnet den Aufnahmeordner im Explorer.",
     "Drehen ↻": "Dreht die angezeigte Karte um 90° im Uhrzeigersinn (für jede Map gemerkt). Der Map-Name "
                 "darüber bleibt aufrecht, die Zahlen in der Karte drehen sich mit.",
     "Scannen": "Sucht sofort auf dem ganzen Bildschirm nach einem Map- oder Realm-Namen – falls die "

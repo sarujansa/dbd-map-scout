@@ -354,6 +354,31 @@ def prune(folder: str, recs: list[Recording], limit: int, reserve: int = RESERVE
     return left, deleted
 
 
+def select_recordings(recs: list[Recording], since: float | None = None, map_label: str | None = None,
+                      role: str | None = None, only: str | None = None) -> list[Recording]:
+    """1.5, tab "Aufnahmen": the index filtered – ``since`` (banner time ≥), map label, role ("killer" /
+    "survivor" / "farming"), ``only`` "marked" / "kept" / "bad". Newest first."""
+    out = []
+    for r in recs:
+        if since is not None and r.t < since:
+            continue
+        if map_label and r.label != map_label:
+            continue
+        if role == "farming":
+            if not r.farming:
+                continue
+        elif role and (r.role != role or r.farming):
+            continue
+        if only == "marked" and not r.marks:
+            continue
+        if only == "kept" and not r.keep:
+            continue
+        if only == "bad" and not (r.extra or {}).get("bad"):
+            continue
+        out.append(r)
+    return sorted(out, key=lambda r: r.t, reverse=True)
+
+
 @dataclass
 class Space:
     """1.4.2: what the overview's tile "Aufnahmen" shows – measured by the recorder thread, never on the UI thread."""
@@ -515,6 +540,14 @@ class Recorder(threading.Thread):
         """1.4.2: F8 – note this moment in the running recording (the clip editor jumps to it later)."""
         self.cmds.put(("mark", None))
 
+    def set_keep(self, t: float, on: bool):
+        """1.5: "behalten" – never deleted for room. Index writes stay on this thread."""
+        self.cmds.put(("keep", (float(t), bool(on))))
+
+    def delete(self, t: float):
+        """1.5: remove one recording (its files from the index only) and its index entry."""
+        self.cmds.put(("delete", float(t)))
+
     def set_game(self, on: bool):
         """DBD running or not (1.4.1): starts/stops OBS's replay buffer, checks OBS and the drive once."""
         if bool(on) != self._game:
@@ -553,6 +586,10 @@ class Recorder(threading.Thread):
                     self._game_changed(arg)
                 elif cmd == "mark":
                     self._mark()
+                elif cmd == "keep":
+                    self._set_keep(*arg)
+                elif cmd == "delete":
+                    self._delete_one(arg)
             except ObsError as e:
                 self._say(str(e), False)
             except Exception as e:                     # never let the thread die
@@ -573,6 +610,47 @@ class Recorder(threading.Thread):
         pos = round(time.time() - self.active["since"], 1)
         self.active.setdefault("marks", []).append(pos)
         self._post("marked", pos=pos, n=len(self.active["marks"]))
+
+    def _set_keep(self, t, on):
+        folder = self.folder()
+        if folder is None:
+            self._warn(_("Aufnahme-Laufwerk nicht angeschlossen."))
+            return
+        recs = load_index(folder)
+        hit = next((r for r in recs if r.t == t), None)
+        if hit is None:
+            return
+        hit.keep = on
+        save_index(folder, recs)
+        self._post("changed", what="keep", t=t, on=on, file=hit.file)
+        self._look_at_space(force=True)
+
+    def _delete_one(self, t):
+        folder = self.folder()
+        if folder is None:
+            self._warn(_("Aufnahme-Laufwerk nicht angeschlossen."))
+            return
+        recs = load_index(folder)
+        hit = next((r for r in recs if r.t == t), None)
+        if hit is None:
+            return
+        gone = []
+        for n in (hit.file, hit.pre):
+            if n and os.path.dirname(os.path.normpath(n)) == "":          # a plain name: inside the folder
+                try:
+                    os.remove(os.path.join(folder, n))
+                    gone.append(n)
+                except FileNotFoundError:
+                    pass
+                except OSError as e:
+                    self._warn(_("Aufnahme nicht gelöscht ({error}): {file}", error=e.__class__.__name__, file=n))
+                    return
+        recs.remove(hit)
+        save_index(folder, recs)
+        self._post("changed", what="delete", t=t, file=hit.file)
+        if gone:
+            self._post("deleted", files=gone, manual=True)
+        self._look_at_space(force=True)
 
     def _look_at_space(self, force=False):
         """Drive and index for the overview – every SPACE_EVERY s while recording is on."""
