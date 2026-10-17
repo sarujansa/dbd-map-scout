@@ -106,6 +106,7 @@ AUTO_PAGES = ("stats", "server", "detect", "log")   # built from the tab's struc
 
 
 FOUND_MS = 1800                   # ms a search hit's card stays lit
+STYLE_IDLE_MS = 120               # ms between restyling two hidden pages after a theme/zoom change (1.3.4)
 
 
 # Hand-made pages: every key names a widget of the UI model registered with App._reg; texts, values,
@@ -400,6 +401,7 @@ class MainWindow(QMainWindow):
         # search over the settings of all pages (1.60): a field above the navigation, Ctrl+F
         side = QWidget()
         side.setObjectName("navside")
+        self._side = side
         sl = QVBoxLayout(side)
         sl.setContentsMargins(0, 0, 0, 0)
         sl.setSpacing(0)
@@ -462,9 +464,17 @@ class MainWindow(QMainWindow):
         self._dark = True
         self._nav_icons()
         self.dialogs = {}                 # dialog path (UI model) -> DialogWindow
+        self._qss = ""                    # the style sheet, set per part (_style_lazily)
+        self._stale = []                  # pages still waiting for it
+        self._style_timer = QTimer(self)  # owned by the window: it dies with it (a test deletes windows)
+        self._style_timer.setSingleShot(True)
+        self._style_timer.setInterval(STYLE_IDLE_MS)
+        self._style_timer.timeout.connect(self._style_next)
 
     def _page_changed(self, row):
         self._setup_on = False                                     # the navigation leaves the assistant
+        if 0 <= row < self.stack.count():
+            self._style_page(self.stack.widget(row))
         self.stack.setCurrentIndex(row)
         self._post("page", PAGES[row][0])                          # the App fills it now
 
@@ -476,6 +486,7 @@ class MainWindow(QMainWindow):
         self._setup_on = bool(on)
         if on:
             self.setup.go(0)
+            self._style_page(self.setup)
             self.stack.setCurrentWidget(self.setup)
             self.nav.blockSignals(True)                # 1.2.19: no page is highlighted behind the assistant
             self.nav.setCurrentRow(-1)
@@ -483,6 +494,7 @@ class MainWindow(QMainWindow):
         else:
             if self.nav.currentRow() < 0:
                 self.nav.setCurrentRow(0)              # posts "page" → the App fills the overview
+            self._style_page(self.stack.widget(max(0, self.nav.currentRow())))
             self.stack.setCurrentIndex(max(0, self.nav.currentRow()))
 
     # ------------------------------------------------------------- search over the settings
@@ -583,7 +595,7 @@ class MainWindow(QMainWindow):
     def open_dialog(self, key, title, node):
         self.close_dialog(key)
         dlg = DialogWindow(self, self._post, key, title, node)
-        dlg.setStyleSheet(self.styleSheet())
+        dlg.setStyleSheet(self._qss)
         self.dialogs[key] = dlg
         dlg.show()
         dlg.raise_()
@@ -634,6 +646,20 @@ class MainWindow(QMainWindow):
         self.maps.show_maps(items, current, thumbs, recent, marks, style)
         self.maps.show_preview(preview)
 
+    def warm_pages(self):
+        """1.3.4 (user: the window should feel smoother): lay out every page once while the window is idle – the
+        first visit of a page polished and laid out all its widgets (settings ~110 ms), later visits ~10 ms."""
+        from PySide6.QtWidgets import QWidget
+        for i in range(self.stack.count()):
+            page = self.stack.widget(i)
+            if page is self.stack.currentWidget():
+                continue
+            page.resize(self.stack.size())
+            for w in [page] + page.findChildren(QWidget):
+                w.ensurePolished()
+            if page.layout() is not None:
+                page.layout().activate()
+
     def show_page(self, key, search=None):
         """Go to a page (e.g. the maps with a search: a scan found only the realm)."""
         if self._setup_on:
@@ -661,7 +687,7 @@ class MainWindow(QMainWindow):
         pal.setColor(QPalette.Disabled, QPalette.Text, QColor(qt_theme.colours(dark)["fg_dis"]))
         pal.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(qt_theme.colours(dark)["fg_dis"]))
         QApplication.setPalette(pal)
-        self.setStyleSheet(qt_theme.stylesheet(dark, zoom))
+        self._style_lazily(qt_theme.stylesheet(dark, zoom))
         self._dark = bool(dark)
         self._nav_icons()
         try:
@@ -669,6 +695,32 @@ class MainWindow(QMainWindow):
             hints.setColorScheme(Qt.ColorScheme.Dark if dark else Qt.ColorScheme.Light)   # title bar (Qt 6.8+)
         except AttributeError:
             pass
+
+    def _style_lazily(self, qss: str):
+        """1.3.4: the style sheet per part, not on the window – Qt repolishes every widget of a window whose sheet
+        changes, hidden pages too (1236 widgets ≈ 250 ms for a theme/zoom click). Navigation, question bar and the
+        page on display get it at once, the other pages one after another while idle or when they are opened."""
+        if qss == self._qss:
+            return
+        self._qss = qss
+        for w in (self._side, self.question, self.completer.popup()):
+            w.setStyleSheet(qss)
+        current = self.stack.currentWidget()
+        self._stale = [self.stack.widget(i) for i in range(self.stack.count())]
+        self._style_page(current)
+        if self._stale:
+            self._style_timer.start()
+
+    def _style_page(self, page):
+        if page in self._stale:
+            self._stale.remove(page)
+            page.setStyleSheet(self._qss)
+
+    def _style_next(self):
+        if self._stale:
+            self._style_page(self._stale[0])
+        if self._stale:
+            self._style_timer.start()
 
     def show_model(self, o, thumb=None, tips=None):
         self.overview.update_page(o, thumb, tips)

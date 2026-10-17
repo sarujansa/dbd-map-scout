@@ -5,7 +5,7 @@ from __future__ import annotations
 from PIL import Image
 from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtGui import QPalette, QPixmap
-from PySide6.QtWidgets import (QApplication, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu,
+from PySide6.QtWidgets import (QApplication, QButtonGroup, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu,
                                QPushButton, QStyle, QStyledItemDelegate, QStyleOptionViewItem, QScrollArea,
                                QSizePolicy, QStackedWidget, QVBoxLayout, QWidget)
 
@@ -140,6 +140,8 @@ class MapsPage(QWidget):
         # the same setting as Overlay → Karte → Kartenstil, so the tiles and the game switch together
         self._style = None
         self.style_btns = {}
+        self._style_group = QButtonGroup(self)          # 1.3.4: exclusive – the click shows at once, not on the
+        self._style_group.setExclusive(True)            # next refresh (user: "Farbe wechselt erst nach 1 s")
         for key, label, tip in STYLE_BUTTONS:
             b = QPushButton(_(label))
             b.setCheckable(True)
@@ -147,6 +149,7 @@ class MapsPage(QWidget):
             b.setFocusPolicy(Qt.TabFocus)
             b.setToolTip(_(tip))
             b.clicked.connect(lambda _c=False, k=key: self._post("map_style", k))
+            self._style_group.addButton(b)
             row.addWidget(b)
             self.style_btns[key] = b
         lay.addLayout(row)
