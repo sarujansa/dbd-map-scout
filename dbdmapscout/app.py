@@ -936,6 +936,10 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         except Exception:
             self._report_once("hotkeys", traceback.format_exc())
         try:
+            self._tray_tick()
+        except Exception:
+            self._report_once("tray", traceback.format_exc())
+        try:
             self._qt_refresh()
         except Exception:
             self._report_once("Qt", traceback.format_exc())
