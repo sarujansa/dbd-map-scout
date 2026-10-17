@@ -17,6 +17,8 @@ class Tray:
         self._post = post
         self._icon = None
         self.error = ""
+        self._dot = None                  # status dot on the icon (1.3.6): theme.DOT key or None
+        self._images = {}
 
     @property
     def active(self) -> bool:
@@ -50,6 +52,24 @@ class Tray:
                 self._icon.title = text[:127]                # Windows limit for tooltips
             except Exception:
                 log.debug("tray title", exc_info=True)
+
+    def image(self, dot):
+        """The icon with the dot of a status (cached per status)."""
+        if dot not in self._images:
+            from .icon import draw_status
+            from .theme import DOT
+            self._images[dot] = draw_status(64, DOT.get(dot) if dot else None)
+        return self._images[dot]
+
+    def set_status(self, dot) -> None:
+        """Colour the dot: "ok" green, "warn" yellow, "err" red, "idle" grey, None = no dot. Only on a change."""
+        if self._icon is None or dot == self._dot:
+            return
+        try:
+            self._icon.icon = self.image(dot)
+            self._dot = dot
+        except Exception:
+            log.debug("tray status", exc_info=True)
 
     def stop(self) -> None:
         icon, self._icon = self._icon, None

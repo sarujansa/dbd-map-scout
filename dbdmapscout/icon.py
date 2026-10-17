@@ -34,6 +34,22 @@ def draw(size: int = 256) -> Image.Image:
     return img.resize((size, size), Image.LANCZOS)
 
 
+def draw_status(size: int, colour: str | None) -> Image.Image:
+    """1.3.6: the icon with a status dot bottom right (tray), ringed in the icon's dark ground."""
+    img = draw(size)
+    if not colour:
+        return img
+    s = 4 * size
+    over = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+    d = ImageDraw.Draw(over)
+    r, ring = 0.25 * s, 0.06 * s
+    cx = cy = s - r - ring
+    d.ellipse([cx - r - ring, cy - r - ring, cx + r + ring, cy + r + ring], fill=BG)
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=colour)
+    img.alpha_composite(over.resize((size, size), Image.LANCZOS))
+    return img
+
+
 def save_ico(path: str) -> None:
     draw(256).save(path, format="ICO", sizes=[(n, n) for n in SIZES])
 

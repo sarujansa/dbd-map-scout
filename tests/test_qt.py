@@ -1228,3 +1228,31 @@ def test_a_theme_change_styles_the_page_on_display_first(qapp, keep):
     while win._stale:
         win._style_next()
     assert all(win.stack.widget(i).styleSheet() == light for i in range(win.stack.count()))
+
+
+def test_columns_can_be_hidden_by_a_right_click_on_the_heading(qapp, keep):
+    """1.3.6: the heading's menu hides columns (one always stays), the stretching column moves to a shown one;
+    the choice goes to the App and comes back on the next start."""
+    from dbdmapscout import qt_window
+    posted = []
+    t = keep(qt_window.Table(".nb.f3.treeview9", lambda a, arg=None: posted.append((a, arg))))
+    cols = [("map", "Map", "w"), ("n", "Runden", "e"), ("kills", "Ø Kills", "e")]
+    rows = [("a", 0, "", ["Gas Heaven", "3", "2.1"], [], False)]
+    t.show_state({"columns": cols, "rows": rows, "colours": {}, "selection": [], "selectable": False})
+    t._toggle_column("kills", False)
+    assert t.isColumnHidden(2) and posted[-1] == ("table_cols", ("map|n|kills", ["kills"]))
+    t._toggle_column("map", False)                             # the stretching column: another one stretches
+    assert t.isColumnHidden(0) and t.header().sectionResizeMode(1) == t.header().ResizeMode.Stretch
+    t._show_all_columns()
+    assert not any(t.isColumnHidden(i) for i in range(3)) and posted[-1] == ("table_cols", ("map|n|kills", []))
+    t.set_hidden_map({"map|n|kills": ["map", "n", "kills"]})    # an old setting hiding everything: all shown
+    assert not any(t.isColumnHidden(i) for i in range(3))
+    t.set_hidden_map({"map|n|kills": ["n"], "other|cols": ["x"]})
+    rows2 = rows + [("b", 0, "", ["Coal Tower", "1", "–"], [], False)]
+    t.show_state({"columns": cols, "rows": rows2, "colours": {}, "selection": [], "selectable": False})
+    assert t.isColumnHidden(1)                                  # stays hidden when the table is built anew
+    fresh = keep(qt_window.Table(".nb.f4.treeview12", lambda a, arg=None: None))   # next start: set before rows
+    fresh.set_hidden_map({"map|n|kills": ["n"]})
+    fresh.show_state({"columns": cols, "rows": rows, "colours": {}, "selection": [], "selectable": False})
+    assert fresh.isColumnHidden(1) and not fresh.isColumnHidden(0)
+    t._column_menu(t.header().rect().center())                 # the menu itself opens without error
