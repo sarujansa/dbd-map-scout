@@ -248,6 +248,8 @@ class QtShell:
         if first:
             self.qt.show_setup(True)
         self.qt.set_card_order(self.settings.get("card_order") or {})
+        self.qt.set_tab_order(self.settings.get("tab_order") or {})              # 1.7.6
+        self.qt.set_nav_order(self.settings.get("nav_order") or [])
         self.qt.set_hidden_columns(self.settings.get("hidden_columns") or {})
         self._qt_refresh(force=True)
         if not start_in_tray:
@@ -402,6 +404,15 @@ class QtShell:
             orders = dict(self.settings.get("card_order") or {})
             orders[str(page)] = dict(orders.get(str(page)) or {}, **{str(run): [str(i) for i in ids]})
             self.settings.set("card_order", orders)
+            self._save_soon()
+        elif action == "tab_order":                  # 1.7.6: a tab dragged along its row
+            page, tabs_id, ids = arg
+            orders = dict(self.settings.get("tab_order") or {})
+            orders[str(page)] = dict(orders.get(str(page)) or {}, **{str(tabs_id): [str(i) for i in ids]})
+            self.settings.set("tab_order", orders)
+            self._save_soon()
+        elif action == "nav_order":                  # 1.7.6: a page dragged in the navigation
+            self.settings.set("nav_order", [str(k) for k in arg])
             self._save_soon()
         elif action == "map_preview":
             mid, v = arg

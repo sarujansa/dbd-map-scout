@@ -368,9 +368,10 @@ def make_control(kind, key, post):
 
 def show_control(kind, w, extra, st):
     """Put a model widget's state (app_qt.ui_state) into its Qt control – never sends anything back."""
-    if kind == "tab":                    # a tab of a hand-made page: hidden with its frame
-        if w.isTabVisible(extra) != bool(st.get("visible", True)):
-            w.setTabVisible(extra, bool(st.get("visible", True)))
+    if kind == "tab":                    # a tab of a hand-made page: hidden with its frame (extra = its body widget)
+        idx = w.indexOf(extra)
+        if idx >= 0 and w.isTabVisible(idx) != bool(st.get("visible", True)):
+            w.setTabVisible(idx, bool(st.get("visible", True)))
         return
     if kind == "title":                  # 1.66.3: a card whose frame is folded away ("Mehr" closed) is not shown
         card, shown = w.parentWidget(), bool(st.get("visible", True))
@@ -622,6 +623,43 @@ class _Arranged:
         for n, col in enumerate(self.columns):
             col.apply((saved or {}).get(str(n)))
 
+    # ---- 1.7.6 (user: "move the tab rows as I like"): the tabs of a row can be dragged; the order is remembered
+    _tabsets = ()                          # [(tabs id, QTabWidget, {tab id: its widget})], set by the page
+    _applying = False                      # apply_tab_order is moving tabs: no posts
+
+    @staticmethod
+    def _tab_ids(tw, ids: dict) -> list:
+        """The tab ids in the order the row shows them now."""
+        by_widget = {w: i for i, w in ids.items()}
+        return [by_widget.get(tw.widget(k)) for k in range(tw.count())]
+
+    def _movable(self, tabs_id, tw, ids: dict, page_key):
+        """Let the user drag the tabs of ``tw``; a move posts ("tab_order", (page, tabs id, [ids]))."""
+        self._tabsets = list(self._tabsets) + [(tabs_id, tw, ids)]
+        tw.tabBar().setMovable(True)
+        if page_key:
+            tw.tabBar().tabMoved.connect(lambda *_a, t=tw, i=ids, tid=tabs_id: self._applying or self._post(
+                "tab_order", (page_key, tid, self._tab_ids(t, i))))
+
+    def apply_tab_order(self, saved: dict):
+        """{tabs id: [ids]} (setting tab_order[page]); a list that is not a permutation of the tabs, or none, means
+        the built-in order."""
+        for tabs_id, tw, ids in self._tabsets:
+            want = [str(i) for i in (saved or {}).get(tabs_id, [])]
+            if sorted(want) != sorted(ids):
+                want = list(ids)
+            if want == self._tab_ids(tw, ids):
+                continue
+            # not blockSignals: the QTabWidget moves its pages along only from the bar's tabMoved signal
+            self._applying = True
+            try:
+                for pos, i in enumerate(want):
+                    now = self._tab_ids(tw, ids).index(i)
+                    if now != pos:
+                        tw.tabBar().moveTab(now, pos)
+            finally:
+                self._applying = False
+
 
 class FitTabs(QTabWidget):
     """Tabs as tall as the open tab, not the tallest one (QStackedLayout asks every page): no empty room below
@@ -660,8 +698,10 @@ class FormPage(QWidget, _Arranged):
     def __init__(self, post, title, spec, page_key=""):
         super().__init__()
         self._post = post
+        self._page_key = page_key
         self.controls = {}                 # key -> (kind, widget, extra)
         self.columns = []
+        self._tabsets = []
         page, lay = _scroll_page(title)
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -694,6 +734,7 @@ class FormPage(QWidget, _Arranged):
             elif kind == "tabs":
                 tabs = FitTabs()
                 tabs.setObjectName("formtabs")
+                bodies = {}
                 for frame, label, rows in item[1]:
                     body = QWidget()
                     body.setObjectName("page")
@@ -703,7 +744,10 @@ class FormPage(QWidget, _Arranged):
                     for row in rows:
                         self._add(row, bl)
                     bl.addStretch()
-                    self.controls[frame] = ("tab", tabs, tabs.addTab(body, _(label).replace("&", "&&")))
+                    tabs.addTab(body, _(label).replace("&", "&&"))
+                    self.controls[frame] = ("tab", tabs, body)
+                    bodies[frame] = body
+                self._movable(item[1][0][0], tabs, bodies, page_key)     # id = the first tab's frame key
                 lay.addWidget(tabs)
             elif kind == "links":
                 row = QHBoxLayout()
@@ -794,6 +838,7 @@ class AutoPage(QWidget, _Arranged):
         self._page_key = page_key
         self.controls = {}                 # key -> (kind, widget, extra)
         self._tabs = []                    # (QTabWidget, [keys of each page])
+        self._tabsets = []
         self._all = []
         self.columns = []
         fill = _fills(node) if node else False
@@ -868,7 +913,8 @@ class AutoPage(QWidget, _Arranged):
             tw = QTabWidget()
             fill = bool(n.get("fill"))
             pages = []
-            for c in n.get("children", []):
+            ids = {}                                   # model tab index (str) -> the tab's widget
+            for j, c in enumerate(n.get("children", [])):
                 pw = QWidget()
                 pl = QVBoxLayout(pw)
                 pl.setContentsMargins(8, 8, 8, 8)
@@ -882,11 +928,15 @@ class AutoPage(QWidget, _Arranged):
                     sa.setFrameShape(QFrame.NoFrame)
                     sa.setWidget(pw)
                     tw.addTab(sa, "")
+                    ids[str(j)] = sa
                 else:
                     tw.addTab(pw, "")
+                    ids[str(j)] = pw
                 pages.append(ks)
                 keys.extend(ks)
-            tw.currentChanged.connect(lambda i, k=key: self._post("act", (k, i)))
+            by_widget = {w: int(i) for i, w in ids.items()}
+            tw.currentChanged.connect(lambda i, k=key, t=tw, b=by_widget: self._post("act", (k, b.get(t.widget(i), i))))
+            self._movable(key, tw, ids, self._page_key)
             lay.addWidget(tw, 1 if fill else 0)
             self._tabs.append((key, tw, pages))
             self.controls[key] = ("tabs", tw, None)
@@ -918,12 +968,18 @@ class AutoPage(QWidget, _Arranged):
                 st = states.get(key)
                 if st:
                     tw = w
-                    for i, text in enumerate(st.get("tabs", [])[:tw.count()]):
-                        if tw.tabText(i) != text:
-                            tw.setTabText(i, text)
-                    if tw.currentIndex() != st.get("index", 0):
+                    ids = next((i for tid, t, i in self._tabsets if t is tw), {})
+                    order = self._tab_ids(tw, ids)                   # 1.7.6: model index per shown position
+                    texts = st.get("tabs", [])
+                    for qi in range(tw.count()):
+                        mi = int(order[qi]) if qi < len(order) and order[qi] is not None else qi
+                        if mi < len(texts) and tw.tabText(qi) != texts[mi]:
+                            tw.setTabText(qi, texts[mi])
+                    want = str(st.get("index", 0))
+                    qi = order.index(want) if want in order else st.get("index", 0)
+                    if tw.currentIndex() != qi:
                         tw.blockSignals(True)
-                        tw.setCurrentIndex(st.get("index", 0))
+                        tw.setCurrentIndex(qi)
                         tw.blockSignals(False)
                 continue
             if key.endswith("#title"):

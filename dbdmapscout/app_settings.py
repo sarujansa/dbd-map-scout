@@ -457,11 +457,15 @@ class SettingsTab:
         self.swatches.current = qt_theme.norm_hex(self.settings.get("accent_custom")) if on else None
 
     def _card_order_reset(self):
-        """The cards of all pages back in their built-in order."""
+        """The cards of all pages, the tab rows and the navigation back in their built-in order."""
         self.settings.set("card_order", {})
+        self.settings.set("tab_order", {})                 # 1.7.6
+        self.settings.set("nav_order", [])
         self._save_soon()
         if self.qt is not None:
             self.qt.set_card_order({})
+            self.qt.set_tab_order({})
+            self.qt.set_nav_order([])
 
     def _zoom_changed(self):
         zoom = next((z for z, lbl in self._zooms if lbl == self.zoom_var.get()), 1.0)
