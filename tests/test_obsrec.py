@@ -387,14 +387,35 @@ def test_a_broken_file_from_obs_gives_a_warning(tmp_path):
         obs.stop()
 
 
-def test_the_rec_dot_is_drawn_on_the_overlay_and_the_tray_icon():
+def _reds(img, x0=0):
+    px = img.convert("RGBA").load()
+    return [(x, y) for x in range(x0, img.width) for y in range(img.height)
+            if px[x, y][3] > 200 and px[x, y][0] > 200 and px[x, y][1] < 120 and px[x, y][2] < 120]
+
+
+def test_the_rec_dot_blinks_right_of_the_timer_in_every_style_and_on_the_tray_icon():
+    """1.5.2 (user: "rechts von der Rundenzeit blinkend"): the red dot sits right of the round timer – classic
+    info block and the three modern cards – on during even seconds, off during odd ones, never while not
+    recording; the card keeps its size between the phases (nothing jumps)."""
     from PIL import Image
-    from dbdmapscout import icon, overlay_win32
-    pic = Image.new("RGBA", (400, 600), (0, 0, 0, 255))
-    out = overlay_win32.rec_badge(pic, 480)
-    assert out is not pic and out.size == pic.size
-    reds = [out.getpixel((x, y)) for x in range(380, 400) for y in range(0, 20)]
-    assert any(p[0] > 200 and p[1] < 120 for p in reds) and pic.getpixel((390, 10)) == (0, 0, 0, 255)
+    from dbdmapscout import icon, overlay_win32, skin
+    assert overlay_win32.rec_phase(10.2) and not overlay_win32.rec_phase(11.7)
+    pic = Image.new("RGBA", (400, 300), (0, 0, 0, 0))
+    on = overlay_win32.add_info(pic.copy(), "03:12", "", 480, rec=True)
+    off = overlay_win32.add_info(pic.copy(), "03:12", "", 480, rec=False)
+    none = overlay_win32.add_info(pic.copy(), "03:12", "", 480)
+    assert on.size == off.size == none.size
+    reds = _reds(on)
+    assert reds and min(x for x, _y in reds) > on.width // 2 + 40      # right of the centred digits
+    assert min(y for _x, y in reds) > 300 and not _reds(off) and not _reds(none)   # below the map, on only
+    body = Image.new("RGBA", (300, 200), (40, 40, 60, 255))
+    for style in ("glass", "chips", "line"):
+        cards = {rec: skin.map_card(body, "Coal Tower", "MacMillan", "03:12", "", "", "", None, (), 480, style,
+                                    "#c9a227", rec=rec) for rec in (True, False, None)}
+        assert cards[True].size == cards[False].size, style
+        reds = _reds(cards[True])
+        assert reds and min(x for x, _y in reds) > cards[True].width // 2, style
+        assert not _reds(cards[False]) and not _reds(cards[None]), style
     plain, rec = icon.draw_status(64, None), icon.draw_status(64, None, rec=True)
     assert plain.tobytes() != rec.tobytes()
     r, g, b, a = rec.getpixel((52, 12))

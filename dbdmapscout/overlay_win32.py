@@ -297,7 +297,7 @@ def _tracked_width(d, text, font, track):
 
 def add_info(pic: Image.Image, timer: str, server: str, height: int, backdrop: bool = False,
              ping: float | None = None, status=(), note: str = "", record: str = "",
-             beside: bool = False) -> Image.Image:
+             beside: bool = False, rec=None) -> Image.Image:
     """Round timer, connected server and its ping below the map, styled like the map title: white heavy
     digits with a soft shadow (no box); below them a green "connected" dot with the region in small
     caps, and the ping coloured by quality. The ping is only shown together with a server.
@@ -305,7 +305,9 @@ def add_info(pic: Image.Image, timer: str, server: str, height: int, backdrop: b
     ``note``: a warning in amber right below the timer (doubtful detection).
     ``record``: own results on this map (stats page), dimmer, below the timer/note.
     ``backdrop``: the map sits on a dark rectangle (transparent edge off) – extend it behind the info.
-    ``beside``: the block goes right of the map, centred in height (low wide bar above/below the picture)."""
+    ``beside``: the block goes right of the map, centred in height (low wide bar above/below the picture).
+    ``rec``: OBS records – True = the red dot right of the timer is on, False = off phase of the blink (1.5.2,
+    user: "rechts von der Rundenzeit blinkend"), None = not recording."""
     if not server:
         ping = None
     if not timer and not server and not status and not note and not record:
@@ -352,6 +354,8 @@ def add_info(pic: Image.Image, timer: str, server: str, height: int, backdrop: b
     halo = max(1, height // 200)                         # dark outline in the shadow: readable over bright game
     if beside:
         layer_w = max(widths) + 2 * gap
+        if rec is not None and timer:                     # room for the recording dot right of the timer
+            layer_w += 4 * max(5, heights[0] // 5) + gap
         left = pic.width + gap
         canvas_h = max(pic.height, layer_h + 2 * off)
         top = (canvas_h - layer_h) // 2 + pad
@@ -370,6 +374,9 @@ def add_info(pic: Image.Image, timer: str, server: str, height: int, backdrop: b
                 d.text(((layer_w - w) // 2 - x0, y - y0), segs[0][0], font=font,
                        fill=dark if shadow else segs[0][1],
                        stroke_width=2 * halo if shadow else 0, stroke_fill=dark)
+                if rec and not shadow:
+                    r = max(5, h // 5)
+                    rec_dot(d, (layer_w - w) // 2 + w + 2 * r + gap, y + h // 2, r)
             else:
                 x = (layer_w - w) // 2
                 if kind == "server":
@@ -864,17 +871,16 @@ class HudWindow:
 REC_DOT = (229, 83, 75, 255)      # 1.4.1: theme.DOT "err" red
 
 
-def rec_badge(pic: Image.Image, text_h: int) -> Image.Image:
-    """1.4.1: a small red dot with a dark ring in the top right corner – OBS records this round. Independent of
-    the style; the picture is copied."""
-    out = pic.copy()
-    r = max(4, text_h // 60)
-    ring = max(1, r // 3)
-    cx, cy = out.width - r - ring - max(2, r // 2), r + ring + max(2, r // 2)
-    d = ImageDraw.Draw(out)
+def rec_dot(d: ImageDraw.ImageDraw, cx: float, cy: float, r: float):
+    """1.4.1/1.5.2: the red "recording" dot with a dark ring – right of the round timer in every style."""
+    ring = max(1, int(r // 3))
     d.ellipse([cx - r - ring, cy - r - ring, cx + r + ring, cy + r + ring], fill=(20, 20, 22, 230))
     d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=REC_DOT)
-    return out
+
+
+def rec_phase(now: float | None = None) -> bool:
+    """Blink of the recording dot: on during even seconds, off during odd ones (1 s period)."""
+    return int(time.time() if now is None else now) % 2 == 0
 
 
 class PictureOverlay:
@@ -910,7 +916,7 @@ class PictureOverlay:
         self._waiting = ()              # lines of the waiting card: shown instead of everything else
         self._note = ""                 # warning below the timer ("" = none)
         self._record = ""               # own results on this map below the timer ("" = none)
-        self._rec = False               # 1.4.1: OBS records the round – red dot top right (set_rec)
+        self._rec = False               # 1.4.1: OBS records the round – blinking red dot right of the timer
         self._base = []                 # [(PIL RGBA, duration)] scaled map (+ caption), cached per size
         self._base_key = None
         self._prepared = []             # [(bytes, w, h, duration)]
@@ -967,7 +973,7 @@ class PictureOverlay:
         """Own results on the map on display ("Ø 2.8 Kills · 12 Runden"); "" = none."""
         self._record = text or ""
 
-    def set_rec(self, on: bool):
+    def set_rec(self, on: bool):   # 1.4.1 / 1.5.2: blinking red dot right of the round timer
         """1.4.1: a red dot top right while OBS records the round."""
         self._rec = bool(on)
 
@@ -1079,8 +1085,9 @@ class PictureOverlay:
             else:                         # info only: an empty picture, the info block is drawn below it
                 self._base = [(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), 0)]
             self._base_key = base_key
+        rec = rec_phase() if self._rec else None     # 1.5.2: the dot blinks with the seconds
         key = (base_key, self._editing, self._timer, self._server, self._ping, self._note, self._record,
-               self.info_beside, self.backdrop, self.skin, self.accent, self.realm, self._rec)
+               self.info_beside, self.backdrop, self.skin, self.accent, self.realm, rec)
         if key != self._key:
             self._prepared = []
             pics = []
@@ -1089,18 +1096,16 @@ class PictureOverlay:
                 for pic, dur in self._base:
                     pics.append(map_card(pic if self.show_map else None, self._caption, self.realm, self._timer,
                                          self._note, self._record, self._server, self._ping, (), text_h, self.skin,
-                                         self.accent))
+                                         self.accent, rec=rec))
             for pic, dur in ([] if modern else self._base):
                 if self.has_info():
                     pic = add_info(pic, self._timer, self._server, text_h, backdrop=not self.transparent,
                                    ping=self._ping, note=self._note, record=self._record,
-                                   beside=self.info_beside and self.show_map)
+                                   beside=self.info_beside and self.show_map, rec=rec)
                 pics.append(pic)
             if self.backdrop and not modern:
                 pics = map_backdrop(pics, text_h)
             for pic, (_b, dur) in zip(pics, self._base):
-                if self._rec:
-                    pic = rec_badge(pic, text_h)
                 if self._editing:
                     pic = add_border(pic.copy(), self.edit_label)
                 self._prepared.append((premultiplied_bgra(pic), pic.width, pic.height, dur))
@@ -1126,7 +1131,7 @@ class PictureOverlay:
         key = (height, text_h, avail, re.sub(r"\d", "0", self._timer), self._server, self._ping, self._note,
                self._record, self.info_beside, self._editing, self.show_map, self.show_caption, self._caption,
                self.transparent, self.backdrop, self._floor, id(self._frames[0][0]) if self._frames else None,
-               self.skin, self.accent, self.realm)
+               self.skin, self.accent, self.realm, self._rec)
         if self._fit is None or self._fit[0] != key:
             timer, self._timer = self._timer, key[3]
             try:
