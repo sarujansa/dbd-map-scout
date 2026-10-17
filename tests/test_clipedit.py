@@ -103,8 +103,8 @@ def test_the_frame_player_streams_frames_at_the_files_pace_and_stops(clip):
 def test_the_clip_window_shows_frames_cuts_at_the_marks_and_saves(clip, tmp_path):
     """1.5.1: the editor offscreen – thumbnails and a preview picture arrive from the threads, the range follows
     the first mark, I/O set start/end, the clip is written into "Clips" and reported."""
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
+    pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)     # platform: conftest (offscreen on Linux only –
+    # setting it here too made the Win32 window tests after this file run offscreen on Windows CI)
     from PySide6.QtWidgets import QApplication
     from dbdmapscout import qt_clip
     app = QApplication.instance() or QApplication([])
