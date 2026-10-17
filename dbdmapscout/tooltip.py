@@ -116,6 +116,16 @@ TIPS = {
                       "Mehr) bleiben Farming.",
     "Runden ohne Crossplay als Farming zählen": "Zeigt die Lobby die Weltkugel mit rotem Kreuz (Crossplay aus), "
                                                  "zählt die nächste Runde als Farming-Runde.",
+    "Spielstatus in Discord anzeigen (Rich Presence)": "Dein Discord-Status zeigt Map, Rolle, Killer und die Rundenzeit "
+                                                       "(in der Lobby: Suche/Lobby). Braucht eine Application-ID aus dem "
+                                                       "Discord-Developer-Portal; das Programm spricht nur mit dem Discord-"
+                                                       "Client auf diesem PC.",
+    "Discord testen": "Verbindet sich einmal mit dem laufenden Discord und zeigt, ob die Application-ID angenommen wird.",
+    "Developer-Portal öffnen": "Öffnet discord.com/developers im Browser: „New Application“ anlegen (Name z. B. „Dead by "
+                               "Daylight“), die Application-ID kopieren und links eintragen.",
+    "Killer in Discord anzeigen": "Als Killer steht dein Killer im Status („Killer · The Nurse“); aus = nur „Killer“.",
+    "Auch Lobby, Suche und Menü anzeigen": "Aus = der Status erscheint nur während einer Runde; sonst auch „Sucht ein "
+                                           "Match“, „In der Lobby“ und „Im Menü“, solange DBD läuft.",
     "Jede Runde mit OBS aufnehmen": "Das Programm startet die OBS-Aufnahme beim Map-Banner und stoppt sie beim "
                                     "erkannten Rundenende (obs-websocket, nur auf diesem PC). OBS muss laufen.",
     "Verbindung testen": "Verbindet sich einmal mit OBS und zeigt Version, Aufnahmezustand, Wiederholungspuffer "

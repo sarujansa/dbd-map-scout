@@ -36,6 +36,7 @@ from .app_sysinfo import HUD_SHOWN, OPACITY_KEYS, SysInfo
 from .app_qt import QtShell
 from .app_overlay import OverlayTab, anchor_label
 from .app_recordings import RecordingsTab
+from .app_discord import DiscordPresence
 
 LANGS = [("en", "EN"), ("de", "DE"), ("fr", "FR"), ("es", "ES"), ("es-MX", "ES-MX"), ("it", "IT"),
          ("pl", "PL"), ("pt-BR", "PT"), ("tr", "TR")]
@@ -59,7 +60,7 @@ def _event_name(ev) -> str:
 log = logging.getLogger("dbdmapscout")
 
 
-class App(ServerTab, StatsTab, RecordingsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutMemory, OverlayTab,
+class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutMemory, OverlayTab,
           QtShell):
     def __init__(self, root_dir: str, simulate: str | None = None, start_in_tray: bool = False):
         self.root_dir = root_dir
@@ -757,6 +758,8 @@ class App(ServerTab, StatsTab, RecordingsTab, LobbyInfo, Hotkeys, SettingsTab, S
             self._qt_event(ev[1], ev[2])
         elif isinstance(ev, tuple) and ev[0] == "obs":
             self._rec_event(ev[1], ev[2])
+        elif isinstance(ev, tuple) and ev[0] == "discord":          # 1.7: status of the Rich Presence
+            self._discord_status(ev[1], ev[2])
         elif isinstance(ev, tuple) and ev[0] == "call":       # from a window procedure (overlay, HUD)
             ev[1](*ev[2])
         else:
@@ -950,6 +953,10 @@ class App(ServerTab, StatsTab, RecordingsTab, LobbyInfo, Hotkeys, SettingsTab, S
             self._rec_tick()
         except Exception:
             self._report_once("tray", traceback.format_exc())
+        try:
+            self._discord_tick()
+        except Exception:
+            self._report_once("discord", traceback.format_exc())
         try:
             self._qt_refresh()
         except Exception:
@@ -1630,6 +1637,7 @@ class App(ServerTab, StatsTab, RecordingsTab, LobbyInfo, Hotkeys, SettingsTab, S
             self.sysmon.stop()
             self.media.stop()
             self.recorder.quit()
+            self.presence.quit()
             self.worker.stop()
             self.hotkeys.stop()
             self.worker.join(timeout=4)      # let a running OCR call finish cleanly
