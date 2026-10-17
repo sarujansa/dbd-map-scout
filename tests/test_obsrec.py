@@ -41,6 +41,8 @@ class FakeObs(threading.Thread):
                 conn, _a = self.srv.accept()
             except socket.timeout:
                 continue
+            except OSError:                       # stop() closed the listening socket (Windows: WinError 10038)
+                break
             try:
                 self.serve(conn)
             except (OSError, ValueError):
@@ -186,10 +188,10 @@ def test_a_round_is_recorded_named_and_indexed(obs, tmp_path):
     folder = str(tmp_path)
     r, posted = _recorder(obs, folder, pre=False)
     t = time.mktime((2026, 10, 17, 21, 40, 0, 0, 0, -1))
-    r._start({"t": t, "map_id": "coal", "label": "Coal Tower", "role": "killer", "killer": "Nurse"})
+    r._begin({"t": t, "map_id": "coal", "label": "Coal Tower", "role": "killer", "killer": "Nurse"})
     assert obs.recording and ("SetRecordDirectory", {"recordDirectory": folder}) in obs.requests
     assert posted.get(timeout=1)[0] == "status" and posted.get(timeout=1)[0] == "started"
-    r._stop({})
+    r._finish({})
     names = sorted(os.listdir(folder))
     assert names == ["2026-10-17 21-40 Coal Tower – Nurse.mkv", obsrec.INDEX]
     recs = obsrec.load_index(folder)
@@ -197,8 +199,8 @@ def test_a_round_is_recorded_named_and_indexed(obs, tmp_path):
     kinds = [posted.get(timeout=1)[0] for _i in range(2)]
     assert kinds == ["status", "saved"]
     # survivor round, no killer: the role names the file; a second file of the same minute gets "(2)"
-    r._start({"t": t, "map_id": "coal", "label": "Coal Tower", "role": "survivor"})
-    r._stop({})
+    r._begin({"t": t, "map_id": "coal", "label": "Coal Tower", "role": "survivor"})
+    r._finish({})
     assert "2026-10-17 21-40 Coal Tower – Survivor.mkv" in os.listdir(folder)
 
 
@@ -207,9 +209,9 @@ def test_the_replay_buffer_becomes_the_pre_roll(tmp_path):
     obs.start()
     try:
         r, posted = _recorder(obs, str(tmp_path), pre=True)
-        r._start({"t": 1.0, "label": "Gas Heaven", "role": "killer", "killer": "Hag"})
+        r._begin({"t": 1.0, "label": "Gas Heaven", "role": "killer", "killer": "Hag"})
         assert ("SaveReplayBuffer", {}) in obs.requests
-        r._stop({})
+        r._finish({})
         rec = obsrec.load_index(str(tmp_path))[0]
         assert rec.pre.endswith("(Vorlauf).mkv") and os.path.exists(os.path.join(str(tmp_path), rec.pre))
         assert rec.size == 1300                           # round + pre-roll
@@ -219,25 +221,25 @@ def test_the_replay_buffer_becomes_the_pre_roll(tmp_path):
 
 def test_a_new_banner_while_recording_closes_the_old_round_first(obs, tmp_path):
     r, posted = _recorder(obs, str(tmp_path), pre=False)
-    r._start({"t": 1.0, "label": "A"})
-    r._start({"t": 2.0, "label": "B"})
+    r._begin({"t": 1.0, "label": "A"})
+    r._begin({"t": 2.0, "label": "B"})
     assert [k for k, _d in obs.requests].count("StopRecord") == 1
-    r._stop({})
+    r._finish({})
     assert len(obsrec.load_index(str(tmp_path))) == 2
 
 
 def test_nothing_is_recorded_without_the_drive_or_when_obs_records_by_hand(obs, tmp_path):
     r, posted = _recorder(obs, os.path.join(str(tmp_path), "missing"), pre=False)
-    r._start({"t": 1.0, "label": "A"})
+    r._begin({"t": 1.0, "label": "A"})
     assert r.active is None and "nicht angeschlossen" in posted.get(timeout=1)[1]["text"]
     assert not obs.requests                                  # OBS was not even asked
     r.cfg.folder = str(tmp_path)
     obs.recording = "/somewhere/manual.mkv"
-    r._start({"t": 1.0, "label": "A"})
+    r._begin({"t": 1.0, "label": "A"})
     assert r.active is None and "schon auf" in posted.get(timeout=1)[1]["text"]
     r.cfg.on = False
     obs.recording = None
-    r._start({"t": 1.0, "label": "A"})
+    r._begin({"t": 1.0, "label": "A"})
     assert r.active is None
 
 
