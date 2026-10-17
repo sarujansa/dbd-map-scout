@@ -18,6 +18,8 @@ from __future__ import annotations
 import threading
 import time
 
+import cv2
+
 FRAME_INTERVAL_MS = 200      # ask Windows for at most 5 pictures/s (Windows 11 24H2+, else ignored)
 WAIT = 0.4                   # longest wait for a fresh picture before falling back to the screen
 STALE_PAUSE = 2.0            # after a timeout do not wait again for this long (game draws nothing in background)
@@ -104,7 +106,7 @@ class WindowCapture:
             if want is None:
                 return
             x, y, w, h = want
-            self._out = frame.frame_buffer[y:y + h, x:x + w, :3].copy()     # BGRA -> BGR
+            self._out = cv2.cvtColor(frame.frame_buffer[y:y + h, x:x + w], cv2.COLOR_BGRA2BGR)   # copy, 1.3.5
         self._got.set()
 
     def grab(self, x: int, y: int, w: int, h: int, expect_size=None, timeout: float = WAIT):

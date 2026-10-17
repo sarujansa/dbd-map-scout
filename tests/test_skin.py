@@ -171,3 +171,21 @@ def test_the_big_music_layout_puts_the_cover_on_top(style):
     assert big.height > small.height + 150 and big.height > big.width              # tall: cover above the text
     no_cover = skin.music(MUSIC, None, 1440, style, None, (), None, "big")
     assert no_cover.height < big.height                                            # without a cover: compact
+
+
+def test_the_drop_shadow_looks_like_the_full_size_blur():
+    """1.3.5: blurred on a smaller picture (it is drawn every second) – no visible difference."""
+    import numpy as np
+    from PIL import ImageFilter
+    from dbdmapscout import skin
+    card = skin._panel(420, 760, 20, (20, 20, 24, 200), (255, 255, 255, 40))
+    for u in (0.6, 1.0, 2.0):
+        blur, off = max(2, int(8 * u)), max(1, int(4 * u))
+        ref = Image.new("RGBA", (card.width + 4 * blur, card.height + 4 * blur), (0, 0, 0, 0))
+        sh = Image.new("RGBA", ref.size, (0, 0, 0, 0))
+        sh.paste((0, 0, 0, 255), (2 * blur, 2 * blur + off), card.getchannel("A").point(lambda v: v * 120 // 255))
+        ref.alpha_composite(sh.filter(ImageFilter.GaussianBlur(blur)))
+        ref.alpha_composite(card, (2 * blur, 2 * blur))
+        got = skin.shadowed(card, u)
+        assert got.size == ref.size
+        assert np.abs(np.asarray(got, int) - np.asarray(ref, int)).max() <= 8

@@ -1222,6 +1222,7 @@ def test_a_theme_change_styles_the_page_on_display_first(qapp, keep):
     light = qt_theme.stylesheet(False, 1.0)
     assert win.styleSheet() == "" and win.stack.currentWidget().styleSheet() == light
     assert win.stack.widget(3) in win._stale and win.stack.widget(3).styleSheet() != light
+    assert not win._style_timer.isActive()                       # hidden window: nothing restyled while idle
     win.show_page("stats")
     assert win.stack.widget(3).styleSheet() == light and win.stack.widget(3) not in win._stale
     while win._stale:
