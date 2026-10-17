@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 import time
 
-from . import history, layout, media, official, sysinfo
+from . import history, layout, media, official, qt_theme, skin, sysinfo
 from .capture import IS_WIN
 from .i18n import N_, _
 from .textnorm import fmt_duration
@@ -118,6 +118,19 @@ class SysInfo:
         self._hud_pending = ""             # "above"/"beside": rendered, placed once the map's place is known
         self._sysrec = None                # readings of the open round (tab Statistik → System)
 
+    # ---------------------------------------------------------- overlay style (1.3)
+    def _skin(self) -> str:
+        """The overlay style of the cards (settings overlay.style): classic | glass | chips | line."""
+        style = self.settings["overlay"].get("style", "classic")
+        return style if style in skin.STYLES else "classic"
+
+    def _skin_accent(self) -> str:
+        """The window theme's accent (dark palette – the overlay sits on dark bars) for the modern styles."""
+        try:
+            return str(qt_theme.colours(True)["accent"])
+        except Exception:
+            return "#c9a227"
+
     def _hud_place(self, gx, gy, gw, gh, show: bool):
         """Show/hide the system values; returns (side, height) when they take the top of a bar."""
         side = self.settings.get("sysinfo", "off")
@@ -158,10 +171,11 @@ class SysInfo:
         self.hud.opacity = o.get("hud_opacity", o["opacity"])
         hh = int(gh * hud_scale(o))
         look = ("backdrop",) if o.get("hud_backdrop", False) else ()
-        w, h = self.hud.render(rows, hh, look=look)
+        style = dict(skin=self._skin(), accent=self._skin_accent(), title=_("SYSTEM"))     # 1.3
+        w, h = self.hud.render(rows, hh, look=look, **style)
         f = layout.fit_scale(w, h, avail_w, avail_h)
         if f < 1:                                           # narrow bar / low bar: smaller text
-            w, h = self.hud.render(rows, max(200, int(hh * f)), look=look)
+            w, h = self.hud.render(rows, max(200, int(hh * f)), look=look, **style)
         labels = tuple(r[0][0] for r in rows if r)
         self._hud_steady, sw = layout.steady_width(getattr(self, "_hud_steady", None), (side, hh, labels), w)
         if follow or beside:                                # shown by _hud_follow_map() after the map
@@ -257,10 +271,11 @@ class SysInfo:
         win.opacity = o.get("today_opacity", o["opacity"])
         look = ("backdrop",) if o.get("today_backdrop", False) else ()
         height = int(gh * today_scale(o))
-        w, h = win.render(rows, height, look=look)
+        style = dict(skin=self._skin(), accent=self._skin_accent())                        # 1.3
+        w, h = win.render(rows, height, look=look, **style)
         avail = layout.max_width(bar, margin) if bar >= layout.MIN_BAR and spot != "custom" else gw / 3
         if w > avail:                                       # never wider than the black bar
-            w, h = win.render(rows, max(200, int(height * avail / w)), look=look)
+            w, h = win.render(rows, max(200, int(height * avail / w)), look=look, **style)
         return (w, h)
 
     def _today_dragged(self, x, y):
@@ -401,11 +416,12 @@ class SysInfo:
         prog = media.progress(now, time.time()) if o.get("media_progress", True) and media.playing(now, time.time()) \
             else None
         look = media.look(o)
-        w, h = win.render(rows, height, cover, o.get("media_style", "big"), prog, look)
+        style = dict(skin=self._skin(), accent=self._skin_accent())                        # 1.3
+        w, h = win.render(rows, height, cover, o.get("media_style", "big"), prog, look, **style)
         avail = layout.max_width(bar, margin) if bar >= layout.MIN_BAR and spot != "custom" else gw / 3
         if w > avail:                                       # never wider than the black bar
             w, h = win.render(rows, max(200, int(height * avail / w)), cover, o.get("media_style", "big"), prog,
-                              look)
+                              look, **style)
         song = (now.title, now.artist)
         self._media_restart = song != self._media_song or not win.shown    # a new song / appears: from nothing
         self._media_song = song

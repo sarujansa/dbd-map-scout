@@ -1216,8 +1216,9 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         today_rows = self._today_rows(now) if today else None
         hud_side = side if sys_on else ""
         music = preview.music_rows(self.media.now, now) if o.get("show_media", True) else None
+        accent = self._skin_accent()                     # 1.3: the modern styles use the theme's colour
         key = (gw, gh, repr(sorted((k, v) for k, v in o.items() if not isinstance(v, dict))), hud_side,
-               bool(self.overlay.editing),
+               bool(self.overlay.editing), accent,
                repr(rows), repr(today_rows), repr(self.settings.get("sysinfo_pos")), id(pic), caption, repr(info),
                self._map_height(), repr(music[0]) if music else None, id(music[1]) if music else None)
         cached = getattr(self, "_preview_cache", None)
@@ -1226,7 +1227,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
             f = min(1.0, preview.RENDER_H / max(1, gh))
             layers, rect = preview.layers(round(gw * f), round(gh * f), o, hud_side, rows,
                                           self.settings.get("sysinfo_pos"), pic, caption, info, self._map_height(),
-                                          music, today_rows, bool(self.overlay.editing))
+                                          music, today_rows, bool(self.overlay.editing), accent)
             self._preview_cache = cached = (key, layers, tuple(round(v / f) for v in rect), f)
         _key, layers, (x, y, w, h), f = cached
         return {"screen": (gw, gh), "bar": layout.bar_width(gw, gh), "rect": (x, y, w, h, h),
