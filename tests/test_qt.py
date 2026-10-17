@@ -97,8 +97,8 @@ def test_overview_system_values():
     app.settings["sysinfo"] = "right"
     o = overview.overview_model(app, now, is_win=True)
     names = [r[0] for r in o.system]
-    assert names == ["GPU", "CPU", "VRAM"] and o.system[0][1] == "88 °C · 97 % · 220 W"
-    assert o.system[0][3] is not None and o.system[2][2] == 0.5 and "DROSSELT" in o.system_note
+    assert names == ["CPU", "GPU", "VRAM"] and o.system[1][1] == "88 °C · 97 % · 220 W"   # 1.7.5: HUD order
+    assert o.system[1][3] is not None and o.system[2][2] == 0.5 and "DROSSELT" in o.system_note
     assert overview.overview_model(app, now, is_win=False).system == []          # not on Windows
 
 
