@@ -334,7 +334,7 @@ class OverlayTab:
         deg = self._map_rotation()
         if own or deg:
             m = self.catalog.maps.get(self.current[0])
-            parts = ([_("eigene Grösse {n} % (Hotkeys/Mausrad)", n=f"{own * 100:.0f}")] if own else []) + \
+            parts = ([_("eigene Grösse {n} % (Hotkeys/Strg+Mausrad)", n=f"{own * 100:.0f}")] if own else []) + \
                 ([_("gedreht um {deg}°", deg=deg)] if deg else [])
             self.map_size_var.set((m.name if m else "") + ": " + " · ".join(parts))
             if not self.map_size_row.winfo_manager():

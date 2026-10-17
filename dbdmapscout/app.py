@@ -117,7 +117,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self._conn_idle = IdlePause()    # capture paused while DBD is not running
 
         self.overlay = make_overlay(self.root, prefer_native=self.settings["overlay"].get("native_window", True))
-        self.overlay.edit_label = _("KARTE · Mausrad = Grösse")       # names on the edit frames (1.64.7)
+        self.overlay.edit_label = _("KARTE · Strg+Mausrad = Grösse")       # names on the edit frames (1.64.7)
         self.overlay.game_hwnd = lambda: self.game.hwnd if self.game else None
         # window procedures: hand over to _poll (one place, in order with the other events)
         self.overlay.on_moved = lambda x, y: self.events.put(("call", self._overlay_dragged, (x, y)))
@@ -488,7 +488,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
             return _("Selten gebrauchte Einstellungen ein- oder ausklappen.")
         if w is self.edit_btn:
             return lambda: (_("Verschieben beenden.") if self.edit_btn.cget("text") == _("Fertig") else
-                            _("Karte direkt mit der Maus ziehen, Mausrad ändert die Grösse.")
+                            _("Karte direkt mit der Maus ziehen, Strg+Mausrad ändert die Grösse.")
                             + self._hk_hint("edit_position")
                             + self._hk_hint("edit_position"))
         if w in hk:
@@ -573,7 +573,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self.edit_btn.configure(text=_("Fertig") if on else _("Mit der Maus verschieben"))
         if on:                     # 1.64.1: also without a map – the preview (tab Overlay) shows everything
             self._log(_("Karte, Systemwerte und Musik mit der Maus ziehen (im Spiel oder in der Vorschau), "
-                        "Mausrad = Grösse. Danach „Fertig“ oder Hotkey."), "Overlay")
+                        "Strg+Mausrad = Grösse. Danach „Fertig“ oder Hotkey."), "Overlay")
         self._tick_overlay(reschedule=False)
 
     def _overlay_dragged(self, x, y):
