@@ -163,6 +163,12 @@ def _width(font, text, track: float = 0) -> float:
     return _run_len(font, text) + track * max(0, len(text) - 1)
 
 
+def _widest(timer: str) -> str:
+    """The timer with every digit a "0" (the widest in Inter and Fira): measured with it, the field keeps one
+    size and place while the seconds run (1.5.4, user: "wird immer grösser und kleiner")."""
+    return re.sub(r"\d", "0", timer or "")
+
+
 def _caps(im, x, y, text, size, fill, u):
     """Small capitals with wide tracking (headers of "line", labels)."""
     f = inter("Medium", size)
@@ -306,11 +312,12 @@ def _card_line(head, lines, u, acc) -> Image.Image:
     return im
 
 
-def chip(text, u, font=None, colour=WHITE, dot=None, edge=CHIP_EDGE, pad=None, h=None) -> Image.Image:
+def chip(text, u, font=None, colour=WHITE, dot=None, edge=CHIP_EDGE, pad=None, h=None, width_text=None) -> Image.Image:
+    """``width_text``: size the pill for this text instead (the timer: widest digits – the pill never changes)."""
     font = font or inter("SemiBold", int(16 * u))
     pad = int(14 * u) if pad is None else pad
     h = int(38 * u) if h is None else h
-    w = int(_width(font, text)) + 2 * pad + (int(18 * u) if dot else 0)
+    w = int(_width(font, width_text if width_text is not None else text)) + 2 * pad + (int(18 * u) if dot else 0)
     im = _panel(w, h, h // 2, CHIP_FILL, edge)
     d = ImageDraw.Draw(im)
     x = pad
@@ -623,8 +630,9 @@ def _map_glass(body, name, realm, timer, note, record, server, ping, ctx) -> Ima
         parts_w.append(_width(hf, realm.upper(), 2.2 * u) + int(12 * u))
     if name:
         parts_w.append(_width(nf, name))
+    timer_w = _width(tf, _widest(timer)) if timer else 0      # 1.5.4: field of the widest digits – nothing moves
     if timer:
-        parts_w.append(_width(tf, timer))
+        parts_w.append(timer_w)
     if note:
         parts_w.append(_width(nf_warn, note))
     if record:
@@ -668,7 +676,7 @@ def _map_glass(body, name, realm, timer, note, record, server, ping, ctx) -> Ima
     si = 0
     for kind, hh in rows:
         if kind == "timer":
-            tw = _width(tf, timer)
+            tw = timer_w
             _text(im, (w - tw) / 2, y - int(6 * u), timer, tf, WHITE)
             if ctx["rec"]:
                 ctx["rec_dot"](d, (w + tw) / 2 + int(22 * u), y + int(30 * u), int(8 * u))
@@ -699,8 +707,9 @@ def _map_chips(body, timer, note, record, server, ping, ctx) -> Image.Image:
     parts = []
     if timer:
         rec = ctx["rec"]
-        c = chip(timer + ("     " if rec is not None else ""), u, inter("SemiBold", int(36 * u)), edge=acc,
-                 pad=int(22 * u), h=int(58 * u))                  # recording: room for the dot, on and off phase
+        tail = "     " if rec is not None else ""
+        c = chip(timer + tail, u, inter("SemiBold", int(36 * u)), edge=acc, pad=int(22 * u), h=int(58 * u),
+                 width_text=_widest(timer) + tail)            # pill sized for the widest digits (+ room for the dot)
         if rec:
             ctx["rec_dot"](ImageDraw.Draw(c), c.width - int(26 * u), c.height / 2, int(8 * u))
         parts.append(c)
@@ -744,8 +753,9 @@ def _map_line(body, name, realm, timer, note, record, server, ping, ctx) -> Imag
         parts_w.append(_width(capf, realm.upper(), 3 * u))
     if name:
         parts_w.append(_width(nf, name))
+    timer_w = _width(tf, _widest(timer)) if timer else 0
     if timer:
-        parts_w.append(_width(tf, timer))
+        parts_w.append(timer_w)
     if note:
         parts_w.append(_width(nf_warn, note))
     srv = (server + (f" · {ping:.0f} ms" if ping is not None else "")) if server else ""
@@ -786,7 +796,7 @@ def _map_line(body, name, realm, timer, note, record, server, ping, ctx) -> Imag
     si = 0
     for kind, hh in rows:
         if kind == "timer":
-            tw = _width(tf, timer)
+            tw = timer_w
             _text(im, (w - tw) / 2, y - int(10 * u), timer, tf, acc)
             if ctx["rec"]:
                 ctx["rec_dot"](d, (w + tw) / 2 + int(22 * u), y + int(30 * u), int(8 * u))

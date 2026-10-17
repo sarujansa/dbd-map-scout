@@ -22,9 +22,13 @@ class FakeObs(threading.Thread):
     """Enough of obs-websocket 5 for the client: handshake, Hello/Identify (with or without a password),
     requests GetVersion / GetRecordStatus / StartRecord / StopRecord / replay buffer. Records what it was asked."""
 
-    def __init__(self, password="", record_dir=None, replay=False):
+    def __init__(self, password="", record_dir=None, replay=False, replay_delay=0):
         super().__init__(daemon=True)
         self.password, self.record_dir, self.replay = password, record_dir, replay
+        self.replay_delay = replay_delay            # 1.5.4: GetLastReplayBufferReplay answers the old path this often
+        self.last_replay = os.path.join(record_dir or ".", "Replay_old.mkv") if record_dir else ""
+        self._pending = None
+        self.saves = 0
         self.srv = socket.socket()
         self.srv.bind(("127.0.0.1", 0))
         self.srv.listen(3)
@@ -127,16 +131,28 @@ class FakeObs(threading.Thread):
             elif kind == "StopReplayBuffer":
                 self.replay = False
             elif kind == "SaveReplayBuffer":
-                self.last_replay = os.path.join(self.record_dir, "Replay.mkv")
-                with open(self.last_replay, "wb") as f:
-                    f.write(PRE_BYTES)
+                self.saves += 1
+                new = os.path.join(self.record_dir, f"Replay_{self.saves}.mkv")
+                self._pending = [new, self.replay_delay]      # written (and reported) only after the delay
+                if not self.replay_delay:
+                    self._write_replay()
             elif kind == "GetLastReplayBufferReplay":
+                if self._pending and self._pending[1] > 0:
+                    self._pending[1] -= 1
+                    if self._pending[1] == 0:
+                        self._write_replay()
                 out = {"savedReplayPath": self.last_replay}
             else:
                 ok = False
             self._send(conn, {"op": 7, "d": {"requestType": kind, "requestId": rid,
                                              "requestStatus": {"result": ok, "code": 100 if ok else 204},
                                              "responseData": out}})
+
+    def _write_replay(self):
+        path, self._pending = self._pending[0], None
+        with open(path, "wb") as f:
+            f.write(PRE_BYTES)
+        self.last_replay = path
 
     def stop(self):
         self.stop_flag = True
@@ -674,3 +690,77 @@ def test_farming_rounds_go_into_their_own_subfolder_and_are_pruned_and_deleted_t
     assert hit.file.startswith("Farming/")
     r._delete_one(4.0)
     assert not os.path.exists(obsrec.rel_path(folder, hit.file)) and all(x.t != 4.0 for x in obsrec.load_index(folder))
+
+
+# ------------------------------------------------------------------ 1.5.4: the replay is picked up when OBS is done
+def test_the_pre_roll_is_waited_for_when_obs_saves_it_slowly(tmp_path):
+    """1.5.4 (user: files named "Replay_…" stayed behind): OBS writes the replay buffer asynchronously – the
+    recorder polls until the path changes and the file exists instead of taking whatever OBS names 0.3 s later."""
+    obs = FakeObs(record_dir=str(tmp_path), replay=True, replay_delay=3)
+    obs.start()
+    try:
+        r, posted = _recorder(obs, str(tmp_path), pre=True, merge=False)
+        r._begin({"t": 1.0, "label": "A", "role": "killer", "killer": "Hag"})
+        assert r.active["pre"].endswith("Replay_1.mkv")              # this save's file, not the old one
+        assert [k for k, _d in obs.requests].count("GetLastReplayBufferReplay") >= 4
+        r._finish({})
+        rec = obsrec.load_index(str(tmp_path))[0]
+        assert rec.pre.endswith("(Vorlauf).mkv") and not os.path.exists(os.path.join(str(tmp_path), "Replay_1.mkv"))
+    finally:
+        obs.stop()
+
+
+def test_the_timer_field_and_the_dot_keep_their_place_while_the_seconds_run():
+    """1.5.4 (user: "die Zeit und der Punkt werden immer grösser und kleiner"): digits are proportional – the
+    field is measured with the widest ("0"), so the block and the dot never move between 11:11 and 00:00."""
+    from PIL import Image
+    from dbdmapscout import overlay_win32, skin
+    pic = Image.new("RGBA", (400, 300), (0, 0, 0, 0))
+    a = overlay_win32.add_info(pic.copy(), "11:11", "", 480, rec=True)
+    b = overlay_win32.add_info(pic.copy(), "00:00", "", 480, rec=True)
+    assert a.size == b.size and _reds(a) == _reds(b)                       # same dot pixels
+    body = Image.new("RGBA", (300, 200), (40, 40, 60, 255))
+    for style in ("glass", "chips", "line"):
+        ca = skin.map_card(body, "Coal Tower", "MacMillan", "11:11", "", "", "", None, (), 480, style, "#c9a227", rec=True)
+        cb = skin.map_card(body, "Coal Tower", "MacMillan", "00:00", "", "", "", None, (), 480, style, "#c9a227", rec=True)
+        assert ca.size == cb.size and _reds(ca) == _reds(cb), style
+    # the chip of the timer alone has one width for every time of the same length
+    assert skin.chip("11:11", 1.0, width_text="00:00").width == skin.chip("00:00", 1.0, width_text="00:00").width
+
+
+def test_an_unreadable_globe_crop_is_kept_for_a_look(tmp_path):
+    import numpy as np
+    from types import SimpleNamespace
+    from dbdmapscout import worker
+    fake = SimpleNamespace(root_dir=str(tmp_path))
+    img = np.zeros((20, 40, 3), dtype=np.uint8)
+    for i in range(worker.GLOBE_KEPT + 3):
+        worker.DetectionWorker._save_globe(fake, img, "cancel")
+        time.sleep(0.001)
+    files = os.listdir(os.path.join(str(tmp_path), "debug", "lobby"))
+    assert files and len(files) <= worker.GLOBE_KEPT and all("-crossplay-cancel.png" in f for f in files)
+
+
+def test_a_farming_mark_from_the_statistics_moves_the_recording(tmp_path):
+    folder = str(tmp_path)
+    for name in ("a.mkv", "a (Vorlauf).mkv"):
+        with open(os.path.join(folder, name), "wb") as f:
+            f.write(b"\0" * 10)
+    obsrec.save_index(folder, [obsrec.Recording(t=1.0, file="a.mkv", pre="a (Vorlauf).mkv")])
+    posted = []
+    r = obsrec.Recorder(lambda kind, **d: posted.append((kind, d)))
+    r.cfg = obsrec.Config(on=True, folder=folder, farming_sub=True)
+    r._set_farming(1.0, True)
+    rec = obsrec.load_index(folder)[0]
+    assert rec.farming and rec.file == "Farming/a.mkv" and rec.pre == "Farming/a (Vorlauf).mkv"
+    assert os.path.exists(os.path.join(folder, "Farming", "a.mkv")) and not os.path.exists(os.path.join(folder, "a.mkv"))
+    assert posted[-1][0] == "changed" and posted[-1][1]["what"] == "farming"
+    r._set_farming(1.0, False)                                  # back to the main folder
+    rec = obsrec.load_index(folder)[0]
+    assert not rec.farming and rec.file == "a.mkv" and os.path.exists(os.path.join(folder, "a (Vorlauf).mkv"))
+    r.cfg.farming_sub = False                                   # switch off: only the flag changes
+    r._set_farming(1.0, True)
+    rec = obsrec.load_index(folder)[0]
+    assert rec.farming and rec.file == "a.mkv"
+    r._set_farming(99.0, True)                                  # unknown round: nothing happens
+    assert len(obsrec.load_index(folder)) == 1

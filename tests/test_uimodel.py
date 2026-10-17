@@ -636,3 +636,61 @@ def test_the_recordings_tab_lists_the_index_and_acts_on_the_marked_row(app_root)
         assert (folder / "two.mkv").exists()
     finally:
         app.quit()
+
+
+def test_several_rounds_can_be_marked_as_farming_at_once_and_the_recordings_follow(app_root):
+    """1.5.4 (user: "mehrere Zeilen markieren und als Farming markieren", "in der Statistik markiert, bei den
+    Aufnahmen nicht"): Ctrl-selection in "Letzte Runden", one click sets every marked round; the recorder moves
+    the matching recordings into "Farming"."""
+    import json
+    from dbdmapscout import history, obsrec
+    from dbdmapscout.app import App
+    folder = app_root / "rec"
+    folder.mkdir()
+    t1, t2 = time.time() - 7200, time.time() - 3600
+    for t, name in ((t1, "one.mkv"), (t2, "two.mkv")):
+        (folder / name).write_bytes(b"\0" * 16)
+        history.append(str(app_root / "rounds.jsonl"), history.Round(t=t, seconds=600, map_id="coal", map="Coal Tower",
+                                                                     role="killer", killer="The Nurse"))
+    obsrec.save_index(str(folder), [obsrec.Recording(t=t1, file="one.mkv", label="Coal Tower"),
+                                    obsrec.Recording(t=t2, file="two.mkv", label="Coal Tower")])
+    (app_root / "settings.json").write_text(json.dumps({"rec_on": True, "rec_folder": str(folder),
+                                                        "welcome_seen": True}), encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        t = app.stats_last
+        app.stats_nb.select(str(t.master.master))             # the sub-tab "Letzte Runden" (only it is drawn)
+        app._stats_render()
+        assert str(t.cget("selectmode")) == "extended" and len(t.get_children()) == 2
+        t.selection_set(repr(t1), repr(t2))
+        t.event_generate("<<TreeviewSelect>>")
+        assert app.stats_delete_btn.cget("state") == "normal"
+        app._stats_toggle_farming()
+        rounds = history.load(str(app_root / "rounds.jsonl"))
+        assert all(r.farming for r in rounds)
+        deadline = time.time() + 5
+        while time.time() < deadline and not all(x.farming for x in obsrec.load_index(str(folder))):
+            time.sleep(0.05)
+        recs = obsrec.load_index(str(folder))
+        assert all(x.farming and x.file.startswith("Farming/") for x in recs)
+        assert sorted(os.listdir(folder / "Farming")) == ["one.mkv", "two.mkv"]
+        # farming rounds show only under the filter "Farming"; marked there, the next click turns both back
+        assert t.get_children() == ()
+        app.stats_role_var.set("Farming")
+        app._stats_render()
+        assert len(t.get_children()) == 2
+        t.selection_set(repr(t1), repr(t2))
+        app._stats_toggle_farming()
+        assert not any(r.farming for r in history.load(str(app_root / "rounds.jsonl")))
+        deadline = time.time() + 5
+        while time.time() < deadline and any(x.farming for x in obsrec.load_index(str(folder))):
+            time.sleep(0.05)
+        assert sorted(os.listdir(folder)) == ["Farming", obsrec.INDEX, "one.mkv", "two.mkv"]
+        app.stats_role_var.set("Alle Rollen")
+        app._stats_render()
+        t.selection_set(repr(t1), repr(t2))
+        app._stats_set_role("survivor")
+        assert all(r.role == "survivor" for r in history.load(str(app_root / "rounds.jsonl")))
+        assert set(t.selection()) == {repr(t1), repr(t2)}          # both stay marked after the re-render
+    finally:
+        app.quit()
