@@ -217,11 +217,24 @@ def _icon(d, kind, x, y, u, colour=GREY):
 
 
 def _round_cover(cover, side: int, radius: int) -> Image.Image:
-    art = cover.convert("RGBA").resize((side, side), Image.LANCZOS)
+    memo = cover.info if isinstance(getattr(cover, "info", None), dict) else {}
+    key = ("_dbdms_round", side, radius)            # 1.6.1: once per cover and size, not every second
+    if key in memo:
+        return memo[key]
+    art = _square_cover(cover, side).copy()
     mask = Image.new("L", (side, side), 0)
     ImageDraw.Draw(mask).rounded_rectangle((0, 0, side - 1, side - 1), radius=radius, fill=255)
     art.putalpha(mask)
+    memo[key] = art
     return art
+
+
+def _square_cover(cover, side: int) -> Image.Image:
+    memo = cover.info if isinstance(getattr(cover, "info", None), dict) else {}
+    key = ("_dbdms_square", side)
+    if key not in memo:
+        memo[key] = cover.convert("RGBA").resize((side, side), Image.LANCZOS)
+    return memo[key]
 
 
 def _fit_text(text, weight, size, max_w, min_scale=0.6) -> tuple:
@@ -454,7 +467,7 @@ def _music_big(title, artist, cover, u, acc, progress, look, style) -> Image.Ima
     d = ImageDraw.Draw(im)
     cx = (w - side) // 2
     if line:
-        im.alpha_composite(cover.convert("RGBA").resize((side, side), Image.LANCZOS), (cx, pad))
+        im.alpha_composite(_square_cover(cover, side), (cx, pad))
         d.rectangle((cx, pad, cx + side - 1, pad + side - 1), outline=LINE_EDGE)
     else:
         im.alpha_composite(_round_cover(cover, side, side // 2 if style == "chips" else int(14 * u)), (cx, pad))
@@ -564,7 +577,7 @@ def _music_line(title, artist, cover, u, acc, progress, look) -> Image.Image:
     im = _panel(w, h, int(10 * u), (0, 0, 0, 0), LINE_EDGE, max(1, int(u)))
     d = ImageDraw.Draw(im)
     if cover is not None:
-        im.alpha_composite(cover.convert("RGBA").resize((side, side), Image.LANCZOS), (pad, pad))
+        im.alpha_composite(_square_cover(cover, side), (pad, pad))
         d.rectangle((pad, pad, pad + side - 1, pad + side - 1), outline=LINE_EDGE)
     _text(im, text_x, pad, title, tf, WHITE)
     if sub:

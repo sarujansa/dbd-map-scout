@@ -346,3 +346,22 @@ def test_music_card_is_its_body_plus_the_progress_strip():
                 assert a.size == b.size and a.tobytes() == b.tobytes(), (style, look, progress)
     pic, strip_w, accent = music_body(rows, cover, 1440, "big", ("accent",))
     assert strip_w > 0 and accent is not None and music_body(rows, None, 1440, "big", ())[2] is None
+
+
+def test_the_fast_premultiply_gives_the_same_bytes_and_the_cover_colour_is_worked_out_once():
+    """1.6.1 (overlay tick 30–70 ms once a second at the user's PC): Pillow's "RGBa" instead of numpy – byte for
+    byte the same; the cover's accent colour and the scaled covers are kept on the cover."""
+    import numpy as np
+    from PIL import Image
+    from dbdmapscout import overlay_win32 as ow, preview, skin
+    rng = np.random.default_rng(1)
+    px = rng.integers(0, 256, (37, 53, 4), dtype=np.uint8)
+    px[0, :, 3], px[1, :, 3], px[2, :, 3] = 0, 255, 1                  # the edges of alpha
+    for img in (Image.fromarray(px, "RGBA"), Image.fromarray(px[:, :, :3], "RGB")):
+        assert ow.premultiplied_bgra(img) == ow.premultiplied_bgra_numpy(img)
+    cover = preview.sample_cover()
+    first = media.accent(cover)
+    assert cover.info["_dbdms_accent"] == first and media.accent(cover) == first
+    a = skin._round_cover(cover, 120, 20)
+    assert skin._round_cover(cover, 120, 20) is a and a.size == (120, 120)
+    assert skin._round_cover(cover, 60, 20).size == (60, 60)

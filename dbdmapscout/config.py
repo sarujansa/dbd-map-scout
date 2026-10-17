@@ -114,6 +114,7 @@ DEFAULTS = {
     "official_notify": True,
     "farming_crossplay": True,          # 1.2.20: a round whose lobby showed cross-play off is a farming round
     "farming_region": "ap-southeast-1",  # … and every round on this server region ("" = none)
+    "farming_ignored": [],              # 1.6.1: rounds (repr of the start) not to offer as farming again
     "rec_on": False,                    # 1.4: round recordings with OBS (obs-websocket on this PC)
     "rec_port": 4455,
     "rec_password": "",
@@ -136,6 +137,7 @@ DEFAULTS = {
     "rec_audio_mic": False,
     "clip_mode": "copy",                # 1.5.1: clip editor – "copy" (key frames, fast) / "exact" (re-encoded)
     "clip_sound": True,                 # 1.5.1: clip editor plays the sound while previewing (Windows)
+    "clip_target_mb": 10,               # 1.6.1: clip editor "Für Discord" – stays under this many MB
     "sysinfo": "right",                 # system values at the top of a black bar: off | left | right | custom
     "sysinfo_pos": [1.0, 0.0],          # sysinfo = custom: 0..1 of the free space in the DBD window (x, y)
 }
