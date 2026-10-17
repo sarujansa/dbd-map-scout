@@ -188,3 +188,33 @@ def test_task_command_line_quoting():
         assert inner.startswith('""') and inner.endswith('"')
         bat = os.path.join(os.path.abspath(ROOT), "start.bat")         # same as the code on this platform
         assert inner[1:-1] == f'"{bat}"{tail}'
+
+
+def test_the_tray_dot_shows_the_state():
+    """1.3.6: green = map on display, yellow = doubtful, red = problem, grey = waiting, none = no DBD."""
+    from dbdmapscout import status
+    st = lambda **kw: status.user_state(**{"game_found": True, **kw})
+    assert status.tray_dot(st(has_map=True)) == "ok"
+    assert status.tray_dot(st(has_map=True, menu_paused=True)) == "ok"
+    assert status.tray_dot(st(has_map=True), unsure=True) == "warn"
+    assert status.tray_dot(st(worker_status="Aufnahme ist schwarz")) == "err"
+    assert status.tray_dot(st()) == "idle"
+    assert status.tray_dot(st(has_map=True, hidden_after_match=True)) == "idle"
+    assert status.tray_dot(status.user_state(game_found=False), game_found=False) is None
+
+
+def test_the_tray_icon_changes_only_when_the_state_does():
+    from dbdmapscout import icon, theme
+    plain, green = icon.draw_status(64, None), icon.draw_status(64, theme.DOT["ok"])
+    assert plain.tobytes() == icon.draw(64).tobytes()
+    r, g, b, a = green.getpixel((50, 50))                    # the dot, bottom right
+    assert a == 255 and g > r and g > b
+    assert green.getpixel((10, 10)) == plain.getpixel((10, 10))
+    t = Tray(lambda a: None)
+    t._icon = types.SimpleNamespace(icon=None)
+    t.set_status("ok")
+    first = t._icon.icon
+    t.set_status("ok")
+    assert t._icon.icon is first and first.getpixel((50, 50))[1] > 150
+    t.set_status("err")
+    assert t._icon.icon is not first and t._icon.icon.getpixel((50, 50))[0] > 150

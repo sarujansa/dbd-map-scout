@@ -243,6 +243,7 @@ class QtShell:
         if first:
             self.qt.show_setup(True)
         self.qt.set_card_order(self.settings.get("card_order") or {})
+        self.qt.set_hidden_columns(self.settings.get("hidden_columns") or {})
         self._qt_refresh(force=True)
         if not start_in_tray:
             self.qt.show()
@@ -382,6 +383,15 @@ class QtShell:
             self._save_soon()
             self.qt.show_setup(False)
             self._qt_refresh(force=True)
+        elif action == "table_cols":                 # 1.3.6: columns hidden by a right-click on a table's heading
+            key, cols = arg
+            hidden = dict(self.settings.get("hidden_columns") or {})
+            if cols:
+                hidden[str(key)] = [str(c) for c in cols]
+            else:
+                hidden.pop(str(key), None)
+            self.settings.set("hidden_columns", hidden)
+            self._save_soon()
         elif action == "card_order":                 # a card dragged to another place: remember the order
             page, run, ids = arg
             orders = dict(self.settings.get("card_order") or {})

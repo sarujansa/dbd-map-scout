@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
-from . import __version__, i18n, qt_theme, regions
+from . import __version__, i18n, qt_theme, regions, status
 from . import uimodel as ui
 from .capture import IS_WIN
 from . import autostart
@@ -374,6 +374,18 @@ class SettingsTab:
         if not self.tray.active and not self.tray.start():
             self._log(_("Symbol im Infobereich nicht verfügbar ({error}) – Minimieren wie gewohnt.",
                         error=self.tray.error), "Fehler")
+
+    def _tray_tick(self):
+        """1.3.6: the tray icon shows the state by a coloured dot (like the overview's status dot)."""
+        if not self.tray.active:
+            return
+        st = status.user_state(self._worker_status, auto_detect=bool(self.settings.get("auto_detect", True)),
+                               game_found=self.game is not None, simulate=bool(self.simulate),
+                               has_map=self.overlay.has_map(), visible_wanted=self.user_visible,
+                               hidden_after_match=self.hidden_after_match, menu_paused=self.menu_paused)
+        u = self._unsure
+        self.tray.set_status(status.tray_dot(st, bool(u and u.get("shown")),
+                                             self.game is not None or bool(self.simulate)))
 
     def _tray_flag_changed(self):
         on = bool(self.tray_var.get())

@@ -19,6 +19,21 @@ class State:
 DOT_STYLE = {"err": "err", "idle": "idle", "wait": "warn", "ok": "ok", "menu": "warn", "done": "info"}
 
 
+# 1.3.6: the dot on the tray icon (theme.DOT colours) – None = plain icon (DBD not running)
+TRAY_DOT = {"err": "err", "ok": "ok", "menu": "ok", "wait": "idle", "done": "idle", "idle": "idle"}
+
+
+def tray_dot(state: State, unsure: bool = False, game_found: bool = True) -> str | None:
+    """Green = map on display, yellow = shown but doubtful, red = a problem, grey = DBD runs and it waits."""
+    if state.kind == "err":
+        return "err"
+    if unsure and state.kind in ("ok", "menu"):
+        return "warn"
+    if state.kind == "idle" and not game_found:
+        return None
+    return TRAY_DOT.get(state.kind, "idle")
+
+
 def is_problem(worker_status: str) -> bool:
     low = (worker_status or "").lower()
     return any(w in low for w in ("fehl", "schwarz", "minimiert", "abgestürzt",       # German texts

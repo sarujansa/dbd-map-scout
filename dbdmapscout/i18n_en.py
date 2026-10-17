@@ -1357,4 +1357,6 @@ EN = {
     'Ø FPS-Tief': 'Avg. FPS low',
     'FPS Ø': 'FPS avg',
     'FPS Tief': 'FPS low',
+    'Klick: sortieren · Rechtsklick: Spalten ein-/ausblenden': 'Click: sort · right-click: show/hide columns',
+    'Alle Spalten zeigen': 'Show all columns',
 }

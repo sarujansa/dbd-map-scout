@@ -637,6 +637,13 @@ class MainWindow(QMainWindow):
             self.question_text.setText(f"<b>{html.escape(q[0])}</b><br>" + html.escape(q[1]).replace("\n", "<br>"))
             self.question_cancel.setVisible(bool(q[2]))
 
+    def set_hidden_columns(self, hidden: dict):
+        """1.3.6: the columns the user hid, per table ({column ids joined by "|": [hidden ids]}, setting
+        hidden_columns)."""
+        from .qt_views import Table
+        for t in self.findChildren(Table):
+            t.set_hidden_map(hidden)
+
     def set_card_order(self, orders: dict):
         """The user's order of the cards ({page: {run: [ids]}}, setting card_order); {} = as built."""
         for key, page in self.forms.items():
