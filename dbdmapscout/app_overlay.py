@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from . import uimodel as ui
 from .i18n import N_, _
+from .skin import STYLE_LABELS
 from .app_sysinfo import (BAR_ALIGNS, HUD_ROW_LABELS, HUD_SIDES, MAP_SCALE, MEDIA_SCALE, MEDIA_SPOTS, MEDIA_STYLES,
                           OPACITY_KEYS, PRESET_LABELS, SELECTABLE, TODAY_SPOTS)
 
@@ -47,6 +48,15 @@ class OverlayTab:
         self.opacity_var = ui.DoubleVar(value=o["opacity"] * 100)        # 1.2.7: of the element picked
         self.opacity_label = self._slider(pos, _("Deckkraft"), self.opacity_var, 25, 100, self._opacity_changed,
                                           key="ov.opacity")
+        sr = ui.Frame(pos)                              # 1.3: the overlay style (skin.py)
+        sr.pack(fill="x", pady=(0, 4))
+        self._reg("ov.style.label", ui.Label(sr, text=_("Stil"), width=12)).pack(side="left")
+        styles = dict(STYLE_LABELS)
+        self.style_var = ui.StringVar(value=_(styles.get(o.get("style", "classic"), styles["classic"])))
+        scb = self._reg("ov.style", ui.Combobox(sr, textvariable=self.style_var, state="readonly", width=24,
+                                                 values=[_(t) for _k, t in STYLE_LABELS]))
+        scb.pack(side="left", padx=6)
+        scb.bind("<<ComboboxSelected>>", lambda e: self._style_changed())
         # 1.2.8: one gap for stacked cards, and where everything sits in the bar
         self.gap_var = ui.DoubleVar(value=float(o.get("stack_gap", 8)))
         self._slider(pos, _("Abstand"), self.gap_var, 0, 40, self._gap_changed, fmt="{:.0f} px", key="ov.gap")
@@ -282,6 +292,16 @@ class OverlayTab:
         self.settings["overlay"]["fade"] = bool(self.fade_var.get())
         self.settings["overlay"]["map_backdrop"] = bool(self.map_backdrop_var.get())
         self.overlay.set_backdrop(self.settings["overlay"]["map_backdrop"])
+        self._save_soon()
+        self._tick_overlay(reschedule=False)
+
+    def _style_changed(self):
+        """1.3: the look of the cards (system values, today, music) – classic or one of the modern styles."""
+        key = dict((_(label), k) for k, label in STYLE_LABELS).get(self.style_var.get(), "classic")
+        o = self.settings["overlay"]
+        if o.get("style", "classic") == key:
+            return
+        o["style"] = key
         self._save_soon()
         self._tick_overlay(reschedule=False)
 

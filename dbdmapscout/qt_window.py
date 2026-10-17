@@ -148,6 +148,7 @@ SPECS = {
                 ("check", "ov.media_cover"), ("check", "ov.media_progress"), ("check", "ov.media_accent"),
                 ("check", "ov.media_remaining"), ("check", "ov.media_backdrop"), ("check", "ov.media_fade"))),
             ("ov.pos", N_("Allgemein"), (
+                ("row", (("label", "ov.style.label"), ("combo", "ov.style"), ("stretch",))),     # 1.3
                 ("slider", "ov.gap"),
                 ("row", (("label", "ov.bar_align.label"), ("combo", "ov.bar_align"), ("stretch",))),
                 ("row", (("label", "ov.preset.label"), ("combo", "ov.preset"), ("button", "ov.preset_apply"),
