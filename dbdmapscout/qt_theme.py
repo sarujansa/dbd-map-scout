@@ -218,6 +218,7 @@ QPushButton:pressed {{ background: {c['press']}; }}
 QPushButton:disabled {{ background: transparent; color: {c['fg_dis']}; border-color: {c['border']}; }}  /* keeps its shape */
 QPushButton#primary {{ background: {c['accent']}; color: {c['on_accent']}; border: none; font-weight: 700; }}
 QPushButton#primary:hover {{ background: {c['accent_hover']}; }}
+QPushButton[class="seg"]:checked {{ background: {c['accent']}; color: {c['on_accent']}; border-color: {c['accent']}; font-weight: 700; }}  /* 1.3.3 */
 QProgressBar {{ background: {c['bar']}; border: none; border-radius: 3px; max-height: 6px; min-height: 6px; }}
 QProgressBar::chunk {{ background: {c['accent']}; border-radius: 3px; }}
 QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }}

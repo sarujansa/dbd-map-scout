@@ -17,7 +17,9 @@ def pixmap_from_pil(img: Image.Image, height: int, ratio: float = 1.0) -> QPixma
     img = img.convert("RGBA")
     h = max(1, round(height * ratio))
     w = max(1, round(img.width * h / img.height))
-    img = img.resize((w, h), Image.LANCZOS)
+    # 1.3.3: reducing_gap shrinks in big integer steps first (a 1440-px card to a 120-px preview: ~5× faster,
+    # the same picture to the eye)
+    img = img.resize((w, h), Image.LANCZOS, reducing_gap=2.0 if h < img.height else None)
     data = img.tobytes("raw", "RGBA")
     pm = QPixmap.fromImage(QImage(data, w, h, 4 * w, QImage.Format_RGBA8888).copy())
     pm.setDevicePixelRatio(ratio)
