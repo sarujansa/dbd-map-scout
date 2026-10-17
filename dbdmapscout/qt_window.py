@@ -13,7 +13,8 @@ import sys
 
 from PySide6.QtCore import QByteArray, QEvent, QObject, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QFontDatabase, QIcon, QPalette, QPixmap
-from PySide6.QtWidgets import (QAbstractScrollArea, QAbstractSlider, QAbstractSpinBox, QApplication, QComboBox,
+from PySide6.QtWidgets import (QAbstractItemView, QAbstractScrollArea, QAbstractSlider, QAbstractSpinBox, QApplication,
+                               QComboBox,
                                QFrame, QHBoxLayout, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QPushButton,
                                QScrollArea, QStackedWidget, QTabWidget, QVBoxLayout, QWidget)
 
@@ -420,17 +421,23 @@ class MainWindow(QMainWindow):
             if key in AUTO_PAGES and (layouts or {}).get(key):
                 self.forms[key] = AutoPage(post, _(label), layouts[key], key)
         self.nav.setIconSize(QSize(NAV_ICON, NAV_ICON))
+        self._pages = {}                   # page key -> its widget in the stack (the nav rows can be reordered)
         for key, label in PAGES:
             item = QListWidgetItem(_(label))
             item.setData(Qt.UserRole, key)
             self.nav.addItem(item)
             page = {"overview": self.overview, "maps": self.maps}.get(key) or self.forms.get(key) or QWidget()
+            self._pages[key] = page
             self.stack.addWidget(page)
         self.setup = SetupPage(post)
         self.stack.addWidget(self.setup)
         self._setup_on = False
         self.nav.setCurrentRow(0)
         self.nav.currentRowChanged.connect(self._page_changed)
+        # 1.7.6 (user: "move the windows on the left as I like"): the rows can be dragged into another order
+        self.nav.setDragDropMode(QAbstractItemView.InternalMove)
+        self.nav.setDefaultDropAction(Qt.MoveAction)
+        self.nav.model().rowsMoved.connect(lambda *_a: self._post("nav_order", self.nav_keys()))
         # search over the settings of all pages (1.60): a field above the navigation, Ctrl+F
         side = QWidget()
         side.setObjectName("navside")
@@ -506,13 +513,56 @@ class MainWindow(QMainWindow):
 
     def _page_changed(self, row):
         self._setup_on = False                                     # the navigation leaves the assistant
-        if 0 <= row < self.stack.count():
-            self._style_page(self.stack.widget(row))
-        self.stack.setCurrentIndex(row)
-        self._post("page", PAGES[row][0])                          # the App fills it now
+        if row < 0:
+            return
+        key = self.nav.item(row).data(Qt.UserRole)
+        page = self._pages.get(key)
+        if page is not None:
+            self._style_page(page)
+            self.stack.setCurrentWidget(page)
+        self._post("page", key)                                    # the App fills it now
+
+    def nav_keys(self) -> list:
+        """The page keys in the order the navigation shows them (1.7.6: the user's order)."""
+        return [self.nav.item(i).data(Qt.UserRole) for i in range(self.nav.count())]
+
+    def _nav_row(self, key) -> int:
+        keys = self.nav_keys()
+        return keys.index(key) if key in keys else -1
+
+    def set_nav_order(self, keys):
+        """Put the navigation into ``keys`` order (unknown keys ignored, missing pages follow in the built-in
+        order); [] = as built. The page on display stays."""
+        built = [k for k, _l in PAGES]
+        want = [k for k in (keys or []) if k in built] + [k for k in built if k not in (keys or [])]
+        if want == self.nav_keys():
+            return
+        current = self.current_key()
+        self.nav.blockSignals(True)
+        try:
+            items = {}
+            while self.nav.count():
+                item = self.nav.takeItem(0)
+                items[item.data(Qt.UserRole)] = item
+            for k in want:
+                self.nav.addItem(items[k])
+            row = self._nav_row(current)
+            self.nav.setCurrentRow(row if row >= 0 else -1)
+        finally:
+            self.nav.blockSignals(False)
+        self._nav_icons()
+        self._nav_texts()
+
+    def set_tab_order(self, orders: dict):
+        """1.7.6: the user's order of the tab rows ({page: {tabs id: [ids]}}, setting tab_order)."""
+        for key, page in self.forms.items():
+            page.apply_tab_order((orders or {}).get(key, {}))
 
     def current_key(self) -> str:
-        return "setup" if self._setup_on else PAGES[max(0, self.nav.currentRow())][0]
+        if self._setup_on:
+            return "setup"
+        item = self.nav.currentItem()
+        return item.data(Qt.UserRole) if item is not None else PAGES[0][0]
 
     def show_setup(self, on: bool = True):
         """The setup assistant instead of a page (first start); the navigation still leads away from it."""
@@ -527,8 +577,9 @@ class MainWindow(QMainWindow):
         else:
             if self.nav.currentRow() < 0:
                 self.nav.setCurrentRow(0)              # posts "page" → the App fills the overview
-            self._style_page(self.stack.widget(max(0, self.nav.currentRow())))
-            self.stack.setCurrentIndex(max(0, self.nav.currentRow()))
+            page = self._pages.get(self.current_key(), self.stack.widget(0))
+            self._style_page(page)
+            self.stack.setCurrentWidget(page)
 
     # ------------------------------------------------------------- search over the settings
     def search_index(self) -> dict:
@@ -712,17 +763,17 @@ class MainWindow(QMainWindow):
             self.maps.search.blockSignals(True)
             self.maps.search.setText(search)
             self.maps.search.blockSignals(False)
-        keys = [k for k, _l in PAGES]
-        if key in keys:
-            self.nav.setCurrentRow(keys.index(key))
+        row = self._nav_row(key)
+        if row >= 0:
+            self.nav.setCurrentRow(row)
 
     def open_tab(self, page: str, frame: str):
         """1.2.12 (analysis point 10): open the tab of a hand-made page that holds ``frame`` (an element picked in
         the overlay preview opens its settings)."""
         form = self.forms.get(page)
         ctl = form.controls.get(frame) if form is not None else None
-        if ctl is not None and ctl[0] == "tab" and ctl[1].currentIndex() != ctl[2]:
-            ctl[1].setCurrentIndex(ctl[2])
+        if ctl is not None and ctl[0] == "tab" and ctl[1].currentWidget() is not ctl[2]:
+            ctl[1].setCurrentWidget(ctl[2])                 # 1.7.6: by widget – the tabs can be reordered
 
     def apply_theme(self, dark: bool, zoom: float):
         pal = QPalette()
@@ -780,7 +831,8 @@ class MainWindow(QMainWindow):
         """The navigation's icons in the colours of the theme: grey, the page on display in the accent colour."""
         c = qt_theme.colours(self._dark)
         ratio = self.devicePixelRatioF() or 1.0
-        for row, (key, _text) in enumerate(PAGES):
+        for row in range(self.nav.count()):
+            key = self.nav.item(row).data(Qt.UserRole)
             alert = key == "log" and self._log_alert
             icon = QIcon()
             icon.addPixmap(nav_icon(key, c["dim"], ratio, alert), QIcon.Normal)
@@ -856,7 +908,14 @@ class MainWindow(QMainWindow):
         self.nav.setFixedWidth(NAV_COMPACT_W if on else NAV_W)
         self.search.setFixedWidth(NAV_W)
         self.search_btn.setFixedWidth(NAV_COMPACT_W)
-        for row, (_key, label) in enumerate(PAGES):
+        self._nav_texts()
+
+    def _nav_texts(self):
+        """Names in the rows (or as hover text while the navigation is narrow), whatever their order."""
+        labels = dict(PAGES)
+        on = self._nav_compact
+        for row in range(self.nav.count()):
             item = self.nav.item(row)
+            label = labels.get(item.data(Qt.UserRole), "")
             item.setText("" if on else _(label))
             item.setToolTip(_(label) if on else "")

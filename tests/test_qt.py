@@ -219,11 +219,12 @@ def test_form_page_shows_states_and_posts_clicks(qapp, keep):
     name, slider, value = page.controls["ov.sel_size"][2]
     assert (slider.minimum(), slider.maximum(), slider.value(), value.text()) == (15, 90, 36, "36 %")
     assert page.controls["ov.map_size_reset"][1].isHidden() and page.controls["ov.pos_hint"][1].isHidden()
-    kind, tabs, index = page.controls["ov.pos"]                # 1.66.4: the cards of the page are tabs
+    kind, tabs, body = page.controls["ov.pos"]                 # 1.66.4: the cards of the page are tabs
+    index = tabs.indexOf(body)                                 # 1.7.6: addressed by widget – tabs can be moved
     assert kind == "tab" and tabs.tabText(index) == "Allgemein" and tabs.count() == 5   # 1.2.12: one per element
     assert [tabs.tabText(i) for i in range(5)] == ["Karte", "Systemwerte", "Heute", "Musik", "Allgemein"]
     page.show_states({"ov.sys": {"text": "Systemwerte", "visible": False}})
-    assert not tabs.isTabVisible(page.controls["ov.sys"][2]) and tabs.isTabVisible(index)
+    assert not tabs.isTabVisible(tabs.indexOf(page.controls["ov.sys"][2])) and tabs.isTabVisible(index)
     assert posted.empty()                                   # showing a state never sends anything back
     check.click()
     combo.activated.emit(0)
@@ -770,7 +771,7 @@ def test_search_finds_a_setting_and_lights_its_card(qapp, keep):
     assert win.current_key() == "overlay" and win.search.text() == ""
     qapp.processEvents()
     tabs = win.forms["overlay"].controls["ov.look"][1]      # 1.66.4: on another tab – that tab is opened
-    assert tabs.currentIndex() == win.forms["overlay"].controls["ov.look"][2] and tabs.property("found") is True
+    assert tabs.currentWidget() is win.forms["overlay"].controls["ov.look"][2] and tabs.property("found") is True
 
 
 def test_open_tab_shows_an_elements_settings(qapp, keep):
@@ -780,12 +781,12 @@ def test_open_tab_shows_an_elements_settings(qapp, keep):
     tabs = win.forms["overlay"].controls["ov.music_f"][1]
     assert tabs.currentIndex() == 0
     win.open_tab("overlay", "ov.music_f")
-    assert tabs.currentIndex() == win.forms["overlay"].controls["ov.music_f"][2]
+    assert tabs.currentWidget() is win.forms["overlay"].controls["ov.music_f"][2]
     win.open_tab("overlay", "ov.sys")
-    assert tabs.currentIndex() == win.forms["overlay"].controls["ov.sys"][2]
+    assert tabs.currentWidget() is win.forms["overlay"].controls["ov.sys"][2]
     win.open_tab("overlay", "ov.caption")                     # not a tab: nothing happens
     win.open_tab("stats", "ov.sys")
-    assert tabs.currentIndex() == win.forms["overlay"].controls["ov.sys"][2]
+    assert tabs.currentWidget() is win.forms["overlay"].controls["ov.sys"][2]
 
 
 def test_tiles_view_shows_the_system_averages(qapp, keep):
@@ -1283,3 +1284,47 @@ def test_a_multi_select_table_posts_the_whole_selection(qapp, keep):
     assert t.selectionMode() == t.SelectionMode.SingleSelection
     t._clicked(items[1], 0)
     assert posted[-1] == ("act", (".nb.f3.treeview9", ("click", "r1")))
+
+
+def test_the_navigation_and_the_overlay_tabs_can_be_reordered_and_remembered(qapp, keep):
+    """1.7.6 (user: "move the windows on the left and the tab rows as I like"): set_nav_order puts the pages into
+    the saved order (missing ones follow), switching pages works by key, a drag posts the new order; the overlay
+    page's tabs follow apply_tab_order, open_tab still finds its tab, a drag posts tab_order, {} restores."""
+    from PySide6.QtCore import QModelIndex
+    from dbdmapscout import qt_window
+    posted = queue.Queue()
+    win = keep(qt_window.MainWindow(lambda a, arg=None: posted.put((a, arg))))
+    built = [k for k, _l in qt_window.PAGES]
+    win.set_nav_order(["log", "stats", "nonsense"])
+    assert win.nav_keys() == ["log", "stats"] + [k for k in built if k not in ("log", "stats")]
+    assert win.current_key() == "overview" and win.nav.currentRow() == win.nav_keys().index("overview")
+    win.show_page("stats")
+    assert win.current_key() == "stats" and win.nav.currentRow() == 1 and win.stack.currentWidget() is win._pages["stats"]
+    win.nav.setCurrentRow(0)
+    assert win.current_key() == "log" and win.stack.currentWidget() is win._pages["log"]
+    assert win.nav.item(0).text() == "Log" and not win.nav.item(0).icon().isNull()
+    while not posted.empty():
+        posted.get()
+    assert win.nav.model().moveRow(QModelIndex(), 0, QModelIndex(), 3)      # what a drag does
+    assert ("nav_order", win.nav_keys()) in [posted.get() for _ in range(posted.qsize())]
+    assert win.nav_keys()[:2] == ["stats", "overview"] and win.current_key() == "log"
+    win.set_nav_order([])
+    assert win.nav_keys() == built and win.current_key() == "log"
+    # the overlay page's tab row
+    form = win.forms["overlay"]
+    tabs_id, tabs, ids = form._tabsets[0]
+    frames = list(ids)
+    assert tabs_id == frames[0] and tabs.tabBar().isMovable()
+    form.apply_tab_order({tabs_id: list(reversed(frames))})
+    assert form._tab_ids(tabs, ids) == list(reversed(frames))
+    assert [tabs.tabText(i) for i in range(tabs.count())] == ["Allgemein", "Musik", "Heute", "Systemwerte", "Karte"]
+    win.open_tab("overlay", frames[0])
+    assert tabs.currentWidget() is form.controls[frames[0]][2]
+    form.show_states({"ov.sys": {"text": "Systemwerte", "visible": False}})
+    assert not tabs.isTabVisible(tabs.indexOf(form.controls["ov.sys"][2]))
+    while not posted.empty():
+        posted.get()
+    tabs.tabBar().moveTab(0, 1)
+    assert ("tab_order", ("overlay", tabs_id, form._tab_ids(tabs, ids))) in [posted.get() for _ in range(posted.qsize())]
+    form.apply_tab_order({tabs_id: ["ov.look", "bogus"]})          # no permutation: built-in order
+    assert form._tab_ids(tabs, ids) == frames

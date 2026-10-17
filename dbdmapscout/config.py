@@ -92,6 +92,8 @@ DEFAULTS = {
     "ui_zoom": 1.0,                     # control window: font size factor (qt_theme.ZOOMS)
     "qt_geometry": "",                  # control window: QWidget.saveGeometry() as base64
     "card_order": {},
+    "tab_order": {},                    # 1.7.6: {page: {tabs id: [tab ids]}} – the user's order of the tab rows
+    "nav_order": [],                    # 1.7.6: page keys in the user's order of the navigation
     "hidden_columns": {},             # 1.3.6: {"col|col|…" of a table: [column ids]} hidden by a right-click
     "layout_per_size": True,            # overlay: place and size of every element per DBD window size (1.65)
     "layouts": {},                      # {"3440x1440": layoutmem.snapshot(...)}
