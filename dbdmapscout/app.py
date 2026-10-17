@@ -346,7 +346,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self._layout_unsure = False
         self.current = (map_id, shown)
         self.source = source
-        self.overlay.set_map(path, m.label(shown), rotation)
+        self.overlay.set_map(path, m.label(shown), rotation, realm=self._realm_name(m))
         if not same_map:                         # a new map/round starts as set, the same one keeps its floor
             self._floor = None if self.settings["overlay"].get("floor_auto", True) else 0
         self._apply_floor()
@@ -683,7 +683,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         except Exception as e:
             self._log(_("Bild konnte nicht geladen werden: {path} ({error})", path=path, error=e), "Fehler")
             return
-        self.overlay.set_map(path, m.label(self.current[1]), rotation)
+        self.overlay.set_map(path, m.label(self.current[1]), rotation, realm=self._realm_name(m))
         self._apply_floor()
         self._set_thumb(frames[0][0])
         self._tick_overlay(reschedule=False)
@@ -958,6 +958,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
 
     def _place_overlay_map(self):
         o = self.settings["overlay"]
+        self.overlay.set_skin(self._skin(), self._skin_accent())       # 1.3.1: only re-renders on a change
         self.worker.map_on_screen = self.overlay.has_map() and not self.hidden_after_match
         gx, gy, gw, gh = self._game_rect()               # keeps the game window info fresh
         # test: shown at its normal place, ignoring every reason to hide it
@@ -1198,14 +1199,17 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         if o.get("show_map", True):
             pic = getattr(self, "_thumb_src", None) if self.current else None
             pic = pic or self._preview_sample()
-        caption = ""
-        if o.get("show_caption", True) and pic is not None:
-            m = self.catalog.maps.get(self.current[0]) if self.current else None
-            caption = m.label(self.current[1]) if m else _("Map-Name")
+        m = self.catalog.maps.get(self.current[0]) if self.current else None
+        if m is None and pic is not None:                  # the sample picture: the catalog's first map
+            m = next((e for e in self.catalog.maps.values() if self._map_file(e.id, 1)[0]), None)
+        name = m.label(self.current[1] if self.current else 1) if m else _("Map-Name")
+        caption = name if o.get("show_caption", True) and pic is not None else ""
         info = {"timer": "3:27" if o.get("show_timer", True) else "",
                 "server": _("Frankfurt") if o.get("show_server", True) and self.settings.get("show_connection") else "",
                 "ping": 31.0,
-                "record": _("Bilanz: Ø 2,8 Kills · 12 Runden") if o.get("show_record", True) else ""}
+                "record": _("Bilanz: Ø 2,8 Kills · 12 Runden") if o.get("show_record", True) else "",
+                "name": name if pic is not None else "",             # 1.3.1: the styled card's header
+                "realm": self._realm_name(m) if m and pic is not None else ""}
         side = self.settings.get("sysinfo", "off")
         sys_on, today = side in HUD_SHOWN, bool(o.get("show_today", True))
         now = time.time()

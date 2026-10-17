@@ -89,3 +89,75 @@ def test_the_preview_draws_the_cards_in_the_chosen_style():
     for a in MODERN:
         assert pics[a]["hud"].tobytes() != pics["classic"]["hud"].tobytes()
         assert pics[a]["music"].tobytes() != pics["classic"]["music"].tobytes()
+
+
+# ------------------------------------------------------------------ the map card (1.3.1)
+def _coal_body():
+    from dbdmapscout import mapimage
+    from dbdmapscout.overlay_win32 import map_body
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    pic = Image.open(os.path.join(root, "maps", "McMillan", "Coal Tower II.webp")).convert("RGBA")
+    return pic, map_body(pic, 440, mapimage.title_split(pic)[2])
+
+
+@pytest.mark.parametrize("style", MODERN)
+def test_the_map_card_carries_map_timer_and_lines(style):
+    pic, body = _coal_body()
+    assert body.height < pic.height * 440 / pic.height and body.width < pic.width     # name and margins cut
+    card = skin.map_card(body, "Coal Tower II", "MacMillan Estate", "12:34", "", "Ø 2.8 Kills · 12 Runden",
+                         "Frankfurt", 28, (), 518, style, "#c9a227")
+    assert card.width >= body.width and card.height > body.height + 60
+    plain = skin.map_card(body, "Coal Tower II", "MacMillan Estate", "", "", "", "", None, (), 518, style)
+    assert plain.height < card.height                                                 # no lines: shorter
+    warn = skin.map_card(body, "Coal Tower II", "", "0:05", "Unsicher", "", "", None, (), 518, style)
+    assert warn.height > plain.height
+    waiting = skin.map_card(None, "", "", "", "", "", "Frankfurt", 28, ("Warte auf Map", "Suche läuft: 1:23"), 518,
+                            style, None)
+    assert 100 < waiting.width < 400 and 60 < waiting.height < 300
+    assert skin.frame_pad(style, 518) == (0 if style == "chips" else skin.frame_pad(style, 518))
+    assert skin.frame_pad("chips", 518) == 0 and skin.frame_pad("glass", 518) > 0 and skin.frame_pad("line", 518) > 0
+
+
+def test_the_overlay_draws_the_map_card_in_the_style_and_fits_the_bar():
+    """PictureOverlay with skin glass / chips / line: the card stays inside the 440-px bar (its frame may use the
+    margin like the dark area), the waiting card follows the style, and a style change re-renders."""
+    from dbdmapscout import layout
+    from dbdmapscout import overlay_win32 as ow
+
+    class Root:
+        def after(self, *a):
+            return None
+
+        def after_cancel(self, *a):
+            pass
+
+    class Overlay(ow.PictureOverlay):
+        def _push(self, *a):
+            pass
+
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    seen = {}
+    for style in skin.STYLES:
+        ov = Overlay(Root())
+        ov.show_caption = False
+        ov.set_skin(style, "#c9a227")
+        ov.set_map(os.path.join(root, "maps", "McMillan", "Coal Tower II.webp"), "Coal Tower II", 0,
+                   realm="MacMillan Estate")
+        ov.set_timer("12:34")
+        ov.set_server("Frankfurt", 28)
+        ov.set_record("Bilanz: Ø 2,8 Kills · 12 Runden")
+        edge = min(ov.backdrop_pad(518), 15)
+        height = layout.fit_height(470, 406, *ov.map_size())
+        h = ov.fit_width(height, 518, 406 + 2 * edge)
+        w, hh = ov.render(h)
+        assert w <= 406 + 2 * edge and hh > h, style
+        seen[style] = ov._prepared[0][0]
+        if style == "chips":
+            pic = Image.frombytes("RGBA", (w, hh), seen[style])
+            assert pic.getpixel((2, hh // 3))[3] == 0            # no dark box behind the map: transparent stays
+        ov.set_waiting(("Warte auf Map", "Suche läuft: 1:23 · Killer"))
+        ww, wh = ov.render(518)
+        assert 120 < ww < 420 and 60 < wh < 320, style
+    assert len({bytes(v) for v in seen.values()}) == len(skin.STYLES)          # four different pictures
+    ov.set_skin("classic", None)                                                # a style change re-renders
+    assert ov._key is None and ov._base_key is None and ov._fit is None
