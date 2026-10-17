@@ -37,6 +37,7 @@ from .app_qt import QtShell
 from .app_overlay import OverlayTab, anchor_label
 from .app_recordings import RecordingsTab
 from .app_discord import DiscordPresence
+from .app_spotify import SpotifyUpNext
 
 LANGS = [("en", "EN"), ("de", "DE"), ("fr", "FR"), ("es", "ES"), ("es-MX", "ES-MX"), ("it", "IT"),
          ("pl", "PL"), ("pt-BR", "PT"), ("tr", "TR")]
@@ -60,8 +61,8 @@ def _event_name(ev) -> str:
 log = logging.getLogger("dbdmapscout")
 
 
-class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutMemory, OverlayTab,
-          QtShell):
+class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, LobbyInfo, Hotkeys, SettingsTab, SysInfo,
+          LayoutMemory, OverlayTab, QtShell):
     def __init__(self, root_dir: str, simulate: str | None = None, start_in_tray: bool = False):
         self.root_dir = root_dir
         self.simulate = simulate
@@ -760,6 +761,8 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, LobbyInfo, Hotkey
             self._rec_event(ev[1], ev[2])
         elif isinstance(ev, tuple) and ev[0] == "discord":          # 1.7: status of the Rich Presence
             self._discord_status(ev[1], ev[2])
+        elif isinstance(ev, tuple) and ev[0] == "spotify":          # 1.8: status / token of "Als nächstes"
+            self._spotify_event(ev[1], ev[2])
         elif isinstance(ev, tuple) and ev[0] == "call":       # from a window procedure (overlay, HUD)
             ev[1](*ev[2])
         else:
@@ -1251,18 +1254,19 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, LobbyInfo, Hotkey
         today_rows = self._today_rows(now) if today else None
         hud_side = side if sys_on else ""
         music = preview.music_rows(self.media.now, now) if o.get("show_media", True) else None
+        upnext = self._upnext(self.media.now, sample=True) if music else None      # 1.8: the Spotify queue
         accent = self._skin_accent()                     # 1.3: the modern styles use the theme's colour
         key = (gw, gh, repr(sorted((k, v) for k, v in o.items() if not isinstance(v, dict))), hud_side,
                bool(self.overlay.editing), accent,
                repr(rows), repr(today_rows), repr(self.settings.get("sysinfo_pos")), id(pic), caption, repr(info),
-               self._map_height(), repr(music[0]) if music else None, id(music[1]) if music else None)
+               self._map_height(), repr(music[0]) if music else None, id(music[1]) if music else None, repr(upnext))
         cached = getattr(self, "_preview_cache", None)
         if cached is None or cached[0] != key:
             # rendered at a smaller game height (everything scales with it) and drawn back at screen size
             f = min(1.0, preview.RENDER_H / max(1, gh))
             layers, rect = preview.layers(round(gw * f), round(gh * f), o, hud_side, rows,
                                           self.settings.get("sysinfo_pos"), pic, caption, info, self._map_height(),
-                                          music, today_rows, bool(self.overlay.editing), accent)
+                                          music, today_rows, bool(self.overlay.editing), accent, upnext)
             self._preview_cache = cached = (key, layers, tuple(round(v / f) for v in rect), f)
         _key, layers, (x, y, w, h), f = cached
         return {"screen": (gw, gh), "bar": layout.bar_width(gw, gh), "rect": (x, y, w, h, h),
@@ -1638,6 +1642,7 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, LobbyInfo, Hotkey
             self.media.stop()
             self.recorder.quit()
             self.presence.quit()
+            self.spotify.quit()
             self.worker.stop()
             self.hotkeys.stop()
             self.worker.join(timeout=4)      # let a running OCR call finish cleanly

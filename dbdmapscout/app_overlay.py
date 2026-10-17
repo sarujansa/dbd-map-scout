@@ -6,6 +6,7 @@ from __future__ import annotations
 from . import uimodel as ui
 from .i18n import N_, _
 from .skin import STYLE_LABELS
+from .app_spotify import MEDIA_NEXT_N, MEDIA_NEXT_SPOTS
 from .app_sysinfo import (BAR_ALIGNS, HUD_ROW_LABELS, HUD_SIDES, MAP_SCALE, MEDIA_SCALE, MEDIA_SPOTS, MEDIA_STYLES,
                           OPACITY_KEYS, PRESET_LABELS, SELECTABLE, TODAY_SPOTS)
 
@@ -279,6 +280,21 @@ class OverlayTab:
                   ).pack(anchor="w", pady=(2, 0))
         self._reg("ov.media_fade", look_check("media_fade", _("Weich ein- und ausblenden (auch beim nächsten Lied)"))
                   ).pack(anchor="w", pady=(2, 0))
+        nr = ui.Frame(mf)                                   # 1.8: the Spotify queue on the card
+        nr.pack(fill="x", pady=(6, 0))
+        self._reg("ov.media_next.label", ui.Label(nr, text=_("Als nächstes"), width=12)).pack(side="left")
+        nspots = dict(MEDIA_NEXT_SPOTS)
+        self.media_next_var = ui.StringVar(value=_(nspots.get(o.get("media_next_pos", "below"), nspots["below"])))
+        ncb = self._reg("ov.media_next", ui.Combobox(nr, textvariable=self.media_next_var, state="readonly",
+                                                      width=38, values=[_(t) for _k, t in MEDIA_NEXT_SPOTS]))
+        ncb.pack(side="left", padx=6)
+        ncb.bind("<<ComboboxSelected>>", lambda e: self._media_next_changed())
+        self.media_next_n_var = ui.DoubleVar(value=int(o.get("media_next_n", 3)))
+        self._slider(mf, _("Anzahl Titel"), self.media_next_n_var, *MEDIA_NEXT_N, self._media_next_changed,
+                     fmt="{:.0f}", key="ov.media_next_n")
+        self._reg("ov.media_next_hint", ui.Label(mf, text=_("Die Liste kommt aus Spotify – einrichten unter "
+                                                             "Einstellungen → Mehr → Spotify."),
+                                                 style="Dim.TLabel", wraplength=420)).pack(anchor="w")
         return outer
 
     def _look_flags_changed(self):

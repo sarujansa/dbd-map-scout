@@ -132,6 +132,10 @@ def collect(app) -> str:
     pres = getattr(app, "presence", None)
     lines.append(f"Discord: {getattr(pres, 'status', '–')} (an={app.settings.get('discord_on')}, "
                  f"ID gesetzt={bool(app.settings.get('discord_client_id'))}, Zustand={getattr(pres, 'state', None)})")
+    sp = getattr(app, "spotify", None)
+    if sp is not None:
+        lines.append(sp.diag_line() + f" (Position={app.settings['overlay'].get('media_next_pos')}, "
+                     f"ID gesetzt={bool(app.settings.get('spotify_client_id'))})")
     mon = getattr(app, "sysmon", None)
     if mon is not None:
         lines.append(mon.diag_line() + f" (Anzeige={app.settings.get('sysinfo')}, Rechteck="

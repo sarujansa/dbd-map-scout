@@ -313,6 +313,8 @@ class SettingsTab:
         self._rec_setting(save=False)
         self._discord_card(more)                      # 1.7: Rich Presence
         self._discord_init()
+        self._spotify_card(more)                      # 1.8: "Als nächstes" from Spotify
+        self._spotify_init()
 
         # 1.2.15: the same controls once more for the setup assistant's step "Match-Daten" – the originals sit
         # under "Mehr" and count as hidden while it is folded (the settings page itself draws only SPECS keys)
