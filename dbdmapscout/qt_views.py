@@ -776,9 +776,9 @@ class DashboardView(QWidget):
         self.empty = _label(cls="dim")
         lay.addWidget(self.empty)
         self.tiles_box = QWidget()
-        self.grid = TileGrid(self.tiles_box, min_width=140, columns=6)   # fewer columns in a narrow window
+        self.grid = TileGrid(self.tiles_box, min_width=140, columns=4)   # fewer columns in a narrow window
         self.tiles = []
-        for _i in range(6):
+        for _i in range(8):                       # 1.6.3: seven tiles (bloodpoints per hour), two rows of four
             card = _card()
             cl = QVBoxLayout(card)
             cl.setContentsMargins(14, 12, 14, 12)
