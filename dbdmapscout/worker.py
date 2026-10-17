@@ -15,9 +15,10 @@ import cv2
 from .capture import (IS_WIN, ImageSource, ScreenGrabber, cursor_state, find_game_window, foreground_root,
                       overlaps, windows_above)
 from .i18n import _
-from .detector import ROI, Accumulator, BannerReader, OutOfMatchWatcher, letterbox_rows
+from .detector import ROI, Accumulator, BannerReader, OutOfMatchWatcher, has_loading_bar, is_dark, letterbox_rows
 from .layout import MIN_VBAR
 from .lobby import LobbyReader, QueueTracker, corner_box, crossplay_box, crossplay_off, result_box
+from .matchstart import MatchStart
 from .matchend import MatchEndTracker, Signals
 from .ocr import Recognizer
 
@@ -32,6 +33,7 @@ MID_MATCH_SPAN = 2.0              # … and it must stay on screen this long (a 
 SIGHTINGS_KEPT = 20               # mid-match sightings kept in debug/midmatch (picture + text each), newest first
 GLOBE_KEPT = 10                   # 1.5.4: unreadable cross-play globe crops kept in debug/lobby
 GLOBE_SAVE_EVERY = 120.0          # s between two saved crops (one per lobby is enough)
+START_LOOK_INTERVAL = 1.0         # 1.6: seconds between two looks for the end of the loading screen (armed only)
 LOBBY_INTERVAL = 1.0              # seconds between two looks at the lobby button (never during a match)
 LOBBY_RATE = 1.0                  # banner scans per second while the lobby button is on screen: the banner
 LOBBY_HOLD = 3.0                  # only comes after the loading screen; full rate again 3 s after the button went
@@ -77,6 +79,7 @@ class DetectionWorker(threading.Thread):
         self.capture_info = "Bildschirm"                     # where the pictures come from (diagnosis)
         self.end_history = collections.deque(maxlen=80)     # for the diagnosis
         self.queue = QueueTracker()                          # lobby: search / waiting time / role
+        self.match_start = MatchStart()                      # 1.6: end of the loading screen (recording start)
         self.lobby_info = "–"                                # last look at the lobby button (diagnosis)
         self.banner_history = collections.deque(maxlen=20)  # every banner-like sighting and its outcome (diagnosis)
         self._scanner = None
@@ -136,6 +139,7 @@ class DetectionWorker(threading.Thread):
         lobby_reader = LobbyReader(rec)
         last_lobby = 0.0
         lobby_button_t = -1e9             # last look that saw PLAY / CANCEL / READY
+        last_start_look = -1e9            # 1.6: last look for the end of the loading screen
         source = ImageSource(self.simulate) if self.simulate else None
         grabber = None if source else ScreenGrabber()
         from .wincapture import CapturePolicy, WindowCapture, describe
@@ -360,6 +364,25 @@ class DetectionWorker(threading.Thread):
                 except Exception:
                     self._report("Lobby-Erkennung", traceback.format_exc())
 
+            # ------------------------------------- 1.6: loading screen over -> the match begins (recording)
+            ms = self.match_start
+            if self.map_on_screen and ms.armed:
+                ms.disarm()                          # a banner came first: the recording starts there
+            elif (ms.armed and sep is None and not session and tick - last_start_look >= START_LOOK_INTERVAL
+                    and (source is not None or window is not None)):
+                last_start_look = tick
+                try:
+                    look = grab((0, 0, fw, fh))
+                    if look is not None:             # None: covered -> no look, nothing changes
+                        if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect or self.today_rect or self.guide_rects):
+                            self._mask_overlay(look, origin[0], origin[1])
+                        if ms.update(tick, has_loading_bar(look), is_dark(look),
+                                     tick - lobby_button_t < START_LOOK_INTERVAL * 1.5):
+                            log.info("Ladebildschirm vorbei – das Match beginnt")
+                            self.post("match_start", t=tick)
+                except Exception:
+                    self._report("Matchbeginn", traceback.format_exc())
+
             # ------------------------------------- left the trial? -> hide map
             gen = self.watch_gen
             if gen != tracker_gen:
@@ -468,13 +491,16 @@ class DetectionWorker(threading.Thread):
             self.post("queue", what="search", since=self.queue.search_start, role=self.queue.role,
                       killer=self.queue.killer, crossplay_off=self.queue.crossplay_off)
         elif ev[0] == "cancel":
+            self.match_start.disarm()
             self.post("queue", what="cancel")
         elif ev[0] == "left":
+            self.match_start.disarm()
             self.post("queue", what="left")
         elif ev[0] == "role":
             self.post("queue", what="role", role=ev[1], killer=self.queue.killer,
                       crossplay_off=self.queue.crossplay_off)
         elif ev[0] == "found":
+            self.match_start.arm(tick)                # 1.6: one lobby arms one match start
             self.post("queue", what="found", found=ev[1], role=ev[1].role)
         elif ev[0] == "remind":
             self.post("queue", what="remind", seconds=ev[1])

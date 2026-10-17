@@ -823,6 +823,8 @@ class App(ServerTab, StatsTab, RecordingsTab, LobbyInfo, Hotkeys, SettingsTab, S
                 self._unknown = (txt, d.get("realm_text") or "")
         elif k == "queue":
             self._queue_event(d)
+        elif k == "match_start":                  # 1.6: end of the loading screen (recording from the spawn)
+            self._match_started(d)
         elif k == "match_end":
             self._clear_unsure()                  # a whole round on that map: it was real
             self._round_ended(d.get("t") or time.time())

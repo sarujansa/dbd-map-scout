@@ -50,6 +50,18 @@ RENAME_WAIT = 0.5
 REPLAY_WAIT = 4.0               # 1.5.4: s to wait for OBS to finish writing the replay buffer (it saves asynchronously)
 REPLAY_POLL = 0.2
 MAX_ROUND_S = 45 * 60           # a recording longer than this is stopped (an end that was never detected)
+EARLY_WAIT_S = 180              # 1.6: started at the end of the loading screen – no banner within this: filed as it is
+CLIP_SECONDS = (15, 30, 45, 60, 90, 120)   # 1.6: F8 instant clip – the last n seconds of the replay buffer
+DEFAULT_CLIP_S = 30
+# 1.6 (user: "only DBD and Discord audio, each switchable"): OBS's own "Application Audio Capture" sources,
+# created once in the current scene. OBS picks the window by its executable (priority 2) – the title is only a
+# hint. OBS does the capture (Windows process loopback); this program only sends the requests.
+AUDIO_KIND = "wasapi_process_output_capture"
+AUDIO_APPS = {
+    "dbd": ("DbD Map Scout – DBD", "DeadByDaylight:UnrealWindow:DeadByDaylight-Win64-Shipping.exe"),
+    "discord": ("DbD Map Scout – Discord", "Discord:Chrome_WidgetWin_1:Discord.exe"),
+}
+AUDIO_PRIORITY_EXE = 2
 TAILS_S = (0, 3, 5, 8, 10)      # 1.4.1: seconds recorded after the detected end (the result screen)
 DEFAULT_TAIL_S = 5
 MIN_FILE_BYTES = 1024 * 1024    # 1.4.1: a recording smaller than this is reported as broken/empty
@@ -59,6 +71,7 @@ FFMPEG_TIMEOUT = 600            # s for joining the two files (stream copy: seco
 SPACE_EVERY = 10.0              # s between two looks at the drive (Recorder.space)
 DURATION_RE = re.compile(rb"Duration: (\d+):(\d\d):(\d\d(?:\.\d+)?)")
 NAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+CLIPS_DIR = "Clips"              # 1.5.3: clips (editor, F8 instant clips) beside the recordings
 FARMING_DIR = "Farming"         # 1.5.3 (user's wish): recordings of farming rounds go into this subfolder
 
 
@@ -499,6 +512,18 @@ class Config:
     buffer_auto: bool = True         # 1.4.1: start OBS's replay buffer with DBD, stop it when DBD is gone
     merge: bool = True               # 1.4.2: pre-roll + round → one file (ffmpeg, stream copy)
     farming_sub: bool = True         # 1.5.3: farming rounds into the subfolder FARMING_DIR
+    early: bool = True               # 1.6: start at the end of the loading screen (spawn), the banner names it
+    instant: bool = True             # 1.6: F8 saves the last clip_s seconds of the replay buffer as a clip
+    clip_s: int = DEFAULT_CLIP_S
+    audio: bool = True               # 1.6: set OBS's audio sources (below) when DBD starts
+    audio_dbd: bool = True
+    audio_discord: bool = True
+    audio_desktop: bool = False      # the rest of the desktop sound (OBS "Desktop Audio")
+    audio_mic: bool = False          # OBS "Mic/Aux"
+
+    @property
+    def wants_buffer(self) -> bool:
+        return self.pre or self.instant
 
 
 def check_file(path: str) -> str | None:
@@ -546,6 +571,18 @@ class Recorder(threading.Thread):
 
     def start_round(self, **meta):
         self.cmds.put(("start", meta))
+
+    def start_early(self, **meta):
+        """1.6: the loading screen ended – record from the spawn on; the banner (start_round) names the round."""
+        self.cmds.put(("early", meta))
+
+    def instant_clip(self, **meta):
+        """1.6: F8 – the last clip_s seconds of OBS's replay buffer as a clip in Clips/."""
+        self.cmds.put(("clip", meta))
+
+    def apply_audio(self):
+        """1.6: set OBS's audio sources now (settings changed)."""
+        self.cmds.put(("audio", None))
 
     def stop_round(self, **meta):
         self.cmds.put(("stop", meta))
@@ -602,6 +639,12 @@ class Recorder(threading.Thread):
                     self._test()
                 elif cmd == "start":
                     self._begin(arg)
+                elif cmd == "early":
+                    self._begin_early(arg)
+                elif cmd == "clip":
+                    self._instant_clip(arg)
+                elif cmd == "audio":
+                    self._audio_now()
                 elif cmd == "stop":
                     self._stop_later(arg)
                 elif cmd == "game":
@@ -789,7 +832,9 @@ class Recorder(threading.Thread):
             self._warn(_("OBS läuft nicht – die Runden werden nicht aufgenommen. ({error})", error=e))
             return
         try:
-            if self.cfg.pre and self.cfg.buffer_auto:
+            if self.cfg.audio:
+                self._audio(c)
+            if self.cfg.wants_buffer and self.cfg.buffer_auto:
                 try:
                     if not c.request("GetReplayBufferStatus").get("outputActive"):
                         c.request("StartReplayBuffer")
@@ -804,7 +849,25 @@ class Recorder(threading.Thread):
         self._say(text, False)
         self._post("warn", text=text)
 
-    def _begin(self, meta):
+    def _begin_early(self, meta):
+        """1.6: recording from the end of the loading screen on, before any banner: provisional until _begin."""
+        if self.active is not None or not self.cfg.on or not self.cfg.early:
+            return
+        self._begin(dict(meta, early=True), pre_roll=False)
+
+    def _begin(self, meta, pre_roll=True):
+        a = self.active
+        if (a is not None and a.get("early") and not meta.get("early") and self._pending is None
+                and time.time() - a.get("since", 0) <= EARLY_WAIT_S):
+            # 1.6: the banner of the round recorded since the loading screen: it names it, nothing restarts
+            marks = a.get("marks", [])
+            merged = dict(a)
+            merged.update({k: v for k, v in meta.items() if v is not None})
+            merged.update(early=False, marks=marks, farming=bool(a.get("farming") or meta.get("farming")))
+            self.active = merged
+            self._say(_("Nimmt die Runde auf (seit dem Ladebildschirm)"), True)
+            self._post("started", t=meta.get("t"))
+            return
         self._flush()                                   # a new banner while recording: close the old one first
         if not self.cfg.on:
             return
@@ -825,7 +888,7 @@ class Recorder(threading.Thread):
             except ObsError:
                 log.info("OBS: Aufnahmeordner nicht setzbar – OBS nimmt in seinen eigenen Ordner auf")
             pre = ""
-            if self.cfg.pre:
+            if self.cfg.pre and pre_roll:
                 try:
                     if c.request("GetReplayBufferStatus").get("outputActive"):
                         pre = self._save_replay(c)
@@ -835,6 +898,10 @@ class Recorder(threading.Thread):
         finally:
             c.close()
         self.active = dict(meta, pre=pre, since=time.time(), marks=[])
+        if meta.get("early"):
+            self._say(_("Nimmt auf – seit dem Ende des Ladebildschirms, wartet auf das Map-Banner"), True)
+            self._post("started", t=meta.get("t"), early=True)
+            return
         self._say(_("Nimmt die Runde auf"), True)
         self._post("started", t=meta.get("t"))
 
@@ -988,7 +1055,116 @@ class Recorder(threading.Thread):
         return src
 
     def _watchdog(self):
-        """An end that never came (DBD crashed, detection missed it): stop after MAX_ROUND_S."""
-        if (self.active is not None and self._pending is None
-                and time.time() - self.active.get("since", time.time()) > MAX_ROUND_S):
+        """An end that never came (DBD crashed, detection missed it): stop after MAX_ROUND_S. 1.6: a recording
+        started at the loading screen whose banner never came within EARLY_WAIT_S is stopped and filed as it is
+        (an unknown map is still a round – nothing is deleted)."""
+        a = self.active
+        if a is None or self._pending is not None:
+            return
+        age = time.time() - a.get("since", time.time())
+        if a.get("early") and age > EARLY_WAIT_S:
+            log.info("OBS: kein Map-Banner %d s nach dem Ladebildschirm – Aufnahme beendet", EARLY_WAIT_S)
+            self._finish({"label": a.get("label") or _("Unbekannte Map")})
+        elif age > MAX_ROUND_S:
             self._finish({})
+
+    # ---- 1.6: audio sources in OBS
+    def _audio_now(self):
+        if not (self.cfg.on and self.cfg.audio and self._game):
+            return
+        try:
+            c = self._client()
+        except ObsError as e:
+            log.info("OBS: Ton nicht eingestellt (%s)", e)
+            return
+        try:
+            self._audio(c)
+        finally:
+            c.close()
+
+    def _audio(self, c: ObsClient):
+        """DBD and Discord as OBS application audio sources (created in the current scene the first time),
+        each muted or not as set; OBS's desktop audio and microphone muted or not as set. Errors only in the log
+        and the status: older OBS (< 28) has no application audio capture."""
+        notes = []
+        try:
+            names = {i.get("inputName") for i in c.request("GetInputList").get("inputs", [])}
+            scene = None
+            for key, on in (("dbd", self.cfg.audio_dbd), ("discord", self.cfg.audio_discord)):
+                name, window = AUDIO_APPS[key]
+                if name not in names:
+                    if not on:
+                        continue                          # never created, not wanted: nothing to do
+                    if scene is None:
+                        cur = c.request("GetCurrentProgramScene")
+                        scene = cur.get("currentProgramSceneName") or cur.get("sceneName") or ""
+                    c.request("CreateInput", {"sceneName": scene, "inputName": name, "inputKind": AUDIO_KIND,
+                                              "inputSettings": {"window": window, "priority": AUDIO_PRIORITY_EXE},
+                                              "sceneItemEnabled": True})
+                    notes.append(_("Tonquelle angelegt: {name}", name=name))
+                c.request("SetInputMute", {"inputName": name, "inputMuted": not on})
+            special = c.request("GetSpecialInputs")
+            for key, on in (("desktop1", self.cfg.audio_desktop), ("desktop2", self.cfg.audio_desktop),
+                            ("mic1", self.cfg.audio_mic), ("mic2", self.cfg.audio_mic),
+                            ("mic3", self.cfg.audio_mic), ("mic4", self.cfg.audio_mic)):
+                name = special.get(key)
+                if name:
+                    c.request("SetInputMute", {"inputName": name, "inputMuted": not on})
+        except ObsError as e:
+            log.info("OBS: Ton nicht eingestellt (%s)", e)
+            self._say(_("Ton in OBS nicht eingestellt: {error}", error=e), False)
+            return
+        for n in notes:
+            log.info("OBS: %s", n)
+
+    # ---- 1.6: F8 instant clip
+    def _instant_clip(self, meta):
+        """Save OBS's replay buffer, keep its last clip_s seconds as Clips/<name>.mp4 (ffmpeg, stream copy). The
+        saved replay is our own file (made by our request, path from OBS): it is removed once the clip exists;
+        without ffmpeg it is moved into Clips as it is."""
+        if not (self.cfg.on and self.cfg.instant):
+            return
+        folder = self.folder()
+        if folder is None:
+            self._post("clip", ok=False, why=_("Aufnahme-Laufwerk nicht angeschlossen"))
+            return
+        c = self._client()
+        try:
+            if not c.request("GetReplayBufferStatus").get("outputActive"):
+                self._post("clip", ok=False, why=_("Wiederholungspuffer in OBS läuft nicht"))
+                return
+            src = self._save_replay(c)
+        finally:
+            c.close()
+        if not src or not os.path.exists(src):
+            self._post("clip", ok=False, why=_("OBS hat den Puffer nicht gespeichert"))
+            return
+        clips = os.path.join(folder, CLIPS_DIR)
+        os.makedirs(clips, exist_ok=True)
+        who = meta.get("killer") or {"killer": "Killer", "survivor": "Survivor"}.get(meta.get("role") or "", "")
+        name = file_name(time.time(), meta.get("label") or _("Clip"), who, "", " " + _("(Sofort-Clip)"))
+        ffmpeg = ffmpeg_exe()
+        out = None
+        if ffmpeg:
+            out = os.path.join(clips, self._unique(clips, name + ".mp4"))
+            rc, err = _run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-sseof", f"-{int(self.cfg.clip_s)}",
+                            "-i", src, "-map", "0", "-c", "copy", "-avoid_negative_ts", "make_zero",
+                            "-movflags", "+faststart", out])
+            if rc != 0 or not os.path.exists(out) or os.path.getsize(out) == 0:
+                log.info("ffmpeg: Sofort-Clip nicht geschnitten (%s): %s", rc,
+                         err[-300:].decode("utf-8", "replace").strip())
+                try:
+                    os.remove(out)
+                except OSError:
+                    pass
+                out = None
+        if out is not None:
+            try:
+                os.remove(src)
+            except OSError:
+                pass
+        else:                                            # no ffmpeg / cut failed: the whole buffer is the clip
+            target = os.path.join(clips, self._unique(clips, name + (os.path.splitext(src)[1] or ".mkv")))
+            out = self._move(src, target)
+        self._post("clip", ok=True, file=os.path.basename(out), seconds=int(self.cfg.clip_s))
+        self._look_at_space(force=True)
