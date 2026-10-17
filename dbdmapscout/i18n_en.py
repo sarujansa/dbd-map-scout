@@ -134,8 +134,18 @@ EN = {
     "Hinweis: Runden auf {region} zählen laut Einstellung weiter als Farming.":
         "Note: rounds on {region} still count as farming by the setting.",
     "Crossplay war aus – die Runde zählt als Farming-Runde.": "Cross-play was off – the round counts as a farming round.",
-    "Crossplay ist aus – die nächste Runde zählt als Farming-Runde.":
-        "Cross-play is off – the next round counts as a farming round.",
+    "{off} von {n} Blicken mit Kreuz": "{off} of {n} looks with the cross",
+    "letzter Blick": "last look",
+    "Crossplay ist aus ({looks}) – die nächste Runde zählt als Farming-Runde.":
+        "Cross-play is off ({looks}) – the next round counts as a farming round.",
+    "Crossplay ist an ({looks}) – keine Farming-Runde.": "Cross-play is on ({looks}) – no farming round.",
+    "Als Custom Game erkannt – die Runde zählt nicht als Farming (unter „Letzte Runden“ mit „Farming an/aus“ "
+    "korrigierbar).": "Recognised as a custom game – the round does not count as farming (correct it under "
+                      "\"Last rounds\" with \"Farming on/off\").",
+    "Keine Lobby zur Runde ({why}) – sie zählt nicht als Farming.":
+        "No lobby for this round ({why}) – it does not count as farming.",
+    "Lobby zu alt": "lobby too old",
+    "Lobby nicht gesehen": "lobby not seen",
     "Diese Runde als Farming-Runde zählen bzw. wieder als normale Runde – Farming-Runden erscheinen nur unter dem "
     "Filter „Farming“. Runden auf der Farming-Region (Einstellungen → Mehr) bleiben Farming.":
         "Count this round as a farming round, or as a normal round again – farming rounds show only under the "
@@ -1404,7 +1414,7 @@ EN = {
     'Das Programm startet die OBS-Aufnahme beim Map-Banner und stoppt sie beim erkannten Rundenende (obs-websocket, nur auf diesem PC). OBS muss laufen.': 'The program starts the OBS recording at the map banner and stops it at the detected end of the round (obs-websocket, on this PC only). OBS must be running.',
     'Verbindet sich einmal mit OBS und zeigt Version, Aufnahmezustand, Wiederholungspuffer und ob der Aufnahmeordner erreichbar ist.': 'Connects to OBS once and shows its version, whether it records, the replay buffer and whether the recording folder is reachable.',
     'Ordner, in den OBS die Runden legt – z. B. auf der externen Platte. Gemerkt wird das Laufwerk, nicht der Buchstabe: bekommt die Platte einen anderen, findet das Programm den Ordner trotzdem.': 'Folder OBS puts the rounds in – e.g. on the external drive. The drive is remembered, not its letter: if the drive gets another one, the program still finds the folder.',
-    'Das Banner kommt erst ~40 s nach Matchbeginn. Läuft in OBS der Wiederholungspuffer, wird er beim Banner gespeichert – so fehlt der Anfang (Spawn) nicht. Die Datei liegt als „(Vorlauf)“ neben der Runde.': 'The banner comes ~40 s after the match starts. If OBS\'s replay buffer is running, it is saved at the banner – so the start (spawn) is not missing. The file lies next to the round as "(Vorlauf)".',
+    'Läuft in OBS der Wiederholungspuffer, wird er beim Map-Banner gespeichert – der Anfang (Spawn) fehlt dann nicht, aber die Datei enthält auch Lobby und Ladebildschirm. Seit 1.5.5 standardmässig aus (Wunsch des Nutzers: nur die Runde). Die Datei liegt als „(Vorlauf)“ neben der Runde.': 'If OBS\'s replay buffer is running, it is saved at the map banner – the start (spawn) is not missing then, but the file also holds the lobby and the loading screen. Off by default since 1.5.5 (user\'s wish: the round only). The file lies next to the round as "(Vorlauf)".',
     # 1.4.1
     'Wiederholungspuffer mit DBD starten und stoppen': "Start and stop the replay buffer with DBD",
     'Das Programm startet den Wiederholungspuffer in OBS, sobald DBD läuft, und stoppt ihn, wenn DBD zu ist – so kostet er ausserhalb des Spiels nichts und du musst nicht daran denken.': "The program starts OBS's replay buffer as soon as DBD runs and stops it when DBD is closed – so it costs nothing outside the game and you need not think of it.",
@@ -1418,7 +1428,7 @@ EN = {
     'Aufnahme': 'Recording',
     # 1.4.2
     'Vorlauf und Runde zu einer Datei zusammenfügen': 'Join pre-roll and round into one file',
-    'Nach der Runde hängt ffmpeg den Vorlauf vorne an die Aufnahme – ohne Neukodierung, in Sekunden, Bild und Ton bleiben wie von OBS. Klappt es nicht, bleiben beide Dateien liegen.': 'After the round ffmpeg puts the pre-roll in front of the recording – no re-encoding, seconds of work, picture and sound stay as OBS made them. If it fails, both files stay.',
+    'Nach der Runde hängt ffmpeg den Vorlauf vorne an die Aufnahme – ohne Neukodierung, in Sekunden. Seit 1.5.5 standardmässig aus: Am PC des Nutzers lief der Rundenteil der zusammengefügten Datei zu schnell. Klappt es nicht, bleiben beide Dateien liegen.': 'After the round ffmpeg puts the pre-roll in front of the recording – no re-encoding, seconds of work. Off by default since 1.5.5: on the user\'s PC the round part of the joined file played too fast. If it fails, both files stay.',
     'ffmpeg fehlt (Paket imageio-ffmpeg) – start.bat installiert es beim nächsten Start; bis dahin bleibt der Vorlauf eine eigene Datei.': 'ffmpeg is missing (package imageio-ffmpeg) – start.bat installs it on the next start; until then the pre-roll stays a file of its own.',
     'Gespeichert: {file} – Vorlauf nicht angefügt, liegt als eigene Datei daneben': 'Saved: {file} – pre-roll not joined, lies next to it as its own file',
     'Clip-Marke setzen': 'Set clip mark',
