@@ -140,7 +140,8 @@ def ui_state(w) -> dict:
         widths = [int(w.column(c[0], "width") or 0) for c in cols]
         st.update(columns=cols, rows=rows, selection=list(w.selection()), colours=colours, stretch=stretch,
                   widths=widths,
-                  selectable=str(w.cget("selectmode")) != "none" or hasattr(w, "_dbdms_click"))
+                  selectable=str(w.cget("selectmode")) != "none" or hasattr(w, "_dbdms_click"),
+                  multi=str(w.cget("selectmode")) == "extended")          # 1.5.4: several rows at once
         return st
     if isinstance(w, ui.Scale):
         value = w.get()
@@ -211,6 +212,9 @@ def ui_act(w, value=None):
                 w.selection_set(arg)
                 w.focus(arg)
                 w.event_generate("<<TreeviewSelect>>")
+        elif what == "select":                            # 1.5.4: the whole selection of a multi-select table
+            w.selection_set([i for i in (arg or []) if w.exists(i)])
+            w.event_generate("<<TreeviewSelect>>")
 
 
 class QtShell:

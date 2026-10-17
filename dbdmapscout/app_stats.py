@@ -230,7 +230,7 @@ class StatsTab:
                                                   ("dur", _("Dauer"), 60, "e"), ("wait", _("Warten"), 65, "e"),
                                                   ("role", _("Rolle/Killer"), 115, "w"), ("res", _("Ergebnis"), 75, "w"),
                                                   ("srv", _("Server"), 100, "w")), 7,
-                                           select=True)
+                                           select=True, multi=True)      # 1.5.4: several rows (Ctrl/Shift)
         self.stats_last.bind("<<TreeviewSelect>>", lambda e: self._stats_role_buttons())
         self.stats_more_btn = ui.Button(box2, text=_("Weitere 100 Runden anzeigen"), command=self._stats_more_rounds)
         rr = ui.Frame(box2)
@@ -267,11 +267,11 @@ class StatsTab:
         self.stats_nb.add(page, text=title)
         return page
 
-    def _stats_tree(self, parent, cols, height, select=False):
+    def _stats_tree(self, parent, cols, height, select=False, multi=False):
         tf = ui.Frame(parent)
         tf.pack(fill="both", expand=True)
         t = ui.Treeview(tf, columns=[c[0] for c in cols], show="headings", height=height,
-                         selectmode="browse" if select else "none")
+                         selectmode=("extended" if multi else "browse") if select else "none")
         for key, title, width, anchor in cols:
             t.heading(key, text=title, anchor=anchor, command=lambda k=key, tr=t: self._stats_sort_by(tr, k))
             t.column(key, width=width, anchor=anchor, stretch=key in ("map", "reg"))
@@ -509,8 +509,9 @@ class StatsTab:
                                                        (_(regions.NAMES.get(r.region, r.region))
                                                         + (f" · {r.ping:.0f} ms" if r.ping is not None else ""))
                                                        if r.region else "–"))
-        if keep and t.exists(keep[0]):
-            t.selection_set(keep[0])
+        kept = [k for k in keep if t.exists(k)]              # 1.5.4: every marked row stays marked
+        if kept:
+            t.selection_set(kept)
         self._stats_role_buttons()
 
     def _stats_sys_render(self, rounds, unit):
@@ -588,7 +589,8 @@ class StatsTab:
 
     def _stats_role_buttons(self):
         sel = self.stats_last.selection()
-        state = "normal" if sel and sel[0] not in getattr(self, "_off_rescued", ()) else "disabled"
+        rescued = getattr(self, "_off_rescued", ())
+        state = "normal" if sel and not any(s in rescued for s in sel) else "disabled"
         for b in self.stats_role_btns:
             b.configure(state=state)
         self.stats_round_killer_cb.configure(state="readonly" if state == "normal" else "disabled")
@@ -626,74 +628,114 @@ class StatsTab:
         self._log(_("Killer-Zuordnungen gelöscht."), "System")
         self._stats_render()
 
+    def _stats_selected_ts(self) -> list:
+        """Banner times of the rows marked in "Letzte Runden" (1.5.4: several at once)."""
+        out = []
+        for iid in self.stats_last.selection():
+            try:
+                out.append(float(iid))
+            except ValueError:
+                continue
+        return out
+
     def _stats_set_role(self, role):
-        """Correct the role of the round marked in "Letzte Runden" (detection wrong or unknown)."""
-        sel = self.stats_last.selection()
-        if not sel:
+        """Correct the role of the rounds marked in "Letzte Runden" (detection wrong or unknown)."""
+        ts = self._stats_selected_ts()
+        if not ts:
             return
+        done = []
         try:
-            r = history.set_role(self._hist_path(), float(sel[0]), role)
+            for t in ts:
+                r = history.set_role(self._hist_path(), t, role)
+                if r is not None:
+                    done.append(r)
         except OSError as e:
             self._log(_("Rolle konnte nicht gespeichert werden: {error}", error=e), "Fehler")
             return
-        if r is not None:
+        name = _("Custom Game") if role == "custom" else self._role_name(role)
+        if len(done) == 1:
+            r = done[0]
             self._log(_("Rolle für {map} ({when}) auf {role} geändert.", map=r.map,
-                        when=time.strftime("%d.%m.%y %H:%M", time.localtime(r.t)),
-                        role=_("Custom Game") if role == "custom" else self._role_name(role)), "System")
+                        when=time.strftime("%d.%m.%y %H:%M", time.localtime(r.t)), role=name), "System")
+        elif done:
+            self._log(_("Rolle für {n} Runden auf {role} geändert.", n=len(done), role=name), "System")
         self._stats_render()
 
     def _stats_toggle_farming(self):
-        """1.2.20: mark / unmark the round marked in "Letzte Runden" as a farming round."""
-        sel = self.stats_last.selection()
-        if not sel:
+        """1.2.20: mark / unmark the rounds marked in "Letzte Runden" as farming rounds – all of them become
+        farming unless every one already is (then all become normal). The recording follows (1.5.4)."""
+        ts = self._stats_selected_ts()
+        if not ts:
             return
-        t = float(sel[0])
-        now = next((r for r in history.load(self._hist_path()) if abs(r.t - t) < 1e-6), None)
-        if now is None:
+        rounds = {r.t: r for r in history.load(self._hist_path())}
+        picked = [rounds[t] for t in ts if t in rounds]
+        if not picked:
             return
+        on = not all(r.farming for r in picked)
+        done = []
         try:
-            r = history.set_farming(self._hist_path(), t, not now.farming)
+            for r0 in picked:
+                r = history.set_farming(self._hist_path(), r0.t, on)
+                if r is not None:
+                    done.append(r)
+                    self.recorder.set_farming(r0.t, on)          # the recording moves into/out of "Farming"
         except OSError as e:
             self._log(_("Rolle konnte nicht gespeichert werden: {error}", error=e), "Fehler")
             return
-        if r is not None:
+        if len(done) == 1:
+            r = done[0]
             when = time.strftime("%d.%m.%y %H:%M", time.localtime(r.t))
             self._log(_("{map} ({when}) zählt jetzt als Farming-Runde.", map=r.map, when=when) if r.farming
                       else _("{map} ({when}) zählt wieder als normale Runde.", map=r.map, when=when), "System")
-            if not r.farming and r.region and r.region == (self.settings.get("farming_region") or None):
-                self._log(_("Hinweis: Runden auf {region} zählen laut Einstellung weiter als Farming.",
-                            region=self._stats_region_name(r.region)), "System")
+        elif done:
+            self._log(_("{n} Runden zählen jetzt als Farming-Runden.", n=len(done)) if on
+                      else _("{n} Runden zählen wieder als normale Runden.", n=len(done)), "System")
+        farm_region = self.settings.get("farming_region") or None
+        if not on and any(r.region and r.region == farm_region for r in done):
+            self._log(_("Hinweis: Runden auf {region} zählen laut Einstellung weiter als Farming.",
+                        region=self._stats_region_name(farm_region)), "System")
         self._stats_render()
 
     def _stats_delete_round(self):
-        """Remove the round marked in "Letzte Runden" (e.g. a map read wrongly in the middle of a match)."""
+        """Remove the rounds marked in "Letzte Runden" (e.g. a map read wrongly in the middle of a match)."""
         sel = self.stats_last.selection()
         if not sel:
             return
-        values = self.stats_last.item(sel[0], "values")
-        what = f"{values[1]} ({values[0]})" if len(values) > 1 else sel[0]
-        if not self._ask(_("Runde löschen"), _("Runde {what} aus der Statistik löschen?", what=what),
-                         self._stats_delete_round):
+        if len(sel) == 1:
+            values = self.stats_last.item(sel[0], "values")
+            what = f"{values[1]} ({values[0]})" if len(values) > 1 else sel[0]
+            question = _("Runde {what} aus der Statistik löschen?", what=what)
+        else:
+            question = _("{n} Runden aus der Statistik löschen?", n=len(sel))
+        if not self._ask(_("Runde löschen"), question, self._stats_delete_round):
             return
+        gone = []
         try:
-            r = history.delete(self._hist_path(), float(sel[0]))
+            for t in self._stats_selected_ts():
+                r = history.delete(self._hist_path(), t)
+                if r is not None:
+                    gone.append(r)
         except OSError as e:
             self._log(_("Runde konnte nicht gelöscht werden: {error}", error=e), "Fehler")
             return
-        if r is not None:
-            self._log(_("Runde gelöscht: {map} ({when}).", map=r.map,
-                        when=time.strftime("%d.%m.%y %H:%M", time.localtime(r.t))), "System")
+        if len(gone) == 1:
+            self._log(_("Runde gelöscht: {map} ({when}).", map=gone[0].map,
+                        when=time.strftime("%d.%m.%y %H:%M", time.localtime(gone[0].t))), "System")
+        elif gone:
+            self._log(_("{n} Runden gelöscht.", n=len(gone)), "System")
         self._stats_render()
 
     def _stats_set_killer(self):
-        """Killer of the round marked in "Letzte Runden" (wrongly read, or the round was counted as survivor)."""
-        sel = self.stats_last.selection()
+        """Killer of the rounds marked in "Letzte Runden" (wrongly read, or the round was counted as survivor)."""
+        ts = self._stats_selected_ts()
         target = next((k for k in self._stats_alias_choices if killer_label(k) == self.stats_round_killer_var.get()),
                       None)
-        if not sel or target is None:
+        if not ts or target is None:
             return
         try:
-            r = history.set_killer(self._hist_path(), float(sel[0]), target)
+            r = None
+            for t in ts:
+                r = history.set_killer(self._hist_path(), t, target) or r
         except OSError as e:
             self._log(_("Killer konnte nicht gespeichert werden: {error}", error=e), "Fehler")
             return

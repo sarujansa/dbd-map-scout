@@ -334,7 +334,9 @@ def add_info(pic: Image.Image, timer: str, server: str, height: int, backdrop: b
     boxes, widths = [], []
     for kind, segs, font in rows:
         text = "".join(t for t, _ in segs)
-        boxes.append(d0.textbbox((0, 0), text if kind == "timer" else text or "0", font=font))
+        if kind == "timer":                      # 1.5.4 (user: "wird immer grösser und kleiner"): the digits are
+            text = re.sub(r"\d", "0", text)      # proportional – measure with the widest so the field and the
+        boxes.append(d0.textbbox((0, 0), text if kind == "timer" else text or "0", font=font))   # dot never move
         if kind == "timer":
             widths.append(boxes[-1][2] - boxes[-1][0])
         else:

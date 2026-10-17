@@ -30,6 +30,8 @@ MID_MATCH_AFTER = 30.0            # s after the map appeared: a "banner" now is 
 MID_MATCH_SPAN = 2.0              # … and it must stay on screen this long (a real banner stands still for ~5 s,
                                   # light strips in the world move with the camera)
 SIGHTINGS_KEPT = 20               # mid-match sightings kept in debug/midmatch (picture + text each), newest first
+GLOBE_KEPT = 10                   # 1.5.4: unreadable cross-play globe crops kept in debug/lobby
+GLOBE_SAVE_EVERY = 120.0          # s between two saved crops (one per lobby is enough)
 LOBBY_INTERVAL = 1.0              # seconds between two looks at the lobby button (never during a match)
 LOBBY_RATE = 1.0                  # banner scans per second while the lobby button is on screen: the banner
 LOBBY_HOLD = 3.0                  # only comes after the loading screen; full rate again 3 s after the button went
@@ -142,7 +144,8 @@ class DetectionWorker(threading.Thread):
         wcap_failed = None                # hwnd the window capture could not be started for
         wcap_told = False
         via = {"screen": True}            # last picture came from the screen (-> our overlay is in it)
-        self.hidden_looks = 0             # looks skipped: DBD in the background, another window over it
+        self.hidden_looks = 0
+        self._globe_saved = 0.0           # 1.5.4: last saved cross-play crop             # looks skipped: DBD in the background, another window over it
 
         window, window_checked = None, 0.0
         session, last_seen, session_frames = False, 0.0, []
@@ -345,6 +348,9 @@ class DetectionWorker(threading.Thread):
                                 if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect or self.today_rect or self.guide_rects):
                                     self._mask_overlay(globe, origin[0] + xb[0], origin[1] + xb[1])
                                 view.crossplay_off = crossplay_off(globe, fw, fh)
+                                if view.crossplay_off is None and tick - self._globe_saved > GLOBE_SAVE_EVERY:
+                                    self._globe_saved = tick    # 1.5.4 (user: farming not recognised): keep the
+                                    self._save_globe(globe, view.button)   # unreadable crop for a look
                         fit = "–" if view.fit is None else f"{view.fit:.1f}"
                         cross = {True: " · Crossplay aus", False: " · Crossplay an"}.get(view.crossplay_off, "")
                         self.lobby_info = (f"{view.button or '–'} ({fit}) "
@@ -556,6 +562,19 @@ class DetectionWorker(threading.Thread):
             pass
 
     # --------------------------------------------------------------- debug
+    def _save_globe(self, img, button):
+        """1.5.4: the cross-play zone when the globe could not be read (farming rounds not recognised) – PNG in
+        debug/lobby, newest GLOBE_KEPT. The user sends these; the detector is tuned on them."""
+        try:
+            d = os.path.join(self.root_dir, "debug", "lobby")
+            os.makedirs(d, exist_ok=True)
+            name = time.strftime("%Y%m%d-%H%M%S") + f"-crossplay-{button or 'x'}.png"
+            cv2.imencode(".png", img)[1].tofile(os.path.join(d, name))
+            for old in sorted(f for f in os.listdir(d) if "-crossplay-" in f)[:-GLOBE_KEPT]:
+                os.remove(os.path.join(d, old))
+        except Exception:
+            pass
+
     def _save_sighting(self, img, res, sep, tag):
         """Mid-match banner-like sighting: the captured region (separator marked) + what was read, in
         debug/midmatch – only the newest SIGHTINGS_KEPT. Returns the file name (None on failure)."""

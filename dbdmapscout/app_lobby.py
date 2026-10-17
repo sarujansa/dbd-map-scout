@@ -97,6 +97,9 @@ class LobbyInfo:
                     self._log(_("Lobby gefunden{role}.", role=who), "Erkennung")
                 if f.crossplay_off and self.settings.get("farming_crossplay", True):
                     self._log(_("Crossplay ist aus – die nächste Runde zählt als Farming-Runde."), "Erkennung")
+                elif f.crossplay_off is None and self.settings.get("farming_crossplay", True):
+                    self._log(_("Crossplay-Anzeige nicht lesbar – die Runde zählt nicht als Farming (Ausschnitt in "
+                                "debug/lobby)."), "Erkennung")
         elif what == "remind":
             if self.settings.get("lobby_remind", True):
                 self._notify(_("Lobby startet gleich"), _("Noch {n} s – READY ist noch nicht gedrückt.",
