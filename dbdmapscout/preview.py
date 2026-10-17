@@ -9,6 +9,8 @@ from functools import lru_cache
 from PIL import Image, ImageDraw
 
 from . import layout, media, sysinfo
+from . import skin
+from .i18n import _
 from .overlay_win32 import add_info, backdrop, backdrop_pad, compose, map_backdrop, render_hud, render_music
 
 SAMPLE_SNAPSHOT = dict(cpu_load=38, cpu_temp=64, gpu_temp=71, gpu_load=92, gpu_name="GPU",
@@ -89,7 +91,7 @@ def music_rows(now: media.NowPlaying, wall: float):
 
 
 def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, map_pic, caption: str,
-           info: dict, height_frac: float, music=None, today=None, editing: bool = False):
+           info: dict, height_frac: float, music=None, today=None, editing: bool = False, accent=None):
     """[(name, picture, x, y)] in screen pixels, bottom to top, + the map's (x, y, w, h) for clicks.
     ``o`` = settings["overlay"], ``hud_side`` = settings["sysinfo"] ("" for none), ``info`` = timer/server/ping/
     record lines, ``music`` = (rows, cover) or None, ``today`` = rows of "today" (its own card, 1.2.6) or None."""
@@ -103,18 +105,22 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
         hud_side = hud_side if hud_side == "custom" else ""   # (in the move mode everything shows, to drag it)
         today = today if o.get("today_pos", "below") == "custom" else None
         music = music if o.get("media_pos", "below") == "custom" else None
+    style = o.get("style", "classic") if o.get("style", "classic") in skin.STYLES else "classic"   # 1.3
+    modern = style != "classic"
     if hud_side and hud_rows:
         hh = int(gh * min(2.0, max(0.6, float(o.get("hud_scale", 1.0)))))      # its own size (1.64.9)
         boxed = bool(o.get("hud_backdrop", False))
-        hud = fitted(lambda h: backdrop(render_hud(hud_rows, h), h) if boxed else render_hud(hud_rows, h), hh, avail,
-                     ("hud", repr(hud_rows), boxed))
+        hud = fitted((lambda h: skin.card(hud_rows, h, style, accent, _("SYSTEM"))) if modern else
+                     (lambda h: backdrop(render_hud(hud_rows, h), h) if boxed else render_hud(hud_rows, h)), hh, avail,
+                     ("hud", repr(hud_rows), boxed, style, accent))
     cards = {}                                              # name: (picture, position setting, own place)
     if today:
         th = int(gh * min(2.0, max(0.6, float(o.get("today_scale", 1.0)))))
         tboxed = bool(o.get("today_backdrop", False))
         tspot = o.get("today_pos", "below")
-        cards["today"] = (fitted(lambda h: backdrop(render_hud(today, h), h) if tboxed else render_hud(today, h),
-                                 th, avail if tspot != "custom" else gw / 3, ("today", repr(today), tboxed)),
+        cards["today"] = (fitted((lambda h: skin.card(today, h, style, accent)) if modern else
+                                 (lambda h: backdrop(render_hud(today, h), h) if tboxed else render_hud(today, h)),
+                                 th, avail if tspot != "custom" else gw / 3, ("today", repr(today), tboxed, style, accent)),
                           tspot, o.get("today_xy"))
     if music:
         rows_m, cover, prog = music
@@ -122,11 +128,12 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
         scale = max(60, min(200, o.get("media_scale", 1.0) * 100)) / 100
         spot = o.get("media_pos", "below")
         show_cover = cover if o.get("media_cover", True) else None
-        style = o.get("media_style", "big")
         look = media.look(o)
-        cards["music"] = (fitted(lambda h: render_music(rows_m, show_cover, h, style, prog, look), int(gh * scale),
-                                 avail if spot != "custom" else gw / 3,
-                                 ("music", repr(rows_m), id(show_cover), style, prog, look)),
+        mstyle = o.get("media_style", "big")
+        cards["music"] = (fitted((lambda h: skin.music(rows_m, show_cover, h, style, prog, look, accent)) if modern
+                                 else (lambda h: render_music(rows_m, show_cover, h, mstyle, prog, look)),
+                                 int(gh * scale), avail if spot != "custom" else gw / 3,
+                                 ("music", repr(rows_m), id(show_cover), mstyle, prog, look, style, accent)),
                           spot, o.get("media_xy"))
     # system values and cards first (1.2.11: like the App), the map moves below / above what stands at the
     # top / bottom of its bar – except with the system values right above the map: those follow it afterwards

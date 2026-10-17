@@ -761,16 +761,24 @@ class HudWindow:
             self._pos = None
         return self.size
 
-    def render(self, rows, height: int, cover=None, style=None, progress=None, look=()):
+    def render(self, rows, height: int, cover=None, style=None, progress=None, look=(), skin="classic",
+               accent=None, title=None):
         """Prepare the picture; returns its size (0, 0 without rows). ``cover``/``style``/``progress``/``look``: the
-        music card (progress = (elapsed, total) seconds; redrawn once a second while a song plays)."""
+        music card (progress = (elapsed, total) seconds; redrawn once a second while a song plays). ``skin``
+        (1.3): the overlay style – glass / chips / line draw the card in skin.py (``accent`` = the theme's colour,
+        ``title`` = the card's header); "classic" as before."""
         progress = (int(progress[0]), int(progress[1])) if progress else None
         look = tuple(sorted(look))
-        key = (tuple(tuple(r) for r in rows), int(height), self.editing, id(cover), style, progress, look)
+        key = (tuple(tuple(r) for r in rows), int(height), self.editing, id(cover), style, progress, look, skin,
+               accent, title)
         if key != self._key:
             self._key = key
             if not rows:
                 self._data, self.size = None, (0, 0)
+            elif skin != "classic":
+                from . import skin as skins
+                pic = skins.music(rows, cover, height, skin, progress, look, accent) if style is not None \
+                    else skins.card(rows, height, skin, accent, title)
             elif style is None:
                 pic = render_hud(rows, height)
                 if "backdrop" in look:

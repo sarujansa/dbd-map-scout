@@ -22,6 +22,7 @@ DEFAULTS = {
         "anchor": "auto",              # auto | top-left | top-right | bottom-left | bottom-right | custom
                                         # auto = in the black bar left of a 16:9 picture, else top-left
         "native_window": True,          # Windows: native layered window (False = Qt window)
+        "style": "classic",             # 1.3: look of the cards – classic | glass | chips | line (skin.py)
         "pos_x": 0.0,                   # anchor=custom: 0 = left edge, 1 = right edge of the free space
         "pos_y": 0.0,                   # anchor=custom: 0 = top, 1 = bottom
         "margin": 0.012,                # distance to the window edge (fraction of the game height)
