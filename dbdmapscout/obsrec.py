@@ -45,6 +45,10 @@ MIN_FREE = 5 * 1024 ** 3        # below this much free space on the drive: no ne
 RENAME_TRIES = 40               # OBS may still hold the file a moment after StopRecord
 RENAME_WAIT = 0.5
 MAX_ROUND_S = 45 * 60           # a recording longer than this is stopped (an end that was never detected)
+TAILS_S = (0, 3, 5, 8, 10)      # 1.4.1: seconds recorded after the detected end (the result screen)
+DEFAULT_TAIL_S = 5
+MIN_FILE_BYTES = 1024 * 1024    # 1.4.1: a recording smaller than this is reported as broken/empty
+MAGIC = {b"\x1a\x45\xdf\xa3": "mkv", b"ftyp": "mp4"}   # file signatures (mp4: at offset 4)
 NAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 
@@ -340,6 +344,26 @@ class Config:
     folder: str = ""             # last known absolute path
     limit_gb: int = DEFAULT_LIMIT_GB
     pre: bool = True
+    tail_s: float = DEFAULT_TAIL_S   # 1.4.1: keep recording this long after the end (result screen)
+    buffer_auto: bool = True         # 1.4.1: start OBS's replay buffer with DBD, stop it when DBD is gone
+
+
+def check_file(path: str) -> str | None:
+    """1.4.1: None if the recording looks fine, else why not ("leer"/"zu klein"/"kein Video") – OBS may have
+    failed silently (drive gone, encoder error)."""
+    try:
+        size = os.path.getsize(path)
+        with open(path, "rb") as f:
+            head = f.read(12)
+    except OSError:
+        return "fehlt"
+    if size == 0:
+        return "leer"
+    if size < MIN_FILE_BYTES:
+        return "zu klein"
+    if not (head[:4] in MAGIC or head[4:8] in MAGIC):
+        return "kein Video"
+    return None
 
 
 class Recorder(threading.Thread):
@@ -353,6 +377,13 @@ class Recorder(threading.Thread):
         self.cfg = Config()
         self.active = None           # the round being recorded: dict(t, map_id, label, role, killer, pre, since)
         self.status = ""
+        self._pending = None         # (meta, deadline): the end came, the tail is still being recorded (1.4.1)
+        self._game = None            # last known: DBD running? (set_game)
+        self._buffer_ours = False    # we started OBS's replay buffer: we stop it with DBD
+
+    @property
+    def recording(self) -> bool:
+        return self.active is not None
 
     # ---- called from the UI thread
     def configure(self, cfg: Config):
@@ -367,16 +398,26 @@ class Recorder(threading.Thread):
     def test(self):
         self.cmds.put(("test", None))
 
+    def set_game(self, on: bool):
+        """DBD running or not (1.4.1): starts/stops OBS's replay buffer, checks OBS and the drive once."""
+        if bool(on) != self._game:
+            self.cmds.put(("game", bool(on)))
+
     def quit(self):
         self.cmds.put(("quit", None))
 
     # ---- thread
     def run(self):
         while True:
+            wait = 5.0 if self._pending is None else max(0.05, min(5.0, self._pending[1] - time.time()))
             try:
-                cmd, arg = self.cmds.get(timeout=5)
+                cmd, arg = self.cmds.get(timeout=wait)
             except queue.Empty:
-                self._watchdog()
+                try:
+                    self._due()
+                    self._watchdog()
+                except ObsError as e:
+                    self._say(str(e), False)
                 continue
             try:
                 if cmd == "quit":
@@ -388,7 +429,9 @@ class Recorder(threading.Thread):
                 elif cmd == "start":
                     self._begin(arg)
                 elif cmd == "stop":
-                    self._finish(arg)
+                    self._stop_later(arg)
+                elif cmd == "game":
+                    self._game_changed(arg)
             except ObsError as e:
                 self._say(str(e), False)
             except Exception as e:                     # never let the thread die
@@ -426,9 +469,72 @@ class Recorder(threading.Thread):
 
     # (named _begin/_finish: threading.Thread has its own _stop(), which join() calls on Python 3.12 – a method
     # of ours with that name broke join with "missing argument meta")
-    def _begin(self, meta):
-        if self.active is not None:                     # a new banner while recording: close the old one first
+    def _stop_later(self, meta):
+        """The round ended: keep recording for the tail (result screen), then stop."""
+        if self.active is None:
+            return
+        if self.cfg.tail_s <= 0:
+            self._finish(meta)
+        else:
+            self._pending = (meta, time.time() + float(self.cfg.tail_s))
+
+    def _due(self):
+        if self._pending is not None and time.time() >= self._pending[1]:
+            meta, self._pending = self._pending[0], None
+            self._finish(meta)
+
+    def _flush(self):
+        """A recording still running (or in its tail) ends now."""
+        if self._pending is not None:
+            meta, self._pending = self._pending[0], None
+            self._finish(meta)
+        elif self.active is not None:
             self._finish({})
+
+    def _game_changed(self, on: bool):
+        self._game = on
+        if not on:
+            self._flush()                               # DBD closed: the round is over
+            if self._buffer_ours:
+                self._buffer_ours = False
+                try:
+                    c = self._client()
+                    try:
+                        c.request("StopReplayBuffer")
+                    finally:
+                        c.close()
+                except ObsError as e:
+                    log.info("OBS: Wiederholungspuffer nicht gestoppt (%s)", e)
+            return
+        if not self.cfg.on:
+            return
+        folder = self.folder()
+        if folder is None:
+            self._warn(_("Aufnahme-Laufwerk nicht angeschlossen – die Runden werden nicht aufgenommen."))
+            return
+        try:
+            c = self._client()
+        except ObsError as e:
+            self._warn(_("OBS läuft nicht – die Runden werden nicht aufgenommen. ({error})", error=e))
+            return
+        try:
+            if self.cfg.pre and self.cfg.buffer_auto:
+                try:
+                    if not c.request("GetReplayBufferStatus").get("outputActive"):
+                        c.request("StartReplayBuffer")
+                        self._buffer_ours = True
+                except ObsError as e:
+                    log.info("OBS: Wiederholungspuffer nicht gestartet (%s)", e)
+            self._say(_("OBS bereit – Runden werden aufgenommen"), True)
+        finally:
+            c.close()
+
+    def _warn(self, text):
+        self._say(text, False)
+        self._post("warn", text=text)
+
+    def _begin(self, meta):
+        self._flush()                                   # a new banner while recording: close the old one first
         if not self.cfg.on:
             return
         folder = self.folder()
@@ -495,14 +601,19 @@ class Recorder(threading.Thread):
         if os.path.dirname(final) != folder:          # another drive than the folder: leave it, still noted
             self._say(_("Aufnahme liegt in OBS' eigenem Ordner: {path}", path=final), False)
             return
+        bad = check_file(final)                        # 1.4.1: OBS may have failed silently
         recs = load_index(folder)
         recs.append(Recording(t=float(rec.get("t") or time.time()), file=os.path.basename(final), pre=pre_name,
                               map_id=rec.get("map_id", ""), label=rec.get("label", ""), role=rec.get("role", ""),
-                              killer=rec.get("killer", ""), end=time.time()))
+                              killer=rec.get("killer", ""), end=time.time(), extra={"bad": bad} if bad else {}))
         limit = int(self.cfg.limit_gb) * 1024 ** 3
         recs, deleted = prune(folder, recs, limit)
         save_index(folder, recs)
-        self._say(_("Gespeichert: {file}", file=os.path.basename(final)), True)
+        if bad:
+            self._warn(_("Aufnahme sieht beschädigt aus ({why}): {file} – OBS-Einstellungen prüfen (Encoder, Platte).",
+                         why=bad, file=os.path.basename(final)))
+        else:
+            self._say(_("Gespeichert: {file}", file=os.path.basename(final)), True)
         self._post("saved", file=os.path.basename(final), t=rec.get("t"))
         if deleted:
             self._post("deleted", files=deleted)
@@ -533,8 +644,6 @@ class Recorder(threading.Thread):
 
     def _watchdog(self):
         """An end that never came (DBD crashed, detection missed it): stop after MAX_ROUND_S."""
-        if self.active is not None and time.time() - self.active.get("since", time.time()) > MAX_ROUND_S:
-            try:
-                self._finish({})
-            except ObsError as e:
-                self._say(str(e), False)
+        if (self.active is not None and self._pending is None
+                and time.time() - self.active.get("since", time.time()) > MAX_ROUND_S):
+            self._finish({})

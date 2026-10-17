@@ -123,6 +123,9 @@ TIPS = {
     "Aufnahmeordner wählen …": "Ordner, in den OBS die Runden legt – z. B. auf der externen Platte. Gemerkt wird das "
                                "Laufwerk, nicht der Buchstabe: bekommt die Platte einen anderen, findet das "
                                "Programm den Ordner trotzdem.",
+    "Wiederholungspuffer mit DBD starten und stoppen": "Das Programm startet den Wiederholungspuffer in OBS, sobald "
+                                                       "DBD läuft, und stoppt ihn, wenn DBD zu ist – so kostet er "
+                                                       "ausserhalb des Spiels nichts und du musst nicht daran denken.",
     "Vorlauf: Wiederholungspuffer von OBS beim Map-Banner sichern (Sekunden davor)":
         "Das Banner kommt erst ~40 s nach Matchbeginn. Läuft in OBS der Wiederholungspuffer, wird er beim Banner "
         "gespeichert – so fehlt der Anfang (Spawn) nicht. Die Datei liegt als „(Vorlauf)“ neben der Runde.",
