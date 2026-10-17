@@ -279,7 +279,10 @@ class RecordingsTab:
                          on_saved=lambda out: self._rec_dirty_set(), on_setting=self.settings.set, log=self._log,
                          dark=bool(self.settings.get("dark_mode", True)),
                          qss=getattr(self.qt, "_qss", "") if self.qt is not None else "",
-                         target_mb=int(self.settings.get("clip_target_mb", 10) or 10))
+                         target_mb=int(self.settings.get("clip_target_mb", 10) or 10),
+                         censor_on=bool(self.settings.get("clip_censor_on", False)),          # 1.7.2
+                         censor_style=str(self.settings.get("clip_censor_style", "pixel")),
+                         censor_boxes=self.settings.get("clip_censor_boxes") or [])
         self._clip_windows = [w for w in self._clip_windows if w.isVisible()] + [win]
         win.show()
         win.raise_()
