@@ -19,7 +19,10 @@ from . import clipedit, qt_theme
 from .i18n import N_, _
 
 MODE_LABELS = {"copy": N_("Schnell (an Schlüsselbildern, Anfang bis zu ein paar Sekunden früher)"),
-               "exact": N_("Genau (Bild neu kodiert, dauert etwas)")}
+               "exact": N_("Genau (Bild neu kodiert, dauert etwas)"),
+               "discord": N_("Für Discord (passt unter die Zielgrösse)")}
+KEY_HINT = N_("Leertaste Abspielen · ←/→ 1 s · Shift 5 s · Strg 1 Bild · I/O Start/Ende · M Marke · "
+              "Pos1/Ende Anfang/Schluss · Esc schliessen")
 STEP_SMALL, STEP_BIG = 1.0, 5.0
 PREVIEW_MIN = (640, 360)
 
@@ -178,7 +181,8 @@ class ClipWindow(QWidget):
     the App; ``mode``/``sound`` are the remembered settings."""
 
     def __init__(self, path: str, marks: list, clips_dir: str, mode: str = "copy", sound: bool = True,
-                 on_saved=None, on_setting=None, log=None, dark=True, qss: str = "", title: str = ""):
+                 on_saved=None, on_setting=None, log=None, dark=True, qss: str = "", title: str = "",
+                 target_mb: int = clipedit.DEFAULT_TARGET_MB):
         super().__init__(None, Qt.Window)
         self.path, self.marks, self.clips_dir = path, sorted(float(m) for m in marks or ()), clips_dir
         self.on_saved, self.on_setting, self.log = on_saved, on_setting, (log or (lambda text, kind="System": None))
@@ -192,12 +196,16 @@ class ClipWindow(QWidget):
         self._want = None                   # latest scrub moment asked for
         self._scrub_lock = threading.Condition()
         self._closed = False
+        self._target_mb = int(target_mb) if target_mb in clipedit.TARGETS_MB else clipedit.DEFAULT_TARGET_MB
+        self._last_out = None               # 1.6.1: the clip saved last (Explorer button)
+        self._play_to = None                # 1.6.1: "Clip ansehen" plays start..end, then back to the start
         self.setObjectName("page")
         self.setWindowTitle(title or _("Clip schneiden – {name}", name=os.path.basename(path)))
         if qss:
             self.setStyleSheet(qss)
         self._build(mode, sound)
-        self.resize(960, 700)
+        self.resize(1100, 780)
+        self.setMinimumSize(760, 600)
         self.setFocusPolicy(Qt.StrongFocus)
         if not self.info.ok or not self.ffmpeg:
             self.status.setText(_("Datei nicht lesbar oder ffmpeg fehlt – keine Vorschau."))
@@ -229,16 +237,20 @@ class ClipWindow(QWidget):
         self.timeline.changed.connect(self._show_range)
         lay.addWidget(self.timeline)
 
+        # transport: position left, playback in the middle, start/end/mark right
         row = QHBoxLayout()
+        self.pos_label = QLabel("")
+        self.pos_label.setProperty("class", "dim")
+        self.pos_label.setMinimumWidth(150)
+        row.addWidget(self.pos_label)
+        row.addStretch()
         self.b_back5 = self._btn(row, "−5 s", lambda: self.step(-STEP_BIG), _("5 Sekunden zurück (Shift+←)"))
         self.b_back1 = self._btn(row, "−1 s", lambda: self.step(-STEP_SMALL), _("1 Sekunde zurück (←)"))
         self.play_btn = self._btn(row, _("▶ Abspielen"), self.toggle_play, _("Abspielen / Pause (Leertaste)"))
         self.play_btn.setObjectName("primary")
+        self.play_btn.setMinimumWidth(120)
         self.b_fwd1 = self._btn(row, "+1 s", lambda: self.step(STEP_SMALL), _("1 Sekunde vor (→)"))
         self.b_fwd5 = self._btn(row, "+5 s", lambda: self.step(STEP_BIG), _("5 Sekunden vor (Shift+→)"))
-        self.pos_label = QLabel("")
-        self.pos_label.setProperty("class", "dim")
-        row.addWidget(self.pos_label)
         row.addStretch()
         self._btn(row, _("Start setzen"), self.set_start, _("Der Clip beginnt am Abspielkopf (Taste I)."))
         self._btn(row, _("Ende setzen"), self.set_end, _("Der Clip endet am Abspielkopf (Taste O)."))
@@ -246,19 +258,43 @@ class ClipWindow(QWidget):
         self.mark_btn.setEnabled(bool(self.marks))
         lay.addLayout(row)
 
+        # the clip: from – to, length, size estimate; "Clip ansehen" plays exactly that
+        crow = QHBoxLayout()
         self.range_label = QLabel("")
-        lay.addWidget(self.range_label)
+        self.range_label.setProperty("class", "big")
+        crow.addWidget(self.range_label)
+        self.size_label = QLabel("")
+        self.size_label.setProperty("class", "dim")
+        crow.addWidget(self.size_label)
+        crow.addStretch()
+        self.watch_btn = self._btn(crow, _("▶ Clip ansehen"), self.watch_clip,
+                                   _("Spielt genau den Ausschnitt ab und springt danach an seinen Anfang zurück."))
+        lay.addLayout(crow)
 
+        sep = QFrame()
+        sep.setFrameShape(QFrame.HLine)
+        sep.setProperty("class", "sep")
+        lay.addWidget(sep)
+
+        # export: name, format, target size, sound
         row2 = QHBoxLayout()
         row2.addWidget(QLabel(_("Name")))
         self.name_edit = QLineEdit()
         row2.addWidget(self.name_edit, 1)
+        row2.addWidget(QLabel(_("Format")))
         self.mode_box = QComboBox()
         for key in clipedit.MODES:
             self.mode_box.addItem(_(MODE_LABELS[key]), key)
         self.mode_box.setCurrentIndex(max(0, list(clipedit.MODES).index(mode) if mode in clipedit.MODES else 0))
-        self.mode_box.currentIndexChanged.connect(lambda _i: self._setting("clip_mode", self.mode_box.currentData()))
+        self.mode_box.currentIndexChanged.connect(self._mode_changed)
         row2.addWidget(self.mode_box)
+        self.target_box = QComboBox()
+        for mb in clipedit.TARGETS_MB:
+            self.target_box.addItem(_("≤ {n} MB", n=mb), mb)
+        self.target_box.setCurrentIndex(list(clipedit.TARGETS_MB).index(self._target_mb))
+        self.target_box.setToolTip(_("Discord: ohne Nitro 10 MB, Nitro Basic 50 MB, Nitro 500 MB."))
+        self.target_box.currentIndexChanged.connect(self._target_changed)
+        row2.addWidget(self.target_box)
         self.sound_box = QCheckBox(_("Ton"))
         self.sound_box.setChecked(bool(sound))
         self.sound_box.setToolTip(_("Beim Abspielen den Ton der Aufnahme mitlaufen lassen (Windows)."))
@@ -269,15 +305,19 @@ class ClipWindow(QWidget):
         row3 = QHBoxLayout()
         self.save_btn = self._btn(row3, _("Clip speichern"), self.save, _("Schreibt den Ausschnitt als MP4 in den Ordner „Clips“ neben den Aufnahmen."))
         self.save_btn.setObjectName("primary")
+        self.show_btn = self._btn(row3, _("Im Explorer zeigen"), self._show_saved, _("Zeigt den zuletzt gespeicherten Clip im Explorer."))
+        self.show_btn.setEnabled(False)
         self.open_btn = self._btn(row3, _("Clips-Ordner öffnen"), self._open_clips, _("Öffnet den Ordner „Clips“ im Explorer."))
         self.status = QLabel("")
         self.status.setProperty("class", "dim")
         self.status.setWordWrap(True)
         row3.addWidget(self.status, 1)
         lay.addLayout(row3)
-        line = QFrame()
-        line.setFrameShape(QFrame.NoFrame)
-        lay.addWidget(line)
+        hint = QLabel(_(KEY_HINT))
+        hint.setProperty("class", "dim")
+        hint.setWordWrap(True)
+        lay.addWidget(hint)
+        self._mode_changed(self.mode_box.currentIndex(), save=False)
 
     def _btn(self, row, text, slot, tip=""):
         b = QPushButton(text)
@@ -362,9 +402,46 @@ class ClipWindow(QWidget):
         tl = self.timeline
         self.range_label.setText(_("Clip: {start} – {end} ({length} s)", start=clipedit.fmt_pos(tl.start),
                                    end=clipedit.fmt_pos(tl.end), length=f"{tl.end - tl.start:.1f}"))
+        self._show_size()
         if not self.name_edit.isModified() or not self.name_edit.text():
             self.name_edit.setText(clipedit.clip_name(self.path, tl.start, tl.end))
             self.name_edit.setModified(False)
+
+    def _show_size(self):
+        """1.6.1: what the chosen format makes of the clip – for Discord the picture size and frame rate."""
+        tl, mode = self.timeline, self.mode_box.currentData() if hasattr(self, "mode_box") else "copy"
+        secs = max(0.0, tl.end - tl.start)
+        if mode == "discord":
+            kbps, h, fps = clipedit.discord_plan(secs, self._target_mb, self.info)
+            self.size_label.setText(_("· wird {h}p {fps} fps, ≈ {kbps} kbit/s, unter {mb} MB",
+                                      h=h, fps=f"{fps:g}", kbps=kbps, mb=self._target_mb))
+        elif self.info.ok and getattr(self.info, "duration", 0):
+            try:
+                size = os.path.getsize(self.path) * secs / self.info.duration
+            except OSError:
+                size = 0
+            self.size_label.setText(_("· etwa {mb} MB", mb=f"{size / 1024 ** 2:.0f}") if size else "")
+        else:
+            self.size_label.setText("")
+
+    def _mode_changed(self, _i, save=True):
+        mode = self.mode_box.currentData()
+        self.target_box.setVisible(mode == "discord")
+        if save:
+            self._setting("clip_mode", mode)
+        self._show_size()
+
+    def _target_changed(self, _i):
+        self._target_mb = int(self.target_box.currentData() or clipedit.DEFAULT_TARGET_MB)
+        self._setting("clip_target_mb", self._target_mb)
+        self._show_size()
+
+    def watch_clip(self):
+        """1.6.1: play the clip as it will be saved – from its start to its end, then back to its start."""
+        tl = self.timeline
+        self.goto(tl.start)
+        self._play_to = tl.start
+        self.toggle_play()
 
     def _show_frame(self, t, img):
         if not self.playing:
@@ -390,6 +467,7 @@ class ClipWindow(QWidget):
     # ---- playback
     def toggle_play(self):
         if self.playing:
+            self._play_to = None
             self._stop_player()
             return
         start = self.timeline.pos
@@ -448,7 +526,8 @@ class ClipWindow(QWidget):
     def _player_ended(self, player):
         if player is self.player and self.playing:            # ran to the end (not stopped by us)
             self._stop_player()
-            self.goto(self.timeline.pos)
+            back, self._play_to = self._play_to, None
+            self.goto(back if back is not None else self.timeline.pos)
 
     # ---- saving
     def save(self):
@@ -465,21 +544,40 @@ class ClipWindow(QWidget):
         self.status.setText(_("Schreibe {file} …", file=os.path.basename(out)))
         start, end = tl.start, tl.end
 
+        target, info = self._target_mb, self.info
+        if mode != "copy":
+            self.status.setText(_("Kodiere {file} … (dauert etwas)", file=os.path.basename(out)))
+
         def work():
-            ok, why = clipedit.cut(self.path, start, end, out, mode, self.ffmpeg)
+            ok, why = clipedit.cut(self.path, start, end, out, mode, self.ffmpeg, target_mb=target, info=info)
             self.bridge.saved.emit(ok, out, why)
         threading.Thread(target=work, name="clip-save", daemon=True).start()
 
     def _saved(self, ok, out, why):
         self.save_btn.setEnabled(True)
         if ok:
-            self.status.setText(_("Gespeichert: {file}", file=os.path.basename(out)))
+            self._last_out = out
+            self.show_btn.setEnabled(True)
+            try:
+                mb = os.path.getsize(out) / 1024 ** 2
+            except OSError:
+                mb = 0.0
+            self.status.setText(_("Gespeichert: {file} ({mb} MB)", file=os.path.basename(out), mb=f"{mb:.1f}"))
             self.log(_("Clip gespeichert: {file}", file=out), "System")
             if self.on_saved:
                 self.on_saved(out)
         else:
             self.status.setText(_("Clip nicht gespeichert: {why}", why=why or "ffmpeg"))
             self.log(_("Clip nicht gespeichert: {why}", why=why or "ffmpeg"), "Fehler")
+
+    def _show_saved(self):
+        if not self._last_out:
+            return
+        if os.name == "nt":
+            import subprocess
+            subprocess.Popen(["explorer", "/select,", os.path.normpath(self._last_out)])   # noqa: S603,S607
+        else:
+            self.status.setText(self._last_out)
 
     def _open_clips(self):
         try:
