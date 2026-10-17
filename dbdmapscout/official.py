@@ -330,10 +330,17 @@ def survivors(m: Match) -> list:
 def kills(m: Match):
     """Survivors that died or abandoned in a killer match (an abandon counts as a kill, like the killer's
     result in the game); None: no killer match or a status is unknown."""
+    try:
+        return m.__dict__["_kills"]      # 1.3.5: kept on the match (never changed once read): the statistics
+    except KeyError:                     # asked ~17 000 times per filter click with 5000 rounds
+        pass
     if m.role != "killer" or not survivors(m):
-        return None
-    kinds = [classify(p.status, p.img) for p in survivors(m)]
-    return None if None in kinds else kinds.count("dead") + kinds.count("abandoned")
+        n = None
+    else:
+        kinds = [classify(p.status, p.img) for p in survivors(m)]
+        n = None if None in kinds else kinds.count("dead") + kinds.count("abandoned")
+    m.__dict__["_kills"] = n
+    return n
 
 
 def abandons(m: Match) -> int:

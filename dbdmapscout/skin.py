@@ -124,6 +124,8 @@ def card_model(rows, dim, title=None) -> tuple:
 
 
 # ------------------------------------------------------------------ drawing helpers
+SHADOW_STEP = 4                   # the drop shadow is blurred this many times smaller (1.3.5)
+
 def _panel(w: int, h: int, radius: int, fill, edge, width: int = 1) -> Image.Image:
     im = Image.new("RGBA", (max(1, w), max(1, h)), (0, 0, 0, 0))
     ImageDraw.Draw(im).rounded_rectangle((0, 0, im.width - 1, im.height - 1), radius=max(1, radius), fill=fill,
@@ -136,10 +138,19 @@ def shadowed(card: Image.Image, u: float) -> Image.Image:
     blur = max(2, int(8 * u))
     off = max(1, int(4 * u))
     out = Image.new("RGBA", (card.width + 4 * blur, card.height + 4 * blur), (0, 0, 0, 0))
+    mask = Image.new("L", out.size, 0)
+    mask.paste(card.getchannel("A").point(lambda v: v * 120 // 255), (2 * blur, 2 * blur + off))
+    # 1.3.5: a soft shadow is blurred on a picture SHADOW_STEP times smaller and scaled back (17 -> 6 ms; it is
+    # drawn every second with the timer – at most 5 of 255 apart from the full-size blur)
+    k = SHADOW_STEP if blur >= 2 * SHADOW_STEP else 1
+    if k > 1:
+        mask = mask.resize((max(1, mask.width // k), max(1, mask.height // k)), Image.BOX) \
+            .filter(ImageFilter.GaussianBlur(blur / k)).resize(mask.size, Image.BILINEAR)
+    else:
+        mask = mask.filter(ImageFilter.GaussianBlur(blur))
     sh = Image.new("RGBA", out.size, (0, 0, 0, 0))
-    a = card.getchannel("A").point(lambda v: v * 120 // 255)
-    sh.paste((0, 0, 0, 255), (2 * blur, 2 * blur + off), a)
-    out.alpha_composite(sh.filter(ImageFilter.GaussianBlur(blur)))
+    sh.putalpha(mask)
+    out.alpha_composite(sh)
     out.alpha_composite(card, (2 * blur, 2 * blur))
     return out
 

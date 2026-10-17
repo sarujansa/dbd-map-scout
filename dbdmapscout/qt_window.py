@@ -708,7 +708,7 @@ class MainWindow(QMainWindow):
         current = self.stack.currentWidget()
         self._stale = [self.stack.widget(i) for i in range(self.stack.count())]
         self._style_page(current)
-        if self._stale:
+        if self._stale and self.isVisible():        # a hidden window gets its pages styled when shown
             self._style_timer.start()
 
     def _style_page(self, page):
@@ -719,7 +719,7 @@ class MainWindow(QMainWindow):
     def _style_next(self):
         if self._stale:
             self._style_page(self._stale[0])
-        if self._stale:
+        if self._stale and self.isVisible():
             self._style_timer.start()
 
     def show_model(self, o, thumb=None, tips=None):
@@ -765,6 +765,11 @@ class MainWindow(QMainWindow):
             return 0
 
     # events: only flags and post() – see the module docstring
+    def showEvent(self, e):
+        super().showEvent(e)
+        if self._stale and not self._style_timer.isActive():
+            self._style_timer.start()
+
     def closeEvent(self, e):
         if self.allow_close:
             e.accept()
