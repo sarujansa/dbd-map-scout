@@ -35,6 +35,7 @@ from .app_sysinfo import TEXT_BASE, text_scale
 from .app_sysinfo import HUD_SHOWN, OPACITY_KEYS, SysInfo
 from .app_qt import QtShell
 from .app_overlay import OverlayTab, anchor_label
+from .app_recordings import RecordingsTab
 
 LANGS = [("en", "EN"), ("de", "DE"), ("fr", "FR"), ("es", "ES"), ("es-MX", "ES-MX"), ("it", "IT"),
          ("pl", "PL"), ("pt-BR", "PT"), ("tr", "TR")]
@@ -58,7 +59,8 @@ def _event_name(ev) -> str:
 log = logging.getLogger("dbdmapscout")
 
 
-class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutMemory, OverlayTab, QtShell):
+class App(ServerTab, StatsTab, RecordingsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutMemory, OverlayTab,
+          QtShell):
     def __init__(self, root_dir: str, simulate: str | None = None, start_in_tray: bool = False):
         self.root_dir = root_dir
         self.simulate = simulate
@@ -167,10 +169,12 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
         self.tab_server = self._tab_server()
         self.tab_log = self._tab_log()
         self.tab_stats = self._tab_stats()
+        self.tab_recordings = self._tab_recordings()          # 1.5
         self.tab_settings = self._tab_settings()
         self.nb.add(self.tab_maps, text="Maps")
         self.nb.add(self.tab_overlay, text=_("Overlay"))
         self.nb.add(self.tab_stats, text=_("Statistik"))
+        self.nb.add(self.tab_recordings, text=_("Aufnahmen"))
         self.nb.add(self.tab_server, text=_("Server"))
         self.nb.add(self.tab_settings, text=_("Einstellungen"))
         self.nb.add(self.tab_detect, text=_("Erkennung"))
@@ -1582,6 +1586,8 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
             self._stats_render()
         if self.nb.select() == str(self.tab_detect):
             self._official_check_render()
+        if self.nb.select() == str(self.tab_recordings):
+            self._rec_render()
         if self.nb.select() == str(self.tab_log):
             self._log_alert = False
         if self.nb.select() == str(self.tab_server):

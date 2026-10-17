@@ -574,3 +574,65 @@ def test_a_slider_rows_labels_are_not_drawn_twice():
     node = ui_layout(root, {})
     kinds = [c["kind"] for c in node["children"][0]["children"]]
     assert kinds == ["slider"]
+
+
+def test_the_recordings_tab_lists_the_index_and_acts_on_the_marked_row(app_root):
+    """1.5: the tab shows the OBS recording index with filters; play / Explorer / keep / delete work on the marked
+    row through the recorder thread; the summary names room and folder."""
+    import json
+    from dbdmapscout import obsrec
+    from dbdmapscout.app import App
+    folder = app_root / "rec"
+    folder.mkdir()
+    for name in ("one.mkv", "two.mkv"):
+        (folder / name).write_bytes(b"\0" * 2048)
+    t1, t2 = time.time() - 3600, time.time() - 60
+    obsrec.save_index(str(folder), [
+        obsrec.Recording(t=t1, file="one.mkv", label="Coal Tower", role="killer", killer="Nurse", end=t1 + 600,
+                         size=2048, marks=[12.0, 100.5]),
+        obsrec.Recording(t=t2, file="two.mkv", label="Gas Heaven", role="survivor", end=t2 + 50, size=2048,
+                         farming=True)])
+    (app_root / "settings.json").write_text(json.dumps({"rec_on": True, "rec_folder": str(folder),
+                                                        "welcome_seen": True}), encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        app._rec_render()
+        t = app.rec_table
+        rows = [t.item(i, "values") for i in t.get_children()]
+        assert [r[1] for r in rows] == ["Gas Heaven", "Coal Tower"]                     # newest first
+        assert rows[1][2] == "Nurse" and rows[1][4] == "10:00" and rows[1][6] == "2" and rows[0][2].endswith("Farming")
+        assert rows[0][5] == "2 KB"                                                        # size column
+        assert "2 Aufnahmen" in app.rec_summary_var.get() and app.rec_hint_var.get() == str(folder)
+        assert app.rec_play_btn.cget("state") == "disabled"
+        t.selection_set(repr(t1))
+        t.event_generate("<<TreeviewSelect>>")
+        assert app.rec_play_btn.cget("state") == "normal" and "00:12" in app.rec_marks_var.get()
+        assert [lbl for _m, lbl in app._rec_maps] == ["Alle Maps", "Coal Tower", "Gas Heaven"]
+        app.rec_map_var.set("Coal Tower")
+        app._rec_render(force=True)
+        assert [t.item(i, "values")[1] for i in t.get_children()] == ["Coal Tower"]
+        app.rec_map_var.set("Alle Maps")
+        app.rec_role_var.set("Farming")
+        app._rec_render(force=True)
+        assert [t.item(i, "values")[1] for i in t.get_children()] == ["Gas Heaven"]
+        app.rec_role_var.set("Alle Rollen")
+        app._rec_render(force=True)
+        t.selection_set(repr(t1))
+        app._rec_keep()                                        # → recorder thread → "changed" event
+        deadline = time.time() + 5
+        while time.time() < deadline and not obsrec.load_index(str(folder))[0].keep:
+            time.sleep(0.05)
+        assert obsrec.load_index(str(folder))[0].keep
+        app._rec_render()
+        t.selection_set(repr(t1))
+        app._rec_buttons()
+        assert t.item(repr(t1), "values")[7] == "✓" and app.rec_keep_btn.cget("text") == "Nicht mehr behalten"
+        app._confirmed = True                                  # the question bar answered with OK
+        app._rec_delete()
+        deadline = time.time() + 5
+        while time.time() < deadline and (folder / "one.mkv").exists():
+            time.sleep(0.05)
+        assert not (folder / "one.mkv").exists() and [r.file for r in obsrec.load_index(str(folder))] == ["two.mkv"]
+        assert (folder / "two.mkv").exists()
+    finally:
+        app.quit()

@@ -505,8 +505,15 @@ class SettingsTab:
                 self.toast.show(_("Aufnahme"), d.get("text", ""))
         elif kind == "saved":
             self._log(_("Aufnahme gespeichert: {file}", file=d.get("file", "")), "System")
+            self._rec_dirty = True
         elif kind == "deleted":
-            self._log(_("Aufnahmen gelöscht (Platz): {n}", n=len(d.get("files") or [])), "System")
+            if d.get("manual"):                 # 1.5: from the tab
+                self._log(_("Aufnahme gelöscht: {file}", file=(d.get("files") or [""])[0]), "System")
+            else:
+                self._log(_("Aufnahmen gelöscht (Platz): {n}", n=len(d.get("files") or [])), "System")
+            self._rec_dirty = True
+        elif kind == "changed":                 # 1.5: keep / delete done by the recorder thread
+            self._rec_changed(d)
         elif kind == "marked":                  # 1.4.2: F8
             if d.get("pos") is None:
                 self._log(_("Keine Aufnahme läuft – keine Clip-Marke gesetzt."), "System")
@@ -551,6 +558,7 @@ class SettingsTab:
     def _rec_tick(self):
         """1.4.1: the recorder learns whether DBD runs (replay buffer, checks); the overlay shows a REC dot."""
         self.recorder.set_game(self.game is not None and not self.simulate)
+        self._rec_tab_tick()
         self.overlay.set_rec(self.recorder.recording)
 
     def _tray_flag_changed(self):

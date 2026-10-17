@@ -140,7 +140,7 @@ def test_window_shows_the_model_and_posts_clicks(qapp, keep):
     assert page.thumb.pixmap() is not None and not page.thumb.pixmap().isNull()
     assert page.buttons["layout"].isHidden() and page.buttons["scan"].toolTip() == "tip scan"
     page.buttons["rotate"].click()
-    win.nav.setCurrentRow(6)                                         # another page: the App fills it
+    win.nav.setCurrentRow([k for k, _l in qt_window.PAGES].index("detect"))   # another page: the App fills it
     win.close()                                                      # closing = quitting, through the App
     assert [posted.get_nowait() for _i in range(3)] == [("rotate", None), ("page", "detect"), ("quit", None)]
     text = win.geometry_b64()
