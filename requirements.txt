@@ -8,6 +8,7 @@ mss>=9.0
 pystray==0.19.5          # Symbol im Infobereich (LGPL-3.0, unverändert genutzt)
 six>=1.16                # von pystray benötigt
 PySide6-Essentials==6.11.2   # neues Steuerfenster (Qt, LGPL-3.0, unverändert genutzt; ~80 MB)
+imageio-ffmpeg==0.6.0        # Aufnahmen (1.4.2): Vorlauf + Runde zu einer Datei (ffmpeg-Binary, BSD-2, ~29 MB; nur Kopie der Streams)
 # „Läuft gerade“ (Musik im Balken, seit 1.64): Windows-Mediensteuerung über pywinrt (MIT, ~0,4 MB).
 # Version bewusst fest: 3.2.1 wurde geprüft (importiert kein OpenProcess, keine Hooks/Eingaben).
 winrt-runtime==3.2.1; sys_platform == "win32"

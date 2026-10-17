@@ -5,9 +5,10 @@ matches from the files – comes from App._joined(), which is cached by file tim
 """
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 
-from . import history, official, sysinfo
+from . import history, obsrec, official, sysinfo, theme
 from .connwatch import UNKNOWN, region_name
 from .i18n import _
 from .lobby import killer_label
@@ -135,7 +136,37 @@ def today(app, now: float) -> tuple[list, str]:
     wait = Fact(_("Ø Wartezeit"), fmt_duration(d["wait"]) if d["wait"] is not None else "–",
                 _("Ping {ms} ms", ms=f"{d['ping']:.0f}") if d["ping"] is not None else "")
     note = _("Spielzeit heute: {time}", time=fmt_duration(d["total"])) if d["count"] else ""
-    return [rounds, kills, esc, wait], note
+    rec = recordings(app)
+    return [rounds, kills, esc, wait] + ([rec] if rec else []), note
+
+
+def _gb(n: float) -> str:
+    gb = n / 1024 ** 3
+    return f"{gb / 1024:.2f} TB" if gb >= 1000 else f"{gb:.0f} GB"
+
+
+def recordings(app) -> Fact | None:
+    """1.4.2: the tile "Aufnahmen" – room on the recording drive, how many rounds, the oldest (user's wish 9).
+    None while recording is off. The numbers come from the recorder thread (obsrec.Space), nothing is measured here."""
+    if not app.settings.get("rec_on", False):
+        return None
+    sp = app.recorder.space
+    if not sp.t:                                   # the recorder thread has not looked yet (first seconds)
+        return Fact(_("Aufnahmen"), "–", _("Platz wird gemessen …"))
+    if not sp.folder:
+        why = _("Platte nicht angeschlossen") if app.settings.get("rec_folder") else _("kein Ordner gewählt")
+        return Fact(_("Aufnahmen"), "–", why, colour=theme.DOT["warn"], action="rec_setup",
+                    action_label=_("Aufnahmen einrichten …"))
+    if not sp.total:
+        return Fact(_("Aufnahmen"), "–", _("Platz wird gemessen …"))
+    bits = [_("{n} Runden", n=sp.count) if sp.count != 1 else _("1 Runde"), _gb(sp.used)]
+    if sp.marked:
+        bits.append(_("{n} mit Marke", n=sp.marked))
+    if sp.oldest:
+        bits.append(_("älteste {date}", date=time.strftime("%d.%m.", time.localtime(sp.oldest))))
+    colour = theme.DOT["err"] if sp.free < obsrec.MIN_FREE else theme.DOT["warn"] if sp.free < obsrec.RESERVE else None
+    return Fact(_("Aufnahmen"), _("{size} frei", size=_gb(sp.free)), " · ".join(bits),
+                frac=1 - sp.free / sp.total, colour=colour)
 
 
 def system(app, now: float, is_win: bool) -> tuple[list, str]:

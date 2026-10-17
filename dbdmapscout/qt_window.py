@@ -173,7 +173,7 @@ SPECS = {
             ("grid", 2, tuple(("row", (("label", f"st.hk.{k}.label"), ("stretch",), ("hotkey", f"st.hk.{k}")))
                               for k in ("toggle_overlay", "next_variant", "scan_now", "prev_map", "next_map",
                                         "bigger", "smaller", "edit_position", "rotate_map", "next_floor",
-                                        "reject_map"))),
+                                        "reject_map", "mark_clip"))),
             ("row", (("button", "st.hk_defaults"), ("hint", "st.hk_status"))))),
         ("card", "st.updates", (
             ("check", "st.update"), ("hint", "st.update_note"),
@@ -195,6 +195,7 @@ SPECS = {
                                  ("row", (("label", "st.more.rec_limit.label"), ("combo", "st.more.rec_limit"),
                                           ("stretch",))),
                                  ("check", "st.more.rec_pre"), ("check", "st.more.rec_buffer"),
+                                 ("check", "st.more.rec_merge"), ("hint", "st.more.rec_ffmpeg"),
                                  ("row", (("label", "st.more.rec_tail.label"), ("combo", "st.more.rec_tail"),
                                           ("stretch",))),
                                  ("hint", "st.more.rec_status"),

@@ -763,7 +763,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
          "next_map": lambda: self.step_map(1), "prev_map": lambda: self.step_map(-1),
          "bigger": lambda: self._resize(0.03), "smaller": lambda: self._resize(-0.03),
          "edit_position": self.toggle_edit, "rotate_map": self.rotate_map, "next_floor": self.next_floor,
-         "reject_map": self.reject_detection}.get(name, lambda: None)()
+         "reject_map": self.reject_detection, "mark_clip": self.mark_clip}.get(name, lambda: None)()
 
     def _event(self, ev):
         k, d = ev.kind, ev.data

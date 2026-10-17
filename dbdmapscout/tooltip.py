@@ -129,6 +129,10 @@ TIPS = {
     "Vorlauf: Wiederholungspuffer von OBS beim Map-Banner sichern (Sekunden davor)":
         "Das Banner kommt erst ~40 s nach Matchbeginn. Läuft in OBS der Wiederholungspuffer, wird er beim Banner "
         "gespeichert – so fehlt der Anfang (Spawn) nicht. Die Datei liegt als „(Vorlauf)“ neben der Runde.",
+    "Vorlauf und Runde zu einer Datei zusammenfügen": "Nach der Runde hängt ffmpeg den Vorlauf vorne an die Aufnahme "
+                                                      "– ohne Neukodierung, in Sekunden, Bild und Ton bleiben wie "
+                                                      "von OBS. Klappt es nicht, bleiben beide Dateien liegen.",
+    "Aufnahmen einrichten …": "Öffnet die Einstellungen für die Aufnahmen mit OBS (Ordner, Verbindung).",
     "Drehen ↻": "Dreht die angezeigte Karte um 90° im Uhrzeigersinn (für jede Map gemerkt). Der Map-Name "
                 "darüber bleibt aufrecht, die Zahlen in der Karte drehen sich mit.",
     "Scannen": "Sucht sofort auf dem ganzen Bildschirm nach einem Map- oder Realm-Namen – falls die "
