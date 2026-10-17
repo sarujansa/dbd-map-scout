@@ -386,9 +386,9 @@ class Recorder(threading.Thread):
                 elif cmd == "test":
                     self._test()
                 elif cmd == "start":
-                    self._start(arg)
+                    self._begin(arg)
                 elif cmd == "stop":
-                    self._stop(arg)
+                    self._finish(arg)
             except ObsError as e:
                 self._say(str(e), False)
             except Exception as e:                     # never let the thread die
@@ -424,9 +424,11 @@ class Recorder(threading.Thread):
         bits.append(_("Ordner: {folder}", folder=folder) if folder else _("Ordner/Laufwerk nicht gefunden"))
         self._say(" · ".join(bits), bool(folder))
 
-    def _start(self, meta):
+    # (named _begin/_finish: threading.Thread has its own _stop(), which join() calls on Python 3.12 – a method
+    # of ours with that name broke join with "missing argument meta")
+    def _begin(self, meta):
         if self.active is not None:                     # a new banner while recording: close the old one first
-            self._stop({})
+            self._finish({})
         if not self.cfg.on:
             return
         folder = self.folder()
@@ -461,7 +463,7 @@ class Recorder(threading.Thread):
         self._say(_("Nimmt die Runde auf"), True)
         self._post("started", t=meta.get("t"))
 
-    def _stop(self, meta):
+    def _finish(self, meta):
         rec, self.active = self.active, None
         if rec is None:
             return
@@ -533,6 +535,6 @@ class Recorder(threading.Thread):
         """An end that never came (DBD crashed, detection missed it): stop after MAX_ROUND_S."""
         if self.active is not None and time.time() - self.active.get("since", time.time()) > MAX_ROUND_S:
             try:
-                self._stop({})
+                self._finish({})
             except ObsError as e:
                 self._say(str(e), False)
