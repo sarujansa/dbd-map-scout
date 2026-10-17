@@ -239,6 +239,20 @@ def test_old_single_opacity_becomes_every_cards_opacity(tmp_path):
     assert o["media_pos"] == "under_today"
 
 
+def test_old_settings_turn_the_pre_roll_and_the_joining_off(tmp_path):
+    """1.5.5 (user: no lobby in the recording; the joined file played too fast in the round): both off once,
+    switched on again later they stay on."""
+    import json
+    from dbdmapscout.config import Settings, DEFAULTS
+    assert DEFAULTS["rec_pre"] is False and DEFAULTS["rec_merge"] is False
+    p = tmp_path / "settings.json"
+    p.write_text(json.dumps({"settings_version": 6, "rec_pre": True, "rec_merge": True, "hotkeys": {}}))
+    s = Settings(str(p))
+    assert s["rec_pre"] is False and s["rec_merge"] is False and s["settings_version"] == 7
+    p.write_text(json.dumps({"settings_version": 7, "rec_pre": True, "rec_merge": True, "hotkeys": {}}))
+    assert Settings(str(p))["rec_pre"] is True
+
+
 def test_alignment_in_the_bar_and_the_stack_gap():
     """1.2.8 (user's picks 22 + 24): left / centred / right in the bar and under the card above; one gap."""
     from dbdmapscout import layout
