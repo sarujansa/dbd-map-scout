@@ -692,13 +692,17 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
     # ============================================================= events
     def _poll(self):
         """Every 50 ms: the events of the detection, the hotkeys, the tray and the window, in order. One failing
-        event is reported and the rest still runs (the loop must never stop)."""
+        event is reported and the rest still runs (the loop must never stop). 1.3.4 (user: "wenn ich einen Button
+        wähle, wechselt die Farbe erst nach 1 s"): after a click in the window the window is refreshed at once –
+        before, the new state waited for the next _tick_overlay (up to 250 ms)."""
+        clicked = False
         while not self._quitting:
             try:
                 ev = self.events.get_nowait()
             except queue.Empty:
                 break
             t0 = time.perf_counter()
+            clicked = clicked or (isinstance(ev, tuple) and ev[0] == "ui")
             try:
                 self._dispatch(ev)
             except Exception:
@@ -706,6 +710,11 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
             took = (time.perf_counter() - t0) * 1000
             if took >= 30:
                 self.root.note("Ereignis " + _event_name(ev), took)
+        if clicked and not self._quitting:
+            try:
+                self._qt_refresh()
+            except Exception:
+                self._report_once("Fenster", traceback.format_exc())
         if not self._quitting:
             self.root.after(50, self._poll)
 
