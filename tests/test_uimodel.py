@@ -694,3 +694,34 @@ def test_several_rounds_can_be_marked_as_farming_at_once_and_the_recordings_foll
         assert set(t.selection()) == {repr(t1), repr(t2)}          # both stay marked after the re-render
     finally:
         app.quit()
+
+
+def test_the_match_start_and_f8_reach_the_recorder(app_root):
+    """1.6: the worker's match_start event starts the early recording (with the found lobby's role and farming),
+    F8 asks for an instant clip even without a running recording; the new boxes are saved."""
+    import json
+    from dbdmapscout.app import App
+    from dbdmapscout.lobby import Found
+    from dbdmapscout.worker import Event
+    (app_root / "settings.json").write_text(json.dumps({"rec_on": True, "welcome_seen": True}), encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    calls = []
+    app.recorder.start_early = lambda **m: calls.append(("early", m))
+    app.recorder.instant_clip = lambda **m: calls.append(("clip", m))
+    app.recorder.apply_audio = lambda: calls.append(("audio", {}))
+    try:
+        app._queue = {"state": "lobby", "found": Found(time.time(), 12.0, "survivor", crossplay_off=True)}
+        app._dispatch(Event("match_start", {"t": 123.0}))
+        assert calls[0] == ("early", {"t": 123.0, "role": "survivor", "killer": "", "farming": True})
+        app.mark_clip()
+        assert calls[1][0] == "clip"
+        app.rec_audio_vars["mic"].set(True)
+        app._rec_audio_changed()
+        assert calls[2][0] == "audio" and app.settings.get("rec_audio_mic") is True
+        assert app._rec_cfg().audio_mic and app._rec_cfg().early and app._rec_cfg().clip_s == 30
+        app.rec_early_var.set(False)
+        app._rec_setting()
+        app._dispatch(Event("match_start", {"t": 200.0}))
+        assert len([c for c in calls if c[0] == "early"]) == 1
+    finally:
+        app.quit()

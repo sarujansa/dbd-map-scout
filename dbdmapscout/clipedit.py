@@ -16,7 +16,7 @@ import threading
 import time
 from dataclasses import dataclass
 
-from .obsrec import NAME_CHARS, ffmpeg_exe
+from .obsrec import CLIPS_DIR as _CLIPS_DIR, NAME_CHARS, ffmpeg_exe
 
 PREVIEW_H = 540                  # px: frames for the preview picture
 THUMB_H = 54                     # px: pictures of the timeline strip
@@ -25,7 +25,7 @@ FPS_CAP = 30.0                   # playback: at most this many frames a second (
 SIZE_RE = re.compile(rb"Video: .*?, (\d{2,5})x(\d{2,5})")
 FPS_RE = re.compile(rb"(\d+(?:\.\d+)?) fps")
 DURATION_RE = re.compile(rb"Duration: (\d+):(\d\d):(\d\d(?:\.\d+)?)")
-CLIPS_DIR = "Clips"
+CLIPS_DIR = _CLIPS_DIR         # one place for the folder name (obsrec)
 MODES = ("copy", "exact")        # cut at key frames (seconds, no re-encoding) / frame exact (re-encoded)
 
 

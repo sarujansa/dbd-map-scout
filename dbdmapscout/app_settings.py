@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import time
 from . import __version__, i18n, obsrec, qt_theme, regions, status
 from . import uimodel as ui
 from .capture import IS_WIN, foreground_root, is_game_window
@@ -250,6 +251,37 @@ class SettingsTab:
         self.rec_merge_var = ui.BooleanVar(value=bool(self.settings.get("rec_merge", True)))       # 1.4.2
         self._reg("st.more.rec_merge", ui.Checkbutton(rc, text=_("Vorlauf und Runde zu einer Datei zusammenfügen"),
                                                        variable=self.rec_merge_var, command=self._rec_setting)).pack(anchor="w")
+        self.rec_early_var = ui.BooleanVar(value=bool(self.settings.get("rec_early", True)))      # 1.6
+        self._reg("st.more.rec_early", ui.Checkbutton(rc, text=_("Aufnahme schon am Ende des Ladebildschirms starten (mit Spawn)"),
+                                                       variable=self.rec_early_var, command=self._rec_setting)).pack(anchor="w")
+        self.rec_instant_var = ui.BooleanVar(value=bool(self.settings.get("rec_instant", True)))  # 1.6
+        ri = ui.Frame(rc)
+        ri.pack(fill="x")
+        self._reg("st.more.rec_instant", ui.Checkbutton(ri, text=_("F8 speichert die letzten Sekunden als Sofort-Clip"),
+                                                         variable=self.rec_instant_var, command=self._rec_setting)).pack(side="left")
+        self._rec_clips = [(s, _("{n} s", n=s)) for s in obsrec.CLIP_SECONDS]
+        clips = dict(self._rec_clips)
+        self.rec_clip_var = ui.StringVar(value=clips.get(int(self.settings.get("rec_clip_s", obsrec.DEFAULT_CLIP_S) or 0),
+                                                         clips[obsrec.DEFAULT_CLIP_S]))
+        cc = self._reg("st.more.rec_clip", ui.Combobox(ri, textvariable=self.rec_clip_var, state="readonly", width=8,
+                                                        values=[lbl for _s, lbl in self._rec_clips]))
+        cc.pack(side="left", padx=6)
+        cc.bind("<<ComboboxSelected>>", lambda e: self._rec_setting())
+        self.rec_audio_var = ui.BooleanVar(value=bool(self.settings.get("rec_audio", True)))      # 1.6
+        self._reg("st.more.rec_audio", ui.Checkbutton(rc, text=_("Ton in OBS einstellen, sobald DBD startet:"),
+                                                       variable=self.rec_audio_var, command=self._rec_setting)).pack(anchor="w", pady=(4, 0))
+        ra = ui.Frame(rc)
+        ra.pack(fill="x")
+        self.rec_audio_vars = {key: ui.BooleanVar(value=bool(self.settings.get("rec_audio_" + key,
+                                                                               key in ("dbd", "discord"))))
+                               for key in ("dbd", "discord", "desktop", "mic")}
+
+        def sound_box(key, text):
+            return ui.Checkbutton(ra, text=text, variable=self.rec_audio_vars[key], command=self._rec_audio_changed)
+        self._reg("st.more.rec_audio_dbd", sound_box("dbd", _("DBD"))).pack(side="left", padx=(0, 10))
+        self._reg("st.more.rec_audio_discord", sound_box("discord", _("Discord"))).pack(side="left", padx=(0, 10))
+        self._reg("st.more.rec_audio_desktop", sound_box("desktop", _("übriger Desktop-Ton"))).pack(side="left", padx=(0, 10))
+        self._reg("st.more.rec_audio_mic", sound_box("mic", _("Mikrofon"))).pack(side="left")
         self.rec_farming_var = ui.BooleanVar(value=bool(self.settings.get("rec_farming_dir", True)))   # 1.5.3
         self._reg("st.more.rec_farming", ui.Checkbutton(rc, text=_("Farming-Runden im Unterordner „Farming“ ablegen"),
                                                          variable=self.rec_farming_var, command=self._rec_setting)).pack(anchor="w")
@@ -456,7 +488,15 @@ class SettingsTab:
                              volume=str(self.settings.get("rec_volume", "")), rel=str(self.settings.get("rec_rel", "")),
                              folder=str(self.settings.get("rec_folder", "")), limit_gb=limit,
                              pre=bool(self.rec_pre_var.get()), tail_s=tail, buffer_auto=bool(self.rec_buffer_var.get()),
-                             merge=bool(self.rec_merge_var.get()), farming_sub=bool(self.rec_farming_var.get()))
+                             merge=bool(self.rec_merge_var.get()), farming_sub=bool(self.rec_farming_var.get()),
+                             early=bool(self.rec_early_var.get()), instant=bool(self.rec_instant_var.get()),
+                             clip_s=next((s for s, lbl in self._rec_clips if lbl == self.rec_clip_var.get()),
+                                         obsrec.DEFAULT_CLIP_S),
+                             audio=bool(self.rec_audio_var.get()),
+                             audio_dbd=bool(self.rec_audio_vars["dbd"].get()),
+                             audio_discord=bool(self.rec_audio_vars["discord"].get()),
+                             audio_desktop=bool(self.rec_audio_vars["desktop"].get()),
+                             audio_mic=bool(self.rec_audio_vars["mic"].get()))
 
     def _rec_setting(self, save=True):
         cfg = self._rec_cfg()
@@ -470,6 +510,12 @@ class SettingsTab:
             self.settings.set("rec_buffer_auto", cfg.buffer_auto)
             self.settings.set("rec_merge", cfg.merge)
             self.settings.set("rec_farming_dir", cfg.farming_sub)
+            self.settings.set("rec_early", cfg.early)
+            self.settings.set("rec_instant", cfg.instant)
+            self.settings.set("rec_clip_s", int(cfg.clip_s))
+            self.settings.set("rec_audio", cfg.audio)
+            for key in ("dbd", "discord", "desktop", "mic"):
+                self.settings.set("rec_audio_" + key, bool(getattr(cfg, "audio_" + key)))
             self._save_soon()
         self.recorder.configure(cfg)
         folder = cfg.folder
@@ -477,6 +523,22 @@ class SettingsTab:
         self.rec_ffmpeg_var.set(_("ffmpeg fehlt (Paket imageio-ffmpeg) – start.bat installiert es beim nächsten Start; "
                                   "bis dahin bleibt der Vorlauf eine eigene Datei.")
                                 if cfg.merge and cfg.pre and obsrec.ffmpeg_exe() is None else "")
+
+    def _rec_audio_changed(self):
+        """1.6: a sound switch – saved, and OBS is set at once while DBD runs (anytime, also mid-round)."""
+        self._rec_setting()
+        self.recorder.apply_audio()
+
+    def _match_started(self, d):
+        """1.6: worker – the loading screen after a found lobby is over: OBS records from the spawn on."""
+        q = self._queue
+        f = q.get("found")
+        farming = bool(f is not None and f.crossplay_off and not f.custom
+                       and self.settings.get("farming_crossplay", True))
+        self._log(_("Ladebildschirm vorbei – das Match beginnt."), "Erkennung")
+        if self.settings.get("rec_on") and self.settings.get("rec_early", True):
+            self.recorder.start_early(t=d.get("t") or time.time(), role=(f.role if f else "") or q.get("role") or "",
+                                      killer=(f.killer if f else "") or "", farming=farming)
 
     def _rec_pick_folder(self):
         self._qt_file("dir", _("Ordner für die Aufnahmen (z. B. auf der externen Platte)"),
@@ -516,6 +578,13 @@ class SettingsTab:
             else:
                 self._log(_("Aufnahmen gelöscht (Platz): {n}", n=len(d.get("files") or [])), "System")
             self._rec_dirty = True
+        elif kind == "clip":                    # 1.6: F8 instant clip
+            if d.get("ok"):
+                self._log(_("Sofort-Clip gespeichert ({n} s): {file}", n=d.get("seconds", 0), file=d.get("file", "")),
+                          "System")
+                self._rec_dirty = True
+            else:
+                self._log(_("Kein Sofort-Clip: {why}", why=d.get("why", "")), "Fehler")
         elif kind == "changed":                 # 1.5: keep / delete done by the recorder thread
             self._rec_changed(d)
         elif kind == "marked":                  # 1.4.2: F8
@@ -526,11 +595,18 @@ class SettingsTab:
                 self.root.bell()
 
     def mark_clip(self):
-        """1.4.2: hotkey (F8) – note this moment in the running OBS recording; the clip editor jumps to it."""
-        if not self.recorder.recording:
+        """1.4.2: hotkey (F8) – note this moment in the running OBS recording; the clip editor jumps to it.
+        1.6: and (setting rec_instant) save the last seconds of OBS's replay buffer as a clip right away."""
+        instant = bool(self.settings.get("rec_on") and self.settings.get("rec_instant", True))
+        if self.recorder.recording:
+            self.recorder.mark()
+        elif not instant:
             self._log(_("Keine Aufnahme läuft – keine Clip-Marke gesetzt."), "System")
             return
-        self.recorder.mark()
+        if instant:
+            hist = self._hist or {}
+            self.recorder.instant_clip(label=hist.get("map", ""), role=hist.get("role", ""),
+                                       killer=hist.get("killer", ""))
 
     def _reveal_rec(self):
         """Overview tile "Aufnahmen" → Settings, "Mehr" open, the card "Aufnahmen mit OBS" lit up."""
