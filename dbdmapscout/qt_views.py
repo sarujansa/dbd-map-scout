@@ -93,7 +93,9 @@ class Table(QTreeWidget):
         self.setUniformRowHeights(True)
         self.header().setSectionsClickable(True)
         self.header().sectionClicked.connect(self._sort)
-        self.itemClicked.connect(lambda item, _c: self._post("act", (self._key, ("click", item.data(0, Qt.UserRole)))))
+        self.itemClicked.connect(self._clicked)
+        self.itemSelectionChanged.connect(self._selection_changed)
+        self._multi = False
         self._cols = []
         self._titles = []
         self._stretch = 0
@@ -259,9 +261,19 @@ class Table(QTreeWidget):
                 item.setData(i, Qt.ForegroundRole, QColor(fg) if fg else None)
             _check(item, tags)
 
+    def _clicked(self, item, _col):
+        if not self._multi:                       # multi-select: the selection itself is posted (Ctrl/Shift-clicks)
+            self._post("act", (self._key, ("click", item.data(0, Qt.UserRole))))
+
+    def _selection_changed(self):
+        if self._multi:                           # 1.5.4: all selected rows at once (blocked while the model syncs)
+            self._post("act", (self._key, ("select", [i.data(0, Qt.UserRole) for i in self.selectedItems()])))
+
     def _select(self, st):
         sel = set(st.get("selection", []))
-        mode = QTreeWidget.SingleSelection if st.get("selectable") else QTreeWidget.NoSelection
+        self._multi = bool(st.get("multi"))
+        mode = (QTreeWidget.ExtendedSelection if self._multi else QTreeWidget.SingleSelection) if st.get("selectable") \
+            else QTreeWidget.NoSelection
         if self.selectionMode() != mode:
             self.setSelectionMode(mode)
         if sel == getattr(self, "_sel", None) and sel == {i.data(0, Qt.UserRole) for i in self.selectedItems()}:

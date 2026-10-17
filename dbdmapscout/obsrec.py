@@ -47,6 +47,8 @@ RESERVE = 10 * 1024 ** 3        # free space kept on the drive: older recordings
 MIN_FREE = 5 * 1024 ** 3        # below this much free space on the drive: no new recording
 RENAME_TRIES = 40               # OBS may still hold the file a moment after StopRecord
 RENAME_WAIT = 0.5
+REPLAY_WAIT = 4.0               # 1.5.4: s to wait for OBS to finish writing the replay buffer (it saves asynchronously)
+REPLAY_POLL = 0.2
 MAX_ROUND_S = 45 * 60           # a recording longer than this is stopped (an end that was never detected)
 TAILS_S = (0, 3, 5, 8, 10)      # 1.4.1: seconds recorded after the detected end (the result screen)
 DEFAULT_TAIL_S = 5
@@ -563,6 +565,11 @@ class Recorder(threading.Thread):
         """1.5: remove one recording (its files from the index only) and its index entry."""
         self.cmds.put(("delete", float(t)))
 
+    def set_farming(self, t: float, on: bool):
+        """1.5.4: the statistics marked the round as farming (or not): the recording follows – flag in the index,
+        file into / out of the subfolder FARMING_DIR. Unknown rounds are ignored."""
+        self.cmds.put(("farming", (float(t), bool(on))))
+
     def set_game(self, on: bool):
         """DBD running or not (1.4.1): starts/stops OBS's replay buffer, checks OBS and the drive once."""
         if bool(on) != self._game:
@@ -605,6 +612,8 @@ class Recorder(threading.Thread):
                     self._set_keep(*arg)
                 elif cmd == "delete":
                     self._delete_one(arg)
+                elif cmd == "farming":
+                    self._set_farming(*arg)
             except ObsError as e:
                 self._say(str(e), False)
             except Exception as e:                     # never let the thread die
@@ -638,6 +647,38 @@ class Recorder(threading.Thread):
         hit.keep = on
         save_index(folder, recs)
         self._post("changed", what="keep", t=t, on=on, file=hit.file)
+        self._look_at_space(force=True)
+
+    def _set_farming(self, t, on):
+        folder = self.folder()
+        if folder is None:
+            return
+        recs = load_index(folder)
+        hit = next((r for r in recs if abs(r.t - t) < 1e-6), None)
+        if hit is None:
+            return
+        hit.farming = on
+        if self.cfg.farming_sub:                            # the file follows the flag (both parts)
+            dest = os.path.join(folder, FARMING_DIR) if on else folder
+            prefix = FARMING_DIR + "/" if on else ""
+            try:
+                os.makedirs(dest, exist_ok=True)
+            except OSError:
+                dest = None
+            for attr in ("file", "pre"):
+                name = getattr(hit, attr)
+                src = rel_path(folder, name) if name else None
+                if dest is None or not src or not os.path.exists(src):
+                    continue
+                base = os.path.basename(src)
+                if os.path.dirname(src) == os.path.normpath(dest):
+                    continue                                # already where it belongs
+                target = os.path.join(dest, self._unique(dest, base))
+                moved = self._move(src, target)
+                if moved == target:
+                    setattr(hit, attr, prefix + os.path.basename(target))
+        save_index(folder, recs)
+        self._post("changed", what="farming", t=t, on=on, file=hit.file)
         self._look_at_space(force=True)
 
     def _delete_one(self, t):
@@ -787,9 +828,7 @@ class Recorder(threading.Thread):
             if self.cfg.pre:
                 try:
                     if c.request("GetReplayBufferStatus").get("outputActive"):
-                        c.request("SaveReplayBuffer")
-                        time.sleep(0.3)
-                        pre = c.request("GetLastReplayBufferReplay").get("savedReplayPath", "")
+                        pre = self._save_replay(c)
                 except ObsError as e:
                     log.info("OBS: kein Vorlauf (%s)", e)
             c.request("StartRecord")
@@ -798,6 +837,35 @@ class Recorder(threading.Thread):
         self.active = dict(meta, pre=pre, since=time.time(), marks=[])
         self._say(_("Nimmt die Runde auf"), True)
         self._post("started", t=meta.get("t"))
+
+    @staticmethod
+    def _save_replay(c: ObsClient) -> str:
+        """SaveReplayBuffer and the path of *this* replay. OBS writes the buffer asynchronously: a fixed 0.3-s wait
+        (1.4–1.5.3) often still got the previous replay's path or none – the new file then stayed behind under
+        OBS's own name "Replay_…" (user's report). Now: the path before, save, then poll until the path changes
+        and the file exists (or the ReplayBufferSaved event names it), at most REPLAY_WAIT s."""
+        try:
+            before = c.request("GetLastReplayBufferReplay").get("savedReplayPath", "") or ""
+        except ObsError:
+            before = ""
+        c.request("SaveReplayBuffer")
+        deadline = time.time() + REPLAY_WAIT
+        path = ""
+        while time.time() < deadline:
+            time.sleep(REPLAY_POLL)
+            saved = [e for e in c.events if e.get("eventType") == "ReplayBufferSaved"]
+            if saved:
+                path = (saved[-1].get("eventData") or {}).get("savedReplayPath", "") or path
+            cur = c.request("GetLastReplayBufferReplay").get("savedReplayPath", "") or ""
+            if cur and cur != before:
+                path = cur
+            if path and os.path.exists(path):
+                return path
+        if path:
+            log.info("OBS: Vorlauf %s noch nicht geschrieben – wird am Rundenende gesucht", path)
+        else:
+            log.info("OBS: Vorlauf nicht gefunden (Pfad unverändert: %s)", before or "–")
+        return path
 
     def _finish(self, meta):
         rec, self.active = self.active, None
