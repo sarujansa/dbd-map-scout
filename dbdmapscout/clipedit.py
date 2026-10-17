@@ -26,7 +26,8 @@ SIZE_RE = re.compile(rb"Video: .*?, (\d{2,5})x(\d{2,5})")
 FPS_RE = re.compile(rb"(\d+(?:\.\d+)?) fps")
 DURATION_RE = re.compile(rb"Duration: (\d+):(\d\d):(\d\d(?:\.\d+)?)")
 CLIPS_DIR = _CLIPS_DIR         # one place for the folder name (obsrec)
-CENSOR_STYLES = ("pixel", "blur", "black")   # 1.7.2: how a censored area looks
+CENSOR_STYLES = ("pixel", "blur", "black", "retouch")   # 1.7.2: how a censored area looks; 1.7.3 retouch = delogo
+EDGE_PX = 2                                # delogo refuses a box that touches the frame edge: keep this far away
 NAMES_BOX = (0.006, 0.66, 0.175, 0.31)     # DBD's survivor names bottom left, as fractions of the 16:9 game picture
 MODES = ("copy", "exact", "discord")   # key frames, no re-encoding / frame exact / 1.6.1: fits a size (Discord)
 TARGETS_MB = (10, 25, 50, 500)  # 1.6.1: Discord's upload limits (free 10 MB, Nitro Basic 50, Nitro 500)
@@ -271,13 +272,17 @@ def box_px(box, width: int, height: int) -> tuple:
 def censor_graph(boxes, style: str, width: int, height: int, tail: str = "") -> str:
     """1.7.2 (user: censor the names on the left): the ffmpeg filter graph that hides ``boxes`` (fraction
     boxes) in a ``width`` × ``height`` picture – "pixel" = coarse blocks, "blur" = blurred, "black" = a black
-    box; ``tail`` = filters to run after it (scale/fps of the Discord mode). Ends in [vout]."""
+    box, "retouch" = ffmpeg's delogo (the area is interpolated from its surroundings, no visible box); ``tail`` = filters to run after it (scale/fps of the Discord mode). Ends in [vout]."""
     parts, cur = [], "[0:v]"
     for i, box in enumerate(boxes):
         x, y, w, h = box_px(box, width, height)
         nxt = f"[c{i}]"
         if style == "black":
             parts.append(f"{cur}drawbox=x={x}:y={y}:w={w}:h={h}:color=black:t=fill{nxt}")
+        elif style == "retouch":            # 1.7.3 (user: "retouchieren"): painted over from the surroundings
+            x, y = max(EDGE_PX, x), max(EDGE_PX, y)
+            w, h = max(2, min(w, width - EDGE_PX - x)), max(2, min(h, height - EDGE_PX - y))
+            parts.append(f"{cur}delogo=x={x}:y={y}:w={w}:h={h}{nxt}")
         else:
             if style == "blur":
                 r = max(2, min(w, h) // 6)

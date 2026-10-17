@@ -1641,4 +1641,5 @@ EN = {
     '{n} Kasten/Kästen – ziehen = verschieben, Ecke rechts unten = Grösse, Klick = markieren.': '{n} box(es) – drag = move, bottom-right corner = size, click = mark.',
     '{n} Kasten/Kästen gemerkt – sie gelten auch für den nächsten Clip.': '{n} box(es) remembered – they apply to the next clip too.',
     '· mit Zensur neu kodiert (wie „Genau“)': '· re-encoded for the censoring (like "Exact")',
+    'Retusche (aus der Umgebung übermalt)': 'Retouch (painted over from the surroundings)',
 }
