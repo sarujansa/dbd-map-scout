@@ -812,3 +812,49 @@ def test_the_discord_state_follows_round_and_lobby_and_the_records_tab_draws(app
         assert titles[:2] == ["4K-Serie", "Entkommen-Serie"] and "Längste Runde" in titles
     finally:
         app.quit()
+
+
+def test_the_statistics_tabs_keep_their_meaning_when_moved(app_root):
+    """1.7.6: a moved sub-tab of the statistics still selects its own model tab (the model index travels with the
+    widget), the order is saved as a setting and restored on apply, "Anordnung zurücksetzen" clears it."""
+    import json
+    from dbdmapscout.app import App
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        app.qt.show_page("stats")                                   # the page gets its texts when shown
+        app._qt_refresh(force=True)
+        page = app.qt.forms["stats"]
+        tabs_id, tw, ids = page._tabsets[0]
+        names = [tw.tabText(i) for i in range(tw.count())]
+        assert tw.tabBar().isMovable() and "Rekorde" in names and page._tab_ids(tw, ids) == [str(i) for i in range(tw.count())]
+        tw.tabBar().moveTab(0, 2)                                   # "Übersicht" behind "Killer"
+        ev = []
+        while not app.events.empty():
+            ev.append(app.events.get())
+        assert ("ui", "tab_order", ("stats", tabs_id, page._tab_ids(tw, ids))) in ev
+        app._qt_event("tab_order", ("stats", tabs_id, page._tab_ids(tw, ids)))
+        assert app.settings.get("tab_order")["stats"][tabs_id][:3] == ["1", "2", "0"]
+        tw.setCurrentIndex(1)
+        tw.setCurrentIndex(0)                                        # a click on the first shown tab = model tab 1
+        ev = []
+        while not app.events.empty():
+            ev.append(app.events.get())
+        assert ("ui", "act", (tabs_id, 1)) in ev
+        app._qt_event("act", (tabs_id, 1))
+        assert app.stats_nb.index("current") == 1
+        app._qt_refresh(force=True)
+        assert [tw.tabText(i) for i in range(3)] == [names[1], names[2], names[0]] and tw.currentIndex() == 0
+        tw.setCurrentIndex(2)                                        # a click on the moved "Übersicht"
+        ev = []
+        while not app.events.empty():
+            ev.append(app.events.get())
+        assert ("ui", "act", (tabs_id, 0)) in ev
+        app._card_order_reset()
+        assert page._tab_ids(tw, ids) == [str(i) for i in range(tw.count())] and app.settings.get("tab_order") == {}
+        app.qt.set_nav_order(["stats"])
+        assert app.qt.nav_keys()[0] == "stats"
+        app._card_order_reset()
+        assert app.qt.nav_keys()[0] == "overview" and app.settings.get("nav_order") == []
+    finally:
+        app.quit()

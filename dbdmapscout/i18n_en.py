@@ -1108,8 +1108,8 @@ EN = {
     'Anordnung zurücksetzen': 'Reset arrangement',
     'Die Kästen der Seiten lassen sich am Griff rechts im Titel verschieben.':
         'The boxes of the pages can be moved by the handle at the right of their title.',
-    'Stellt die Kästen auf allen Seiten wieder in die ursprüngliche Reihenfolge.':
-        'Puts the boxes of all pages back in their original order.',
+    'Stellt die Kästen auf allen Seiten, die Reiter-Reihen (Statistik, Overlay) und die Navigation links wieder in die ursprüngliche Reihenfolge.':
+        'Puts the boxes of all pages, the tab rows (Statistics, Overlay) and the navigation on the left back in their original order.',
     # 1.60: setup assistant, search over the settings
     'Das Programm liest beim Match-Start den Map-Namen aus dem Bild. Hake die Sprache an, in der du Dead by Daylight spielst (mehrere gehen).':
         'The program reads the map name from the picture when a match starts. Tick the language you play Dead by Daylight in (several are fine).',
