@@ -383,6 +383,7 @@ class SysInfo:
         music = bool(o.get("show_media", True)) and win is not None
         self.media.active = music and self.game is not None
         self.media.want_cover = bool(o.get("media_cover", True))
+        self.spotify.active = self.media.active and bool(self.settings.get("spotify_on", False))   # 1.8
         ctx = self._media_ctx
         if win is None:
             return None
@@ -416,7 +417,8 @@ class SysInfo:
         prog = media.progress(now, time.time()) if o.get("media_progress", True) and media.playing(now, time.time()) \
             else None
         look = media.look(o)
-        style = dict(skin=self._skin(), accent=self._skin_accent())                        # 1.3
+        style = dict(skin=self._skin(), accent=self._skin_accent(),                        # 1.3
+                     upnext=self._upnext(now, sample=forced), upnext_pos=o.get("media_next_pos", "below"))   # 1.8
         w, h = win.render(rows, height, cover, o.get("media_style", "big"), prog, look, **style)
         avail = layout.max_width(bar, margin) if bar >= layout.MIN_BAR and spot != "custom" else gw / 3
         if w > avail:                                       # never wider than the black bar
@@ -424,6 +426,8 @@ class SysInfo:
                               look, **style)
         song = (now.title, now.artist)
         self._media_restart = song != self._media_song or not win.shown    # a new song / appears: from nothing
+        if song != self._media_song:
+            self.spotify.kick()                             # 1.8: the queue moved on with the song
         self._media_song = song
         return (w, h)
 

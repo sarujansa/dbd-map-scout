@@ -655,13 +655,40 @@ def render_music_compact(rows, cover, height: int) -> Image.Image:
     return pic
 
 
-def render_music(rows, cover, height: int, style: str = "big", progress=None, look=()) -> Image.Image:
+def render_music(rows, cover, height: int, style: str = "big", progress=None, look=(), upnext=None,
+                 upnext_pos: str = "below") -> Image.Image:
     """"Läuft gerade": style "big" (1.64.7, user's choice "A") = the cover big on top, below it the title (a bit
     larger) and the artist, centred; "compact" = the card of 1.64 (cover left). Text like the system values, the
     cover slightly rounded with the same soft shadow. ``look`` (1.2.4): "accent" = bar in the cover's colour,
-    "remaining" = time left, "backdrop" = on a dark area. = music_card(music_body(…)); HudWindow keeps the body
-    (cover and text) and draws only the progress strip anew every second (1.2.13)."""
-    return music_card(music_body(rows, cover, height, style, look), height, style, progress, look)
+    "remaining" = time left, "backdrop" = on a dark area. ``upnext`` (1.8) = (label, ((title, artist), …)) of the
+    Spotify queue, below the song or to its right (``upnext_pos``). = music_card(music_body(…)); HudWindow keeps
+    the body (cover and text) and draws only the progress strip anew every second (1.2.13)."""
+    return music_card(music_body(rows, cover, height, style, look), height, style, progress, look, upnext, upnext_pos)
+
+
+UPNEXT_SCALE = 0.8                  # the "up next" rows, a little smaller than the song's lines (1.8)
+
+
+def upnext_block(label: str, items, height: int) -> Image.Image:
+    """"Als nächstes" (1.8): a grey header and one row per coming track – number, title, artist – set like the
+    system values (render_hud puts the titles in one column behind the numbers)."""
+    from .media import MAX_CHARS, clip
+    rows = [[(label, DIM_LABEL)]] if label else []
+    for i, item in enumerate(items, 1):
+        title, artist = (tuple(item) + ("", ""))[:2]
+        row = [(f"{i}  ", DIM_LABEL), (clip(title, MAX_CHARS), (255, 255, 255, 255))]
+        if artist:
+            row.append((" – " + clip(artist, MAX_CHARS // 2 + 5), DIM_LABEL))
+        rows.append(row)
+    return render_hud(rows, max(1, int(height * UPNEXT_SCALE)))
+
+
+def _beside(pic: Image.Image, block: Image.Image, gap: int) -> Image.Image:
+    """``block`` to the right of ``pic``, both at the top."""
+    out = Image.new("RGBA", (pic.width + gap + block.width, max(pic.height, block.height)), (0, 0, 0, 0))
+    out.alpha_composite(pic, (0, 0))
+    out.alpha_composite(block, (pic.width + gap, 0))
+    return out
 
 
 def music_body(rows, cover, height: int, style: str, look=()):
@@ -701,14 +728,20 @@ def music_body(rows, cover, height: int, style: str, look=()):
     return pic, max(side, text_w - 2 * pad), accent
 
 
-def music_card(body, height: int, style: str, progress=None, look=()) -> Image.Image:
+def music_card(body, height: int, style: str, progress=None, look=(), upnext=None,
+               upnext_pos: str = "below") -> Image.Image:
     """The music card from its body (music_body): the progress strip below it (``progress`` = (elapsed, total)
-    seconds), on the dark area if "backdrop" is in ``look``. Cheap – drawn every second while a song plays."""
+    seconds), then the Spotify queue ``upnext`` = (label, items) below or to the right (1.8), on the dark area if
+    "backdrop" is in ``look``. Cheap – drawn every second while a song plays."""
     pic, strip_w, accent = body
     if progress:
         strip = progress_strip(strip_w, *progress, height, accent if "accent" in look else None,
                                "remaining" in look)
         pic = _below(pic, strip, style != "compact")
+    if upnext and upnext[1]:
+        block = upnext_block(upnext[0], upnext[1], height)
+        pic = _beside(pic, block, max(6, height // 120)) if upnext_pos == "right" else \
+            _below(pic, block, style != "compact")
     return backdrop(pic, height) if "backdrop" in look else pic
 
 
@@ -792,23 +825,25 @@ class HudWindow:
         return self.size
 
     def render(self, rows, height: int, cover=None, style=None, progress=None, look=(), skin="classic",
-               accent=None, title=None):
+               accent=None, title=None, upnext=None, upnext_pos="below"):
         """Prepare the picture; returns its size (0, 0 without rows). ``cover``/``style``/``progress``/``look``: the
         music card (progress = (elapsed, total) seconds; redrawn once a second while a song plays). ``skin``
         (1.3): the overlay style – glass / chips / line draw the card in skin.py (``accent`` = the theme's colour,
-        ``title`` = the card's header); "classic" as before."""
+        ``title`` = the card's header); "classic" as before. ``upnext`` (1.8) = (label, items) of the Spotify
+        queue on the music card, ``upnext_pos`` below / right."""
         progress = (int(progress[0]), int(progress[1])) if progress else None
         look = tuple(sorted(look))
+        upnext = (str(upnext[0]), tuple(tuple(i) for i in upnext[1])) if upnext and upnext[1] else None
         key = (tuple(tuple(r) for r in rows), int(height), self.editing, id(cover), style, progress, look, skin,
-               accent, title)
+               accent, title, upnext, upnext_pos)
         if key != self._key:
             self._key = key
             if not rows:
                 self._data, self.size = None, (0, 0)
             elif skin != "classic":
                 from . import skin as skins
-                pic = skins.music(rows, cover, height, skin, progress, look, accent, style) if style is not None \
-                    else skins.card(rows, height, skin, accent, title)
+                pic = skins.music(rows, cover, height, skin, progress, look, accent, style, upnext, upnext_pos) \
+                    if style is not None else skins.card(rows, height, skin, accent, title)
             elif style is None:
                 pic = render_hud(rows, height)
                 if "backdrop" in look:
@@ -818,7 +853,7 @@ class HudWindow:
                 if body_key != self._body_key:
                     self._body_key = body_key
                     self._body = (music_body(rows, cover, height, style, look), cover)   # cover kept: id stays
-                pic = music_card(self._body[0], height, style, progress, look)
+                pic = music_card(self._body[0], height, style, progress, look, upnext, upnext_pos)
             if rows:
                 if self.editing:
                     pic = add_border(pic, self.edit_label)
