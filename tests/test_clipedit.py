@@ -228,3 +228,97 @@ def test_the_whole_strip_comes_from_one_ffmpeg_run(clip):
     assert list(clipedit.thumb_strip(clip, times[:1], 54, info, FF)) == []       # one moment: nothing to space
     stopped = list(clipedit.thumb_strip(clip, times, 54, info, FF, stop=lambda: True))
     assert stopped == []
+
+
+def test_censor_boxes_are_hidden_in_the_saved_clip(clip, tmp_path):
+    """1.7.2 (user: censor the names on the left): names_box lies bottom left of the 16:9 game picture (shifted
+    by the bars of a wider frame), the filter graph names every box, a black box really is black in the saved
+    clip and the picture outside it stays, "copy" becomes a re-encode."""
+    assert clipedit.names_box(2560, 1440) == pytest.approx(clipedit.NAMES_BOX)
+    wide = clipedit.names_box(3440, 1440)                          # ultrawide: the game picture starts at 440 px
+    assert wide[0] == pytest.approx(440 / 3440 + 0.006 * 2560 / 3440) and wide[2] == pytest.approx(0.175 * 2560 / 3440)
+    assert clipedit.box_px((0.5, 0.5, 0.25, 0.25), 321, 181) == (160, 90, 80, 46)   # even, inside the frame
+    g = clipedit.censor_graph([(0.1, 0.1, 0.2, 0.2), (0.5, 0.5, 0.1, 0.1)], "pixel", 320, 180, "scale=-2:90")
+    assert g.count("overlay") == 2 and g.endswith("scale=-2:90[vout]") and "flags=neighbor" in g
+    assert "drawbox" in clipedit.censor_graph([(0, 0, 0.5, 0.5)], "black", 320, 180)
+    assert "boxblur" in clipedit.censor_graph([(0, 0, 0.5, 0.5)], "blur", 320, 180)
+    info = clipedit.probe(clip, FF)
+    out = str(tmp_path / "censored.mp4")
+    ok, why = clipedit.cut(clip, 2.0, 4.0, out, "copy", FF, info=info, censor=[(0.0, 0.5, 0.5, 0.5)],
+                           censor_style="black")
+    assert ok, why
+    img = clipedit.frame_at(out, 1.0, 180, info=clipedit.probe(out, FF), ffmpeg=FF)
+    assert img is not None
+    assert max(img.getpixel((40, 150))) < 24 and max(img.getpixel((200, 150))) > 60     # black box left, colour right
+    for style in ("pixel", "blur"):
+        ok, why = clipedit.cut(clip, 2.0, 3.0, str(tmp_path / f"{style}.mp4"), "discord", FF, target_mb=5,
+                               info=info, censor=[clipedit.names_box(320, 180)], censor_style=style)
+        assert ok, why
+
+
+def test_the_clip_window_censors_with_remembered_boxes(clip, tmp_path):
+    """1.7.2: the window shows remembered boxes, "Namen links unten" adds one and switches the censoring on,
+    the tool draws/removes boxes, every change is saved as a setting, and saving passes the boxes to cut()."""
+    pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
+    from PySide6.QtCore import QPointF, Qt
+    from PySide6.QtGui import QMouseEvent
+    from PySide6.QtWidgets import QApplication
+    from dbdmapscout import qt_clip
+    app = QApplication.instance() or QApplication([])
+    settings, saved = {}, []
+    win = qt_clip.ClipWindow(clip, [], str(tmp_path / "Clips"), mode="copy", sound=False, on_saved=saved.append,
+                             on_setting=lambda k, v: settings.__setitem__(k, v), censor_on=False,
+                             censor_boxes=[[0.5, 0.5, 0.2, 0.2]])
+    try:
+        win.show()
+        assert win.preview.boxes == [[0.5, 0.5, 0.2, 0.2]] and not win.preview.active
+        win._add_names_box()
+        assert len(win.preview.boxes) == 2 and win.censor_box.isChecked() and settings["clip_censor_on"] is True
+        assert settings["clip_censor_boxes"][1][0] == pytest.approx(0.006, abs=1e-3)
+        assert "neu kodiert" in win.size_label.text()
+        win.tool_btn.setChecked(True)
+        win._tool_toggled()
+        assert win.preview.editing
+        deadline = time.time() + 15                                  # drawing needs the picture on display
+        while time.time() < deadline and win.preview.pixmap().isNull():
+            app.processEvents()
+            time.sleep(0.02)
+        assert not win.preview.pixmap().isNull()
+        f = win.preview.frame_rect()                                 # draw a box by dragging on the picture
+
+        def mouse(kind, fx, fy):
+            pt = QPointF(f.left() + fx * f.width(), f.top() + fy * f.height())
+            ev = QMouseEvent(kind, pt, pt, Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+            getattr(win.preview, {QMouseEvent.Type.MouseButtonPress: "mousePressEvent",
+                                  QMouseEvent.Type.MouseMove: "mouseMoveEvent",
+                                  QMouseEvent.Type.MouseButtonRelease: "mouseReleaseEvent"}[kind])(ev)
+        mouse(QMouseEvent.Type.MouseButtonPress, 0.1, 0.1)
+        mouse(QMouseEvent.Type.MouseMove, 0.3, 0.25)
+        mouse(QMouseEvent.Type.MouseButtonRelease, 0.3, 0.25)
+        assert len(win.preview.boxes) == 3 and win.preview.boxes[2] == pytest.approx([0.1, 0.1, 0.2, 0.15], abs=0.02)
+        assert win.preview.selected == 2
+        win.preview.remove_selected()
+        assert len(win.preview.boxes) == 2 and len(settings["clip_censor_boxes"]) == 2
+        win.style_box.setCurrentIndex(2)
+        assert settings["clip_censor_style"] == "black" and win.preview.style == "black"
+        calls = []
+        real_cut = clipedit.cut
+        qt_clip.clipedit.cut = lambda *a, **k: (calls.append(k), real_cut(*a, **k))[1]
+        try:
+            win.goto(1.0)
+            win.set_start()
+            win.goto(2.0)
+            win.set_end()
+            win.save()
+            deadline = time.time() + 30
+            while time.time() < deadline and not saved:
+                app.processEvents()
+                time.sleep(0.02)
+        finally:
+            qt_clip.clipedit.cut = real_cut
+        assert saved and calls and calls[0]["censor_style"] == "black" and len(calls[0]["censor"]) == 2
+        win.censor_box.setChecked(False)
+        assert win._censor_args() == {} and "neu kodiert" not in win.size_label.text()
+    finally:
+        win.close()
+        app.processEvents()

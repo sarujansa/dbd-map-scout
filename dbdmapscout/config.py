@@ -138,6 +138,9 @@ DEFAULTS = {
     "clip_mode": "copy",                # 1.5.1: clip editor – "copy" (key frames, fast) / "exact" (re-encoded)
     "clip_sound": True,                 # 1.5.1: clip editor plays the sound while previewing (Windows)
     "clip_target_mb": 10,               # 1.6.1: clip editor "Für Discord" – stays under this many MB
+    "clip_censor_on": False,            # 1.7.2: clip editor hides the censor boxes when saving
+    "clip_censor_style": "pixel",       # pixel | blur | black
+    "clip_censor_boxes": [],            # [[x, y, w, h] …] as fractions of the picture (the names stay put)
     "discord_on": False,                # 1.7: Rich Presence over the local Discord client (user's pick)
     "discord_client_id": "",            # the Application-ID the user registered in Discord's developer portal
     "discord_killer": True,             # name the killer in the status
