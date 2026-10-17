@@ -271,3 +271,25 @@ def test_farming_rounds_count_only_in_their_own_filter(tmp_path):
     r = h.set_farming(path, 300, True)                                     # 1.5.5: farming drops "custom game"
     assert r.farming and not r.custom and [x.t for x in h.select(h.load(path), role="farming")] == [100, 300]
     assert h.set_farming(path, 999, True) is None
+
+
+def test_bloodpoints_per_round_and_per_hour_with_and_without_waiting():
+    """1.6.3 (user: farming evaluation): BP per round, per hour in the match (the page's length, else banner to
+    end) and per hour with the search time; rounds without a known wait count with the average of the others."""
+    from dbdmapscout import dashboard
+    from dbdmapscout.official import Match
+    rs = [h.Round(t=1, seconds=500, map_id="a", map="A", role="survivor", wait=60.0),
+          h.Round(t=2, seconds=500, map_id="a", map="A", role="killer", killer="The Nurse", wait=None),
+          h.Round(t=3, seconds=500, map_id="a", map="A", role="killer", killer="The Nurse", wait=120.0),
+          h.Round(t=4, seconds=500, map_id="a", map="A", role="survivor", wait=30.0)]
+    ms = [Match(t=0, map="A", seconds=600, bp=30000), Match(t=0, map="A", seconds=0, bp=40000),
+          Match(t=0, map="A", seconds=900, bp=50000), Match(t=0, map="A", seconds=600, bp=0)]   # no BP: left out
+    b = dashboard.bp_rate(list(zip(rs, ms)))
+    assert (b.rounds, b.bp, b.play_s) == (3, 120000, 600 + 500 + 900) and b.per_round == 40000
+    assert b.wait_s == 60 + 90 + 120                                    # the unknown wait = mean of 60 and 120
+    assert b.per_hour == 120000 * 3600 / 2000 and b.per_hour_waiting == 120000 * 3600 / 2270
+    rows = dashboard.bp_rows(list(zip(rs, ms)), lambda k: k[4:])
+    assert [g for g, _b in rows] == ["Alle", "Survivor", "Killer", "   Nurse"]
+    assert rows[2][1].bp == 90000 and dashboard.bp_rate([]).per_hour is None
+    tile = dashboard.tiles(rs, list(zip(rs, ms)))[-1]
+    assert tile.title == "Bloodpoints pro Stunde" and tile.value == "216k" and tile.sub.startswith("mit Wartezeit")

@@ -164,6 +164,14 @@ class StatsTab:
         ui.Label(box_k, text=_("Ein Skin oder neuer Killer steht unter seinem eigenen Namen? Zeile markieren, Killer "
                                 "wählen, „Zuordnen“ – gilt auch rückwirkend."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
+        box_b = self._stats_page(_("Bloodpoints"))   # 1.6.3: with the role filter "Farming" = the farming evaluation
+        self.stats_bp = self._stats_tree(box_b, (("group", _("Rolle/Killer"), 140, "w"), ("n", _("Runden"), 60, "e"),
+                                                 ("round", _("Ø BP"), 70, "e"), ("hour", _("BP/h"), 70, "e"),
+                                                 ("hourw", _("BP/h mit Wartezeit"), 120, "e"),
+                                                 ("sum", _("Summe"), 80, "e")), 8)
+        ui.Label(box_b, text=_("Bloodpoints laut Stats-Seite. BP/h = je Stunde im Match; mit Wartezeit = je Stunde aus "
+                                "Match und Suche zusammen. Mit dem Rollen-Filter „Farming“ steht hier, was das Farmen "
+                                "bringt."), style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         box_v = self._stats_page(_("Verlauf"))
         self.trend = TrendChart(box_v, bool(self.settings.get("dark_mode", True)))
         ui.Label(box_v, text=_("Nur Runden, die einem Match auf der Stats-Seite zugeordnet sind. Die Maus über einer "
@@ -408,7 +416,8 @@ class StatsTab:
         if c is None or i not in self._stats_dirty:
             return
         self._stats_dirty.discard(i)
-        part = (self._stats_part_dash, self._stats_part_maps, self._stats_part_killers, self._stats_part_trend,
+        part = (self._stats_part_dash, self._stats_part_maps, self._stats_part_killers, self._stats_part_bp,
+                self._stats_part_trend,
                 self._stats_part_sys, self._stats_part_regions, self._stats_part_wait, self._stats_part_last)
         if i < len(part):
             part[i](c)
@@ -467,6 +476,15 @@ class StatsTab:
         if keep and t.exists(keep[0]):
             t.selection_set(keep[0])
         self._stats_alias_buttons()
+
+    def _stats_part_bp(self, c):
+        """1.6.3: bloodpoints per round and per hour – all, by role, by killer (filters apply)."""
+        t = self.stats_bp
+        t.delete(*t.get_children())
+        for i, (group, b) in enumerate(dashboard.bp_rows(c.pairs, killer_label)):
+            t.insert("", "end", iid=str(i), values=(
+                group, b.rounds, dashboard._bp(b.per_round), dashboard._bp(b.per_hour) if b.per_hour else "–",
+                dashboard._bp(b.per_hour_waiting) if b.per_hour_waiting else "–", dashboard._bp(b.bp)))
 
     def _stats_part_trend(self, c):
         self._trend_render(c.pairs, TREND_UNIT.get(c.period, "week"))

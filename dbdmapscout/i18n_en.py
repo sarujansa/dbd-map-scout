@@ -1565,4 +1565,12 @@ EN = {
     '▶ Clip ansehen': '▶ Watch clip',
     'Markiert alle genannten Runden als Farming-Runden (und nicht mehr als Custom Game); ihre Aufnahmen wandern in den Ordner „Farming“. Einzeln zurück: „Farming an/aus“ unter „Letzte Runden“.': 'Marks all these rounds as farming rounds (no longer custom games); their recordings move into the folder "Farming". One by one back: "Farming on/off" under "Last rounds".',
     'Diese Runden nicht mehr vorschlagen – sie bleiben, wie sie sind.': 'Do not suggest these rounds again – they stay as they are.',
+    'Alle': 'All',
+    'BP/h': 'BP/h',
+    'BP/h mit Wartezeit': 'BP/h with waiting',
+    'Bloodpoints': 'Bloodpoints',
+    'Bloodpoints laut Stats-Seite. BP/h = je Stunde im Match; mit Wartezeit = je Stunde aus Match und Suche zusammen. Mit dem Rollen-Filter „Farming“ steht hier, was das Farmen bringt.': 'Bloodpoints from the stats page. BP/h = per hour in the match; with waiting = per hour of match and search together. With the role filter "Farming" this shows what farming earns.',
+    'Bloodpoints pro Stunde': 'Bloodpoints per hour',
+    'Summe': 'Total',
+    'mit Wartezeit {bp}': 'with waiting {bp}',
 }
