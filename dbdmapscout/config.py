@@ -52,6 +52,8 @@ DEFAULTS = {
         "media_style": "big",           # music card: big = cover on top (1.64.7) / compact = cover left (1.64)
         "media_scale": 1.0,             # size of the music card (slider 60–200 %)
         "media_cover": True,            # album cover left of title and artist
+        "media_next_pos": "below",      # 1.8: the Spotify queue below the song / right of it
+        "media_next_n": 3,              # … how many coming tracks (1–5)
         "map_backdrop": False,          # dark area with rounded corners behind the map and its lines (1.2.4)
         "hud_backdrop": False,          # … behind the system values / "today"
         "hud_rows": {"cpu": True, "gpu": True, "spot": True, "vram": True, "ram": True},   # rows shown (1.2.8)
@@ -147,6 +149,9 @@ DEFAULTS = {
     "discord_client_id": "",            # the Application-ID the user registered in Discord's developer portal
     "discord_killer": True,             # name the killer in the status
     "discord_lobby": True,              # also show lobby / search / menu (else only the match)
+    "spotify_on": False,                # 1.8: "Als nächstes" from the Spotify Web API on the music card (user's pick)
+    "spotify_client_id": "",            # the Client-ID of the app the user registered in Spotify's dashboard
+    "spotify_token": "",                # the refresh token, DPAPI-protected (spotify.protect), PC-specific
     "sysinfo": "right",                 # system values at the top of a black bar: off | left | right | custom
     "sysinfo_pos": [1.0, 0.0],          # sysinfo = custom: 0..1 of the free space in the DBD window (x, y)
 }
@@ -172,7 +177,7 @@ def export_settings(data: dict, path: str) -> None:
 
 # per-PC values that must not come along from a backup (other folder / other machine)
 LOCAL_KEYS = ("setup_version", "setup_root", "qt_geometry", "official_dir", "layouts", "layout_key",
-              "rec_volume", "rec_rel", "rec_folder", "rec_password")
+              "rec_volume", "rec_rel", "rec_folder", "rec_password", "spotify_token")
 
 
 def reset_data(current: dict) -> dict:

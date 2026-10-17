@@ -149,7 +149,9 @@ SPECS = {
                 ("check", "ov.media"), ("row", (("label", "ov.media_pos.label"), ("combo", "ov.media_pos"), ("stretch",))),
                 ("row", (("label", "ov.media_style.label"), ("combo", "ov.media_style"), ("stretch",))),
                 ("check", "ov.media_cover"), ("check", "ov.media_progress"), ("check", "ov.media_accent"),
-                ("check", "ov.media_remaining"), ("check", "ov.media_backdrop"), ("check", "ov.media_fade"))),
+                ("check", "ov.media_remaining"), ("check", "ov.media_backdrop"), ("check", "ov.media_fade"),
+                ("row", (("label", "ov.media_next.label"), ("combo", "ov.media_next"), ("stretch",))),   # 1.8
+                ("slider", "ov.media_next_n"), ("hint", "ov.media_next_hint"))),
             ("ov.pos", N_("Allgemein"), (
                 ("row", (("label", "ov.style.label"), ("combo", "ov.style"), ("stretch",))),     # 1.3
                 ("slider", "ov.gap"),
@@ -216,6 +218,12 @@ SPECS = {
                                               ("stretch",))),
                                      ("check", "st.more.dc_killer"), ("check", "st.more.dc_lobby"),
                                      ("hint", "st.more.dc_status"), ("hint", "st.more.dc_text"))),
+        ("card", "st.more.spotify", (("check", "st.more.sp_on"),                             # 1.8: "Als nächstes"
+                                     ("row", (("label", "st.more.sp_id.label"), ("entry", "st.more.sp_id"),
+                                              ("button", "st.more.sp_dash"), ("stretch",))),
+                                     ("row", (("button", "st.more.sp_login"), ("button", "st.more.sp_logout"),
+                                              ("stretch",))),
+                                     ("hint", "st.more.sp_status"), ("hint", "st.more.sp_text"))),
         ("card", "st.more.backup", (("row", (("button", "st.more.export"), ("button", "st.more.import"), ("stretch",),
                                              ("button", "st.more.clear_hist"), ("button", "st.more.reset_all"))),)),
         ("card", "st.more.folders", (("row", (("button", "st.more.dir"), ("button", "st.more.maps_dir"), ("stretch",))),)),

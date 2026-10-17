@@ -1642,4 +1642,49 @@ EN = {
     '{n} Kasten/Kästen gemerkt – sie gelten auch für den nächsten Clip.': '{n} box(es) remembered – they apply to the next clip too.',
     '· mit Zensur neu kodiert (wie „Genau“)': '· re-encoded for the censoring (like "Exact")',
     'Retusche (aus der Umgebung übermalt)': 'Retouch (painted over from the surroundings)',
+    # ------------------------------------------------------------------ 1.8: "Als nächstes" from Spotify
+    'Spotify': 'Spotify',
+    '„Als nächstes“ aus Spotify in der Musikkarte zeigen': 'Show "Up next" from Spotify on the music card',
+    'Client-ID': 'Client ID',
+    'Developer-Dashboard öffnen': 'Open developer dashboard',
+    'Mit Spotify verbinden': 'Connect to Spotify',
+    'Spotify-Verbindung trennen': 'Disconnect Spotify',
+    'Zeigt in der Musikkarte, was in Spotify als Nächstes kommt (Position und Anzahl unter Overlay → Musik). Die Windows-Mediensteuerung kennt nur den laufenden Titel, die Liste holt das Programm deshalb von Spotify selbst: Dafür im Developer-Dashboard „Create app“ anlegen (Name frei, API „Web API“), als Redirect URI genau {uri} eintragen, die Client-ID kopieren und hier einfügen, dann „Mit Spotify verbinden“ – der Browser fragt einmal nach der Freigabe. Gelesen wird nur die Warteschlange, nichts gesteuert; die Freigabe liegt verschlüsselt auf diesem PC und lässt sich hier trennen. Titel kommen nie ins Log.':
+        'Shows on the music card what comes next in Spotify (place and count under Overlay → Music). The Windows media controls know only the current track, so the program gets the list from Spotify itself: in the developer dashboard "Create app" (any name, API "Web API"), enter exactly {uri} as the redirect URI, copy the Client ID and paste it here, then "Connect to Spotify" – the browser asks once for your consent. Only the queue is read, nothing is controlled; the consent is kept encrypted on this PC and can be removed here. Titles never go to the log.',
+    'Spotify: öffne die Anmeldung im Browser …': 'Spotify: opening the login in the browser …',
+    'ALS NÄCHSTES': 'UP NEXT',
+    'Unter dem Lied': 'Below the song',
+    'Rechts neben dem Lied': 'Right of the song',
+    'Als nächstes': 'Up next',
+    'Anzahl Titel': 'Tracks shown',
+    'Die Liste kommt aus Spotify – einrichten unter Einstellungen → Mehr → Spotify.':
+        'The list comes from Spotify – set it up under Settings → More → Spotify.',
+    'Spotify: aus': 'Spotify: off',
+    'Spotify: Client-ID fehlt – im Developer-Dashboard anlegen und hier eintragen.':
+        'Spotify: Client ID missing – create it in the developer dashboard and enter it here.',
+    'Spotify: nicht verbunden – „Mit Spotify verbinden“ klicken.': 'Spotify: not connected – click "Connect to Spotify".',
+    'Spotify: Anmeldung im Browser offen – dort bei Spotify anmelden und zustimmen …':
+        'Spotify: login open in the browser – sign in to Spotify there and agree …',
+    'Spotify: Port {port} ist belegt – Anmeldung nicht möglich.': 'Spotify: port {port} is in use – login not possible.',
+    'Spotify: Browser konnte nicht geöffnet werden ({error})': 'Spotify: the browser could not be opened ({error})',
+    'Spotify: Anmeldung fehlgeschlagen ({error})': 'Spotify: login failed ({error})',
+    'Spotify: Anmeldung abgelehnt ({error})': 'Spotify: login refused ({error})',
+    'Spotify: keine Antwort vom Browser – Anmeldung abgebrochen.': 'Spotify: no answer from the browser – login cancelled.',
+    'Spotify: verbunden': 'Spotify: connected',
+    'Spotify: Anmeldung abgelaufen – bitte neu verbinden.': 'Spotify: login expired – please connect again.',
+    'Spotify: kein Zugriff ({error}) – ist dein Spotify-Konto in der Developer-App unter „User Management“ eingetragen?':
+        'Spotify: no access ({error}) – is your Spotify account listed in the developer app under "User Management"?',
+    'Spotify: Fehler – {error}': 'Spotify: error – {error}',
+    'keine Antwort mit Token': 'no answer with a token',
+    'Mit Spotify verbunden – du kannst dieses Fenster schliessen.': 'Connected to Spotify – you can close this window.',
+    'Spotify hat die Anmeldung abgelehnt – du kannst dieses Fenster schliessen.':
+        'Spotify refused the login – you can close this window.',
+    'Die nächsten Titel deiner Spotify-Warteschlange unter oder neben dem laufenden Lied. Braucht eine eigene App im Spotify-Developer-Dashboard (Client-ID) und einmal die Anmeldung im Browser; nur solange Spotify spielt.':
+        'The next tracks of your Spotify queue below or beside the current song. Needs an app of your own in the Spotify developer dashboard (Client ID) and one login in the browser; only while Spotify plays.',
+    'Öffnet developer.spotify.com/dashboard im Browser: „Create app“, Redirect URI wie unten angegeben eintragen, die Client-ID kopieren und links einfügen.':
+        'Opens developer.spotify.com/dashboard in the browser: "Create app", enter the redirect URI given below, copy the Client ID and paste it on the left.',
+    'Öffnet die Spotify-Anmeldung im Browser. Nach dem Zustimmen kommt der Browser auf 127.0.0.1 zurück und das Programm merkt sich die Freigabe (verschlüsselt, nur auf diesem PC). Dafür hört es nur während der Anmeldung einmal auf diesem Port.':
+        'Opens the Spotify login in the browser. After you agree, the browser returns to 127.0.0.1 and the program keeps the consent (encrypted, on this PC only). For that it listens on this port once, only during the login.',
+    'Vergisst die Spotify-Freigabe auf diesem PC; die Liste verschwindet. In Spotify selbst lässt sich die App unter Konto → Apps ebenfalls entfernen.':
+        'Forgets the Spotify consent on this PC; the list goes away. In Spotify itself the app can be removed under Account → Apps as well.',
 }

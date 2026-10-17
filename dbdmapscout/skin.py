@@ -413,12 +413,13 @@ def _chips_table(lines, u, acc) -> Image.Image:
 
 # ------------------------------------------------------------------ the music card
 def music(rows, cover, height: int, style: str, progress=None, look=(), accent=None,
-          layout: str = "compact") -> Image.Image:
+          layout: str = "compact", upnext=None, upnext_pos: str = "below") -> Image.Image:
     """"Läuft gerade" in ``style``: ``rows`` as media.rows gives them ([[(title, white)], [(artist, dim)]]),
     ``progress`` = (elapsed, total) s or None, ``look`` as media.look (``remaining`` = time left on the right,
     ``accent`` = bar in the cover's colour – else the theme's accent). ``layout`` = overlay.media_style:
     "big" (1.3.2, user: the big cover stayed small in the new styles) = cover large on top, text centred below;
-    "compact" = cover left."""
+    "compact" = cover left. ``upnext`` (1.8) = (label, ((title, artist), …)) of the Spotify queue: a second small
+    panel in the same style below the card or to its right (``upnext_pos``)."""
     u = max(0.25, height / 1440)
     acc = accent_rgba(accent)
     if "accent" in look and cover is not None:
@@ -428,12 +429,71 @@ def music(rows, cover, height: int, style: str, progress=None, look=(), accent=N
     title = texts[0] if texts else ""
     artist = texts[1] if len(texts) > 1 else ""
     if layout == "big" and cover is not None:
-        return _music_big(title, artist, cover, u, acc, progress, look, style)
-    if style == "chips":
-        return _music_chips(title, artist, cover, u, acc, progress, look)
-    if style == "line":
-        return _music_line(title, artist, cover, u, acc, progress, look)
-    return _music_glass(title, artist, cover, u, acc, progress, look)
+        im = _music_big(title, artist, cover, u, acc, progress, look, style)
+    elif style == "chips":
+        im = _music_chips(title, artist, cover, u, acc, progress, look)
+    elif style == "line":
+        im = _music_line(title, artist, cover, u, acc, progress, look)
+    else:
+        im = _music_glass(title, artist, cover, u, acc, progress, look)
+    if upnext and upnext[1]:
+        block = upnext_panel(upnext[0], upnext[1], u, style)
+        im = _attach(im, block, upnext_pos, int(8 * u), centred=layout == "big" and cover is not None)
+    return im
+
+
+def upnext_panel(label: str, items, u: float, style: str) -> Image.Image:
+    """"Als nächstes" (1.8) as a small panel in ``style``: a caps header, then number · title – artist per track,
+    each line fitted to the width of the chips' wrap (WRAP_SHARE)."""
+    pad = int(12 * u)
+    line = style == "line"
+    max_w = int(WRAP_SHARE * 1440 * u) - 2 * pad
+    head_h = int(16 * u) if label else 0
+    row_h = int(20 * u)
+    nf = inter("Medium", int(12 * u))
+    num_w = int(_width(nf, "9")) + int(8 * u)
+    fitted = []
+    for i, item in enumerate(items, 1):
+        title, artist = (tuple(item) + ("", ""))[:2]
+        text = f"{title} – {artist}" if artist else title
+        tf, text = _fit_text(text, "Regular" if line else "Medium", int(14 * u), max_w - num_w)
+        fitted.append((str(i), tf, text, len(title)))
+    w = max((int(_width(tf, t)) for _n, tf, t, _k in fitted), default=0) + num_w + 2 * pad
+    head_w = int(_width(inter("Medium", int(11 * u)), label.upper(), 3 * u)) + 2 * pad if label else 0
+    w = max(w, head_w, int(120 * u))
+    h = pad + head_h + len(fitted) * row_h + pad - (int(4 * u) if fitted else 0)
+    if line:
+        im = _panel(w, h, int(10 * u), (0, 0, 0, 0), LINE_EDGE, max(1, int(u)))
+    elif style == "chips":
+        im = _panel(w, h, int(16 * u), CHIP_FILL, CHIP_EDGE)
+    else:
+        im = _panel(w, h, int(14 * u), GLASS_FILL, GLASS_EDGE)
+    y = pad
+    if label:
+        _caps(im, pad, y, label, int(11 * u), GREY, u)
+        y += head_h
+    for num, tf, text, title_len in fitted:
+        _text(im, pad, y + int(2 * u), num, nf, DIMG)
+        head, tail = text[:title_len], text[title_len:]      # title bright, artist grey (the fit may cut the tail)
+        x = _text(im, pad + num_w, y, head, tf, WHITE)
+        if tail:
+            _text(im, x, y, tail, tf, GREY)
+        y += row_h
+    return im if line else shadowed(im, u)
+
+
+def _attach(card: Image.Image, block: Image.Image, pos: str, gap: int, centred: bool) -> Image.Image:
+    """``block`` below ``card`` (centred under it or left-aligned) or to its right (tops aligned)."""
+    if pos == "right":
+        out = Image.new("RGBA", (card.width + gap + block.width, max(card.height, block.height)), (0, 0, 0, 0))
+        out.alpha_composite(card, (0, 0))
+        out.alpha_composite(block, (card.width + gap, 0))
+        return out
+    w = max(card.width, block.width)
+    out = Image.new("RGBA", (w, card.height + gap + block.height), (0, 0, 0, 0))
+    out.alpha_composite(card, ((w - card.width) // 2 if centred else 0, 0))
+    out.alpha_composite(block, ((w - block.width) // 2 if centred else 0, card.height + gap))
+    return out
 
 
 BIG_COVER = 200                         # side of the big cover in design pixels (≈ classic "Groß" at 1440p)
