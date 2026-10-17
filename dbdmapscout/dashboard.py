@@ -51,6 +51,56 @@ def play_time(seconds: float) -> str:
     return f"{seconds / 3600:.1f} h"
 
 
+@dataclass
+class BpRate:
+    """1.6.3 (user: farming evaluation): bloodpoints of the rounds tied to a match with BP."""
+    rounds: int = 0
+    bp: int = 0
+    play_s: float = 0.0          # match length (the stats page's, else banner to end)
+    wait_s: float = 0.0          # search time in the lobby (rounds without a known wait: the average of the others)
+
+    @property
+    def per_round(self):
+        return self.bp / self.rounds if self.rounds else None
+
+    @property
+    def per_hour(self):
+        return self.bp * 3600 / self.play_s if self.play_s > 0 else None
+
+    @property
+    def per_hour_waiting(self):
+        """Per hour of playing and searching together – what an evening of farming really earns."""
+        total = self.play_s + self.wait_s
+        return self.bp * 3600 / total if total > 0 else None
+
+
+def bp_rate(pairs) -> BpRate:
+    """``pairs``: [(round, official match)]; only matches with bloodpoints count."""
+    got = [(r, m) for r, m in pairs if m.bp > 0]
+    out = BpRate(rounds=len(got), bp=sum(m.bp for _r, m in got))
+    out.play_s = sum(m.seconds if m.seconds > 0 else r.seconds for r, m in got)
+    waits = [r.wait for r, _m in got if r.wait is not None]
+    avg_wait = sum(waits) / len(waits) if waits else 0.0
+    out.wait_s = sum(r.wait if r.wait is not None else avg_wait for r, _m in got)
+    return out
+
+
+def bp_rows(pairs, killer_label=lambda k: k) -> list:
+    """[(group, BpRate)]: all, survivor, killer, then each killer by rounds – the table "Bloodpoints"."""
+    rows = [(_("Alle"), bp_rate(pairs))]
+    for role, label in (("survivor", _("Survivor")), ("killer", _("Killer"))):
+        sub = [(r, m) for r, m in pairs if r.role == role]
+        if sub:
+            rows.append((label, bp_rate(sub)))
+    killers = {}
+    for r, m in pairs:
+        if r.role == "killer" and r.killer:
+            killers.setdefault(r.killer, []).append((r, m))
+    for k, sub in sorted(killers.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+        rows.append(("   " + killer_label(k), bp_rate(sub)))
+    return [(g, b) for g, b in rows if b.rounds]
+
+
 def tiles(rounds, pairs) -> list:
     s = history.summary(rounds)
     o = official.summary([m for _r, m in pairs])
@@ -73,6 +123,9 @@ def tiles(rounds, pairs) -> list:
                     _("Median {time}", time=fmt_duration(ws["median"])) if ws["count"] else ""))
     out.append(Tile(_("Ø Bloodpoints"), _bp(o["bp"] / o["bp_matches"]) if o["bp_matches"] else "–",
                     _("{n} Matches", n=o["bp_matches"]) if o["bp_matches"] else ""))
+    rate = bp_rate(pairs)                                       # 1.6.3: what farming earns
+    out.append(Tile(_("Bloodpoints pro Stunde"), _bp(rate.per_hour) if rate.per_hour else "–",
+                    _("mit Wartezeit {bp}", bp=_bp(rate.per_hour_waiting)) if rate.per_hour_waiting else ""))
     return out
 
 
