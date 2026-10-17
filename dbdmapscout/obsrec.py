@@ -10,7 +10,9 @@ recordings *of this index* go first (never any other file on the drive), kept on
 The external drive (Samsung T7) may get another letter after re-plugging: the folder is remembered by its volume
 (``\\\\?\\Volume{…}\\``) plus the path on it; a missing drive means no recording and a note, never C: instead.
 
-Only the standard library (a minimal WebSocket client: RFC 6455 handshake, masked text frames, ping/pong).
+Only the standard library (a minimal WebSocket client: RFC 6455 handshake, masked text frames, ping/pong) –
+plus, since 1.4.2, the ffmpeg binary that imageio-ffmpeg ships, run as a child process on the two files of a
+round only (pre-roll + round → one file, stream copy, nothing re-encoded, no network).
 """
 from __future__ import annotations
 
@@ -24,6 +26,7 @@ import re
 import shutil
 import socket
 import struct
+import subprocess
 import sys
 import threading
 import time
@@ -49,6 +52,10 @@ TAILS_S = (0, 3, 5, 8, 10)      # 1.4.1: seconds recorded after the detected end
 DEFAULT_TAIL_S = 5
 MIN_FILE_BYTES = 1024 * 1024    # 1.4.1: a recording smaller than this is reported as broken/empty
 MAGIC = {b"\x1a\x45\xdf\xa3": "mkv", b"ftyp": "mp4"}   # file signatures (mp4: at offset 4)
+SHORT_ROUND_S = 300             # 1.4.2: rounds shorter than this go first when room is needed
+FFMPEG_TIMEOUT = 600            # s for joining the two files (stream copy: seconds, not minutes)
+SPACE_EVERY = 10.0              # s between two looks at the drive (Recorder.space)
+DURATION_RE = re.compile(rb"Duration: (\d+):(\d\d):(\d\d(?:\.\d+)?)")
 NAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 
@@ -273,6 +280,9 @@ class Recording:
     size: int = 0
     keep: bool = False           # never deleted by the limit
     extra: dict = field(default_factory=dict)
+    marks: list = field(default_factory=list)   # 1.4.2: F8 moments, seconds from the start of the file
+    farming: bool = False        # 1.4.2: a farming round (cross-play off) – goes first when room is needed
+    pre_s: float = 0.0           # 1.4.2: seconds of pre-roll at the start of the file (0 = none or separate)
 
 
 def load_index(folder: str) -> list[Recording]:
@@ -299,10 +309,21 @@ def save_index(folder: str, recs: list[Recording]):
     os.replace(tmp, path)
 
 
+def prune_rank(r: Recording) -> int:
+    """1.4.2: what goes first when room is needed – 0 farming rounds and rounds shorter than SHORT_ROUND_S,
+    1 ordinary rounds, 2 rounds with a mark (F8); within a rank the oldest first. Kept ones never."""
+    if r.marks:
+        return 2
+    if r.farming or (r.end and 0 < r.end - r.t < SHORT_ROUND_S):
+        return 0
+    return 1
+
+
 def prune(folder: str, recs: list[Recording], limit: int, reserve: int = RESERVE,
           free=None) -> tuple[list[Recording], list[str]]:
     """Keep the folder's recordings under ``limit`` bytes (0 = the whole drive) and ``reserve`` bytes free on
-    the drive: delete the oldest not-kept ones of the index – only files named in it, only inside ``folder``.
+    the drive: delete not-kept ones of the index in ``prune_rank`` order (farming/short first, marked last,
+    oldest first) – only files named in it, only inside ``folder``.
     Entries whose files are gone drop out. ``free`` = bytes free now (measured when None).
     Returns (entries left, files deleted)."""
     left, deleted = [], []
@@ -317,7 +338,7 @@ def prune(folder: str, recs: list[Recording], limit: int, reserve: int = RESERVE
         except OSError:
             free = reserve
     total = sum(r.size for r in left)
-    for r in sorted([r for r in left if not r.keep], key=lambda r: r.t):
+    for r in sorted([r for r in left if not r.keep], key=lambda r: (prune_rank(r), r.t)):
         if (limit <= 0 or total <= limit) and free >= reserve:
             break
         for n in (r.file, r.pre):
@@ -333,6 +354,95 @@ def prune(folder: str, recs: list[Recording], limit: int, reserve: int = RESERVE
     return left, deleted
 
 
+@dataclass
+class Space:
+    """1.4.2: what the overview's tile "Aufnahmen" shows – measured by the recorder thread, never on the UI thread."""
+    free: int = 0                # bytes free on the drive
+    total: int = 0               # bytes the drive holds
+    used: int = 0                # bytes the recordings of the index take
+    count: int = 0
+    oldest: float = 0.0          # banner time of the oldest recording (0 = none)
+    marked: int = 0              # recordings with an F8 mark
+    folder: str = ""             # "" = drive not connected
+    t: float = 0.0               # when measured
+
+
+def space(folder: str | None, recs: list[Recording] | None = None) -> Space:
+    if not folder:
+        return Space(t=time.time())
+    recs = load_index(folder) if recs is None else recs
+    try:
+        du = shutil.disk_usage(folder)
+        free, total = du.free, du.total
+    except OSError:
+        free = total = 0
+    return Space(free=free, total=total, used=sum(r.size for r in recs), count=len(recs),
+                 oldest=min((r.t for r in recs), default=0.0), marked=sum(1 for r in recs if r.marks),
+                 folder=folder, t=time.time())
+
+
+# ------------------------------------------------------------------ ffmpeg (1.4.2): pre-roll + round → one file
+def ffmpeg_exe() -> str | None:
+    """The ffmpeg binary imageio-ffmpeg ships (BSD-2; no PATH lookup – only the one pip installed into .venv),
+    None when the package is missing."""
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return None
+
+
+def _run(args: list[str], timeout: float = FFMPEG_TIMEOUT) -> tuple[int, bytes]:
+    """ffmpeg as a child process without a console window; (exit code, stderr)."""
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    try:
+        p = subprocess.run(args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                           timeout=timeout, creationflags=flags)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return 1, str(e).encode()
+    return p.returncode, p.stderr or b""
+
+
+def media_duration(path: str, ffmpeg: str | None = None, run=None) -> float | None:
+    """Length of a video in seconds from ffmpeg's own file summary (``ffmpeg -i``; imageio-ffmpeg has no ffprobe)."""
+    ffmpeg = ffmpeg or ffmpeg_exe()
+    if not ffmpeg:
+        return None
+    _rc, err = (run or _run)([ffmpeg, "-hide_banner", "-i", path], timeout=30)
+    m = DURATION_RE.search(err)
+    if not m:
+        return None
+    return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
+
+
+def merge_files(parts: list[str], out: str, ffmpeg: str | None = None, run=None) -> bool:
+    """Join video files of the same format into ``out`` without re-encoding (concat demuxer, stream copy):
+    seconds of work, the picture stays as OBS wrote it. False when ffmpeg is missing or fails – the parts stay."""
+    ffmpeg = ffmpeg or ffmpeg_exe()
+    if not ffmpeg or len(parts) < 2:
+        return False
+    lst = out + ".txt"
+    try:
+        with open(lst, "w", encoding="utf-8") as f:
+            for p in parts:
+                f.write("file '" + os.path.abspath(p).replace("'", "'\\''") + "'\n")
+        rc, err = (run or _run)([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0",
+                                "-i", lst, "-map", "0", "-c", "copy", out])
+    finally:
+        try:
+            os.remove(lst)
+        except OSError:
+            pass
+    ok = rc == 0 and os.path.exists(out) and os.path.getsize(out) > 0
+    if not ok:
+        log.info("ffmpeg: Zusammenfügen fehlgeschlagen (%s): %s", rc, err[-400:].decode("utf-8", "replace").strip())
+        try:
+            os.remove(out)
+        except OSError:
+            pass
+    return ok
+
+
 # ------------------------------------------------------------------ the recorder thread
 @dataclass
 class Config:
@@ -346,6 +456,7 @@ class Config:
     pre: bool = True
     tail_s: float = DEFAULT_TAIL_S   # 1.4.1: keep recording this long after the end (result screen)
     buffer_auto: bool = True         # 1.4.1: start OBS's replay buffer with DBD, stop it when DBD is gone
+    merge: bool = True               # 1.4.2: pre-roll + round → one file (ffmpeg, stream copy)
 
 
 def check_file(path: str) -> str | None:
@@ -380,6 +491,8 @@ class Recorder(threading.Thread):
         self._pending = None         # (meta, deadline): the end came, the tail is still being recorded (1.4.1)
         self._game = None            # last known: DBD running? (set_game)
         self._buffer_ours = False    # we started OBS's replay buffer: we stop it with DBD
+        self.space = Space()         # 1.4.2: the drive and the index, for the overview's tile
+        self._space_t = 0.0
 
     @property
     def recording(self) -> bool:
@@ -397,6 +510,10 @@ class Recorder(threading.Thread):
 
     def test(self):
         self.cmds.put(("test", None))
+
+    def mark(self):
+        """1.4.2: F8 – note this moment in the running recording (the clip editor jumps to it later)."""
+        self.cmds.put(("mark", None))
 
     def set_game(self, on: bool):
         """DBD running or not (1.4.1): starts/stops OBS's replay buffer, checks OBS and the drive once."""
@@ -416,6 +533,7 @@ class Recorder(threading.Thread):
                 try:
                     self._due()
                     self._watchdog()
+                    self._look_at_space()
                 except ObsError as e:
                     self._say(str(e), False)
                 continue
@@ -424,6 +542,7 @@ class Recorder(threading.Thread):
                     return
                 if cmd == "config":
                     self.cfg = arg
+                    self._look_at_space(force=True)    # the tile follows a new folder/switch at once
                 elif cmd == "test":
                     self._test()
                 elif cmd == "start":
@@ -432,6 +551,8 @@ class Recorder(threading.Thread):
                     self._stop_later(arg)
                 elif cmd == "game":
                     self._game_changed(arg)
+                elif cmd == "mark":
+                    self._mark()
             except ObsError as e:
                 self._say(str(e), False)
             except Exception as e:                     # never let the thread die
@@ -444,6 +565,21 @@ class Recorder(threading.Thread):
 
     def _client(self) -> ObsClient:
         return ObsClient(self.cfg.port, self.cfg.password).connect()
+
+    def _mark(self):
+        if self.active is None:
+            self._post("marked", pos=None)
+            return
+        pos = round(time.time() - self.active["since"], 1)
+        self.active.setdefault("marks", []).append(pos)
+        self._post("marked", pos=pos, n=len(self.active["marks"]))
+
+    def _look_at_space(self, force=False):
+        """Drive and index for the overview – every SPACE_EVERY s while recording is on."""
+        if not force and time.time() - self._space_t < SPACE_EVERY:
+            return
+        self._space_t = time.time()
+        self.space = space(self.folder()) if self.cfg.on else Space(t=self._space_t)
 
     def folder(self) -> str | None:
         return find_folder(self.cfg.volume, self.cfg.rel, self.cfg.folder)
@@ -565,7 +701,7 @@ class Recorder(threading.Thread):
             c.request("StartRecord")
         finally:
             c.close()
-        self.active = dict(meta, pre=pre, since=time.time())
+        self.active = dict(meta, pre=pre, since=time.time(), marks=[])
         self._say(_("Nimmt die Runde auf"), True)
         self._post("started", t=meta.get("t"))
 
@@ -602,21 +738,59 @@ class Recorder(threading.Thread):
             self._say(_("Aufnahme liegt in OBS' eigenem Ordner: {path}", path=final), False)
             return
         bad = check_file(final)                        # 1.4.1: OBS may have failed silently
+        marks = list(rec.get("marks") or [])
+        pre_s, extra = 0.0, {}
+        if pre_name and not bad and self.cfg.merge:    # 1.4.2: pre-roll + round → one file
+            final, pre_name, pre_s, joined = self._join(folder, os.path.join(folder, pre_name), final)
+            if joined:
+                marks = [round(m + pre_s, 1) for m in marks]
+            else:
+                extra["merge_failed"] = True
+        if bad:
+            extra["bad"] = bad
         recs = load_index(folder)
         recs.append(Recording(t=float(rec.get("t") or time.time()), file=os.path.basename(final), pre=pre_name,
                               map_id=rec.get("map_id", ""), label=rec.get("label", ""), role=rec.get("role", ""),
-                              killer=rec.get("killer", ""), end=time.time(), extra={"bad": bad} if bad else {}))
+                              killer=rec.get("killer", ""), end=time.time(), extra=extra, marks=marks,
+                              farming=bool(rec.get("farming")), pre_s=pre_s))
         limit = int(self.cfg.limit_gb) * 1024 ** 3
         recs, deleted = prune(folder, recs, limit)
         save_index(folder, recs)
         if bad:
             self._warn(_("Aufnahme sieht beschädigt aus ({why}): {file} – OBS-Einstellungen prüfen (Encoder, Platte).",
                          why=bad, file=os.path.basename(final)))
+        elif extra.get("merge_failed"):
+            self._say(_("Gespeichert: {file} – Vorlauf nicht angefügt, liegt als eigene Datei daneben",
+                        file=os.path.basename(final)), True)
         else:
             self._say(_("Gespeichert: {file}", file=os.path.basename(final)), True)
-        self._post("saved", file=os.path.basename(final), t=rec.get("t"))
+        self._post("saved", file=os.path.basename(final), t=rec.get("t"), marks=len(marks))
         if deleted:
             self._post("deleted", files=deleted)
+        self._look_at_space(force=True)
+
+    @staticmethod
+    def _join(folder, pre_path, round_path):
+        """Pre-roll and round into one file named like the round (ffmpeg, stream copy). Returns
+        (file, pre name left, seconds of pre-roll, joined?) – on failure both files stay as they were."""
+        ffmpeg = ffmpeg_exe()
+        if not ffmpeg or os.path.splitext(pre_path)[1].lower() != os.path.splitext(round_path)[1].lower():
+            return round_path, os.path.basename(pre_path), 0.0, False
+        pre_s = media_duration(pre_path, ffmpeg)
+        tmp = os.path.splitext(round_path)[0] + " (zusammen)" + os.path.splitext(round_path)[1]
+        if not merge_files([pre_path, round_path], tmp, ffmpeg):
+            return round_path, os.path.basename(pre_path), 0.0, False
+        try:
+            os.remove(pre_path)
+            os.replace(tmp, round_path)
+        except OSError as e:
+            log.info("ffmpeg: zusammengefügte Datei nicht abgelegt (%s)", e)
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+            return round_path, os.path.basename(pre_path) if os.path.exists(pre_path) else "", 0.0, False
+        return round_path, "", float(pre_s or 0.0), True
 
     @staticmethod
     def _unique(folder, name):

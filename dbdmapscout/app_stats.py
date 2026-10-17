@@ -781,7 +781,8 @@ class StatsTab:
             if self._hist["farming"]:
                 self._log(_("Crossplay war aus – die Runde zählt als Farming-Runde."), "Erkennung")
         self.recorder.start_round(t=now, map_id=map_id, label=self._hist["map"], role=self._hist.get("role", ""),
-                                  killer=self._hist.get("killer", ""))         # 1.4: OBS records the round
+                                  killer=self._hist.get("killer", ""),         # 1.4: OBS records the round
+                                  farming=bool(self._hist.get("farming")))     # 1.4.2: goes first when room is needed
 
     def _hist_close(self, t, role=None):
         rec, self._hist = self._hist, None

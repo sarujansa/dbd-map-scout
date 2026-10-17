@@ -432,6 +432,8 @@ class QtShell:
             self.qt.show_page("server")
         elif action == "official_setup":             # 1.2.15: "noch keine Stats-Daten" → the card under "Mehr"
             self._reveal_official()
+        elif action == "rec_setup":                  # 1.4.2: tile "Aufnahmen" without a folder/drive
+            self._reveal_rec()
         else:
             {"scan": self.scan_now, "rotate": self.rotate_map, "toggle": self.toggle_overlay,
              "reject": self.reject_detection, "confirm": self._confirm_unsure, "layout": self.next_variant,

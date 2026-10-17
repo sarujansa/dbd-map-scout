@@ -82,6 +82,7 @@ DEFAULTS = {
         "rotate_map": "ctrl+alt+r",
         "next_floor": "ctrl+alt+f",     # not E: Ctrl+Alt+E is AltGr+E = € on German keyboards
         "reject_map": "ctrl+alt+x",
+        "mark_clip": "f8",              # 1.4.2: a mark in the running OBS recording (single key: only while DBD is in front)
     },
     "ui_language": "auto",            # auto (Windows language) | de | en
     "dark_mode": True,
@@ -123,6 +124,7 @@ DEFAULTS = {
     "rec_pre": True,                    # save OBS's replay buffer at the banner (the seconds before it)
     "rec_tail_s": 5,                    # 1.4.1: seconds recorded after the detected end (result screen)
     "rec_buffer_auto": True,            # 1.4.1: start/stop OBS's replay buffer with DBD
+    "rec_merge": True,                  # 1.4.2: pre-roll + round → one file (ffmpeg from imageio-ffmpeg, stream copy)
     "sysinfo": "right",                 # system values at the top of a black bar: off | left | right | custom
     "sysinfo_pos": [1.0, 0.0],          # sysinfo = custom: 0..1 of the free space in the DBD window (x, y)
 }

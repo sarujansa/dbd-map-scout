@@ -154,9 +154,9 @@ class OverviewPage(QWidget):
         self.today_note = _label(cls="dim")
         head.addWidget(self.today_note)
         page.addLayout(head)
-        tiles = TileGrid(min_width=170, columns=4)
-        self.tiles = []
-        for _i in range(4):
+        tiles = TileGrid(min_width=170, columns=5)
+        self.tiles, self.tile_cards = [], []
+        for i in range(5):                        # 1.4.2: the fifth ("Aufnahmen") only while recording is on
             t = _card()
             tl = QVBoxLayout(t)
             tl.setContentsMargins(14, 12, 14, 12)
@@ -165,6 +165,8 @@ class OverviewPage(QWidget):
             tl.addWidget(box)
             tiles.addWidget(t)
             self.tiles.append(box)
+            self.tile_cards.append(t)
+            t.setVisible(i < 4)
         page.addLayout(tiles)
 
         # system values and the last rounds
@@ -230,8 +232,11 @@ class OverviewPage(QWidget):
                     if b.toolTip() != tip:
                         b.setToolTip(tip)
         _set(self.today_note, o.today_note)
-        for box, f in zip(self.tiles, o.today):
-            box.show_fact(f)
+        for i, (box, card) in enumerate(zip(self.tiles, self.tile_cards)):
+            if i < len(o.today):
+                box.show_fact(o.today[i])
+            if card.isVisible() != (i < len(o.today)):
+                card.setVisible(i < len(o.today))
         self._show_system(o)
         self._show_rounds(o.rounds)
 
