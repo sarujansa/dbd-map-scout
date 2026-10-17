@@ -941,6 +941,7 @@ class App(ServerTab, StatsTab, LobbyInfo, Hotkeys, SettingsTab, SysInfo, LayoutM
             self._report_once("hotkeys", traceback.format_exc())
         try:
             self._tray_tick()
+            self._rec_tick()
         except Exception:
             self._report_once("tray", traceback.format_exc())
         try:

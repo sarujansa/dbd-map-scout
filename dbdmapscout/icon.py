@@ -34,18 +34,28 @@ def draw(size: int = 256) -> Image.Image:
     return img.resize((size, size), Image.LANCZOS)
 
 
-def draw_status(size: int, colour: str | None) -> Image.Image:
-    """1.3.6: the icon with a status dot bottom right (tray), ringed in the icon's dark ground."""
+REC = (229, 83, 75, 255)      # 1.4.1: recording dot top right (theme.DOT "err" red)
+
+
+def draw_status(size: int, colour: str | None, rec: bool = False) -> Image.Image:
+    """1.3.6: the icon with a status dot bottom right (tray), ringed in the icon's dark ground; 1.4.1: a red
+    dot top right while a round is being recorded."""
     img = draw(size)
-    if not colour:
+    if not colour and not rec:
         return img
     s = 4 * size
     over = Image.new("RGBA", (s, s), (0, 0, 0, 0))
     d = ImageDraw.Draw(over)
-    r, ring = 0.25 * s, 0.06 * s
-    cx = cy = s - r - ring
-    d.ellipse([cx - r - ring, cy - r - ring, cx + r + ring, cy + r + ring], fill=BG)
-    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=colour)
+    if colour:
+        r, ring = 0.25 * s, 0.06 * s
+        cx = cy = s - r - ring
+        d.ellipse([cx - r - ring, cy - r - ring, cx + r + ring, cy + r + ring], fill=BG)
+        d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=colour)
+    if rec:
+        r, ring = 0.19 * s, 0.06 * s
+        cx, cy = s - r - ring, r + ring
+        d.ellipse([cx - r - ring, cy - r - ring, cx + r + ring, cy + r + ring], fill=BG)
+        d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=REC)
     img.alpha_composite(over.resize((size, size), Image.LANCZOS))
     return img
 
