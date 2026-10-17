@@ -890,12 +890,14 @@ def test_preview_sizes_the_picked_element_by_its_corner_and_the_wheel(qapp, keep
     assert (what, name) == ("resize", "music") and abs(h - 200) < 10
     assert posted.empty()                                     # the corner neither picks nor moves anything else
 
-    def wheel(pt, dy):
+    def wheel(pt, dy, mods=Qt.ControlModifier):
         e = QWheelEvent(QPointF(pt), QPointF(view.mapToGlobal(pt)), QPoint(0, 0), QPoint(0, dy), Qt.NoButton,
-                        Qt.NoModifier, Qt.NoScrollPhase, False)
+                        mods, Qt.NoScrollPhase, False)
         qapp.sendEvent(view, e)
         return e.isAccepted()
-    assert wheel(at(100, 100), 120)                           # over the map: bigger
+    # 1.3.2 (user: the plain wheel kept changing sizes while scrolling the page): only Ctrl + wheel sizes
+    assert not wheel(at(100, 100), 120, Qt.NoModifier) and posted.empty()
+    assert wheel(at(100, 100), 120)                           # Ctrl + wheel over the map: bigger
     assert posted.get_nowait()[1][1][:2] == ("resize", "map")
     assert not wheel(at(1700, 700), 120) and posted.empty()   # empty spot: the page scrolls
     view.show_state({"data": dict(data, editing=False), "visible": True})

@@ -42,7 +42,7 @@ class _Window(QWidget):
             self.owner._dropped()
 
     def wheelEvent(self, e):
-        if self.owner.editing and self.owner.on_wheel:
+        if self.owner.editing and self.owner.on_wheel and e.modifiers() & Qt.ControlModifier:   # 1.3.2: Ctrl only
             self.owner.on_wheel(1 if e.angleDelta().y() > 0 else -1)
 
 

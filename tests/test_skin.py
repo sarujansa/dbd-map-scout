@@ -161,3 +161,13 @@ def test_the_overlay_draws_the_map_card_in_the_style_and_fits_the_bar():
     assert len({bytes(v) for v in seen.values()}) == len(skin.STYLES)          # four different pictures
     ov.set_skin("classic", None)                                                # a style change re-renders
     assert ov._key is None and ov._base_key is None and ov._fit is None
+
+
+@pytest.mark.parametrize("style", MODERN)
+def test_the_big_music_layout_puts_the_cover_on_top(style):
+    """1.3.2 (user: "Groß – Cover oben" still showed the small card in the new styles)."""
+    big = skin.music(MUSIC, sample_cover(), 1440, style, (70, 200), ("remaining",), None, "big")
+    small = skin.music(MUSIC, sample_cover(), 1440, style, (70, 200), ("remaining",), None, "compact")
+    assert big.height > small.height + 150 and big.height > big.width              # tall: cover above the text
+    no_cover = skin.music(MUSIC, None, 1440, style, None, (), None, "big")
+    assert no_cover.height < big.height                                            # without a cover: compact

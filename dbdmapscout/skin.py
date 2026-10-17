@@ -381,10 +381,13 @@ def _chips_table(lines, u, acc) -> Image.Image:
 
 
 # ------------------------------------------------------------------ the music card
-def music(rows, cover, height: int, style: str, progress=None, look=(), accent=None) -> Image.Image:
+def music(rows, cover, height: int, style: str, progress=None, look=(), accent=None,
+          layout: str = "compact") -> Image.Image:
     """"Läuft gerade" in ``style``: ``rows`` as media.rows gives them ([[(title, white)], [(artist, dim)]]),
     ``progress`` = (elapsed, total) s or None, ``look`` as media.look (``remaining`` = time left on the right,
-    ``accent`` = bar in the cover's colour – else the theme's accent)."""
+    ``accent`` = bar in the cover's colour – else the theme's accent). ``layout`` = overlay.media_style:
+    "big" (1.3.2, user: the big cover stayed small in the new styles) = cover large on top, text centred below;
+    "compact" = cover left."""
     u = max(0.25, height / 1440)
     acc = accent_rgba(accent)
     if "accent" in look and cover is not None:
@@ -393,11 +396,72 @@ def music(rows, cover, height: int, style: str, progress=None, look=(), accent=N
     texts = ["".join(t for t, _c in row) for row in rows]
     title = texts[0] if texts else ""
     artist = texts[1] if len(texts) > 1 else ""
+    if layout == "big" and cover is not None:
+        return _music_big(title, artist, cover, u, acc, progress, look, style)
     if style == "chips":
         return _music_chips(title, artist, cover, u, acc, progress, look)
     if style == "line":
         return _music_line(title, artist, cover, u, acc, progress, look)
     return _music_glass(title, artist, cover, u, acc, progress, look)
+
+
+BIG_COVER = 200                         # side of the big cover in design pixels (≈ classic "Groß" at 1440p)
+
+
+def _music_big(title, artist, cover, u, acc, progress, look, style) -> Image.Image:
+    """Cover large on top, title and artist centred below, then the progress – in the frame of ``style``
+    (glass: dark card with a rounded cover, chips: dark card with a round cover, line: outline, square cover)."""
+    pad = int(16 * u)
+    side = int(BIG_COVER * u)
+    max_w = max(side, int(WRAP_SHARE * 1440 * u) - 2 * pad)
+    line = style == "line"
+    tf, title = _fit_text(title, "Regular" if line else "SemiBold", int(20 * u), max_w)
+    sub = artist
+    af = inter("Medium", int(12 * u) if line else int(16 * u))
+    if line:
+        sub_w = _width(af, sub.upper(), 3 * u)
+        if sub_w > max_w:
+            sub = sub[:max(4, int(len(sub) * max_w / sub_w) - 1)].rstrip() + "…"
+    elif sub:
+        af, sub = _fit_text(sub, "Medium", int(16 * u), max_w)
+    tail = _progress_text(progress, look)
+    sf = inter("Medium", int(12 * u))
+    w = int(max(side, _width(tf, title), (_width(af, sub.upper(), 3 * u) if line else _width(af, sub)), 160 * u)) \
+        + 2 * pad
+    h = pad + side + int(14 * u) + int(26 * u) + (int(22 * u) if sub else 0) + (int(24 * u) if progress else 0) + pad
+    if line:
+        im = _panel(w, h, int(10 * u), (0, 0, 0, 0), LINE_EDGE, max(1, int(u)))
+    else:
+        im = _panel(w, h, int(20 * u), GLASS_FILL, GLASS_EDGE)
+    d = ImageDraw.Draw(im)
+    cx = (w - side) // 2
+    if line:
+        im.alpha_composite(cover.convert("RGBA").resize((side, side), Image.LANCZOS), (cx, pad))
+        d.rectangle((cx, pad, cx + side - 1, pad + side - 1), outline=LINE_EDGE)
+    else:
+        im.alpha_composite(_round_cover(cover, side, side // 2 if style == "chips" else int(14 * u)), (cx, pad))
+    y = pad + side + int(14 * u)
+    _text(im, (w - _width(tf, title)) / 2, y, title, tf, WHITE)
+    y += int(26 * u)
+    if sub:
+        if line:
+            _caps(im, (w - _width(af, sub.upper(), 3 * u)) / 2, y, sub, int(12 * u), GREY, u)
+        else:
+            _text(im, (w - _width(af, sub)) / 2, y, sub, af, GREY)
+        y += int(22 * u)
+    if progress:
+        el, total = progress
+        frac = min(1.0, el / max(1, total))
+        tw = int(_width(sf, tail)) + int(8 * u) if tail else 0
+        y += int(8 * u)
+        if line:
+            d.line((pad, y, w - pad - tw, y), fill=(255, 255, 255, 40))
+            d.line((pad, y, pad + int((w - 2 * pad - tw) * frac), y), fill=acc, width=max(1, int(2 * u)))
+        else:
+            _bar(d, pad, y, w - 2 * pad - tw, frac, acc, u)
+        if tail:
+            _text(im, w - pad - tw + int(8 * u), y - int(6 * u), tail, sf, GREY)
+    return im if line else shadowed(im, u)
 
 
 def _clock(seconds: float) -> str:
