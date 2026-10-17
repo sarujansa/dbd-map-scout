@@ -103,6 +103,53 @@ def frame_at(path: str, t: float, height: int = PREVIEW_H, info: Info | None = N
     return Image.frombytes("RGB", (w, h), p.stdout[:need])
 
 
+def thumb_strip(path: str, times: list, height: int = THUMB_H, info: Info | None = None, ffmpeg: str | None = None,
+                stop=lambda: False):
+    """1.7.1 (user: the strip loaded slowly): the pictures for evenly spaced ``times`` from ONE ffmpeg run that
+    decodes key frames only (``-skip_frame nokey``; the fps filter repeats the key frame before each moment) –
+    yields (index, image) as they arrive instead of one seek + decode per picture. A picture may show the key
+    frame up to one key-frame interval earlier (OBS: ~2–4 s), which is fine for a strip. ``stop()`` True ends it."""
+    from PIL import Image
+    ffmpeg = ffmpeg or ffmpeg_exe()
+    info = info or probe(path, ffmpeg)
+    if not ffmpeg or not info.ok or len(times) < 2:
+        return
+    step = times[1] - times[0]
+    if step <= 0:
+        return
+    w, h = scaled(info, height)
+    need = w * h * 3
+    try:
+        proc = subprocess.Popen([ffmpeg, "-hide_banner", "-loglevel", "error", "-skip_frame", "nokey",
+                                 "-ss", f"{max(0.0, times[0]):.3f}", "-i", path, "-an", "-sn",
+                                 # the fps filter emits a moment only once a later frame arrived: clone the last
+                                 # key frame long enough (tpad) so the strip's tail is not missing
+                                 "-vf", f"scale={w}:{h},tpad=stop_mode=clone:stop_duration={6 * step:.3f},"
+                                        f"fps=1/{step:.6f}", "-frames:v", str(len(times)),
+                                 "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+                                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                creationflags=_flags())
+    except OSError:
+        return
+    try:
+        for i in range(len(times)):
+            buf = b""
+            while len(buf) < need and not stop():
+                part = proc.stdout.read(need - len(buf))
+                if not part:
+                    break
+                buf += part
+            if len(buf) < need:
+                return
+            yield i, Image.frombytes("RGB", (w, h), buf)
+    finally:
+        try:
+            proc.kill()
+        except OSError:
+            pass
+        proc.wait(timeout=5)
+
+
 def thumb_times(duration: float, n: int = THUMBS) -> list[float]:
     """Moments for the strip: the middle of n equal stretches."""
     n = max(1, n)

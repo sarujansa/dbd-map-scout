@@ -293,3 +293,27 @@ def test_bloodpoints_per_round_and_per_hour_with_and_without_waiting():
     assert rows[2][1].bp == 90000 and dashboard.bp_rate([]).per_hour is None
     tile = dashboard.tiles(rs, list(zip(rs, ms)))[-1]
     assert tile.title == "Bloodpoints pro Stunde" and tile.value == "216k" and tile.sub.startswith("mit Wartezeit")
+
+
+def test_the_bloodpoints_dashboard_tiles_and_trend():
+    """1.7.1 (user: a small dashboard for the bloodpoints): tiles above the table – total, per round, per hour,
+    best round, Ø per role with bars relative to the higher one – and Ø BP per bucket with empty buckets kept."""
+    from dbdmapscout import dashboard
+    from dbdmapscout.official import Match, bucket_start
+    day = 86400
+    t0 = bucket_start(1_760_000_000, "day")
+    rs = [h.Round(t=t0 + 60, seconds=600, map_id="a", map="Coal Tower", role="killer", wait=60.0),
+          h.Round(t=t0 + 2 * day, seconds=600, map_id="b", map="Badham", role="survivor", wait=30.0),
+          h.Round(t=t0 + 2 * day + 900, seconds=600, map_id="b", map="Badham", role="survivor", wait=30.0)]
+    ms = [Match(t=0, map="Coal Tower", seconds=600, bp=30000), Match(t=0, map="Badham", seconds=600, bp=50000),
+          Match(t=0, map="Badham", seconds=600, bp=0)]
+    tiles = {t.title: t for t in dashboard.bp_tiles(list(zip(rs, ms)), lambda r: r.upper())}
+    assert tiles["Bloodpoints"].value == "80k" and tiles["Bloodpoints"].sub.startswith("2 Runden")
+    assert tiles["Ø pro Runde"].value == "40k" and tiles["BP/h im Match"].value == "240k"
+    assert tiles["Beste Runde"].value == "50k" and tiles["Beste Runde"].sub.startswith("Badham · ")
+    assert tiles["Beste Runde"].sub.endswith("SURVIVOR")
+    assert tiles["Ø BP als Killer"].frac == 30000 / 50000 and tiles["Ø BP als Survivor"].frac == 1.0
+    assert dashboard.bp_tiles([]) == []
+    trend = dashboard.bp_trend(list(zip(rs, ms)), "day")
+    assert [(round((b - t0) / day), bps) for b, bps in trend] == [(0, [30000]), (1, []), (2, [50000])]
+    assert dashboard.bp_trend([], "day") == []
