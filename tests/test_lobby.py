@@ -304,7 +304,9 @@ def test_old_rounds_read_with_a_slip_count_for_the_killer():
 # ------------------------------------------------------------------ cross-play (farming rounds, 1.2.20)
 @pytest.mark.parametrize("name, expected", [
     ("crossplay_off", True),             # the user's lobby screenshot (2000×837 copy): globe with the red cross
-    ("crossplay_on_synthetic", False),   # the same globe with the cross painted over (no screenshot with it on yet)
+    ("crossplay_on_synthetic", False),   # the same globe with the cross painted over
+    ("crossplay_on", False),             # 1.6.2: the user's screenshot with cross-play on – no globe, only "x1.00"
+    ("crossplay_off_2", True),           # 1.6.2: the second screenshot, cross-play off
     ("crossplay_none", None),            # ground and fire only
 ])
 def test_crossplay_globe(name, expected):
