@@ -1405,4 +1405,15 @@ EN = {
     'Verbindet sich einmal mit OBS und zeigt Version, Aufnahmezustand, Wiederholungspuffer und ob der Aufnahmeordner erreichbar ist.': 'Connects to OBS once and shows its version, whether it records, the replay buffer and whether the recording folder is reachable.',
     'Ordner, in den OBS die Runden legt – z. B. auf der externen Platte. Gemerkt wird das Laufwerk, nicht der Buchstabe: bekommt die Platte einen anderen, findet das Programm den Ordner trotzdem.': 'Folder OBS puts the rounds in – e.g. on the external drive. The drive is remembered, not its letter: if the drive gets another one, the program still finds the folder.',
     'Das Banner kommt erst ~40 s nach Matchbeginn. Läuft in OBS der Wiederholungspuffer, wird er beim Banner gespeichert – so fehlt der Anfang (Spawn) nicht. Die Datei liegt als „(Vorlauf)“ neben der Runde.': 'The banner comes ~40 s after the match starts. If OBS\'s replay buffer is running, it is saved at the banner – so the start (spawn) is not missing. The file lies next to the round as "(Vorlauf)".',
+    # 1.4.1
+    'Wiederholungspuffer mit DBD starten und stoppen': "Start and stop the replay buffer with DBD",
+    'Das Programm startet den Wiederholungspuffer in OBS, sobald DBD läuft, und stoppt ihn, wenn DBD zu ist – so kostet er ausserhalb des Spiels nichts und du musst nicht daran denken.': "The program starts OBS's replay buffer as soon as DBD runs and stops it when DBD is closed – so it costs nothing outside the game and you need not think of it.",
+    'Nachlauf nach dem Rundenende': 'Tail after the end of the round',
+    '{n} s': '{n} s',
+    'keiner': 'none',
+    'Aufnahme-Laufwerk nicht angeschlossen – die Runden werden nicht aufgenommen.': 'Recording drive not connected – the rounds are not recorded.',
+    'OBS läuft nicht – die Runden werden nicht aufgenommen. ({error})': 'OBS is not running – the rounds are not recorded. ({error})',
+    'OBS bereit – Runden werden aufgenommen': 'OBS ready – rounds are recorded',
+    'Aufnahme sieht beschädigt aus ({why}): {file} – OBS-Einstellungen prüfen (Encoder, Platte).': 'Recording looks broken ({why}): {file} – check the OBS settings (encoder, drive).',
+    'Aufnahme': 'Recording',
 }
