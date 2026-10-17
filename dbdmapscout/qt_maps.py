@@ -100,6 +100,11 @@ class RealmDelegate(QStyledItemDelegate):
         return QSize(1, super().sizeHint(opt, index).height())
 
 
+STYLE_BUTTONS = (("classic", N_("Original"), N_("Die Karten mit lila Boden, wie sie mitgeliefert werden – gilt auch im Spiel.")),
+                 ("dark", N_("Dunkel"), N_("Die Karten im Stil von Fallen Refuge (durchsichtiger Boden, dunkler Rand) – "
+                                           "gilt auch im Spiel.")))
+
+
 class MapsPage(QWidget):
     """1.66.4 (user picked variant A): realms on the left (with "Alle Maps" and "Zuletzt gespielt" on top), the
     maps of the chosen one as tiles with their picture; a click shows a map big (with "Anzeigen"), a double click
@@ -131,6 +136,19 @@ class MapsPage(QWidget):
         self.search.textChanged.connect(self._searched)
         self.search.returnPressed.connect(self._pick_first)
         row.addWidget(self.search, 1)
+        # 1.3.3 (user: "im Maps eine Option, normale Maps anzuzeigen, quasi zu wechseln"): the map style right here –
+        # the same setting as Overlay → Karte → Kartenstil, so the tiles and the game switch together
+        self._style = None
+        self.style_btns = {}
+        for key, label, tip in STYLE_BUTTONS:
+            b = QPushButton(_(label))
+            b.setCheckable(True)
+            b.setProperty("class", "seg")
+            b.setFocusPolicy(Qt.TabFocus)
+            b.setToolTip(_(tip))
+            b.clicked.connect(lambda _c=False, k=key: self._post("map_style", k))
+            row.addWidget(b)
+            self.style_btns[key] = b
         lay.addLayout(row)
         body = QHBoxLayout()
         body.setSpacing(16)
@@ -404,9 +422,14 @@ class MapsPage(QWidget):
             self._post("show_map", (self._items[0][2], self._items[0][3]))
 
     # ------------------------------------------------------------------ from the app
-    def show_maps(self, items, current, thumbs=None, recent=None, marks=None):
+    def show_maps(self, items, current, thumbs=None, recent=None, marks=None, style=None):
         """items [(realm, label, map_id, variant)] (already searched), the map on display, picture paths, the
-        map ids played last (newest first), ``marks`` {key: (info text, tooltip, has own values)} (1.2.18)."""
+        map ids played last (newest first), ``marks`` {key: (info text, tooltip, has own values)} (1.2.18),
+        ``style`` = the map style for the two buttons (1.3.3)."""
+        if style is not None and style != self._style:
+            self._style = style
+            for key, b in self.style_btns.items():
+                b.setChecked(key == style)
         if marks is not None and marks != self._marks:
             self._marks = dict(marks)
             for key, t in self._tiles.items():

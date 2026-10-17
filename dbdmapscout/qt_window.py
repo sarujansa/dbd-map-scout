@@ -630,8 +630,8 @@ class MainWindow(QMainWindow):
         for key, page in self.forms.items():
             page.apply_order((orders or {}).get(key, {}))
 
-    def show_maps(self, items, current, preview=None, thumbs=None, recent=None, marks=None):
-        self.maps.show_maps(items, current, thumbs, recent, marks)
+    def show_maps(self, items, current, preview=None, thumbs=None, recent=None, marks=None, style=None):
+        self.maps.show_maps(items, current, thumbs, recent, marks, style)
         self.maps.show_preview(preview)
 
     def show_page(self, key, search=None):
