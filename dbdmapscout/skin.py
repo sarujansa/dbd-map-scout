@@ -583,14 +583,16 @@ def frame_pad(style: str, text_h: int) -> int:
 
 
 def map_card(body, name: str, realm: str, timer: str, note: str, record: str, server: str, ping, status,
-             text_h: int, style: str, accent=None) -> Image.Image:
+             text_h: int, style: str, accent=None, rec=None) -> Image.Image:
     """The map window in ``style``: ``body`` = the map picture without its drawn name (None: the waiting card –
     ``status`` lines only); ``name``/``realm`` for the header (glass, line); ``timer``, ``note`` (amber warning),
-    ``record`` (own results), ``server`` + ``ping`` as the classic info block; ``text_h`` sizes the text."""
-    from .overlay_win32 import INFO_WARN, ping_colour
+    ``record`` (own results), ``server`` + ``ping`` as the classic info block; ``text_h`` sizes the text.
+    ``rec``: OBS records – True/False = on/off phase of the blinking red dot right of the timer, None = no dot."""
+    from .overlay_win32 import INFO_WARN, ping_colour, rec_dot
     u = max(0.25, text_h / MAP_U)
     acc = accent_rgba(accent)
-    ctx = dict(u=u, acc=acc, warn=INFO_WARN, ping_colour=ping_colour, status=tuple(status or ()))
+    ctx = dict(u=u, acc=acc, warn=INFO_WARN, ping_colour=ping_colour, status=tuple(status or ()), rec=rec,
+               rec_dot=rec_dot)
     if style == "chips":
         return _map_chips(body, timer, note, record, server, ping, ctx)
     if style == "line":
@@ -666,7 +668,10 @@ def _map_glass(body, name, realm, timer, note, record, server, ping, ctx) -> Ima
     si = 0
     for kind, hh in rows:
         if kind == "timer":
-            _text(im, (w - _width(tf, timer)) / 2, y - int(6 * u), timer, tf, WHITE)
+            tw = _width(tf, timer)
+            _text(im, (w - tw) / 2, y - int(6 * u), timer, tf, WHITE)
+            if ctx["rec"]:
+                ctx["rec_dot"](d, (w + tw) / 2 + int(22 * u), y + int(30 * u), int(8 * u))
         elif kind == "note":
             _text(im, (w - _width(nf_warn, note)) / 2, y, note, nf_warn, ctx["warn"])
         elif kind == "status":
@@ -693,7 +698,12 @@ def _map_chips(body, timer, note, record, server, ping, ctx) -> Image.Image:
     f = inter("SemiBold", int(16 * u))
     parts = []
     if timer:
-        parts.append(chip(timer, u, inter("SemiBold", int(36 * u)), edge=acc, pad=int(22 * u), h=int(58 * u)))
+        rec = ctx["rec"]
+        c = chip(timer + ("     " if rec is not None else ""), u, inter("SemiBold", int(36 * u)), edge=acc,
+                 pad=int(22 * u), h=int(58 * u))                  # recording: room for the dot, on and off phase
+        if rec:
+            ctx["rec_dot"](ImageDraw.Draw(c), c.width - int(26 * u), c.height / 2, int(8 * u))
+        parts.append(c)
     if note:
         parts.append(chip(note, u, f, colour=ctx["warn"], edge=ctx["warn"]))
     status = _status_lines(ctx, 16, 15)
@@ -776,7 +786,10 @@ def _map_line(body, name, realm, timer, note, record, server, ping, ctx) -> Imag
     si = 0
     for kind, hh in rows:
         if kind == "timer":
-            _text(im, (w - _width(tf, timer)) / 2, y - int(10 * u), timer, tf, acc)
+            tw = _width(tf, timer)
+            _text(im, (w - tw) / 2, y - int(10 * u), timer, tf, acc)
+            if ctx["rec"]:
+                ctx["rec_dot"](d, (w + tw) / 2 + int(22 * u), y + int(30 * u), int(8 * u))
         elif kind == "note":
             _text(im, (w - _width(nf_warn, note)) / 2, y, note, nf_warn, ctx["warn"])
         elif kind == "status":

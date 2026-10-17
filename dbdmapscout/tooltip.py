@@ -141,6 +141,8 @@ TIPS = {
                            "Nochmal drücken hebt es auf.",
     "Aufnahme löschen": "Löscht die markierte Aufnahme (und ihren Vorlauf) von der Platte – nach Rückfrage.",
     "Aufnahmeordner öffnen": "Öffnet den Aufnahmeordner im Explorer.",
+    "Clip schneiden …": "Öffnet den Clip-Editor für die markierte Aufnahme: Vorschau, Zeitleiste mit Marken, Start/Ende "
+                        "setzen, Ausschnitt als MP4 in den Ordner „Clips“ speichern.",
     "Drehen ↻": "Dreht die angezeigte Karte um 90° im Uhrzeigersinn (für jede Map gemerkt). Der Map-Name "
                 "darüber bleibt aufrecht, die Zahlen in der Karte drehen sich mit.",
     "Scannen": "Sucht sofort auf dem ganzen Bildschirm nach einem Map- oder Realm-Namen – falls die "
