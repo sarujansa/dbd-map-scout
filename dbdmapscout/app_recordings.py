@@ -91,6 +91,9 @@ class RecordingsTab:
         self.rec_keep_btn.pack(side="left", padx=(6, 0))
         self.rec_delete_btn = ui.Button(row, text=_("Aufnahme löschen"), command=self._rec_delete, state="disabled")
         self.rec_delete_btn.pack(side="left", padx=(6, 0))
+        self.rec_clip_btn = ui.Button(row, text=_("Clip schneiden …"), command=self._rec_clip, state="disabled")   # 1.5.1
+        self.rec_clip_btn.pack(side="left", padx=(6, 0))
+        self._clip_windows = []
         self.rec_folder_btn = ui.Button(row, text=_("Aufnahmeordner öffnen"), command=self._rec_open_folder)
         self.rec_folder_btn.pack(side="right")
 
@@ -197,7 +200,7 @@ class RecordingsTab:
     def _rec_buttons(self):
         r = self._rec_selected()
         state = "normal" if r is not None else "disabled"
-        for b in (self.rec_play_btn, self.rec_show_btn, self.rec_keep_btn, self.rec_delete_btn):
+        for b in (self.rec_play_btn, self.rec_show_btn, self.rec_keep_btn, self.rec_delete_btn, self.rec_clip_btn):
             b.configure(state=state)
         self.rec_keep_btn.configure(text=_("Nicht mehr behalten") if r is not None and r.keep else _("Behalten"))
         if r is None:
@@ -254,6 +257,33 @@ class RecordingsTab:
         if not self._ask(_("Aufnahme löschen"), _("{file} von der Platte löschen?", file=r.file), self._rec_delete):
             return
         self.recorder.delete(r.t)
+
+    def _rec_clip(self):
+        """1.5.1: the clip editor for the marked recording (its own top-level window; several may be open)."""
+        r = self._rec_selected()
+        path = self._rec_path(r) if r is not None else None
+        if path is None:
+            return
+        if not os.path.exists(path):
+            self._log(_("Aufnahme fehlt: {file}", file=r.file), "Fehler")
+            return
+        if obsrec.ffmpeg_exe() is None:
+            self._log(_("ffmpeg fehlt (Paket imageio-ffmpeg) – start.bat installiert es beim nächsten Start; "
+                        "bis dahin bleibt der Vorlauf eine eigene Datei."), "Fehler")
+            return
+        from .qt_clip import ClipWindow
+        win = ClipWindow(path, r.marks, os.path.join(os.path.dirname(path), "Clips"),
+                         mode=str(self.settings.get("clip_mode", "copy")), sound=bool(self.settings.get("clip_sound", True)),
+                         on_saved=lambda out: self._rec_dirty_set(), on_setting=self.settings.set, log=self._log,
+                         dark=bool(self.settings.get("dark_mode", True)),
+                         qss=getattr(self.qt, "_qss", "") if self.qt is not None else "")
+        self._clip_windows = [w for w in self._clip_windows if w.isVisible()] + [win]
+        win.show()
+        win.raise_()
+        win.activateWindow()
+
+    def _rec_dirty_set(self):
+        self._rec_dirty = True
 
     def _rec_changed(self, d):
         """Recorder → "changed" (keep / delete from this tab): re-read on the next tick, log the deletion."""
