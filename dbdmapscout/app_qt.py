@@ -165,6 +165,7 @@ def ui_state(w) -> dict:
     elif isinstance(w, ui.Entry):
         st["value"] = w.get()
         st["placeholder"] = getattr(w, "_dbdms_placeholder", "")      # 1.2.19 (the log's search field)
+        st["secret"] = bool(getattr(w, "_dbdms_secret", False))        # 1.4: shown as dots (OBS password)
     return st
 
 
