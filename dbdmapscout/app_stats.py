@@ -165,6 +165,9 @@ class StatsTab:
                                 "wählen, „Zuordnen“ – gilt auch rückwirkend."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         box_b = self._stats_page(_("Bloodpoints"))   # 1.6.3: with the role filter "Farming" = the farming evaluation
+        self.stats_bp_tiles = ui.Tiles(box_b)          # 1.7.1: a small dashboard above the table
+        self.stats_bp_tiles.pack(fill="x", pady=(0, 6))
+        self.bp_trend = TrendChart(box_b, bool(self.settings.get("dark_mode", True)), panels=("bp",))
         self.stats_bp = self._stats_tree(box_b, (("group", _("Rolle/Killer"), 140, "w"), ("n", _("Runden"), 60, "e"),
                                                  ("round", _("Ø BP"), 70, "e"), ("hour", _("BP/h"), 70, "e"),
                                                  ("hourw", _("BP/h mit Wartezeit"), 120, "e"),
@@ -488,12 +491,38 @@ class StatsTab:
 
     def _stats_part_bp(self, c):
         """1.6.3: bloodpoints per round and per hour – all, by role, by killer (filters apply)."""
+        self.stats_bp_tiles.data = dashboard.bp_tiles(c.pairs, self._role_name)
+        self._bp_trend_render(c.pairs, TREND_UNIT.get(c.period, "week"))
         t = self.stats_bp
         t.delete(*t.get_children())
         for i, (group, b) in enumerate(dashboard.bp_rows(c.pairs, killer_label)):
             t.insert("", "end", iid=str(i), values=(
                 group, b.rounds, dashboard._bp(b.per_round), dashboard._bp(b.per_hour) if b.per_hour else "–",
                 dashboard._bp(b.per_hour_waiting) if b.per_hour_waiting else "–", dashboard._bp(b.bp)))
+
+    def _bp_trend_render(self, pairs, unit):
+        """1.7.1: Ø bloodpoints per round per hour / day / week above the bloodpoints table."""
+        def label(b):
+            if unit == "week":
+                return _("KW {n}", n=datetime.date.fromtimestamp(b).isocalendar()[1])
+            return time.strftime("%H:00" if unit == "hour" else "%d.%m.", time.localtime(b))
+
+        per = {"hour": _("pro Stunde"), "day": _("pro Tag"), "week": _("pro Woche")}[unit]
+        bars = []
+        for b, bps in dashboard.bp_trend(pairs, unit):
+            v = sum(bps) / len(bps) if bps else None
+            bars.append((v, label(b), _("{when}: Ø {bp} BP · {n} Runden · Summe {sum}", when=label(b),
+                                        bp=dashboard._bp(v), n=len(bps), sum=dashboard._bp(sum(bps))) if bps else ""))
+        values = [v for v, _l, _t in bars if v is not None]
+        top = max(values) if values else 0
+        step = 10000 if top <= 40000 else 20000 if top <= 100000 else 50000
+        hi = max(step, (int(top) // step + 1) * step) if values else 40000
+        self.bp_trend.dark = bool(self.settings.get("dark_mode", True))
+        self.bp_trend.draw({"bp": {
+            "title": _("Ø Bloodpoints pro Runde {per}", per=per), "bars": bars, "max": hi,
+            "ticks": [(v, dashboard._bp(v)) for v in range(0, hi + 1, step)],
+            "last": dashboard._bp(values[-1]) if values else "",
+            "empty": _("Keine Runden mit Bloodpoints in dieser Auswahl.")}})
 
     def _stats_part_records(self, c):
         self.stats_records_var.set("" if c.rounds else _("Noch keine Runden in dieser Auswahl."))

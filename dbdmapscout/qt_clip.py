@@ -200,7 +200,7 @@ class ClipWindow(QWidget):
         self._last_out = None               # 1.6.1: the clip saved last (Explorer button)
         self._play_to = None                # 1.6.1: "Clip ansehen" plays start..end, then back to the start
         self.setObjectName("page")
-        self.setWindowTitle(title or _("Clip schneiden – {name}", name=os.path.basename(path)))
+        self.setWindowTitle(title or _("Clip bearbeiten – {name}", name=os.path.basename(path)))
         if qss:
             self.setStyleSheet(qss)
         self._build(mode, sound)
@@ -357,9 +357,17 @@ class ClipWindow(QWidget):
                 self.bridge.frame.emit(t, img)
 
     def _thumb_loop(self):
-        for i, t in enumerate(clipedit.thumb_times(self.info.duration, self.timeline.n_thumbs)):
+        times = clipedit.thumb_times(self.info.duration, self.timeline.n_thumbs)
+        got = set()                                  # 1.7.1: one ffmpeg run for the whole strip (key frames only)
+        for i, img in clipedit.thumb_strip(self.path, times, clipedit.THUMB_H, self.info, self.ffmpeg,
+                                           stop=lambda: self._closed):
+            got.add(i)
+            self.bridge.thumb.emit(i, img)
+        for i, t in enumerate(times):                # whatever the run did not deliver: the old way
             if self._closed:
                 return
+            if i in got:
+                continue
             img = clipedit.frame_at(self.path, t, clipedit.THUMB_H, self.info, self.ffmpeg)
             if img is not None and not self._closed:
                 self.bridge.thumb.emit(i, img)
