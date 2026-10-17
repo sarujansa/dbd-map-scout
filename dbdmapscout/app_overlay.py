@@ -311,6 +311,14 @@ class OverlayTab:
         self._save_soon()
         self._tick_overlay(reschedule=False)
 
+    def _set_map_style(self, key: str):
+        """1.3.3: the map style from the maps page – the same as the list in Overlay → Karte."""
+        if key not in dict(MAP_STYLES):
+            return
+        self.map_style_var.set(_(dict(MAP_STYLES)[key]))
+        self._map_style_changed()
+        self._qt_maps_rev = getattr(self, "_qt_maps_rev", 0) + 1     # the tiles take the other pictures
+
     def _map_style_changed(self):
         key = dict((_(label), k) for k, label in MAP_STYLES).get(self.map_style_var.get(), "classic")
         o = self.settings["overlay"]

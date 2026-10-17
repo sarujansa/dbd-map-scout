@@ -106,6 +106,12 @@ EN = {
     "Custom Games": "Custom games",
     "Farming": "Farming",
     "Stil": "Style",
+    "Original": "Original",
+    "Dunkel": "Dark",
+    "Die Karten mit lila Boden, wie sie mitgeliefert werden – gilt auch im Spiel.":
+        "The maps with the purple floor, as they come – applies in the game too.",
+    "Die Karten im Stil von Fallen Refuge (durchsichtiger Boden, dunkler Rand) – gilt auch im Spiel.":
+        "The maps in the style of Fallen Refuge (see-through floor, dark edge) – applies in the game too.",
     "Klassisch": "Classic",
     "Glas-Karten": "Glass cards",
     "Chips & Icons": "Chips & icons",

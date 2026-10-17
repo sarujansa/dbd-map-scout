@@ -349,6 +349,8 @@ class QtShell:
                 self._log_alert = False
         elif action == "undo":                       # Ctrl+Z on the overlay page (1.65)
             self.undo_layout()
+        elif action == "map_style":                  # 1.3.3: the buttons on the maps page
+            self._set_map_style(str(arg or "classic"))
         elif action == "search":
             self._qt_search = str(arg or "")
             self._qt_maps_rev = getattr(self, "_qt_maps_rev", 0) + 1
@@ -461,12 +463,13 @@ class QtShell:
             q.show_log_alert(bool(getattr(self, "_log_alert", False)))
         if page == "maps":
             sel = getattr(self, "_qt_preview_sel", None) or self.current
-            rev = (getattr(self, "_qt_maps_rev", 0), id(self.catalog), self.current, sel)
+            rev = (getattr(self, "_qt_maps_rev", 0), id(self.catalog), self.current, sel,
+                   self.settings["overlay"].get("map_style", "classic"))
             if force or rev != getattr(self, "_qt_maps_shown", None):
                 self._qt_maps_shown = rev
                 items = self._qt_map_items()
                 q.show_maps(items, self.current, self._qt_preview(sel), self._qt_thumbs(items), self._qt_recent(),
-                            self._qt_marks(items))
+                            self._qt_marks(items), self.settings["overlay"].get("map_style", "classic"))
         reg = self.__dict__.get("_qt_reg", {})
         keys = self._qt_mod.page_keys(page)
         if keys:
