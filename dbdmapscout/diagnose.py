@@ -111,6 +111,7 @@ def collect(app) -> str:
     if w is not None:
         lines.append(f"Rundenende-Erkennung: {w.watch_status}  (Menü pausiert={getattr(app, 'menu_paused', None)}, "
                      f"Überwachung={w.watch_gen}, Overlay-Rechteck={w.overlay_rect})")
+        lines.append(f"Banner-Scans: {getattr(w, 'scan_rate', 0):.0f}/s")
         lines.append(f"Aufnahme: {getattr(w, 'capture_info', '?')}  (Fensteraufnahme erlaubt="
                      f"{app.settings.get('window_capture', True)})")
         q = getattr(w, "queue", None)

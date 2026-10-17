@@ -88,15 +88,23 @@ def _separator_in(mask: np.ndarray, frame_w: int, frame_h: int, s: float) -> Sep
     # bridge small gaps (texture, compression) along the line
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (9, 1))) > 0
     h_img, w_img = mask.shape
-    # longest horizontal run per row (vectorised): run = i - index of last zero
-    cols = np.arange(w_img)[None, :]
-    last_zero = np.maximum.accumulate(np.where(mask, -1, cols), axis=1)
-    run = cols - last_zero
-    run[~mask] = 0
-    row_len = run.max(1)
-    row_end = run.argmax(1)
     # UI size follows the 16:9 part of the screen (matters for ultrawide)
     wn = min(frame_w, frame_h * 16 / 9) * s
+    # 1.6.4: a row with fewer lit pixels than the shortest line can hold no such run – only the others are run
+    # through (the same result; the full accumulate over every row was half of the 11 ms per banner look)
+    rows = np.where(mask.sum(1) >= 0.17 * wn)[0]
+    if len(rows) == 0:
+        return None
+    sub = mask[rows]
+    # longest horizontal run per row (vectorised): run = i - index of last zero
+    cols = np.arange(w_img)[None, :]
+    last_zero = np.maximum.accumulate(np.where(sub, -1, cols), axis=1)
+    run = cols - last_zero
+    run[~sub] = 0
+    row_len = np.zeros(h_img, dtype=run.dtype)
+    row_end = np.zeros(h_img, dtype=np.int64)
+    row_len[rows] = run.max(1)
+    row_end[rows] = run.argmax(1)
     long_rows = np.where(row_len >= 0.17 * wn)[0]
     if len(long_rows) == 0:
         return None
@@ -688,7 +696,9 @@ class OutOfMatchWatcher:
     def _still(self, frame) -> bool:
         """Upper 70 % of the picture unchanged since the last look? A loading screen
         is still; gameplay with a progress bar (repair, heal …) never is."""
-        g = cv2.cvtColor(_region(frame, 0.0, 0.0, 1.0, 0.70), cv2.COLOR_BGR2GRAY)
+        # 1.6.4: every 4th pixel each way first – the 64×28 thumbnail still averages ~100 of them per cell, and the
+        # resize of the whole region was half of the round-end look (3.6 of 8.5 ms)
+        g = cv2.cvtColor(np.ascontiguousarray(_region(frame, 0.0, 0.0, 1.0, 0.70)[::4, ::4]), cv2.COLOR_BGR2GRAY)
         thumb = cv2.resize(g, (64, 28), interpolation=cv2.INTER_AREA).astype(np.int16)
         prev, self._thumb = self._thumb, thumb
         if prev is None or prev.shape != thumb.shape:

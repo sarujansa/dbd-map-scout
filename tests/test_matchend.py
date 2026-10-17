@@ -232,3 +232,22 @@ def test_in_trial_for_scan_throttling():
     manual = fresh(source="manual")               # picked in the lobby: not yet in a trial
     assert not manual.in_trial
     assert not MatchEndTracker().in_trial         # nothing on display
+
+
+def test_banner_scans_slow_down_in_the_menus_only():
+    """1.6.4 (user: optimise): full rate while reading a banner, after a loading screen and for two minutes after the
+    lobby button; 1/s in the match, in the lobby and in the other menus; simulation keeps its full rate."""
+    from dbdmapscout.worker import scan_rate
+    far = 1e9
+
+    def rate(**kw):
+        args = dict(in_match=False, session=False, since_button=far, since_loading=far, live=True, lobby_visible=False)
+        args.update(kw)
+        return scan_rate(5, **args)
+    assert rate() == 1                                       # menus, store, bloodweb
+    assert rate(session=True) == 5 and rate(session=True, in_match=True) == 5
+    assert rate(in_match=True) == 1 and rate(lobby_visible=True, since_button=0) == 1
+    assert rate(since_button=30) == 5 and rate(since_button=121) == 1        # READY pressed → loading → banner
+    assert rate(since_loading=10) == 5 and rate(since_loading=91) == 1
+    assert rate(live=False) == 5 and scan_rate(0.2, in_match=False, session=False, since_button=far,
+                                                since_loading=far, live=True, lobby_visible=False) == 1
