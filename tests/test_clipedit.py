@@ -322,3 +322,22 @@ def test_the_clip_window_censors_with_remembered_boxes(clip, tmp_path):
     finally:
         win.close()
         app.processEvents()
+
+
+def test_the_retouch_style_paints_the_box_over_from_its_surroundings(clip, tmp_path):
+    """1.7.3 (user: "retouch, make it unrecognisable"): delogo hides the box without a visible block; a box at
+    the frame edge is moved EDGE_PX inwards (delogo refuses boxes touching the edge); the preview knows the style."""
+    g = clipedit.censor_graph([(0.0, 0.5, 0.5, 0.5)], "retouch", 320, 180)
+    assert g.startswith("[0:v]delogo=x=2:y=90:w=160:h=88[c0]") and g.endswith("null[vout]")
+    info = clipedit.probe(clip, FF)
+    out = str(tmp_path / "retouch.mp4")
+    ok, why = clipedit.cut(clip, 2.0, 3.0, out, "copy", FF, info=info, censor=[clipedit.names_box(320, 180)],
+                           censor_style="retouch")
+    assert ok, why
+    before = clipedit.frame_at(clip, 2.5, 180, info=info, ffmpeg=FF)
+    after = clipedit.frame_at(out, 0.5, 180, info=clipedit.probe(out, FF), ffmpeg=FF)
+    x, y, w, h = clipedit.box_px(clipedit.names_box(320, 180), 320, 180)
+    inside = sum(abs(a - b) for px in ((x + w // 2, y + h // 2),) for a, b in zip(before.getpixel(px), after.getpixel(px)))
+    outside = sum(abs(a - b) for a, b in zip(before.getpixel((250, 60)), after.getpixel((250, 60))))
+    assert inside > 30 and outside < 30                     # changed inside the box, untouched outside
+    assert "retouch" in clipedit.CENSOR_STYLES

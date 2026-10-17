@@ -18,7 +18,8 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel
 from . import clipedit, qt_theme
 from .i18n import N_, _
 
-CENSOR_LABELS = {"pixel": N_("Verpixelt"), "blur": N_("Verwischt"), "black": N_("Schwarz")}   # 1.7.2
+CENSOR_LABELS = {"pixel": N_("Verpixelt"), "blur": N_("Verwischt"), "black": N_("Schwarz"),
+                 "retouch": N_("Retusche (aus der Umgebung übermalt)")}   # 1.7.2, retouch 1.7.3
 MODE_LABELS = {"copy": N_("Schnell (an Schlüsselbildern, Anfang bis zu ein paar Sekunden früher)"),
                "exact": N_("Genau (Bild neu kodiert, dauert etwas)"),
                "discord": N_("Für Discord (passt unter die Zielgrösse)")}
@@ -322,6 +323,13 @@ class PreviewView(QWidget):
         src = QRectF(r.left() - f.left(), r.top() - f.top(), r.width(), r.height()).toRect() \
             .intersected(scaled.rect())
         if src.width() < 2 or src.height() < 2:
+            return
+        if self.style == "retouch":        # delogo-like: a smooth fill from the pixels around the box
+            m = max(2, min(src.width(), src.height()) // 6)
+            around = scaled.copy(src.adjusted(-m, -m, m, m).intersected(scaled.rect()))
+            look = around.scaled(2, 2, Qt.IgnoreAspectRatio, Qt.SmoothTransformation) \
+                .scaled(src.size(), Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+            p.drawImage(QRectF(src).translated(f.left(), f.top()).topLeft(), look)
             return
         part = scaled.copy(src)
         if self.style == "blur":
