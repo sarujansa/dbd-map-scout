@@ -39,6 +39,7 @@ SWP_NOSIZE, SWP_NOMOVE, SWP_NOACTIVATE, SWP_FRAMECHANGED = 0x1, 0x2, 0x10, 0x20
 ULW_ALPHA = 2
 WM_NCHITTEST = 0x0084
 WM_MOUSEWHEEL = 0x020A
+MK_CONTROL = 0x0008                     # wParam key state of WM_MOUSEWHEEL: Ctrl held
 WM_EXITSIZEMOVE = 0x0232
 HTCAPTION = 2
 BORDER = (224, 176, 0, 255)
@@ -789,7 +790,7 @@ class HudWindow:
                 self._data, self.size = None, (0, 0)
             elif skin != "classic":
                 from . import skin as skins
-                pic = skins.music(rows, cover, height, skin, progress, look, accent) if style is not None \
+                pic = skins.music(rows, cover, height, skin, progress, look, accent, style) if style is not None \
                     else skins.card(rows, height, skin, accent, title)
             elif style is None:
                 pic = render_hud(rows, height)
@@ -872,7 +873,7 @@ class PictureOverlay:
         self.transparent = True
         self.show_caption = True
         self.show_map = True            # off: only timer, server and ping ("nur Infos")
-        self.edit_label = ""            # name on the edit frame (1.64.7: "KARTE · Mausrad = Grösse")
+        self.edit_label = ""            # name on the edit frame (1.64.7: "KARTE · Strg+Mausrad = Grösse")
         self.info_beside = False        # timer/server right of the map (low bar above/below the picture)
         self.text_height = 0            # px the timer/name/info are sized for (1.65: not the map's size); 0 = map
         self.backdrop = False           # dark area with rounded corners behind map and lines (1.2.4)
@@ -1258,7 +1259,7 @@ class Win32Overlay(PictureOverlay):
                     self._pos = (rc.left, rc.top)
                     if self.on_moved:
                         self.on_moved(rc.left, rc.top)
-                if msg == WM_MOUSEWHEEL and self.on_wheel:
+                if msg == WM_MOUSEWHEEL and self.on_wheel and wp & MK_CONTROL:   # 1.3.2: Ctrl + wheel only
                     delta = ctypes.c_short((wp >> 16) & 0xFFFF).value
                     self.on_wheel(1 if delta > 0 else -1)
                     return 0

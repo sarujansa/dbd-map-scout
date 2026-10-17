@@ -94,7 +94,7 @@ EN = {
         "Off: the overlay shows only the round timer, server region and ping – without the map. Detection, end of "
         "round and statistics work as usual.",
     "Für diese Map zurücksetzen": "Reset for this map",
-    "eigene Grösse {n} % (Hotkeys/Mausrad)": "own size {n} % (hotkeys/mouse wheel)",
+    "eigene Grösse {n} % (Hotkeys/Strg+Mausrad)": "own size {n} % (hotkeys/Ctrl+wheel)",
     "gedreht um {deg}°": "turned by {deg}°",
     # lobby: search, waiting time, role
     "Killer": "Killer",
@@ -615,10 +615,10 @@ EN = {
     "Test beendet.": "Test ended.",
     "Diagnose in die Zwischenablage kopiert (auch als diagnose.txt gespeichert).":
         "Diagnostics copied to the clipboard (also saved as diagnose.txt).",
-    "Karte, Systemwerte und Musik mit der Maus ziehen (im Spiel oder in der Vorschau), Mausrad = Grösse. Danach „Fertig“ oder Hotkey.":
-        "Drag the map, the system values and the music with the mouse (in the game or in the preview), mouse wheel = size. Then “Done” or the hotkey.",
-    "Verschieben aktiv – ziehen (rastet ein, Alt = frei), Pfeiltasten = fein, Ecke/Mausrad = Grösse":
-        "Moving is on – drag (snaps, Alt = free), arrow keys = fine, corner/mouse wheel = size",
+    "Karte, Systemwerte und Musik mit der Maus ziehen (im Spiel oder in der Vorschau), Strg+Mausrad = Grösse. Danach „Fertig“ oder Hotkey.":
+        "Drag the map, the system values and the music with the mouse (in the game or in the preview), Ctrl+mouse wheel = size. Then “Done” or the hotkey.",
+    "Verschieben aktiv – ziehen (rastet ein, Alt = frei), Pfeiltasten = fein, Ecke/Strg+Mausrad = Grösse":
+        "Moving is on – drag (snaps, Alt = free), arrow keys = fine, corner/Ctrl+wheel = size",
     "Rückgängig": "Undo",
     "Die Karte ist so breit wie der schwarze Balken – grösser geht so nicht. Grösser mit „Karte darf grösser als der Balken werden“ (ragt dann ins Spielbild).":
         "The map is as wide as the black bar – it cannot get bigger like this. Bigger with “The map may grow bigger than the bar” (it then reaches into the game picture).",
@@ -793,7 +793,7 @@ EN = {
         "Shows for 10 s everything the overlay shows in a match – map, system values, \"Today\" and music (sample "
         "values when nothing is there) – at their places, also without DBD. Press again to end the test.",
     "Verschieben beenden.": "Stop moving.",
-    "Karte direkt mit der Maus ziehen, Mausrad ändert die Grösse.": "Drag the map with the mouse, the mouse wheel changes the size.",
+    "Karte direkt mit der Maus ziehen, Strg+Mausrad ändert die Grösse.": "Drag the map with the mouse, Ctrl+mouse wheel changes the size.",
     "Sucht sofort auf dem ganzen Bildschirm nach einem Map- oder Realm-Namen – falls die automatische Erkennung "
     "das Banner verpasst hat.":
         "Searches the whole screen for a map or realm name right away – in case automatic detection missed the "
@@ -1139,8 +1139,8 @@ EN = {
     'über {n} Runden': 'over {n} rounds',
     # 1.61: overlay preview
     'Bilanz: Ø 2,8 Kills · 12 Runden': 'Record: avg. 2.8 kills · 12 rounds',
-    'Klick auf Karte, Systemwerte oder Musik wählt das Element für den Regler „Grösse“. Mit „Mit der Maus verschieben“: Element ziehen = verschieben, an der Ecke ziehen oder Mausrad = Grösse, Klick auf eine freie Stelle setzt die Karte dorthin. Ende mit „Fertig“.':
-        'A click on the map, the system values or the music picks the element for the “Size” slider. With “Move with the mouse”: drag an element = move it, drag its corner or the mouse wheel = size, a click on an empty spot puts the map there. End with “Done”.',
+    'Klick auf Karte, Systemwerte oder Musik wählt das Element für den Regler „Grösse“. Mit „Mit der Maus verschieben“: Element ziehen = verschieben, an der Ecke ziehen oder Strg+Mausrad = Grösse, Klick auf eine freie Stelle setzt die Karte dorthin. Ende mit „Fertig“.':
+        'A click on the map, the system values or the music picks the element for the “Size” slider. With “Move with the mouse”: drag an element = move it, drag its corner or Ctrl+mouse wheel = size, a click on an empty spot puts the map there. End with “Done”.',
     "Element": "Element",
     "Schrift der Karte (Name, Timer, Infos)": "Map text (name, timer, info)",
     'Spielbild': 'Game picture',
@@ -1244,7 +1244,7 @@ EN = {
     'Unter Titel und Künstler: wie weit das Lied ist, mit Balken und Länge – wie in Spotify.':
         'Below title and artist: how far the song is, with a bar and its length – like in Spotify.',
     # 1.64.7: names while moving
-    'KARTE · Mausrad = Grösse': 'MAP · mouse wheel = size',
+    'KARTE · Strg+Mausrad = Grösse': 'MAP · Ctrl+wheel = size',
     'SYSTEMWERTE · HEUTE': 'SYSTEM VALUES · TODAY',
     'Karte': 'Map',
     'Systemwerte': 'System values',
