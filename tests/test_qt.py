@@ -1256,3 +1256,30 @@ def test_columns_can_be_hidden_by_a_right_click_on_the_heading(qapp, keep):
     fresh.show_state({"columns": cols, "rows": rows, "colours": {}, "selection": [], "selectable": False})
     assert fresh.isColumnHidden(1) and not fresh.isColumnHidden(0)
     t._column_menu(t.header().rect().center())                 # the menu itself opens without error
+
+
+def test_a_multi_select_table_posts_the_whole_selection(qapp, keep):
+    """1.5.4 (user: mark several rows and set them as farming): selectmode "extended" -> ExtendedSelection; the
+    table posts the selected ids as one list and never a single "click" (that would reset a Ctrl-click)."""
+    from PySide6.QtCore import Qt
+    from dbdmapscout import qt_window
+    posted = []
+    t = keep(qt_window.Table(".nb.f3.treeview9", lambda a, arg=None: posted.append((a, arg))))
+    cols = [("map", "Map", "w"), ("n", "Runden", "e")]
+    rows = [(f"r{i}", 0, "", [f"Map {i}", str(i)], [], False) for i in range(3)]
+    t.show_state({"columns": cols, "rows": rows, "colours": {}, "selection": [], "selectable": True, "multi": True})
+    assert t.selectionMode() == t.SelectionMode.ExtendedSelection
+    items = [t.topLevelItem(i) for i in range(3)]
+    items[0].setSelected(True)
+    items[2].setSelected(True)
+    sel = [a for a in posted if a[0] == "act" and a[1][1][0] == "select"]
+    assert sel and sorted(sel[-1][1][1][1]) == ["r0", "r2"]
+    posted.clear()
+    t._clicked(items[1], 0)
+    assert posted == []                                          # no single click in multi mode
+    t.show_state({"columns": cols, "rows": rows, "colours": {}, "selection": ["r1"], "selectable": True, "multi": True})
+    assert [i.data(0, Qt.UserRole) for i in t.selectedItems()] == ["r1"]   # the model's selection wins
+    t.show_state({"columns": cols, "rows": rows, "colours": {}, "selection": [], "selectable": True})
+    assert t.selectionMode() == t.SelectionMode.SingleSelection
+    t._clicked(items[1], 0)
+    assert posted[-1] == ("act", (".nb.f3.treeview9", ("click", "r1")))
