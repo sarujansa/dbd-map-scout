@@ -236,7 +236,8 @@ def test_censor_boxes_are_hidden_in_the_saved_clip(clip, tmp_path):
     clip and the picture outside it stays, "copy" becomes a re-encode."""
     assert clipedit.names_box(2560, 1440) == pytest.approx(clipedit.NAMES_BOX)
     wide = clipedit.names_box(3440, 1440)                          # ultrawide: the game picture starts at 440 px
-    assert wide[0] == pytest.approx(440 / 3440 + 0.006 * 2560 / 3440) and wide[2] == pytest.approx(0.175 * 2560 / 3440)
+    nx, _ny, nw, _nh = clipedit.NAMES_BOX
+    assert wide[0] == pytest.approx(440 / 3440 + nx * 2560 / 3440) and wide[2] == pytest.approx(nw * 2560 / 3440)
     assert clipedit.box_px((0.5, 0.5, 0.25, 0.25), 321, 181) == (160, 90, 80, 46)   # even, inside the frame
     g = clipedit.censor_graph([(0.1, 0.1, 0.2, 0.2), (0.5, 0.5, 0.1, 0.1)], "pixel", 320, 180, "scale=-2:90")
     assert g.count("overlay") == 2 and g.endswith("scale=-2:90[vout]") and "flags=neighbor" in g
@@ -274,7 +275,7 @@ def test_the_clip_window_censors_with_remembered_boxes(clip, tmp_path):
         assert win.preview.boxes == [[0.5, 0.5, 0.2, 0.2]] and not win.preview.active
         win._add_names_box()
         assert len(win.preview.boxes) == 2 and win.censor_box.isChecked() and settings["clip_censor_on"] is True
-        assert settings["clip_censor_boxes"][1][0] == pytest.approx(0.006, abs=1e-3)
+        assert settings["clip_censor_boxes"][1][0] == pytest.approx(clipedit.NAMES_BOX[0], abs=1e-3)
         assert "neu kodiert" in win.size_label.text()
         win.tool_btn.setChecked(True)
         win._tool_toggled()

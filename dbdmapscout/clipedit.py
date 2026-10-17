@@ -28,7 +28,9 @@ DURATION_RE = re.compile(rb"Duration: (\d+):(\d\d):(\d\d(?:\.\d+)?)")
 CLIPS_DIR = _CLIPS_DIR         # one place for the folder name (obsrec)
 CENSOR_STYLES = ("pixel", "blur", "black", "retouch")   # 1.7.2: how a censored area looks; 1.7.3 retouch = delogo
 EDGE_PX = 2                                # delogo refuses a box that touches the frame edge: keep this far away
-NAMES_BOX = (0.006, 0.66, 0.175, 0.31)     # DBD's survivor names bottom left, as fractions of the 16:9 game picture
+NAMES_BOX = (0.004, 0.50, 0.26, 0.32)      # DBD's survivor list bottom left (portraits + names + status text), as
+                                           # fractions of the 16:9 game picture – 1.7.4 after the user's screenshot:
+                                           # the list sits higher (≈ 50–82 % of the height) and long names reach further
 MODES = ("copy", "exact", "discord")   # key frames, no re-encoding / frame exact / 1.6.1: fits a size (Discord)
 TARGETS_MB = (10, 25, 50, 500)  # 1.6.1: Discord's upload limits (free 10 MB, Nitro Basic 50, Nitro 500)
 DEFAULT_TARGET_MB = 10
