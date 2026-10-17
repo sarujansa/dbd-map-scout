@@ -304,7 +304,9 @@ def test_old_rounds_read_with_a_slip_count_for_the_killer():
 # ------------------------------------------------------------------ cross-play (farming rounds, 1.2.20)
 @pytest.mark.parametrize("name, expected", [
     ("crossplay_off", True),             # the user's lobby screenshot (2000×837 copy): globe with the red cross
-    ("crossplay_on_synthetic", False),   # the same globe with the cross painted over (no screenshot with it on yet)
+    ("crossplay_on_synthetic", False),   # the same globe with the cross painted over
+    ("crossplay_on", False),             # 1.6.2: the user's screenshot with cross-play on – no globe, only "x1.00"
+    ("crossplay_off_2", True),           # 1.6.2: the second screenshot, cross-play off
     ("crossplay_none", None),            # ground and fire only
 ])
 def test_crossplay_globe(name, expected):
@@ -361,3 +363,26 @@ def test_found_lobby_carries_crossplay_off():
     for i in range(2):
         ev = q2.update(LobbyView(button="ready", time_text="00:50"), float(i))
     assert [e for e in ev if e[0] == "found"][0][1].crossplay_off is None
+
+
+def test_any_multiplier_without_a_globe_means_cross_play_on():
+    """1.6.2 (user: "x1.00 can vary"): other multipliers drawn into the real crops – no globe = on, globe with the
+    cross = off, whatever the number."""
+    from PIL import Image, ImageDraw, ImageFont
+    on = cv2.imread(os.path.join(DATA, "crossplay_on.png"))
+    off = cv2.imread(os.path.join(DATA, "crossplay_off_2.png"))
+    font = ImageFont.truetype(os.path.join(os.path.dirname(DATA), "..", "..", "dbdmapscout", "fonts",
+                                           "Inter-Medium.otf"), 14)
+
+    def draw(base, clear, text, right):
+        img = base.copy()
+        img[14:36, 0:clear] = base[0:12, 0:clear].mean(axis=(0, 1))     # the old text away
+        im = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+        d = ImageDraw.Draw(im)
+        left, _t, r, b = d.textbbox((0, 0), text, font=font)
+        d.text((right - (r - left) - left, 29 - b), text, font=font, fill=(235, 235, 235))
+        return cv2.cvtColor(np.array(im), cv2.COLOR_RGB2BGR)
+    for text in ("x1.00", "x1.25", "x2.00", "x1.5", "x10.00", "x0.75", "x3"):
+        assert lobby.crossplay_off(draw(on, 45, text, 41), 2000, 837) is False, text
+    for text in ("x2.00", "x1.25", "x1.5"):
+        assert lobby.crossplay_off(draw(off, 20, text, 17), 2000, 837) is True, text
