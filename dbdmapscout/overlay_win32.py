@@ -237,6 +237,18 @@ def compose(img: Image.Image, height: int, caption: str, transparent: bool, bord
     return pic
 
 
+def map_body(img: Image.Image, height: int, split: int | None) -> Image.Image:
+    """1.3.1: the map alone for the styled cards (skin.map_card): the name drawn into the picture is cut off
+    (``split`` = mapimage.title_split) and the empty transparent margins go, scaled so that the map is
+    ``height`` tall like compose() would make it (the whole picture's height, name included)."""
+    body = img.crop((0, split, img.width, img.height)) if split and 0 < split < img.height else img
+    box = body.getchannel("A").getbbox()
+    if box:
+        body = body.crop(box)
+    bh = max(1, round(body.height * height / img.height))
+    return body.resize((max(1, round(body.width * bh / body.height)), bh), Image.LANCZOS)
+
+
 def add_border(pic: Image.Image, label: str = "") -> Image.Image:
     """The yellow frame of the edit mode; ``label`` (1.64.7, user: "keinen Plan, was ich verschiebe") names the
     element on a tag inside the frame's top left – size and place stay exactly the same (no jump after "Fertig")."""
@@ -864,6 +876,9 @@ class PictureOverlay:
         self.info_beside = False        # timer/server right of the map (low bar above/below the picture)
         self.text_height = 0            # px the timer/name/info are sized for (1.65: not the map's size); 0 = map
         self.backdrop = False           # dark area with rounded corners behind map and lines (1.2.4)
+        self.skin = "classic"           # 1.3.1: overlay style of the map card (skin.map_card) – classic as before
+        self.accent = None              # the theme's accent for the modern styles
+        self.realm = ""                 # realm name for the card's header (glass, line)
         self.fade = 1.0                 # share of the opacity while fading in/out (1.2.9)
         self.on_moved = None
         self.on_wheel = None
@@ -898,12 +913,20 @@ class PictureOverlay:
         self._keep_on_top()
 
     # ------------------------------------------------------------ content
-    def set_map(self, path, caption: str = "", rotation: int = 0):
+    def set_map(self, path, caption: str = "", rotation: int = 0, realm: str = ""):
         self._stop_anim()
         self._frames = load_frames(path, rotation) if path else []
         self._floor = self._view = None
         self._caption = caption
+        self.realm = realm or ""
         self._base_key = self._key = None
+
+    def set_skin(self, style: str, accent=None):
+        """1.3.1: the overlay style of the map card (classic | glass | chips | line) and the theme's accent."""
+        style = style if style in ("classic", "glass", "chips", "line") else "classic"
+        if (style, accent) != (self.skin, self.accent):
+            self.skin, self.accent = style, accent
+            self._base_key = self._key = self._fit = None
 
     def set_timer(self, text: str):
         """Round timer shown below the map; only re-renders when the text changes."""
@@ -992,8 +1015,16 @@ class PictureOverlay:
 
     def backdrop_pad(self, text_h: int) -> int:
         """Edge the dark area adds around the map (0 without it) – the App lets it use the margin, so the map
-        stays as big as without the area (1.2.5, user: "Warum wird die Map kleiner?")."""
+        stays as big as without the area (1.2.5, user: "Warum wird die Map kleiner?"). 1.3.1: the frame of the
+        glass / line card the same way."""
+        if self._modern():
+            from .skin import frame_pad
+            return frame_pad(self.skin, text_h)
         return backdrop_pad(text_h) if self.backdrop else 0
+
+    def _modern(self) -> bool:
+        """The map card is drawn by skin.map_card (not classic; the block beside the map stays classic)."""
+        return self.skin != "classic" and not self.info_beside
 
     def render(self, height: int, push: bool = True):
         """Prepare pictures for this height; returns (w, h) of the overlay. ``push=False``: only measure – the
@@ -1009,29 +1040,41 @@ class PictureOverlay:
         # text below/above the map is sized for one floor: stacked floors would double it; since 1.65 the App
         # gives it its own size (user: a bigger map, the same text)
         text_h = max(40, int(self.text_height) or height // self.stacked())
-        base_key = (height, self._caption if self.show_caption else "", self.transparent, self.show_map, text_h)
+        modern = self._modern()
+        headed = modern and self.skin in ("glass", "line")       # the name goes into the card's header
+        base_key = (height, self._caption if self.show_caption and not headed else "", self.transparent,
+                    self.show_map, text_h, self.skin if modern else "")
         new_base = base_key != self._base_key
         if new_base:                      # scaling is the slow part: done once per size, not per timer tick
             if self.show_map:
                 frames = self._view_frames()[0]
                 split = self._title_split(frames)
-                self._base = [(compose(img, height, base_key[1], self.transparent, False, text_h, split), dur)
-                              for img, dur in frames]
+                if headed:                # 1.3.1: the map alone, its drawn name becomes the header
+                    self._base = [(map_body(img, height, split), dur) for img, dur in frames]
+                else:
+                    self._base = [(compose(img, height, base_key[1], self.transparent, False, text_h, split), dur)
+                                  for img, dur in frames]
             else:                         # info only: an empty picture, the info block is drawn below it
                 self._base = [(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), 0)]
             self._base_key = base_key
         key = (base_key, self._editing, self._timer, self._server, self._ping, self._note, self._record,
-               self.info_beside, self.backdrop)
+               self.info_beside, self.backdrop, self.skin, self.accent, self.realm)
         if key != self._key:
             self._prepared = []
             pics = []
-            for pic, dur in self._base:
+            if modern:
+                from .skin import map_card
+                for pic, dur in self._base:
+                    pics.append(map_card(pic if self.show_map else None, self._caption, self.realm, self._timer,
+                                         self._note, self._record, self._server, self._ping, (), text_h, self.skin,
+                                         self.accent))
+            for pic, dur in ([] if modern else self._base):
                 if self.has_info():
                     pic = add_info(pic, self._timer, self._server, text_h, backdrop=not self.transparent,
                                    ping=self._ping, note=self._note, record=self._record,
                                    beside=self.info_beside and self.show_map)
                 pics.append(pic)
-            if self.backdrop:
+            if self.backdrop and not modern:
                 pics = map_backdrop(pics, text_h)
             for pic, (_b, dur) in zip(pics, self._base):
                 if self._editing:
@@ -1058,7 +1101,8 @@ class PictureOverlay:
         the App rendered big, showed it, then smaller: the map grew and shrank on every tick."""
         key = (height, text_h, avail, re.sub(r"\d", "0", self._timer), self._server, self._ping, self._note,
                self._record, self.info_beside, self._editing, self.show_map, self.show_caption, self._caption,
-               self.transparent, self.backdrop, self._floor, id(self._frames[0][0]) if self._frames else None)
+               self.transparent, self.backdrop, self._floor, id(self._frames[0][0]) if self._frames else None,
+               self.skin, self.accent, self.realm)
         if self._fit is None or self._fit[0] != key:
             timer, self._timer = self._timer, key[3]
             try:
@@ -1089,13 +1133,18 @@ class PictureOverlay:
 
     def _render_waiting(self, height: int):
         key = ("waiting", height, self.transparent, self._editing, self._waiting, self._server, self._ping,
-               self.backdrop)
+               self.backdrop, self.skin, self.accent)
         if key != self._key:
             self._stop_anim()
-            pic = add_info(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), "", self._server, height,
-                           backdrop=not self.transparent, ping=self._ping, status=self._waiting)
-            if self.backdrop:
-                pic = map_backdrop([pic], height)[0]
+            if self.skin != "classic":                           # 1.3.1: the waiting card in the overlay style
+                from .skin import map_card
+                pic = map_card(None, "", "", "", "", "", self._server, self._ping, self._waiting, height, self.skin,
+                               self.accent)
+            else:
+                pic = add_info(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), "", self._server, height,
+                               backdrop=not self.transparent, ping=self._ping, status=self._waiting)
+                if self.backdrop:
+                    pic = map_backdrop([pic], height)[0]
             if self._editing:
                 pic = add_border(pic.copy(), self.edit_label)
             self._prepared = [(premultiplied_bgra(pic), pic.width, pic.height, 0)]

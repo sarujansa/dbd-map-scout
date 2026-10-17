@@ -494,3 +494,231 @@ def _music_line(title, artist, cover, u, acc, progress, look) -> Image.Image:
         d.line((text_x, y, text_x + int((w - pad - text_x) * min(1.0, el / max(1, total))), y), fill=acc,
                width=max(1, int(2 * u)))
     return im
+
+
+# ------------------------------------------------------------------ the map card (1.3.1)
+MAP_U = 518                             # text_h of the map's lines at 1440p and text scale 1 = one design pixel
+
+
+def frame_pad(style: str, text_h: int) -> int:
+    """Edge the card's frame adds around the map in ``style`` (the App lets it use the margin, like the dark
+    area's edge – backdrop_pad); chips have no frame."""
+    u = max(0.25, text_h / MAP_U)
+    return int(18 * u) if style == "glass" else int(20 * u) if style == "line" else 0
+
+
+def map_card(body, name: str, realm: str, timer: str, note: str, record: str, server: str, ping, status,
+             text_h: int, style: str, accent=None) -> Image.Image:
+    """The map window in ``style``: ``body`` = the map picture without its drawn name (None: the waiting card –
+    ``status`` lines only); ``name``/``realm`` for the header (glass, line); ``timer``, ``note`` (amber warning),
+    ``record`` (own results), ``server`` + ``ping`` as the classic info block; ``text_h`` sizes the text."""
+    from .overlay_win32 import INFO_WARN, ping_colour
+    u = max(0.25, text_h / MAP_U)
+    acc = accent_rgba(accent)
+    ctx = dict(u=u, acc=acc, warn=INFO_WARN, ping_colour=ping_colour, status=tuple(status or ()))
+    if style == "chips":
+        return _map_chips(body, timer, note, record, server, ping, ctx)
+    if style == "line":
+        return _map_line(body, name, realm, timer, note, record, server, ping, ctx)
+    return _map_glass(body, name, realm, timer, note, record, server, ping, ctx)
+
+
+def _status_lines(ctx, first_size, rest_size, first_weight="SemiBold", rest_weight="Medium"):
+    """(font, text, colour) per waiting-card line: the first white, the others grey."""
+    u = ctx["u"]
+    out = []
+    for i, line in enumerate(ctx["status"]):
+        out.append((inter(first_weight if i == 0 else rest_weight, int((first_size if i == 0 else rest_size) * u)),
+                    line, WHITE if i == 0 else GREY))
+    return out
+
+
+def _map_glass(body, name, realm, timer, note, record, server, ping, ctx) -> Image.Image:
+    u, acc = ctx["u"], ctx["acc"]
+    pad = int(18 * u)
+    hf, nf, tf, sf = inter("SemiBold", int(14 * u)), inter("Bold", int(24 * u)), inter("SemiBold", int(58 * u)), \
+        inter("Medium", int(18 * u))
+    nf_warn = inter("Medium", int(16 * u))
+    status = _status_lines(ctx, 20, 16)
+    # widths of everything, the card as wide as the widest
+    parts_w = [body.width if body is not None else 0]
+    if realm:
+        parts_w.append(_width(hf, realm.upper(), 2.2 * u) + int(12 * u))
+    if name:
+        parts_w.append(_width(nf, name))
+    if timer:
+        parts_w.append(_width(tf, timer))
+    if note:
+        parts_w.append(_width(nf_warn, note))
+    if record:
+        parts_w.append(_width(sf, record))
+    if server:
+        parts_w.append(_width(sf, server) + int(22 * u) + (_width(sf, f"{ping:.0f} ms") + int(24 * u)
+                                                                    if ping is not None else 0))
+    parts_w += [_width(f, t) for f, t, _c in status]
+    w = int(max(parts_w)) + 2 * pad
+    w = max(w, int(140 * u))
+    # heights
+    y = pad if not realm and not name else int(14 * u)
+    head_h = (int(20 * u) if realm else 0) + (int(32 * u) if name else 0)
+    y_body = y + head_h + (int(6 * u) if head_h else 0)
+    y_cur = y_body + (body.height + int(10 * u) if body is not None else 0)
+    rows = []                                         # (kind, height)
+    if timer:
+        rows.append(("timer", int(74 * u)))
+    if note:
+        rows.append(("note", int(26 * u)))
+    for _f, _t, _c in status:
+        rows.append(("status", int(28 * u)))
+    if record or server:
+        rows.append(("rule", int(10 * u)))
+    if record:
+        rows.append(("record", int(32 * u)))
+    if server:
+        rows.append(("server", int(32 * u)))
+    h = y_cur + sum(hh for _k, hh in rows) + pad
+    im = _panel(w, h, int(20 * u), GLASS_FILL, GLASS_EDGE)
+    d = ImageDraw.Draw(im)
+    if realm:
+        d.rounded_rectangle((pad, y + int(3 * u), pad + int(4 * u), y + int(17 * u)), radius=int(2 * u), fill=acc)
+        _text(im, pad + int(12 * u), y, realm.upper(), hf, GREY, 2.2 * u)
+        y += int(20 * u)
+    if name:
+        _text(im, pad, y - int(2 * u), name, nf, WHITE)
+    if body is not None:
+        im.alpha_composite(body, ((w - body.width) // 2, y_body))
+    y = y_cur
+    si = 0
+    for kind, hh in rows:
+        if kind == "timer":
+            _text(im, (w - _width(tf, timer)) / 2, y - int(6 * u), timer, tf, WHITE)
+        elif kind == "note":
+            _text(im, (w - _width(nf_warn, note)) / 2, y, note, nf_warn, ctx["warn"])
+        elif kind == "status":
+            f, t, c = status[si]
+            si += 1
+            _text(im, (w - _width(f, t)) / 2, y, t, f, c)
+        elif kind == "rule":
+            d.line((pad, y + int(4 * u), w - pad, y + int(4 * u)), fill=(255, 255, 255, 30))
+        elif kind == "record":
+            _text(im, pad, y, record, sf, GREY)
+        elif kind == "server":
+            _dot(d, pad + int(6 * u), y + int(11 * u), int(5 * u), (74, 222, 128, 255))
+            _text(im, pad + int(22 * u), y, server, sf, WHITE)
+            if ping is not None:
+                txt = f"{ping:.0f} ms"
+                _text(im, w - pad - _width(sf, txt), y, txt, sf, accent_rgba(ctx["ping_colour"](ping)))
+        y += hh
+    return shadowed(im, u)
+
+
+def _map_chips(body, timer, note, record, server, ping, ctx) -> Image.Image:
+    u, acc = ctx["u"], ctx["acc"]
+    gap = int(8 * u)
+    f = inter("SemiBold", int(16 * u))
+    parts = []
+    if timer:
+        parts.append(chip(timer, u, inter("SemiBold", int(36 * u)), edge=acc, pad=int(22 * u), h=int(58 * u)))
+    if note:
+        parts.append(chip(note, u, f, colour=ctx["warn"], edge=ctx["warn"]))
+    status = _status_lines(ctx, 16, 15)
+    for sf, t, c in status:
+        parts.append(chip(t, u, sf, colour=c))
+    infos = []
+    if server:
+        infos.append(chip(server + (f" · {ping:.0f} ms" if ping is not None else ""), u, f,
+                          dot=(74, 222, 128, 255)))
+    if record:
+        infos.append(chip(record, u, f, colour=GREY))
+    max_w = max(body.width if body is not None else 0, int(WRAP_SHARE * 1440 * u))
+    blocks = ([body] if body is not None else []) + [shadowed(p, u) for p in parts] + \
+        ([shadowed(chip_rows(infos, max_w, gap), u)] if infos else [])
+    if not blocks:
+        return Image.new("RGBA", (1, 1), (0, 0, 0, 0))
+    w = max(b.width for b in blocks)
+    h = sum(b.height for b in blocks) + gap * (len(blocks) - 1)
+    im = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    y = 0
+    for b in blocks:
+        im.alpha_composite(b, ((w - b.width) // 2, y))
+        y += b.height + gap
+    return im
+
+
+def _map_line(body, name, realm, timer, note, record, server, ping, ctx) -> Image.Image:
+    u, acc = ctx["u"], ctx["acc"]
+    pad = int(20 * u)
+    cf = int(13 * u)
+    nf, tf, vf = inter("Medium", int(22 * u)), inter("Light", int(70 * u)), inter("Regular", int(18 * u))
+    nf_warn = inter("Regular", int(16 * u))
+    capf = inter("Medium", cf)
+    status = _status_lines(ctx, 20, 16, "Regular", "Regular")
+    cols = (server or "") and (record or "")                 # two columns when both are there
+    parts_w = [body.width if body is not None else 0]
+    if realm:
+        parts_w.append(_width(capf, realm.upper(), 3 * u))
+    if name:
+        parts_w.append(_width(nf, name))
+    if timer:
+        parts_w.append(_width(tf, timer))
+    if note:
+        parts_w.append(_width(nf_warn, note))
+    srv = (server + (f" · {ping:.0f} ms" if ping is not None else "")) if server else ""
+    if cols:
+        parts_w.append(_width(vf, srv) + int(16 * u) + _width(vf, record) + int(40 * u))
+    else:
+        parts_w += [_width(vf, srv) + int(16 * u) if server else 0, _width(vf, record) if record else 0]
+    parts_w += [_width(f, t) for f, t, _c in status]
+    w = int(max(parts_w)) + 2 * pad
+    w = max(w, int(140 * u))
+    y = int(16 * u)
+    head = (int(16 * u) if realm else 0) + (int(30 * u) if name else 0)
+    y_body = y + head + (int(10 * u) if head else 0) + (int(10 * u) if head else 0)
+    y_cur = y_body + (body.height + int(12 * u) if body is not None else 0)
+    rows = []
+    if timer:
+        rows.append(("timer", int(80 * u)))
+    if note:
+        rows.append(("note", int(26 * u)))
+    for _f, _t, _c in status:
+        rows.append(("status", int(28 * u)))
+    if server or record:
+        rows.append(("info", int(60 * u)))
+    h = y_cur + sum(hh for _k, hh in rows) + int(6 * u)
+    im = _panel(w, h, int(10 * u), (0, 0, 0, 0), LINE_EDGE, max(1, int(u)))
+    d = ImageDraw.Draw(im)
+    if realm:
+        _caps(im, pad, y, realm, cf, DIMG, u)
+        y += int(16 * u)
+    if name:
+        _text(im, pad, y, name, nf, WHITE)
+        y += int(30 * u)
+    if head:
+        d.line((pad, y + int(4 * u), w - pad, y + int(4 * u)), fill=(255, 255, 255, 50))
+    if body is not None:
+        im.alpha_composite(body, ((w - body.width) // 2, y_body))
+    y = y_cur
+    si = 0
+    for kind, hh in rows:
+        if kind == "timer":
+            _text(im, (w - _width(tf, timer)) / 2, y - int(10 * u), timer, tf, acc)
+        elif kind == "note":
+            _text(im, (w - _width(nf_warn, note)) / 2, y, note, nf_warn, ctx["warn"])
+        elif kind == "status":
+            f, t, c = status[si]
+            si += 1
+            _text(im, (w - _width(f, t)) / 2, y, t, f, c)
+        elif kind == "info":
+            d.line((pad, y, w - pad, y), fill=HAIRLINE)
+            y2 = y + int(10 * u)
+            x2 = pad
+            if server:
+                _caps(im, pad, y2, "Server", cf, DIMG, u)
+                _dot(d, pad + int(6 * u), y2 + int(29 * u), int(4 * u), (74, 222, 128, 255))
+                _text(im, pad + int(16 * u), y2 + int(18 * u), srv, vf, WHITE)
+                x2 = pad + int(_width(vf, srv)) + int(16 * u) + int(40 * u)
+            if record:
+                _caps(im, x2, y2, "Bilanz", cf, DIMG, u)
+                _text(im, x2, y2 + int(18 * u), record, vf, WHITE)
+        y += hh
+    return im
