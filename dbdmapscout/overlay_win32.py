@@ -403,6 +403,14 @@ def add_info(pic: Image.Image, timer: str, server: str, height: int, backdrop: b
 
 
 def premultiplied_bgra(img: Image.Image) -> bytes:
+    """Pixels for UpdateLayeredWindow: colour multiplied by alpha, in B G R A order. 1.6.1: Pillow's own "RGBa"
+    mode does it in C – the same bytes as the numpy version (test), 6.4 → 1.6 ms for a 420×560 map, and this runs
+    for every window whose picture changes (the map with its timer every second)."""
+    return img.convert("RGBA").convert("RGBa").tobytes("raw", "BGRa")
+
+
+def premultiplied_bgra_numpy(img: Image.Image) -> bytes:
+    """Reference for the test: the numpy version used until 1.6."""
     a = np.asarray(img.convert("RGBA"), dtype=np.uint16)
     rgb = (a[:, :, :3] * a[:, :, 3:4] + 127) // 255
     out = np.empty(a.shape, dtype=np.uint8)

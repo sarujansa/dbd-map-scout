@@ -725,3 +725,42 @@ def test_the_match_start_and_f8_reach_the_recorder(app_root):
         assert len([c for c in calls if c[0] == "early"]) == 1
     finally:
         app.quit()
+
+
+def test_custom_rounds_that_were_public_matches_are_offered_as_farming(app_root):
+    """1.6.1: rounds saved as custom games, which the stats page lists as public matches (instant lobbies with
+    cross-play off before 1.5.5), are shown with a button: all become farming rounds (custom dropped); "Ignorieren"
+    hides them for good."""
+    import json
+    from dbdmapscout import history, official
+    from dbdmapscout.app import App
+    t0 = time.time() - 3 * 3600
+    for i, (custom, page_custom) in enumerate([(True, False), (True, True), (False, False), (True, False)]):
+        history.append(str(app_root / history.FILE), history.Round(t=t0 + i * 900, seconds=600, map_id="coal-tower",
+                                                                   map="Coal Tower", role="survivor", custom=custom))
+        with open(app_root / official.FILE, "a", encoding="utf-8") as f:
+            f.write(json.dumps({"t": t0 + i * 900 - 38, "map": "Coal Tower", "custom": page_custom,
+                                "role": "survivor", "seconds": 600, "status": "ESCAPED"}) + "\n")
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    moved = []
+    app.recorder.set_farming = lambda t, on: moved.append((t, on))
+    try:
+        assert [r.t for r in app._stats_farm_candidates()] == [t0, t0 + 2700]
+        app._stats_render()
+        assert "2 Runden sind als Custom Game gespeichert" in app.stats_farm_var.get()
+        assert app.stats_farm_row.winfo_manager()
+        app._confirmed = True
+        app._stats_farm_found()
+        saved = {r.t: r for r in history.load(str(app_root / history.FILE))}
+        assert saved[t0].farming and not saved[t0].custom and saved[t0 + 900].custom and not saved[t0 + 900].farming
+        assert sorted(moved) == [(t0, True), (t0 + 2700, True)] and not app._stats_farm_candidates()
+        assert not app.stats_farm_row.winfo_manager()
+        r = history.load(str(app_root / history.FILE))                          # a third one appears later
+        r[2].custom = True
+        history._rewrite(str(app_root / history.FILE), r, [])
+        assert [x.t for x in app._stats_farm_candidates()] == [t0 + 1800]
+        app._stats_farm_ignore()
+        assert not app._stats_farm_candidates() and app.settings.get("farming_ignored") == [repr(t0 + 1800)]
+    finally:
+        app.quit()

@@ -78,6 +78,16 @@ def accent(cover):
     as (r, g, b, 255) light enough to read on the dark game edge, or None for a grey cover (pure)."""
     if cover is None:
         return None
+    memo = getattr(cover, "info", None)
+    if isinstance(memo, dict) and "_dbdms_accent" in memo:    # 1.6.1: once per cover, not twice a second
+        return memo["_dbdms_accent"]
+    out = _accent(cover)
+    if isinstance(memo, dict):
+        memo["_dbdms_accent"] = out
+    return out
+
+
+def _accent(cover):
     import colorsys
     raw = cover.convert("RGB").resize((24, 24)).tobytes()
     px = [tuple(raw[i:i + 3]) for i in range(0, len(raw), 3)]

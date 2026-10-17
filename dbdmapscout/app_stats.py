@@ -128,6 +128,13 @@ class StatsTab:
         self.stats_dash.pack(fill="x")
         self.stats_lost_var = ui.StringVar(value="")
         self.stats_lost_label = ui.Label(box_d, textvariable=self.stats_lost_var, wraplength=540)  # only when needed
+        self.stats_farm_row = ui.Frame(box_d)        # 1.6.1: old farming rounds saved as custom games
+        self.stats_farm_var = ui.StringVar(value="")
+        ui.Label(self.stats_farm_row, textvariable=self.stats_farm_var, wraplength=540).pack(anchor="w")
+        fr = ui.Frame(self.stats_farm_row)
+        fr.pack(anchor="w", pady=(4, 0))
+        ui.Button(fr, text=_("Als Farming markieren"), command=self._stats_farm_found).pack(side="left")
+        ui.Button(fr, text=_("Ignorieren"), command=self._stats_farm_ignore).pack(side="left", padx=(6, 0))
         ui.Label(box_d, text=_("Runden vom Map-Banner bis zum Rundenende (ab 1 min), nur lokal gespeichert. Kills, "
                                 "Escapes und Bloodpoints laut stats.deadbydaylight.com, sobald eine Runde dort "
                                 "zugeordnet ist."),
@@ -309,6 +316,7 @@ class StatsTab:
                                       lambda mid: self.catalog.maps[mid].label(1) if mid in self.catalog.maps else None)
         off = {}                                     # id(round) -> its official match
         rescued = []                                 # end never detected: counts with the page's length
+        public_custom = []                           # 1.6.1: saved as custom game, a public match on the page
         for i, m in tied.items():
             r = candidates[i]
             if i >= len(all_rounds):
@@ -320,6 +328,8 @@ class StatsTab:
             off[id(r)] = m
             if m.role and not r.role:                # the page knows it for sure
                 r.role = m.role
+            if i < len(all_rounds) and r.custom and not m.custom and not r.farming:
+                public_custom.append(r)              # before 1.5.5 instant (cross-play off) lobbies looked custom
             r.custom = m.custom
             k = self._killer_of(m.character)
             if m.role == "killer" and r.role == "killer" and k in KILLERS:
@@ -330,7 +340,7 @@ class StatsTab:
         kept = [r for i, r in enumerate(all_rounds) if i not in ghost]
         return SimpleNamespace(rounds=sorted(kept + rescued, key=lambda r: r.t), off=off, tied=tied,
                                other=other, fixed=fixed, rescued=rescued, matches=matches, candidates=candidates,
-                               phantoms=phantoms)
+                               phantoms=phantoms, public_custom=public_custom)
 
     def _stats_render(self):
         j = self._joined()
@@ -410,6 +420,15 @@ class StatsTab:
             self.stats_lost_label.pack(anchor="w", after=self.stats_dash, pady=(6, 0))
         else:
             self.stats_lost_label.pack_forget()
+        found = self._stats_farm_candidates()
+        if found:
+            self.stats_farm_var.set(_("{n} Runden sind als Custom Game gespeichert, laut Stats-Seite waren es aber "
+                                      "öffentliche Matches – vermutlich Farming mit Crossplay aus (vor 1.5.5 als Custom "
+                                      "Game erkannt). Zuletzt: {map}, {when}.", n=len(found), map=found[-1].map,
+                                      when=time.strftime("%d.%m.%y %H:%M", time.localtime(found[-1].t))))
+            self.stats_farm_row.pack(anchor="w", fill="x", after=self.stats_dash, pady=(6, 0))
+        else:
+            self.stats_farm_row.pack_forget()
         dash = dashboard.build(rounds, pairs, lambda k: killer_label(k))
         if not all_rounds:
             dash.empty = _("Noch keine Runden gespeichert.")
@@ -694,6 +713,36 @@ class StatsTab:
         if not on and any(r.region and r.region == farm_region for r in done):
             self._log(_("Hinweis: Runden auf {region} zählen laut Einstellung weiter als Farming.",
                         region=self._stats_region_name(farm_region)), "System")
+        self._stats_render()
+
+    def _stats_farm_candidates(self):
+        """1.6.1: rounds saved as custom games that the stats page lists as public matches (not ignored)."""
+        ignored = set(self.settings.get("farming_ignored") or [])
+        return [r for r in self._joined().public_custom if repr(r.t) not in ignored]
+
+    def _stats_farm_found(self):
+        """1.6.1: mark them all as farming rounds (that also drops "custom game"); the recordings follow."""
+        found = self._stats_farm_candidates()
+        if not found or not self._ask(_("Als Farming markieren"),
+                                      _("{n} Runden als Farming-Runden markieren?", n=len(found)),
+                                      self._stats_farm_found):
+            return
+        done = 0
+        try:
+            for r in found:
+                if history.set_farming(self._hist_path(), r.t, True) is not None:
+                    self.recorder.set_farming(r.t, True)
+                    done += 1
+        except OSError as e:
+            self._log(_("Runden nicht geändert: {error}", error=e), "Fehler")
+        self._log(_("{n} Runden als Farming markiert.", n=done), "System")
+        self._stats_render()
+
+    def _stats_farm_ignore(self):
+        ignored = list(self.settings.get("farming_ignored") or [])
+        ignored += [repr(r.t) for r in self._stats_farm_candidates()]
+        self.settings.set("farming_ignored", ignored[-5000:])
+        self._save_soon()
         self._stats_render()
 
     def _stats_delete_round(self):

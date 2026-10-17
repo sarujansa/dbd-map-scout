@@ -26,7 +26,11 @@ SIZE_RE = re.compile(rb"Video: .*?, (\d{2,5})x(\d{2,5})")
 FPS_RE = re.compile(rb"(\d+(?:\.\d+)?) fps")
 DURATION_RE = re.compile(rb"Duration: (\d+):(\d\d):(\d\d(?:\.\d+)?)")
 CLIPS_DIR = _CLIPS_DIR         # one place for the folder name (obsrec)
-MODES = ("copy", "exact")        # cut at key frames (seconds, no re-encoding) / frame exact (re-encoded)
+MODES = ("copy", "exact", "discord")   # key frames, no re-encoding / frame exact / 1.6.1: fits a size (Discord)
+TARGETS_MB = (10, 25, 50, 500)  # 1.6.1: Discord's upload limits (free 10 MB, Nitro Basic 50, Nitro 500)
+DEFAULT_TARGET_MB = 10
+AUDIO_KBPS = 96                 # sound of a size-fitted clip
+SIZE_MARGIN = 0.90              # aim this far below the limit (container overhead, rate control)
 
 
 @dataclass
@@ -131,10 +135,12 @@ def unique_path(folder: str, name: str, ext: str) -> str:
 
 
 def cut(path: str, start: float, end: float, out: str, mode: str = "copy", ffmpeg: str | None = None,
-        run=None) -> tuple[bool, str]:
+        run=None, target_mb: float = DEFAULT_TARGET_MB, info: Info | None = None,
+        retry: bool = True) -> tuple[bool, str]:
     """Write the stretch ``start``..``end`` of ``path`` to ``out``. "copy" = stream copy (seconds of work; the
     cut lands on the key frame before ``start``, so the clip may begin up to a few seconds early), "exact" =
-    frame exact, picture re-encoded (x264 veryfast, CRF 18; a 30-s clip takes some seconds), sound as AAC.
+    frame exact, picture re-encoded (x264 veryfast, CRF 18; a 30-s clip takes some seconds), sound as AAC;
+    "discord" (1.6.1) = re-encoded to stay under ``target_mb`` (discord_plan picks rate, size, frame rate).
     Returns (ok, ffmpeg's last words on failure)."""
     ffmpeg = ffmpeg or ffmpeg_exe()
     if not ffmpeg:
@@ -144,7 +150,12 @@ def cut(path: str, start: float, end: float, out: str, mode: str = "copy", ffmpe
         return False, "Ende vor Anfang"
     os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
     args = [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{start:.3f}", "-to", f"{end:.3f}", "-i", path]
-    if mode == "exact":
+    if mode == "discord":
+        kbps, h, fps = discord_plan(end - start, target_mb, info)
+        args += ["-vf", f"scale=-2:{h},fps={fps:g}", "-c:v", "libx264", "-preset", "veryfast", "-b:v", f"{kbps}k",
+                 "-maxrate", f"{int(kbps * 1.1)}k", "-bufsize", f"{kbps * 2}k", "-pix_fmt", "yuv420p",
+                 "-c:a", "aac", "-b:a", f"{AUDIO_KBPS}k"]
+    elif mode == "exact":
         args += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p", "-c:a", "aac",
                  "-b:a", "160k"]
     else:
@@ -166,7 +177,32 @@ def cut(path: str, start: float, end: float, out: str, mode: str = "copy", ffmpe
         except OSError:
             pass
         return False, err[-300:].decode("utf-8", "replace").strip()
+    if mode == "discord" and retry and os.path.getsize(out) > target_mb * 1024 * 1024:
+        # the rate control overshot (very busy pictures): once more with less, never a file over the limit
+        return cut(path, start, end, out, mode, ffmpeg, run, target_mb * 0.8, info, retry=False)
     return True, ""
+
+
+def discord_plan(seconds: float, target_mb: float, info: Info | None = None) -> tuple[int, int, float]:
+    """1.6.1: (video kbit/s, picture height, frame rate) so a clip of ``seconds`` stays under ``target_mb`` MB.
+    Less room → smaller picture and 30 fps instead of a blurred 1440p (rules of thumb for x264: 1080p60 needs
+    ~6000 kbit/s, 1080p30 ~4000, 720p30 ~2000, 480p30 ~900)."""
+    seconds = max(1.0, float(seconds))
+    total = target_mb * 8 * 1024 * SIZE_MARGIN / seconds          # kbit/s for picture + sound
+    video = max(150, int(total - AUDIO_KBPS))
+    src_h = info.height if info and info.height else 1080
+    src_fps = info.fps if info and info.fps else 30.0
+    if video >= 6000:
+        h, fps = 1080, 60.0
+    elif video >= 4000:
+        h, fps = 1080, 30.0
+    elif video >= 2000:
+        h, fps = 720, 30.0
+    elif video >= 900:
+        h, fps = 480, 30.0
+    else:
+        h, fps = 360, 30.0
+    return video, min(h, src_h), min(fps, src_fps)
 
 
 def sound_wav(path: str, start: float, end: float, ffmpeg: str | None = None) -> str | None:
