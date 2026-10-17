@@ -26,6 +26,8 @@ SIZE_RE = re.compile(rb"Video: .*?, (\d{2,5})x(\d{2,5})")
 FPS_RE = re.compile(rb"(\d+(?:\.\d+)?) fps")
 DURATION_RE = re.compile(rb"Duration: (\d+):(\d\d):(\d\d(?:\.\d+)?)")
 CLIPS_DIR = _CLIPS_DIR         # one place for the folder name (obsrec)
+CENSOR_STYLES = ("pixel", "blur", "black")   # 1.7.2: how a censored area looks
+NAMES_BOX = (0.006, 0.66, 0.175, 0.31)     # DBD's survivor names bottom left, as fractions of the 16:9 game picture
 MODES = ("copy", "exact", "discord")   # key frames, no re-encoding / frame exact / 1.6.1: fits a size (Discord)
 TARGETS_MB = (10, 25, 50, 500)  # 1.6.1: Discord's upload limits (free 10 MB, Nitro Basic 50, Nitro 500)
 DEFAULT_TARGET_MB = 10
@@ -183,23 +185,29 @@ def unique_path(folder: str, name: str, ext: str) -> str:
 
 def cut(path: str, start: float, end: float, out: str, mode: str = "copy", ffmpeg: str | None = None,
         run=None, target_mb: float = DEFAULT_TARGET_MB, info: Info | None = None,
-        retry: bool = True) -> tuple[bool, str]:
+        retry: bool = True, censor=None, censor_style: str = "pixel") -> tuple[bool, str]:
     """Write the stretch ``start``..``end`` of ``path`` to ``out``. "copy" = stream copy (seconds of work; the
     cut lands on the key frame before ``start``, so the clip may begin up to a few seconds early), "exact" =
     frame exact, picture re-encoded (x264 veryfast, CRF 18; a 30-s clip takes some seconds), sound as AAC;
     "discord" (1.6.1) = re-encoded to stay under ``target_mb`` (discord_plan picks rate, size, frame rate).
-    Returns (ok, ffmpeg's last words on failure)."""
+    ``censor`` (1.7.2): boxes to hide (fractions of the picture, see censor_graph) – needs the picture re-encoded,
+    so "copy" becomes "exact". Returns (ok, ffmpeg's last words on failure)."""
     ffmpeg = ffmpeg or ffmpeg_exe()
     if not ffmpeg:
         return False, "ffmpeg fehlt"
+    censor = list(censor or ())
+    if censor and mode == "copy":
+        mode = "exact"
     start, end = max(0.0, float(start)), float(end)
     if end <= start:
         return False, "Ende vor Anfang"
     os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
     args = [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{start:.3f}", "-to", f"{end:.3f}", "-i", path]
+    vf = ""
     if mode == "discord":
         kbps, h, fps = discord_plan(end - start, target_mb, info)
-        args += ["-vf", f"scale=-2:{h},fps={fps:g}", "-c:v", "libx264", "-preset", "veryfast", "-b:v", f"{kbps}k",
+        vf = f"scale=-2:{h},fps={fps:g}"
+        args += ["-c:v", "libx264", "-preset", "veryfast", "-b:v", f"{kbps}k",
                  "-maxrate", f"{int(kbps * 1.1)}k", "-bufsize", f"{kbps * 2}k", "-pix_fmt", "yuv420p",
                  "-c:a", "aac", "-b:a", f"{AUDIO_KBPS}k"]
     elif mode == "exact":
@@ -207,6 +215,13 @@ def cut(path: str, start: float, end: float, out: str, mode: str = "copy", ffmpe
                  "-b:a", "160k"]
     else:
         args += ["-c", "copy", "-avoid_negative_ts", "make_zero"]
+    if censor:
+        if info is None or not info.ok:
+            info = probe(path, ffmpeg)
+        args += ["-filter_complex", censor_graph(censor, censor_style, info.width, info.height, vf),
+                 "-map", "[vout]", "-map", "0:a?"]
+    elif vf:
+        args += ["-vf", vf]
     args += ["-movflags", "+faststart", out] if out.lower().endswith(".mp4") else [out]
     if run is None:
         def run(a):
@@ -226,8 +241,55 @@ def cut(path: str, start: float, end: float, out: str, mode: str = "copy", ffmpe
         return False, err[-300:].decode("utf-8", "replace").strip()
     if mode == "discord" and retry and os.path.getsize(out) > target_mb * 1024 * 1024:
         # the rate control overshot (very busy pictures): once more with less, never a file over the limit
-        return cut(path, start, end, out, mode, ffmpeg, run, target_mb * 0.8, info, retry=False)
+        return cut(path, start, end, out, mode, ffmpeg, run, target_mb * 0.8, info, retry=False, censor=censor,
+                   censor_style=censor_style)
     return True, ""
+
+
+def names_box(width: int, height: int) -> tuple:
+    """1.7.2: where DBD draws the survivor names (bottom left of the game picture) as a box (x, y, w, h) in
+    fractions of a frame ``width`` × ``height`` – the game picture is 16:9 centred in a wider frame (ultrawide
+    recordings of the whole screen carry the black bars)."""
+    if width <= 0 or height <= 0:
+        return NAMES_BOX
+    gw = min(width, height * 16 / 9)
+    off = (width - gw) / 2 / width
+    x, y, w, h = NAMES_BOX
+    return (off + x * gw / width, y, w * gw / width, h)
+
+
+def box_px(box, width: int, height: int) -> tuple:
+    """A fraction box -> whole, even pixel values (x, y, w, h) inside the frame (ffmpeg wants even sizes)."""
+    x, y, w, h = box
+    x0 = min(max(0, int(x * width)), width - 2) // 2 * 2
+    y0 = min(max(0, int(y * height)), height - 2) // 2 * 2
+    x1 = min(width, int((x + w) * width + 1)) // 2 * 2
+    y1 = min(height, int((y + h) * height + 1)) // 2 * 2
+    return x0, y0, max(2, x1 - x0), max(2, y1 - y0)
+
+
+def censor_graph(boxes, style: str, width: int, height: int, tail: str = "") -> str:
+    """1.7.2 (user: censor the names on the left): the ffmpeg filter graph that hides ``boxes`` (fraction
+    boxes) in a ``width`` × ``height`` picture – "pixel" = coarse blocks, "blur" = blurred, "black" = a black
+    box; ``tail`` = filters to run after it (scale/fps of the Discord mode). Ends in [vout]."""
+    parts, cur = [], "[0:v]"
+    for i, box in enumerate(boxes):
+        x, y, w, h = box_px(box, width, height)
+        nxt = f"[c{i}]"
+        if style == "black":
+            parts.append(f"{cur}drawbox=x={x}:y={y}:w={w}:h={h}:color=black:t=fill{nxt}")
+        else:
+            if style == "blur":
+                r = max(2, min(w, h) // 6)
+                inner = f"boxblur=luma_radius={r}:luma_power=3:chroma_radius={max(1, r // 2)}:chroma_power=3"
+            else:
+                p = max(4, min(w, h) // 8)
+                inner = f"scale={max(1, w // p)}:{max(1, h // p)}:flags=area,scale={w}:{h}:flags=neighbor"
+            parts.append(f"{cur}split[a{i}][b{i}];[b{i}]crop={w}:{h}:{x}:{y},{inner}[p{i}];"
+                         f"[a{i}][p{i}]overlay={x}:{y}{nxt}")
+        cur = nxt
+    parts.append(f"{cur}{tail or 'null'}[vout]")
+    return ";".join(parts)
 
 
 def discord_plan(seconds: float, target_mb: float, info: Info | None = None) -> tuple[int, int, float]:
