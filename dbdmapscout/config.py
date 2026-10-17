@@ -113,6 +113,14 @@ DEFAULTS = {
     "official_notify": True,
     "farming_crossplay": True,          # 1.2.20: a round whose lobby showed cross-play off is a farming round
     "farming_region": "ap-southeast-1",  # … and every round on this server region ("" = none)
+    "rec_on": False,                    # 1.4: round recordings with OBS (obs-websocket on this PC)
+    "rec_port": 4455,
+    "rec_password": "",
+    "rec_volume": "",                   # the recording folder's drive (volume GUID) + path on it + last path
+    "rec_rel": "",
+    "rec_folder": "",
+    "rec_limit_gb": 0,                  # 0 = the whole drive (older recordings go when it fills up)
+    "rec_pre": True,                    # save OBS's replay buffer at the banner (the seconds before it)
     "sysinfo": "right",                 # system values at the top of a black bar: off | left | right | custom
     "sysinfo_pos": [1.0, 0.0],          # sysinfo = custom: 0..1 of the free space in the DBD window (x, y)
 }
@@ -137,7 +145,8 @@ def export_settings(data: dict, path: str) -> None:
 
 
 # per-PC values that must not come along from a backup (other folder / other machine)
-LOCAL_KEYS = ("setup_version", "setup_root", "qt_geometry", "official_dir", "layouts", "layout_key")
+LOCAL_KEYS = ("setup_version", "setup_root", "qt_geometry", "official_dir", "layouts", "layout_key",
+              "rec_volume", "rec_rel", "rec_folder", "rec_password")
 
 
 def reset_data(current: dict) -> dict:

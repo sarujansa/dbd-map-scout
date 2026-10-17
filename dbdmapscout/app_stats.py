@@ -780,9 +780,12 @@ class StatsTab:
             self._queue = dict(self._queue, found=None, used=f)
             if self._hist["farming"]:
                 self._log(_("Crossplay war aus – die Runde zählt als Farming-Runde."), "Erkennung")
+        self.recorder.start_round(t=now, map_id=map_id, label=self._hist["map"], role=self._hist.get("role", ""),
+                                  killer=self._hist.get("killer", ""))         # 1.4: OBS records the round
 
     def _hist_close(self, t, role=None):
         rec, self._hist = self._hist, None
+        self.recorder.stop_round(role=role or (rec or {}).get("role", ""), killer=(rec or {}).get("killer", ""))
         sysrec, self._sysrec = self._sysrec, None
         if rec is None:
             return

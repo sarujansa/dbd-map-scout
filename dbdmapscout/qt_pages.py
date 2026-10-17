@@ -389,6 +389,8 @@ def show_control(kind, w, extra, st):
             w.setText(st.get("value", ""))
         if st.get("placeholder", "") != w.placeholderText():
             w.setPlaceholderText(st.get("placeholder", ""))
+        if st.get("secret") and w.echoMode() != QLineEdit.Password:   # 1.4: the OBS password
+            w.setEchoMode(QLineEdit.Password)
     elif kind == "image":
         pil = st.get("pil")
         if pil is not getattr(w, "_pil", None):

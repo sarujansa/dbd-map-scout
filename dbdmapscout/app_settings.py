@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
-from . import __version__, i18n, qt_theme, regions, status
+from . import __version__, i18n, obsrec, qt_theme, regions, status
 from . import uimodel as ui
 from .capture import IS_WIN
 from . import autostart
@@ -205,6 +205,57 @@ class SettingsTab:
             "ältere. Einzelne Runden: „Farming an/aus“ unter „Letzte Runden“."),
             style="Dim.TLabel", wraplength=420)).pack(anchor="w", pady=(4, 0))
 
+        # 1.4: round recordings with OBS (obs-websocket on this PC) on the user's external drive
+        rc = self._reg("st.more.rec", ui.LabelFrame(more, text=_("Aufnahmen mit OBS"), padding=8))
+        rc.pack(fill="x", pady=(8, 0))
+        self.rec_on_var = ui.BooleanVar(value=bool(self.settings.get("rec_on", False)))
+        self._reg("st.more.rec_on", ui.Checkbutton(rc, text=_("Jede Runde mit OBS aufnehmen"),
+                                                    variable=self.rec_on_var, command=self._rec_setting)).pack(anchor="w")
+        rr = ui.Frame(rc)
+        rr.pack(fill="x", pady=(4, 0))
+        self._reg("st.more.rec_port.label", ui.Label(rr, text=_("Port"))).pack(side="left")
+        self.rec_port_var = ui.StringVar(value=str(self.settings.get("rec_port", obsrec.DEFAULT_PORT)))
+        self.rec_port_var.trace_add("write", lambda *a: self._rec_setting())
+        self._reg("st.more.rec_port", ui.Entry(rr, textvariable=self.rec_port_var, width=7)).pack(side="left", padx=6)
+        self._reg("st.more.rec_pw.label", ui.Label(rr, text=_("Passwort"))).pack(side="left")
+        self.rec_pw_var = ui.StringVar(value=str(self.settings.get("rec_password", "")))
+        self.rec_pw_var.trace_add("write", lambda *a: self._rec_setting())
+        pw = self._reg("st.more.rec_pw", ui.Entry(rr, textvariable=self.rec_pw_var, width=18))
+        pw._dbdms_secret = True
+        pw.pack(side="left", padx=6)
+        self._reg("st.more.rec_test", ui.Button(rr, text=_("Verbindung testen"), command=self._rec_test)).pack(side="left")
+        rd = ui.Frame(rc)
+        rd.pack(fill="x", pady=(4, 0))
+        self._reg("st.more.rec_dir", ui.Button(rd, text=_("Aufnahmeordner wählen …"), command=self._rec_pick_folder)).pack(side="left")
+        self.rec_folder_var = ui.StringVar(value="")
+        self._reg("st.more.rec_folder", ui.Label(rd, textvariable=self.rec_folder_var, style="Dim.TLabel")).pack(side="left", padx=8)
+        rl = ui.Frame(rc)
+        rl.pack(fill="x", pady=(4, 0))
+        self._reg("st.more.rec_limit.label", ui.Label(rl, text=_("Platz für Aufnahmen"))).pack(side="left")
+        self._rec_limits = [(0, _("Ganze Platte (Älteste weg, wenn sie voll wird)"))] + \
+            [(gb, f"{gb} GB") for gb in obsrec.LIMITS_GB if gb]
+        names = dict(self._rec_limits)
+        self.rec_limit_var = ui.StringVar(value=names.get(int(self.settings.get("rec_limit_gb", 0) or 0), names[0]))
+        cb = self._reg("st.more.rec_limit", ui.Combobox(rl, textvariable=self.rec_limit_var, state="readonly",
+                                                         width=36, values=[lbl for _g, lbl in self._rec_limits]))
+        cb.pack(side="left", padx=6)
+        cb.bind("<<ComboboxSelected>>", lambda e: self._rec_setting())
+        self.rec_pre_var = ui.BooleanVar(value=bool(self.settings.get("rec_pre", True)))
+        self._reg("st.more.rec_pre", ui.Checkbutton(rc, text=_("Vorlauf: Wiederholungspuffer von OBS beim Map-Banner sichern (Sekunden davor)"),
+                                                     variable=self.rec_pre_var, command=self._rec_setting)).pack(anchor="w", pady=(4, 0))
+        self.rec_status_var = ui.StringVar(value="")
+        self._reg("st.more.rec_status", ui.Label(rc, textvariable=self.rec_status_var, wraplength=420,
+                                                  style="Dim.TLabel")).pack(anchor="w", pady=(4, 0))
+        self._reg("st.more.rec_text", ui.Label(rc, text=_(
+            "OBS nimmt auf, das Programm sagt nur wann: Start beim Map-Banner, Stopp beim erkannten Rundenende, "
+            "Datei nach Datum, Map und Killer benannt. Dafür in OBS unter Werkzeuge → WebSocket-Servereinstellungen "
+            "den Server einschalten und das Passwort hier eintragen; Verbindung nur auf diesem PC (127.0.0.1). "
+            "Empfohlen: Aufnahmeformat MKV oder Hybrid-MP4 (bleibt bei Abbruch lesbar), Fenster- oder "
+            "Bildschirmaufnahme statt Spielaufnahme. Der Ordner wird über sein Laufwerk gemerkt – ist die Platte "
+            "nicht angeschlossen, wird nicht aufgenommen."),
+            style="Dim.TLabel", wraplength=420)).pack(anchor="w", pady=(4, 0))
+        self._rec_setting(save=False)
+
         # 1.2.15: the same controls once more for the setup assistant's step "Match-Daten" – the originals sit
         # under "Mehr" and count as hidden while it is folded (the settings page itself draws only SPECS keys)
         sx = ui.Frame(f)
@@ -256,7 +307,7 @@ class SettingsTab:
 
     def _show_more(self):
         arrow = "▾ " if self._more_open else "▸ "
-        self.more_btn.configure(text=arrow + _("Mehr (Map-Zuordnungen, Match-Daten, Sicherung, Ordner)"))
+        self.more_btn.configure(text=arrow + _("Mehr (Map-Zuordnungen, Match-Daten, Aufnahmen, Sicherung, Ordner)"))
         if self._more_open:
             self.more_frame.pack(fill="x", pady=(4, 0), before=self.version_label)
         else:
@@ -368,6 +419,61 @@ class SettingsTab:
         self.ui_lang_note.set(_("Wirkt nach dem nächsten Start des Programms.") if changed else "")
         if changed:
             self._log(_("Sprache geändert – wirkt nach dem nächsten Start des Programms."), "System")
+
+    # ---------------------------------------------------------- recordings (1.4)
+    def _rec_cfg(self) -> obsrec.Config:
+        try:
+            port = int(self.rec_port_var.get().strip() or obsrec.DEFAULT_PORT)
+        except ValueError:
+            port = obsrec.DEFAULT_PORT
+        limit = next((gb for gb, lbl in self._rec_limits if lbl == self.rec_limit_var.get()), 0)
+        return obsrec.Config(on=bool(self.rec_on_var.get()), port=port, password=self.rec_pw_var.get(),
+                             volume=str(self.settings.get("rec_volume", "")), rel=str(self.settings.get("rec_rel", "")),
+                             folder=str(self.settings.get("rec_folder", "")), limit_gb=limit,
+                             pre=bool(self.rec_pre_var.get()))
+
+    def _rec_setting(self, save=True):
+        cfg = self._rec_cfg()
+        if save:
+            self.settings.set("rec_on", cfg.on)
+            self.settings.set("rec_port", cfg.port)
+            self.settings.set("rec_password", cfg.password)
+            self.settings.set("rec_limit_gb", cfg.limit_gb)
+            self.settings.set("rec_pre", cfg.pre)
+            self._save_soon()
+        self.recorder.configure(cfg)
+        folder = cfg.folder
+        self.rec_folder_var.set(folder if folder else _("(kein Ordner gewählt)"))
+
+    def _rec_pick_folder(self):
+        self._qt_file("dir", _("Ordner für die Aufnahmen (z. B. auf der externen Platte)"),
+                      str(self.settings.get("rec_folder", "")), self._rec_folder_chosen)
+
+    def _rec_folder_chosen(self, path):
+        if not path or not os.path.isdir(path):
+            return
+        volume, rel = obsrec.volume_of(path)
+        self.settings.set("rec_volume", volume)
+        self.settings.set("rec_rel", rel)
+        self.settings.set("rec_folder", os.path.abspath(path))
+        self._rec_setting()
+        self._log(_("Aufnahmeordner: {path}", path=os.path.abspath(path)), "System")
+
+    def _rec_test(self):
+        self.rec_status_var.set(_("Verbinde mit OBS …"))
+        self.recorder.configure(self._rec_cfg())
+        self.recorder.test()
+
+    def _rec_event(self, kind, d):
+        """Recorder thread -> UI: status (text, ok) | started | saved | deleted."""
+        if kind == "status":
+            self.rec_status_var.set(d.get("text", ""))
+            if not d.get("ok", True):
+                self._log(_("Aufnahme: {text}", text=d.get("text", "")), "Fehler")
+        elif kind == "saved":
+            self._log(_("Aufnahme gespeichert: {file}", file=d.get("file", "")), "System")
+        elif kind == "deleted":
+            self._log(_("Aufnahmen gelöscht (Platz): {n}", n=len(d.get("files") or [])), "System")
 
     # ---------------------------------------------------------- tray and autostart
     def _tray_start(self):

@@ -116,6 +116,16 @@ TIPS = {
                       "Mehr) bleiben Farming.",
     "Runden ohne Crossplay als Farming zählen": "Zeigt die Lobby die Weltkugel mit rotem Kreuz (Crossplay aus), "
                                                  "zählt die nächste Runde als Farming-Runde.",
+    "Jede Runde mit OBS aufnehmen": "Das Programm startet die OBS-Aufnahme beim Map-Banner und stoppt sie beim "
+                                    "erkannten Rundenende (obs-websocket, nur auf diesem PC). OBS muss laufen.",
+    "Verbindung testen": "Verbindet sich einmal mit OBS und zeigt Version, Aufnahmezustand, Wiederholungspuffer "
+                         "und ob der Aufnahmeordner erreichbar ist.",
+    "Aufnahmeordner wählen …": "Ordner, in den OBS die Runden legt – z. B. auf der externen Platte. Gemerkt wird das "
+                               "Laufwerk, nicht der Buchstabe: bekommt die Platte einen anderen, findet das "
+                               "Programm den Ordner trotzdem.",
+    "Vorlauf: Wiederholungspuffer von OBS beim Map-Banner sichern (Sekunden davor)":
+        "Das Banner kommt erst ~40 s nach Matchbeginn. Läuft in OBS der Wiederholungspuffer, wird er beim Banner "
+        "gespeichert – so fehlt der Anfang (Spawn) nicht. Die Datei liegt als „(Vorlauf)“ neben der Runde.",
     "Drehen ↻": "Dreht die angezeigte Karte um 90° im Uhrzeigersinn (für jede Map gemerkt). Der Map-Name "
                 "darüber bleibt aufrecht, die Zahlen in der Karte drehen sich mit.",
     "Scannen": "Sucht sofort auf dem ganzen Bildschirm nach einem Map- oder Realm-Namen – falls die "
