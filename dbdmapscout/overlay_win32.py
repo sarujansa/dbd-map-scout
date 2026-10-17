@@ -861,6 +861,22 @@ class HudWindow:
             pass
 
 
+REC_DOT = (229, 83, 75, 255)      # 1.4.1: theme.DOT "err" red
+
+
+def rec_badge(pic: Image.Image, text_h: int) -> Image.Image:
+    """1.4.1: a small red dot with a dark ring in the top right corner – OBS records this round. Independent of
+    the style; the picture is copied."""
+    out = pic.copy()
+    r = max(4, text_h // 60)
+    ring = max(1, r // 3)
+    cx, cy = out.width - r - ring - max(2, r // 2), r + ring + max(2, r // 2)
+    d = ImageDraw.Draw(out)
+    d.ellipse([cx - r - ring, cy - r - ring, cx + r + ring, cy + r + ring], fill=(20, 20, 22, 230))
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=REC_DOT)
+    return out
+
+
 class PictureOverlay:
     """The overlay's content and logic: map picture (+ caption), timer/server/ping/notes below it, the waiting
     card, floors, animation, edit mode. The window that shows it is a subclass's (Win32Overlay, QtOverlay):
@@ -894,6 +910,7 @@ class PictureOverlay:
         self._waiting = ()              # lines of the waiting card: shown instead of everything else
         self._note = ""                 # warning below the timer ("" = none)
         self._record = ""               # own results on this map below the timer ("" = none)
+        self._rec = False               # 1.4.1: OBS records the round – red dot top right (set_rec)
         self._base = []                 # [(PIL RGBA, duration)] scaled map (+ caption), cached per size
         self._base_key = None
         self._prepared = []             # [(bytes, w, h, duration)]
@@ -949,6 +966,10 @@ class PictureOverlay:
     def set_record(self, text: str):
         """Own results on the map on display ("Ø 2.8 Kills · 12 Runden"); "" = none."""
         self._record = text or ""
+
+    def set_rec(self, on: bool):
+        """1.4.1: a red dot top right while OBS records the round."""
+        self._rec = bool(on)
 
     def has_map(self) -> bool:
         return bool(self._frames)
@@ -1059,7 +1080,7 @@ class PictureOverlay:
                 self._base = [(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), 0)]
             self._base_key = base_key
         key = (base_key, self._editing, self._timer, self._server, self._ping, self._note, self._record,
-               self.info_beside, self.backdrop, self.skin, self.accent, self.realm)
+               self.info_beside, self.backdrop, self.skin, self.accent, self.realm, self._rec)
         if key != self._key:
             self._prepared = []
             pics = []
@@ -1078,6 +1099,8 @@ class PictureOverlay:
             if self.backdrop and not modern:
                 pics = map_backdrop(pics, text_h)
             for pic, (_b, dur) in zip(pics, self._base):
+                if self._rec:
+                    pic = rec_badge(pic, text_h)
                 if self._editing:
                     pic = add_border(pic.copy(), self.edit_label)
                 self._prepared.append((premultiplied_bgra(pic), pic.width, pic.height, dur))

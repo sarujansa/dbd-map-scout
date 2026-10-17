@@ -117,15 +117,19 @@ class FakeObs(threading.Thread):
                 self.files += 1
                 self.recording = os.path.join(self.record_dir, f"obs {self.files}.mkv")
                 with open(self.recording, "wb") as f:
-                    f.write(b"\0" * 1000)
+                    f.write(ROUND_BYTES)
             elif kind == "StopRecord":
                 out, self.recording = {"outputPath": self.recording}, None
             elif kind == "GetReplayBufferStatus":
                 out = {"outputActive": self.replay}
+            elif kind == "StartReplayBuffer":
+                self.replay = True
+            elif kind == "StopReplayBuffer":
+                self.replay = False
             elif kind == "SaveReplayBuffer":
                 self.last_replay = os.path.join(self.record_dir, "Replay.mkv")
                 with open(self.last_replay, "wb") as f:
-                    f.write(b"\0" * 300)
+                    f.write(PRE_BYTES)
             elif kind == "GetLastReplayBufferReplay":
                 out = {"savedReplayPath": self.last_replay}
             else:
@@ -137,6 +141,10 @@ class FakeObs(threading.Thread):
     def stop(self):
         self.stop_flag = True
         self.srv.close()
+
+
+ROUND_BYTES = b"\x1a\x45\xdf\xa3" + b"\0" * obsrec.MIN_FILE_BYTES      # an MKV header, big enough
+PRE_BYTES = b"\x1a\x45\xdf\xa3" + b"\0" * 300
 
 
 @pytest.fixture
@@ -195,7 +203,8 @@ def test_a_round_is_recorded_named_and_indexed(obs, tmp_path):
     names = sorted(os.listdir(folder))
     assert names == ["2026-10-17 21-40 Coal Tower – Nurse.mkv", obsrec.INDEX]
     recs = obsrec.load_index(folder)
-    assert len(recs) == 1 and recs[0].t == t and recs[0].killer == "Nurse" and recs[0].size == 1000
+    assert len(recs) == 1 and recs[0].t == t and recs[0].killer == "Nurse" and recs[0].size == len(ROUND_BYTES)
+    assert not recs[0].extra
     kinds = [posted.get(timeout=1)[0] for _i in range(2)]
     assert kinds == ["status", "saved"]
     # survivor round, no killer: the role names the file; a second file of the same minute gets "(2)"
@@ -214,7 +223,7 @@ def test_the_replay_buffer_becomes_the_pre_roll(tmp_path):
         r._finish({})
         rec = obsrec.load_index(str(tmp_path))[0]
         assert rec.pre.endswith("(Vorlauf).mkv") and os.path.exists(os.path.join(str(tmp_path), rec.pre))
-        assert rec.size == 1300                           # round + pre-roll
+        assert rec.size == len(ROUND_BYTES) + len(PRE_BYTES)      # round + pre-roll
     finally:
         obs.stop()
 
@@ -302,3 +311,91 @@ def test_the_recorder_thread_survives_errors(obs, tmp_path):
     r.quit()
     r.join(timeout=3)
     assert not r.is_alive()
+
+
+def test_the_replay_buffer_follows_the_game_and_obs_is_checked_once(tmp_path):
+    """1.4.1: DBD starts -> OBS checked, replay buffer started; DBD closes -> a running round ends, the buffer we
+    started stops. OBS not running -> one warning for the user."""
+    obs = FakeObs(record_dir=str(tmp_path))
+    obs.start()
+    try:
+        r, posted = _recorder(obs, str(tmp_path), pre=True, buffer_auto=True)
+        r._game_changed(True)
+        assert obs.replay and r._buffer_ours
+        assert posted.get(timeout=1)[1]["ok"]
+        r._begin({"t": 1.0, "label": "A"})
+        r._game_changed(False)                               # DBD closed mid-round
+        assert r.active is None and not obs.replay and not r._buffer_ours
+        assert len(obsrec.load_index(str(tmp_path))) == 1
+        while not posted.empty():                            # the round's own messages
+            posted.get_nowait()
+        r.cfg.port = 1
+        r._game = None
+        r._game_changed(True)
+        kinds = [posted.get(timeout=1) for _i in range(2)]
+        warn = next(d for k, d in kinds if k == "warn")
+        assert "OBS läuft nicht" in warn["text"]
+    finally:
+        obs.stop()
+
+
+def test_the_tail_keeps_recording_after_the_end(obs, tmp_path):
+    r, posted = _recorder(obs, str(tmp_path), pre=False, tail_s=0.3)
+    r._begin({"t": 1.0, "label": "A"})
+    r._stop_later({"role": "killer"})
+    assert r.active is not None and r._pending is not None and obs.recording      # still recording
+    r._due()
+    assert obs.recording                                       # not yet due
+    time.sleep(0.35)
+    r._due()
+    assert r.active is None and r._pending is None and not obs.recording
+    # the next banner during a tail ends the old round at once
+    r._begin({"t": 2.0, "label": "B"})
+    r._stop_later({})
+    r._begin({"t": 3.0, "label": "C"})
+    assert r._pending is None and len(obsrec.load_index(str(tmp_path))) == 2
+    r._finish({})
+    assert r.recording is False
+
+
+def test_broken_recordings_are_reported(tmp_path):
+    f = tmp_path / "a.mkv"
+    f.write_bytes(b"")
+    assert obsrec.check_file(str(f)) == "leer"
+    f.write_bytes(b"\x1a\x45\xdf\xa3" + b"\0" * 10)
+    assert obsrec.check_file(str(f)) == "zu klein"
+    f.write_bytes(b"\0" * (obsrec.MIN_FILE_BYTES + 8))
+    assert obsrec.check_file(str(f)) == "kein Video"
+    f.write_bytes(b"\0\0\0\x1cftypisom" + b"\0" * obsrec.MIN_FILE_BYTES)
+    assert obsrec.check_file(str(f)) is None
+    assert obsrec.check_file(str(tmp_path / "missing.mkv")) == "fehlt"
+
+
+def test_a_broken_file_from_obs_gives_a_warning(tmp_path):
+    obs = FakeObs(record_dir=str(tmp_path))
+    obs.start()
+    try:
+        r, posted = _recorder(obs, str(tmp_path), pre=False)
+        r._begin({"t": 1.0, "label": "A"})
+        with open(obs.recording, "wb") as f:                  # OBS wrote nothing usable
+            f.write(b"\0" * 10)
+        r._finish({})
+        kinds = [posted.get(timeout=1) for _i in range(4)]
+        assert any(k == "warn" and "beschädigt" in d["text"] for k, d in kinds)
+        assert obsrec.load_index(str(tmp_path))[0].extra == {"bad": "zu klein"}
+    finally:
+        obs.stop()
+
+
+def test_the_rec_dot_is_drawn_on_the_overlay_and_the_tray_icon():
+    from PIL import Image
+    from dbdmapscout import icon, overlay_win32
+    pic = Image.new("RGBA", (400, 600), (0, 0, 0, 255))
+    out = overlay_win32.rec_badge(pic, 480)
+    assert out is not pic and out.size == pic.size
+    reds = [out.getpixel((x, y)) for x in range(380, 400) for y in range(0, 20)]
+    assert any(p[0] > 200 and p[1] < 120 for p in reds) and pic.getpixel((390, 10)) == (0, 0, 0, 255)
+    plain, rec = icon.draw_status(64, None), icon.draw_status(64, None, rec=True)
+    assert plain.tobytes() != rec.tobytes()
+    r, g, b, a = rec.getpixel((52, 12))
+    assert r > 180 and g < 120 and plain.getpixel((10, 50)) == rec.getpixel((10, 50))

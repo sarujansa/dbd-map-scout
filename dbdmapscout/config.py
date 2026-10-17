@@ -121,6 +121,8 @@ DEFAULTS = {
     "rec_folder": "",
     "rec_limit_gb": 0,                  # 0 = the whole drive (older recordings go when it fills up)
     "rec_pre": True,                    # save OBS's replay buffer at the banner (the seconds before it)
+    "rec_tail_s": 5,                    # 1.4.1: seconds recorded after the detected end (result screen)
+    "rec_buffer_auto": True,            # 1.4.1: start/stop OBS's replay buffer with DBD
     "sysinfo": "right",                 # system values at the top of a black bar: off | left | right | custom
     "sysinfo_pos": [1.0, 0.0],          # sysinfo = custom: 0..1 of the free space in the DBD window (x, y)
 }

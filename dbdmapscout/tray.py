@@ -53,21 +53,22 @@ class Tray:
             except Exception:
                 log.debug("tray title", exc_info=True)
 
-    def image(self, dot):
-        """The icon with the dot of a status (cached per status)."""
-        if dot not in self._images:
+    def image(self, dot, rec=False):
+        """The icon with the dot of a status (cached per status), a red dot on top while recording (1.4.1)."""
+        key = (dot, bool(rec))
+        if key not in self._images:
             from .icon import draw_status
             from .theme import DOT
-            self._images[dot] = draw_status(64, DOT.get(dot) if dot else None)
-        return self._images[dot]
+            self._images[key] = draw_status(64, DOT.get(dot) if dot else None, bool(rec))
+        return self._images[key]
 
-    def set_status(self, dot) -> None:
+    def set_status(self, dot, rec=False) -> None:
         """Colour the dot: "ok" green, "warn" yellow, "err" red, "idle" grey, None = no dot. Only on a change."""
-        if self._icon is None or dot == self._dot:
+        if self._icon is None or (dot, bool(rec)) == self._dot:
             return
         try:
-            self._icon.icon = self.image(dot)
-            self._dot = dot
+            self._icon.icon = self.image(dot, rec)
+            self._dot = (dot, bool(rec))
         except Exception:
             log.debug("tray status", exc_info=True)
 

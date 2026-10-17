@@ -8,7 +8,7 @@ import os
 import threading
 from . import __version__, i18n, obsrec, qt_theme, regions, status
 from . import uimodel as ui
-from .capture import IS_WIN
+from .capture import IS_WIN, foreground_root, is_game_window
 from . import autostart
 from .connwatch import is_admin
 from .i18n import N_, _
@@ -243,6 +243,20 @@ class SettingsTab:
         self.rec_pre_var = ui.BooleanVar(value=bool(self.settings.get("rec_pre", True)))
         self._reg("st.more.rec_pre", ui.Checkbutton(rc, text=_("Vorlauf: Wiederholungspuffer von OBS beim Map-Banner sichern (Sekunden davor)"),
                                                      variable=self.rec_pre_var, command=self._rec_setting)).pack(anchor="w", pady=(4, 0))
+        self.rec_buffer_var = ui.BooleanVar(value=bool(self.settings.get("rec_buffer_auto", True)))   # 1.4.1
+        self._reg("st.more.rec_buffer", ui.Checkbutton(rc, text=_("Wiederholungspuffer mit DBD starten und stoppen"),
+                                                        variable=self.rec_buffer_var, command=self._rec_setting)).pack(anchor="w")
+        rt = ui.Frame(rc)
+        rt.pack(fill="x", pady=(4, 0))
+        self._reg("st.more.rec_tail.label", ui.Label(rt, text=_("Nachlauf nach dem Rundenende"))).pack(side="left")
+        self._rec_tails = [(s, _("{n} s", n=s) if s else _("keiner")) for s in obsrec.TAILS_S]
+        tails = dict(self._rec_tails)
+        self.rec_tail_var = ui.StringVar(value=tails.get(int(self.settings.get("rec_tail_s", obsrec.DEFAULT_TAIL_S) or 0),
+                                                         tails[obsrec.DEFAULT_TAIL_S]))
+        ct = self._reg("st.more.rec_tail", ui.Combobox(rt, textvariable=self.rec_tail_var, state="readonly", width=10,
+                                                        values=[lbl for _s, lbl in self._rec_tails]))
+        ct.pack(side="left", padx=6)
+        ct.bind("<<ComboboxSelected>>", lambda e: self._rec_setting())
         self.rec_status_var = ui.StringVar(value="")
         self._reg("st.more.rec_status", ui.Label(rc, textvariable=self.rec_status_var, wraplength=420,
                                                   style="Dim.TLabel")).pack(anchor="w", pady=(4, 0))
@@ -427,10 +441,11 @@ class SettingsTab:
         except ValueError:
             port = obsrec.DEFAULT_PORT
         limit = next((gb for gb, lbl in self._rec_limits if lbl == self.rec_limit_var.get()), 0)
+        tail = next((s for s, lbl in self._rec_tails if lbl == self.rec_tail_var.get()), obsrec.DEFAULT_TAIL_S)
         return obsrec.Config(on=bool(self.rec_on_var.get()), port=port, password=self.rec_pw_var.get(),
                              volume=str(self.settings.get("rec_volume", "")), rel=str(self.settings.get("rec_rel", "")),
                              folder=str(self.settings.get("rec_folder", "")), limit_gb=limit,
-                             pre=bool(self.rec_pre_var.get()))
+                             pre=bool(self.rec_pre_var.get()), tail_s=tail, buffer_auto=bool(self.rec_buffer_var.get()))
 
     def _rec_setting(self, save=True):
         cfg = self._rec_cfg()
@@ -440,6 +455,8 @@ class SettingsTab:
             self.settings.set("rec_password", cfg.password)
             self.settings.set("rec_limit_gb", cfg.limit_gb)
             self.settings.set("rec_pre", cfg.pre)
+            self.settings.set("rec_tail_s", int(cfg.tail_s))
+            self.settings.set("rec_buffer_auto", cfg.buffer_auto)
             self._save_soon()
         self.recorder.configure(cfg)
         folder = cfg.folder
@@ -470,6 +487,10 @@ class SettingsTab:
             self.rec_status_var.set(d.get("text", ""))
             if not d.get("ok", True):
                 self._log(_("Aufnahme: {text}", text=d.get("text", "")), "Fehler")
+        elif kind == "warn":                    # 1.4.1: OBS/drive missing when DBD starts, a broken file
+            self._log(_("Aufnahme: {text}", text=d.get("text", "")), "Fehler")
+            if not (self.game is not None and not self.simulate and is_game_window(foreground_root())):
+                self.toast.show(_("Aufnahme"), d.get("text", ""))
         elif kind == "saved":
             self._log(_("Aufnahme gespeichert: {file}", file=d.get("file", "")), "System")
         elif kind == "deleted":
@@ -491,7 +512,13 @@ class SettingsTab:
                                hidden_after_match=self.hidden_after_match, menu_paused=self.menu_paused)
         u = self._unsure
         self.tray.set_status(status.tray_dot(st, bool(u and u.get("shown")),
-                                             self.game is not None or bool(self.simulate)))
+                                             self.game is not None or bool(self.simulate)),
+                             rec=self.recorder.recording)
+
+    def _rec_tick(self):
+        """1.4.1: the recorder learns whether DBD runs (replay buffer, checks); the overlay shows a REC dot."""
+        self.recorder.set_game(self.game is not None and not self.simulate)
+        self.overlay.set_rec(self.recorder.recording)
 
     def _tray_flag_changed(self):
         on = bool(self.tray_var.get())
