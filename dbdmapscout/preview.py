@@ -11,7 +11,8 @@ from PIL import Image, ImageDraw
 from . import layout, media, sysinfo
 from . import skin
 from .i18n import _
-from .overlay_win32 import add_info, backdrop, backdrop_pad, compose, map_backdrop, map_body, render_hud, render_music
+from .overlay_win32 import (add_info, backdrop, backdrop_pad, compose, map_backdrop, map_body, music_body,
+                            music_card, render_hud)
 
 SAMPLE_SNAPSHOT = dict(cpu_load=38, cpu_temp=64, gpu_temp=71, gpu_load=92, gpu_name="GPU",
                        vram_used=7.1, vram_total=16, ram_used=17.2, ram_total=32, gpu_power=241)
@@ -57,6 +58,16 @@ def overlay_picture(pic, map_h: int, caption: str, transparent: bool, timer: str
 
 
 _SPLITS: dict = {}
+_BODY: list = [None, None]                  # [key, body] of the music card: only its progress changes each second
+
+
+def _music_body(rows, cover, height, style, look):
+    """music_body once per song and size (1.3.3, user: the window felt laggy – the preview drew cover, text and
+    shadow anew every second although only the progress strip moved; the HUD window splits it since 1.2.13)."""
+    key = (repr(rows), id(cover), height, style, "accent" in look)
+    if _BODY[0] != key:
+        _BODY[0], _BODY[1] = key, (music_body(rows, cover, height, style, look), cover)   # cover kept: id stays
+    return _BODY[1][0]
 
 
 def _split(pic):
@@ -70,21 +81,27 @@ def _split(pic):
     return _SPLITS[key]
 
 
-_CACHE: dict = {}             # one picture per layer: a slider that moves the map does not redraw the others
+_CACHE: dict = {}             # {layer: {inputs: picture}}: a slider that moves the map does not redraw the others
+CACHE_PER_LAYER = 8           # 1.3.3: the map is tried at a few sizes per refresh (smaller text, smaller map) – with
+                              # one slot per layer those evicted each other and the map was scaled anew 4×/s
 
 
 def fitted(render, height: int, avail_w: float, key=None):
     """render(height) once more smaller when it is wider than ``avail_w`` (like App._hud_place); ``key``: the
     layer's name and inputs – the same inputs give the same picture without drawing it again."""
+    slot = None
     if key is not None:
-        hit = _CACHE.get(key[0])
-        if hit is not None and hit[0] == (key[1:], height, avail_w):
-            return hit[1]
+        slot = _CACHE.setdefault(key[0], {})
+        hit = slot.get((key[1:], height, avail_w))
+        if hit is not None:
+            return hit
     img = render(height)
     if avail_w > 0 and img.width > avail_w:
         img = render(max(200, int(height * avail_w / img.width)))
-    if key is not None:
-        _CACHE[key[0]] = ((key[1:], height, avail_w), img)
+    if slot is not None:
+        if len(slot) >= CACHE_PER_LAYER:
+            slot.pop(next(iter(slot)))                  # the oldest entry
+        slot[(key[1:], height, avail_w)] = img
     return img
 
 
@@ -139,7 +156,8 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
         look = media.look(o)
         mstyle = o.get("media_style", "big")
         cards["music"] = (fitted((lambda h: skin.music(rows_m, show_cover, h, style, prog, look, accent, mstyle)) if modern
-                                 else (lambda h: render_music(rows_m, show_cover, h, mstyle, prog, look)),
+                                 else (lambda h: music_card(_music_body(rows_m, show_cover, h, mstyle, look), h,
+                                                            mstyle, prog, look)),
                                  int(gh * scale), avail if spot != "custom" else gw / 3,
                                  ("music", repr(rows_m), id(show_cover), mstyle, prog, look, style, accent)),
                           spot, o.get("media_xy"))

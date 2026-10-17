@@ -1178,3 +1178,17 @@ def test_the_assistant_clears_the_navigation_and_shows_the_preview(qapp, keep):
     btn = win.forms["settings"].controls["st.hk.toggle_overlay"][1]
     btn._post("hk_menu", ("st.hk.toggle_overlay", "off"))
     assert ("hk_menu", ("st.hk.toggle_overlay", "off")) in [posted.get_nowait() for _i in range(posted.qsize())]
+
+
+def test_maps_page_switches_the_map_style(qapp, keep):
+    """1.3.3 (user: "im Maps eine Option, normale Maps anzuzeigen, quasi zu wechseln"): Original / Dunkel on the
+    maps page post the style; the shown style is checked."""
+    from dbdmapscout import qt_window
+    posted = []
+    page = keep(qt_window.MapsPage(lambda a, arg=None: posted.append((a, arg))))
+    page.show_maps([("MacMillan Estate", "Coal Tower", "coal", 1)], None, {}, [], {}, "dark")
+    assert page.style_btns["dark"].isChecked() and not page.style_btns["classic"].isChecked()
+    page.style_btns["classic"].click()
+    assert posted[-1] == ("map_style", "classic")
+    page.show_maps([("MacMillan Estate", "Coal Tower", "coal", 1)], None, {}, [], {}, "classic")
+    assert page.style_btns["classic"].isChecked() and not page.style_btns["dark"].isChecked()
