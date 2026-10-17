@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dbdmapscout import spotify  # noqa: E402
 
+CID, CID1 = "a" * 32, "b" * 32                 # Spotify client ids are 32 hex characters
 QUEUE = {"currently_playing": {"type": "track", "name": "Blinding Lights", "artists": [{"name": "The Weeknd"}]},
          "queue": [{"type": "track", "name": "Save Your Tears", "artists": [{"name": "The Weeknd"}, {"name": "Ariana Grande"}]},
                    {"type": "episode", "name": "Folge 12", "show": {"name": "Ein Podcast"}},
@@ -172,10 +173,10 @@ def test_pkce_and_the_auth_url():
     import base64, hashlib
     assert challenge == base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
     assert spotify.pkce_pair()[0] != verifier
-    url = spotify.auth_url("cid", "st", challenge)
+    url = spotify.auth_url(CID, "st", challenge)
     q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query))
     assert url.startswith("https://accounts.spotify.com/authorize?")
-    assert q == {"client_id": "cid", "response_type": "code", "redirect_uri": spotify.REDIRECT_URI,
+    assert q == {"client_id": CID, "response_type": "code", "redirect_uri": spotify.REDIRECT_URI,
                  "scope": spotify.SCOPES, "code_challenge_method": "S256", "code_challenge": challenge, "state": "st"}
     assert spotify.REDIRECT_URI == "http://127.0.0.1:27831/callback"
 
@@ -195,6 +196,21 @@ def test_the_queue_is_parsed_matched_against_the_media_controls_and_cut():
     assert spotify.parse_queue(None).items == () and spotify.parse_queue({"queue": "x"}).items == ()
     many = {"queue": [{"type": "track", "name": f"T{i}", "artists": [{"name": "A"}]} for i in range(30)]}
     assert len(spotify.parse_queue(many).items) == spotify.MAX_ITEMS
+
+
+def test_the_list_moves_up_at_once_when_the_first_coming_track_starts():
+    up = spotify.parse_queue(QUEUE, wall=5.0)
+    assert spotify.advance(up, "Blinding Lights", "The Weeknd") is up             # still the current song
+    moved = spotify.advance(up, "Save Your Tears", "The Weeknd")
+    assert (moved.title, moved.artist) == ("Save Your Tears", "The Weeknd, Ariana Grande")
+    assert moved.items == up.items[1:] and moved.t == 5.0
+    assert spotify.matches(moved, "Save Your Tears", "The Weeknd")
+    assert spotify.advance(up, "Something Else", "") is up                        # not in the list: unchanged
+    assert spotify.advance(spotify.UpNext(), "Save Your Tears") == spotify.UpNext()
+    assert spotify.same_title("Save  Your Tears", "save your tears") and not spotify.same_title("", "")
+    assert spotify.valid_client_id("7f3c9b2e1a4d4c0f8e6b5a1d2c3e4f50") and spotify.valid_client_id(" 7F3C9B2E1A4D4C0F8E6B5A1D2C3E4F50 ")
+    assert not spotify.valid_client_id("2gOjTlYwN7z00JYMgX3JVOKTEQ1") and not spotify.valid_client_id("")
+    assert "32 Zeichen" in spotify.BAD_ID_TEXT()
 
 
 def test_the_refresh_token_is_stored_protected_and_garbage_reads_as_nothing():
@@ -248,11 +264,11 @@ def test_the_thread_logs_in_reads_the_queue_refreshes_and_forgets_a_dead_token(f
     link = spotify.SpotifyLink(lambda kind, data: events.append((kind, data)), opener=browser)
     link.start()
     try:
-        link.configure(True, "cid-1", "")
+        link.configure(True, CID1, "")
         assert _wait(lambda: link.state == "login_needed")
         link.login()
         assert _wait(lambda: browser.state is not None and link.state == "linking")
-        assert browser.client_id == "cid-1"
+        assert browser.client_id == CID1
         # the browser comes back with a code that belongs to the challenge the thread sent
         import base64, hashlib
         fake.verifier_for["code-1"] = link._verifier
@@ -294,7 +310,7 @@ def test_the_thread_logs_in_reads_the_queue_refreshes_and_forgets_a_dead_token(f
         assert events[-1] == ("token", "") or ("token", "") in events[-3:]
         assert not link.linked and link.upnext.items == ()
         assert "abgelaufen" in link.status
-        link.configure(False, "cid-1", "")
+        link.configure(False, CID1, "")
         assert _wait(lambda: link.state == "off")
     finally:
         link.quit()
@@ -308,7 +324,7 @@ def test_a_stored_token_logs_in_without_the_browser_and_logout_forgets_it(fake):
     link.start()
     try:
         link.active = True
-        link.configure(True, "cid", spotify.protect("ref-stored"))
+        link.configure(True, CID, spotify.protect("ref-stored"))
         assert _wait(lambda: link.upnext.items != ())
         assert fake.grants[0] == ("refresh_token", fake.grants[0][1]) and fake.grants[0][1]["refresh_token"] == "ref-stored"
         assert ("token", spotify.protect("ref1")) in events          # Spotify handed out a new refresh token
@@ -316,10 +332,10 @@ def test_a_stored_token_logs_in_without_the_browser_and_logout_forgets_it(fake):
         assert _wait(lambda: link.state == "login_needed" and not link.linked)
         assert ("token", "") in events[-3:] and link.upnext.items == ()
         # a different client id drops the tokens too
-        link.configure(True, "cid", spotify.protect("ref-stored"))
+        link.configure(True, CID, spotify.protect("ref-stored"))
         assert _wait(lambda: link.linked)
-        link.configure(True, "other", spotify.protect("ref-stored"))
-        assert _wait(lambda: fake.grants[-1][1]["client_id"] == "other")   # stored token taken for the new id
+        link.configure(True, "c" * 32, spotify.protect("ref-stored"))
+        assert _wait(lambda: fake.grants[-1][1]["client_id"] == "c" * 32)   # stored token taken for the new id
         assert link.linked
     finally:
         link.quit()
@@ -334,20 +350,24 @@ def test_no_id_a_busy_port_and_a_forbidden_account_are_reported(fake, monkeypatc
         link.configure(True, "", "")
         assert _wait(lambda: link.state == "no_id")
         assert "Client-ID fehlt" in link.status
+        link.configure(True, "2gOjTlYwN7z00JYMgX3JVOKTEQ1", "")     # a user id, not a client id (1.8.1)
+        link.login()
+        assert _wait(lambda: "32 Zeichen" in link.status)
+        assert link.state == "no_id" and link._login is None
         # the port is taken by someone else
         port = _free_port()
         blocker = socket.socket()
         blocker.bind(("127.0.0.1", port))
         blocker.listen(1)
         monkeypatch.setattr(spotify, "REDIRECT_PORT", port)
-        link.configure(True, "cid", "")
+        link.configure(True, CID, "")
         link.login()
         assert _wait(lambda: "belegt" in link.status)
         blocker.close()
         # a 403: the account is not allowed in the developer app
         fake.mode = "403"
         link.active = True
-        link.configure(True, "cid", spotify.protect("ref-x"))
+        link.configure(True, CID, spotify.protect("ref-x"))
         assert _wait(lambda: "User Management" in link.status, timeout=5)
         assert link.linked and link.state == "error"
         line = link.diag_line()
@@ -384,6 +404,129 @@ def test_the_music_card_grows_by_the_list_below_or_to_the_right_in_every_style()
     assert wide.width <= int(skin.WRAP_SHARE * 1440) + 60                      # fitted, never wider than the bar
 
 
+def test_a_song_change_slides_the_rows_and_cross_fades_the_card_at_the_same_size():
+    """1.8.1 (user: "smoother … die Liste rutscht hoch"): the frames of a song change keep the final size in every
+    style; blend_cards is the old card at t = 0 and the new one at t = 1; the Transition eases 0 → 1."""
+    from dbdmapscout import media, skin, sysinfo
+    from dbdmapscout.overlay_win32 import blend_cards, music_picture
+    from dbdmapscout.preview import sample_cover
+    rows_old = [[("Blinding Lights", sysinfo.WHITE)], [("The Weeknd", sysinfo.DIM)]]
+    rows_new = [[("Save Your Tears", sysinfo.WHITE)], [("The Weeknd", sysinfo.DIM)]]
+    items = (("Save Your Tears", "The Weeknd"), ("Levitating", "Dua Lipa"), ("As It Was", "Harry Styles"))
+    cover = sample_cover()
+    bodies = {}
+    for style in ("classic", "glass", "chips", "line"):
+        for layout in ("big", "compact"):
+            for pos in ("below", "right"):
+                final = music_picture(rows_new, 1440, cover, layout, (1, 200), ("accent",), style, "#3987e5",
+                                      ("ALS NÄCHSTES", items[1:]), pos, None, bodies)
+                for t in (0.0, 0.5, 1.0):
+                    frame = music_picture(rows_new, 1440, cover, layout, (1, 200), ("accent",), style, "#3987e5",
+                                          ("ALS NÄCHSTES", items[1:]), pos, (items[0], t), bodies)
+                    assert frame.size == final.size, (style, layout, pos, t)
+                mid = music_picture(rows_new, 1440, cover, layout, (1, 200), ("accent",), style, "#3987e5",
+                                    ("ALS NÄCHSTES", items[1:]), pos, (items[0], 0.5), bodies)
+                assert mid.tobytes() != final.tobytes(), (style, layout, pos)      # the rows really moved
+            assert len(bodies) <= 2
+    a = skin.music(rows_old, cover, 1440, "glass", (170, 176), ("accent",), "#3987e5", "big")
+    b = skin.music(rows_new, cover, 1440, "glass", (1, 200), ("accent",), "#3987e5", "big")
+    assert blend_cards(a, b, 0.0, True).tobytes() == a.tobytes() if a.size == b.size else True
+    start, end, half = blend_cards(a, b, 0.0, True), blend_cards(a, b, 1.0, True), blend_cards(a, b, 0.5, True)
+    assert start.size == end.size == half.size == (max(a.width, b.width), max(a.height, b.height))
+    assert start.tobytes() != end.tobytes() and half.tobytes() not in (start.tobytes(), end.tobytes())
+    tr = media.Transition({"height": 500}, items[0], 10.0)
+    seq = [tr.progress(10.0 + x) for x in (0, 0.1, 0.2, 0.3, 0.35, 1.0)]
+    assert seq[0] == 0.0 and seq[-1] == 1.0 and seq == sorted(seq) and 0.4 < tr.progress(10.175) < 0.6
+    assert not tr.done(10.3) and tr.done(10.4)
+
+
+class _FakeWin:
+    """A HudWindow for the App's music card on Linux: records what is rendered."""
+
+    def __init__(self):
+        self.shown = True
+        self.opacity = 0.85
+        self.editing = False
+        self.fade = 1.0
+        self.size = (300, 400)
+        self.calls = []
+
+    def set_editing(self, on):
+        self.editing = bool(on)
+
+    def render(self, **kw):
+        self.calls.append(("render", kw))
+        return self.size
+
+    def render_blend(self, old, new, t):
+        self.calls.append(("blend", old, new, t))
+        return self.size
+
+    def show_at(self, x, y):
+        self.calls.append(("show", x, y))
+
+    def set_fade(self, f):
+        self.fade = f
+
+    def hide(self):
+        self.shown = False
+
+    def destroy(self):
+        self.shown = False
+
+
+def test_the_app_cross_fades_a_song_change_and_the_list_slides(app_root):
+    import json as _json
+    from dbdmapscout.app import App
+    from dbdmapscout import media
+    (app_root / "settings.json").write_text(_json.dumps({"welcome_seen": True, "spotify_on": True,
+                                                         "spotify_client_id": "a" * 32}), encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        win = app.media_win = _FakeWin()
+        app._media_ctx = (0, 0, 3440, 1440, True)
+        app._forced = True
+        app.spotify.upnext = spotify.parse_queue(QUEUE)
+        app.media.now = media.NowPlaying("Blinding Lights", "The Weeknd", True, time.time(), position=10.0,
+                                         duration=176.0, at=time.time())
+        assert app._media_card() == win.size
+        assert win.calls[-1][0] == "render" and win.calls[-1][1]["upnext"][1][0] == ("Save Your Tears", "The Weeknd, Ariana Grande")
+        assert app._media_trans is None and app._media_prev is not None
+        # the first coming track starts: the list moves up at once, the card cross-fades with the rows sliding
+        app.media.now = media.NowPlaying("Save Your Tears", "The Weeknd", True, time.time(), position=1.0,
+                                         duration=200.0, at=time.time())
+        assert app._media_card() == win.size
+        kind, old, new, t = win.calls[-1]
+        assert kind == "blend" and 0.0 <= t < 0.5
+        assert new["rows"][0][0][0] == "Save Your Tears" and old["rows"][0][0][0] == "Blinding Lights"
+        assert new["upnext"][1][0] == ("Folge 12", "Ein Podcast") and old["upnext"] == new["upnext"]
+        assert new["anim"][0] == ("Save Your Tears", "The Weeknd, Ariana Grande") and old["anim"] == new["anim"]
+        assert app._media_trans is not None and app._media_trans.leaving == new["anim"][0]
+        assert not app._media_restart and app._media_anim_job is not None
+        # a frame in between, then the end of the transition draws the final card
+        app._media_box = (10, 20, 300, 400)
+        app._media_anim_tick()
+        assert win.calls[-2][0] == "blend" and win.calls[-1] == ("show", 10, 20)
+        app._media_trans.t0 -= 5
+        app._media_anim_tick()
+        assert app._media_trans is None and win.calls[-2][0] == "render" and win.calls[-2][1]["rows"][0][0][0] == "Save Your Tears"
+        # a song that is not in the list: plain cross-fade without sliding rows
+        app.media.now = media.NowPlaying("Other Song", "Someone", True, time.time())
+        app._media_card()
+        kind, old, new, t = win.calls[-1]
+        assert kind == "blend" and new.get("anim") is None            # (_forced: the sample list stays on the card)
+        # fading off: the old behaviour (the card starts from nothing), no transition
+        app._media_trans = None
+        app.settings["overlay"]["media_fade"] = False
+        app.media.now = media.NowPlaying("Third", "Someone", True, time.time())
+        app._media_card()
+        assert win.calls[-1][0] == "render" and app._media_restart and app._media_trans is None
+    finally:
+        if app._media_anim_job is not None:
+            app.root.after_cancel(app._media_anim_job)
+        app.quit()
+
+
 def test_the_preview_and_the_app_pass_the_list_to_the_music_card(tmp_path):
     from dbdmapscout import preview, sysinfo
     from dbdmapscout.config import DEFAULTS
@@ -410,9 +553,9 @@ def test_the_app_shows_the_list_only_when_spotify_plays_the_same_song(app_root):
         now = media.NowPlaying("Blinding Lights", "The Weeknd", True, time.time())
         assert app._upnext(now) is None and app._upnext(now, sample=True) is None       # off by default
         app.sp_on_var.set(True)
-        app.sp_id_var.set("cid")
+        app.sp_id_var.set(CID)
         app._spotify_setting()
-        assert app.settings.get("spotify_on") is True and app.settings.get("spotify_client_id") == "cid"
+        assert app.settings.get("spotify_on") is True and app.settings.get("spotify_client_id") == CID
         assert app._upnext(now) is None                                                # nothing read yet
         assert app._upnext(now, sample=True)[1][0] == ("Save Your Tears", "The Weeknd")   # the sample list
         app.spotify.upnext = spotify.parse_queue(QUEUE)
