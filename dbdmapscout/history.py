@@ -357,12 +357,15 @@ def set_role(path: str, t: float, role: str):
 
 def set_farming(path: str, t: float, farming: bool):
     """1.2.20: mark / unmark the round that started at ``t`` as a farming round (the role stays).
-    Rewrites the file; returns the changed round or None."""
+    1.5.5: marking a round as farming also drops "custom game" – a farming round is a public round, and a
+    custom game is never counted as farming (select()). Rewrites the file; returns the changed round or None."""
     rounds = load(path)
     hit = next((r for r in rounds if abs(r.t - t) < 1e-6), None)
     if hit is None:
         return None
     hit.farming = bool(farming)
+    if farming:
+        hit.custom = False
     _rewrite(path, rounds, _lost_lines(path))
     return hit
 

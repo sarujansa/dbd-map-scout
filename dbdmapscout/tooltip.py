@@ -127,11 +127,13 @@ TIPS = {
                                                        "DBD läuft, und stoppt ihn, wenn DBD zu ist – so kostet er "
                                                        "ausserhalb des Spiels nichts und du musst nicht daran denken.",
     "Vorlauf: Wiederholungspuffer von OBS beim Map-Banner sichern (Sekunden davor)":
-        "Das Banner kommt erst ~40 s nach Matchbeginn. Läuft in OBS der Wiederholungspuffer, wird er beim Banner "
-        "gespeichert – so fehlt der Anfang (Spawn) nicht. Die Datei liegt als „(Vorlauf)“ neben der Runde.",
+        "Läuft in OBS der Wiederholungspuffer, wird er beim Map-Banner gespeichert – der Anfang (Spawn) fehlt dann "
+        "nicht, aber die Datei enthält auch Lobby und Ladebildschirm. Seit 1.5.5 standardmässig aus (Wunsch des "
+        "Nutzers: nur die Runde). Die Datei liegt als „(Vorlauf)“ neben der Runde.",
     "Vorlauf und Runde zu einer Datei zusammenfügen": "Nach der Runde hängt ffmpeg den Vorlauf vorne an die Aufnahme "
-                                                      "– ohne Neukodierung, in Sekunden, Bild und Ton bleiben wie "
-                                                      "von OBS. Klappt es nicht, bleiben beide Dateien liegen.",
+                                                      "– ohne Neukodierung, in Sekunden. Seit 1.5.5 standardmässig "
+                                                      "aus: Am PC des Nutzers lief der Rundenteil der zusammengefügten "
+                                                      "Datei zu schnell. Klappt es nicht, bleiben beide Dateien liegen.",
     "Aufnahmen einrichten …": "Öffnet die Einstellungen für die Aufnahmen mit OBS (Ordner, Verbindung).",
     "Farming-Runden im Unterordner „Farming“ ablegen": "Runden, die das Programm als Farming erkennt (Crossplay aus "
                                                         "oder die Farming-Region), landen im Unterordner „Farming“ "

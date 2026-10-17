@@ -95,11 +95,16 @@ class LobbyInfo:
                     self._log(_("Lobby gefunden nach {time}{role}.", time=fmt_duration(f.wait), role=who), "Erkennung")
                 else:
                     self._log(_("Lobby gefunden{role}.", role=who), "Erkennung")
+                off, on = f.cross_looks
+                looks = _("{off} von {n} Blicken mit Kreuz", off=off, n=off + on) if off + on else _("letzter Blick")
                 if f.crossplay_off and self.settings.get("farming_crossplay", True):
-                    self._log(_("Crossplay ist aus – die nächste Runde zählt als Farming-Runde."), "Erkennung")
+                    self._log(_("Crossplay ist aus ({looks}) – die nächste Runde zählt als Farming-Runde.",
+                                looks=looks), "Erkennung")
                 elif f.crossplay_off is None and self.settings.get("farming_crossplay", True):
                     self._log(_("Crossplay-Anzeige nicht lesbar – die Runde zählt nicht als Farming (Ausschnitt in "
                                 "debug/lobby)."), "Erkennung")
+                elif self.settings.get("farming_crossplay", True):
+                    self._log(_("Crossplay ist an ({looks}) – keine Farming-Runde.", looks=looks), "Erkennung")
         elif what == "remind":
             if self.settings.get("lobby_remind", True):
                 self._notify(_("Lobby startet gleich"), _("Noch {n} s – READY ist noch nicht gedrückt.",
