@@ -560,3 +560,55 @@ def test_the_f8_hotkey_and_the_overview_tile_exist():
     assert f.action == "" and abs(f.frac - 0.1) < 1e-9 and f.colour is None
     app.recorder.space.free = 6 * gb
     assert overview.recordings(app).colour is not None
+
+
+# ------------------------------------------------------------------ 1.5: tab "Aufnahmen"
+def test_select_recordings_filters_the_index():
+    R = obsrec.Recording
+    recs = [R(t=10.0, file="a.mkv", label="Coal Tower", role="killer"),
+            R(t=20.0, file="b.mkv", label="Gas Heaven", role="survivor", marks=[3.0]),
+            R(t=30.0, file="c.mkv", label="Coal Tower", role="killer", farming=True, keep=True),
+            R(t=40.0, file="d.mkv", label="Coal Tower", role="killer", extra={"bad": "leer"})]
+    files = lambda out: [r.file for r in out]  # noqa: E731
+    assert files(obsrec.select_recordings(recs)) == ["d.mkv", "c.mkv", "b.mkv", "a.mkv"]       # newest first
+    assert files(obsrec.select_recordings(recs, since=25.0)) == ["d.mkv", "c.mkv"]
+    assert files(obsrec.select_recordings(recs, map_label="Gas Heaven")) == ["b.mkv"]
+    assert files(obsrec.select_recordings(recs, role="killer")) == ["d.mkv", "a.mkv"]          # farming not a killer round
+    assert files(obsrec.select_recordings(recs, role="farming")) == ["c.mkv"]
+    assert files(obsrec.select_recordings(recs, only="marked")) == ["b.mkv"]
+    assert files(obsrec.select_recordings(recs, only="kept")) == ["c.mkv"]
+    assert files(obsrec.select_recordings(recs, only="bad")) == ["d.mkv"]
+
+
+def test_keep_and_delete_from_the_tab_go_through_the_recorder(tmp_path):
+    """1.5: the tab never writes the index itself – the recorder thread does (one writer); deleting removes only
+    the files the entry names."""
+    folder = str(tmp_path)
+    for name in ("a.mkv", "a (Vorlauf).mkv", "b.mkv", "someone-elses.mkv"):
+        with open(os.path.join(folder, name), "wb") as f:
+            f.write(b"\0" * 10)
+    obsrec.save_index(folder, [obsrec.Recording(t=1.0, file="a.mkv", pre="a (Vorlauf).mkv"),
+                               obsrec.Recording(t=2.0, file="b.mkv")])
+    posted = []
+    r = obsrec.Recorder(lambda kind, **d: posted.append((kind, d)))
+    r.cfg = obsrec.Config(on=True, folder=folder)
+    r._set_keep(2.0, True)
+    assert [x.keep for x in obsrec.load_index(folder)] == [False, True]
+    assert posted[-1] == ("changed", {"what": "keep", "t": 2.0, "on": True, "file": "b.mkv"})
+    r._set_keep(99.0, True)                                   # unknown: nothing happens
+    r._delete_one(1.0)
+    assert sorted(os.listdir(folder)) == ["b.mkv", obsrec.INDEX, "someone-elses.mkv"]
+    assert [x.file for x in obsrec.load_index(folder)] == ["b.mkv"]
+    kinds = [k for k, _d in posted]
+    assert kinds[-2:] == ["changed", "deleted"] and posted[-1][1] == {"files": ["a.mkv", "a (Vorlauf).mkv"], "manual": True}
+    r.cfg.folder = os.path.join(folder, "gone")                # drive missing: a warning, nothing written
+    r._delete_one(2.0)
+    assert posted[-1][0] == "warn" and os.path.exists(os.path.join(folder, "b.mkv"))
+    # the thread takes the same commands
+    r.cfg.folder = folder
+    r.start()
+    r.set_keep(2.0, False)
+    r.delete(2.0)
+    r.quit()
+    r.join(timeout=5)
+    assert not os.path.exists(os.path.join(folder, "b.mkv")) and obsrec.load_index(folder) == []
