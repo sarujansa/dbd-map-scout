@@ -311,6 +311,8 @@ class SettingsTab:
             "nicht angeschlossen, wird nicht aufgenommen."),
             style="Dim.TLabel", wraplength=420)).pack(anchor="w", pady=(4, 0))
         self._rec_setting(save=False)
+        self._discord_card(more)                      # 1.7: Rich Presence
+        self._discord_init()
 
         # 1.2.15: the same controls once more for the setup assistant's step "Match-Daten" – the originals sit
         # under "Mehr" and count as hidden while it is folded (the settings page itself draws only SPECS keys)

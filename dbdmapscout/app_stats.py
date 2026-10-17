@@ -10,7 +10,7 @@ import time
 import webbrowser
 from types import SimpleNamespace
 
-from . import dashboard, history, official, regions, sysinfo
+from . import dashboard, history, official, records, regions, sysinfo
 from . import uimodel as ui
 from .capture import foreground_root, is_game_window
 from .i18n import N_, _
@@ -172,6 +172,15 @@ class StatsTab:
         ui.Label(box_b, text=_("Bloodpoints laut Stats-Seite. BP/h = je Stunde im Match; mit Wartezeit = je Stunde aus "
                                 "Match und Suche zusammen. Mit dem Rollen-Filter „Farming“ steht hier, was das Farmen "
                                 "bringt."), style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
+        box_rk = self._stats_page(_("Rekorde"))    # 1.7: streaks, best week, busiest day, longest session
+        self.stats_records_var = ui.StringVar(value="")
+        ui.Label(box_rk, textvariable=self.stats_records_var, wraplength=400).pack(anchor="w")
+        self.stats_records = ui.Tiles(box_rk)
+        self.stats_records.pack(fill="x")
+        ui.Label(box_rk, text=_("Serien zählen Runden mit Ergebnis laut Stats-Seite in zeitlicher Reihenfolge – „aktuell“ "
+                                 "ist die Serie der neuesten Runden der Auswahl. Beste Woche ab {n} Runden mit Ergebnis. "
+                                 "Eine Sitzung endet nach 45 Minuten ohne Runde.", n=records.WEEK_MIN),
+                  style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(6, 0))
         box_v = self._stats_page(_("Verlauf"))
         self.trend = TrendChart(box_v, bool(self.settings.get("dark_mode", True)))
         ui.Label(box_v, text=_("Nur Runden, die einem Match auf der Stats-Seite zugeordnet sind. Die Maus über einer "
@@ -417,7 +426,7 @@ class StatsTab:
             return
         self._stats_dirty.discard(i)
         part = (self._stats_part_dash, self._stats_part_maps, self._stats_part_killers, self._stats_part_bp,
-                self._stats_part_trend,
+                self._stats_part_records, self._stats_part_trend,
                 self._stats_part_sys, self._stats_part_regions, self._stats_part_wait, self._stats_part_last)
         if i < len(part):
             part[i](c)
@@ -485,6 +494,10 @@ class StatsTab:
             t.insert("", "end", iid=str(i), values=(
                 group, b.rounds, dashboard._bp(b.per_round), dashboard._bp(b.per_hour) if b.per_hour else "–",
                 dashboard._bp(b.per_hour_waiting) if b.per_hour_waiting else "–", dashboard._bp(b.bp)))
+
+    def _stats_part_records(self, c):
+        self.stats_records_var.set("" if c.rounds else _("Noch keine Runden in dieser Auswahl."))
+        self.stats_records.data = records.tiles(c.rounds, c.pairs) if c.rounds else []
 
     def _stats_part_trend(self, c):
         self._trend_render(c.pairs, TREND_UNIT.get(c.period, "week"))

@@ -209,6 +209,12 @@ SPECS = {
                                           ("stretch",))),
                                  ("hint", "st.more.rec_status"),
                                  ("hint", "st.more.rec_text"))),
+        ("card", "st.more.discord", (("check", "st.more.dc_on"),                             # 1.7: Rich Presence
+                                     ("row", (("label", "st.more.dc_id.label"), ("entry", "st.more.dc_id"),
+                                              ("button", "st.more.dc_test"), ("button", "st.more.dc_portal"),
+                                              ("stretch",))),
+                                     ("check", "st.more.dc_killer"), ("check", "st.more.dc_lobby"),
+                                     ("hint", "st.more.dc_status"), ("hint", "st.more.dc_text"))),
         ("card", "st.more.backup", (("row", (("button", "st.more.export"), ("button", "st.more.import"), ("stretch",),
                                              ("button", "st.more.clear_hist"), ("button", "st.more.reset_all"))),)),
         ("card", "st.more.folders", (("row", (("button", "st.more.dir"), ("button", "st.more.maps_dir"), ("stretch",))),)),
