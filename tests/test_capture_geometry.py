@@ -34,3 +34,19 @@ def test_covered_parts_of_the_game_picture():
     assert not overlaps(banner, [(-3422, 254, 1920, banner[1] - 254)])   # only above the banner region
     assert overlaps(banner, [(0, 0, 10, 10), (-2300, 1300, 50, 50)])
     assert not overlaps(banner, [])
+
+
+def test_a_screen_grab_turns_mss_bgra_into_writable_bgr():
+    """1.3.5: BGRA -> BGR straight from mss' buffer by OpenCV (the numpy copy took 28 ms per 3440×1440 look);
+    the worker blacks out our overlay in place, so the picture must be its own writable array."""
+    import types
+    import numpy as np
+    from dbdmapscout import capture
+    px = (np.arange(4 * 5 * 4) + 1).astype(np.uint8).reshape(4, 5, 4)
+    for raw in (bytearray(px.tobytes()), px.tobytes()):                  # Windows: bytearray; elsewhere bytes
+        g = capture.ScreenGrabber.__new__(capture.ScreenGrabber)
+        g._sct = types.SimpleNamespace(grab=lambda mon, _r=raw: types.SimpleNamespace(raw=_r, width=5, height=4))
+        img = g.grab(0, 0, 5, 4)
+        assert img.shape == (4, 5, 3) and np.array_equal(img, px[:, :, :3])
+        img[0, 0] = 0                                                   # writable, and not mss' buffer
+        assert raw[0] == px[0, 0, 0]

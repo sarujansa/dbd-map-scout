@@ -365,8 +365,10 @@ class ScreenGrabber:
 
     def grab(self, left: int, top: int, width: int, height: int) -> np.ndarray:
         shot = self._sct.grab({"left": int(left), "top": int(top), "width": int(width), "height": int(height)})
-        arr = np.frombuffer(shot.bgra, dtype=np.uint8).reshape(shot.height, shot.width, 4)
-        return arr[:, :, :3].copy()
+        # 1.3.5: straight from mss' own buffer, BGRA -> BGR by OpenCV – the numpy copy of the 3 of 4 channels
+        # (plus ``shot.bgra``, another copy) took 28 ms for a 3440×1440 look, cvtColor < 1 ms
+        arr = np.frombuffer(shot.raw, dtype=np.uint8).reshape(shot.height, shot.width, 4)
+        return cv2.cvtColor(arr, cv2.COLOR_BGRA2BGR)
 
     def close(self):
         try:
