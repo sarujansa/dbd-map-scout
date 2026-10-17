@@ -1192,3 +1192,38 @@ def test_maps_page_switches_the_map_style(qapp, keep):
     assert posted[-1] == ("map_style", "classic")
     page.show_maps([("MacMillan Estate", "Coal Tower", "coal", 1)], None, {}, [], {}, "classic")
     assert page.style_btns["classic"].isChecked() and not page.style_btns["dark"].isChecked()
+
+
+def test_style_buttons_switch_at_once_and_pages_can_be_warmed(qapp, keep):
+    """1.3.4 (user: "Farbe wechselt erst nach 1 s"): Original / Dunkel are one exclusive group – a click shows at
+    once, without waiting for the App; warm_pages lays out the hidden pages without errors."""
+    from dbdmapscout import qt_window
+    posted = []
+    page = keep(qt_window.MapsPage(lambda a, arg=None: posted.append((a, arg))))
+    page.show_maps([("MacMillan Estate", "Coal Tower", "coal", 1)], None, {}, [], {}, "classic")
+    page.style_btns["dark"].click()
+    assert page.style_btns["dark"].isChecked() and not page.style_btns["classic"].isChecked()
+    page.style_btns["dark"].click()                                      # a second click keeps it on
+    assert page.style_btns["dark"].isChecked() and posted[-1] == ("map_style", "dark")
+    win = keep(qt_window.MainWindow(lambda *a: None))
+    win.warm_pages()
+
+
+def test_a_theme_change_styles_the_page_on_display_first(qapp, keep):
+    """1.3.4: the style sheet goes to the visible page at once and to the hidden ones one by one (or when opened) –
+    on the whole window Qt repolished all 1236 widgets (≈ 250 ms per theme/zoom click)."""
+    from dbdmapscout import qt_theme, qt_window
+    win = keep(qt_window.MainWindow(lambda *a: None))
+    win.apply_theme(True, 1.0)
+    win._stale.clear()                                            # as if the idle restyling had finished
+    for i in range(win.stack.count()):
+        win.stack.widget(i).setStyleSheet(win._qss)
+    win.apply_theme(False, 1.0)
+    light = qt_theme.stylesheet(False, 1.0)
+    assert win.styleSheet() == "" and win.stack.currentWidget().styleSheet() == light
+    assert win.stack.widget(3) in win._stale and win.stack.widget(3).styleSheet() != light
+    win.show_page("stats")
+    assert win.stack.widget(3).styleSheet() == light and win.stack.widget(3) not in win._stale
+    while win._stale:
+        win._style_next()
+    assert all(win.stack.widget(i).styleSheet() == light for i in range(win.stack.count()))
