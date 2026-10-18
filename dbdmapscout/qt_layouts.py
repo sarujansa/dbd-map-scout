@@ -26,9 +26,9 @@ def _natural(item) -> int:
     w = item.widget()
     if w is not None:
         if isinstance(w, QLabel) and w.wordWrap():
-            return _one_line(w)
+            return max(w.minimumWidth(), _one_line(w))
         if hasattr(w, "natural_width"):
-            return w.natural_width()
+            return max(w.minimumWidth(), w.natural_width())
     return item.sizeHint().width()
 
 

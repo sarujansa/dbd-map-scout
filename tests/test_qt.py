@@ -815,7 +815,7 @@ def test_preview_draws_the_screen_and_posts_a_click(qapp, keep):
             "layers": [("map", 26, 17, 300, 400), ("hud", 3200, 17, 200, 100)], "pics": {"map": pic, "hud": hud},
             "opacity": 0.85, "editing": True}
     view.show_state({"data": data, "visible": True})
-    assert view.heightForWidth(1000) == view.MAX_H             # 3440:1440 would be 419 – capped
+    assert view.heightForWidth(1000) == view.MAX_H + view._note_h()   # capped; 1.8.8: + the note strip (moving)
     shot = view.grab().toImage()                              # paints every layer (1.64: real pictures)
     ox, oy, s = view._frame()
     assert shot.pixelColor(round(ox + 3300 * s), round(oy + 60 * s)).lightness() > 150     # the white "hud" layer
