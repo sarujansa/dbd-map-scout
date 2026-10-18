@@ -556,11 +556,11 @@ class QtShell:
         if not sel or sel[0] not in self.catalog.maps:
             return None
         mid, v = sel[0], int(sel[1])
+        path, shown = self._map_file(mid, v)              # 1.8.21: never made here – the original until it is there
         cached = getattr(self, "_qt_preview_cache", None)
-        if cached is not None and cached[0] == (mid, v, id(self.catalog)):
+        if cached is not None and cached[0] == (mid, v, id(self.catalog), path):
             return cached[1]
         m = self.catalog.maps[mid]
-        path, shown = self._map_file(mid, v)
         pic = None
         if path:
             try:
@@ -572,7 +572,7 @@ class QtShell:
                 self._log(_("Kartenbild nicht lesbar: {error}", error=e), "Fehler")
         realm = self.catalog.realm_display(m) or _("Eigene Bilder")
         out = (mid, shown, m.label(shown), realm, pic)
-        self._qt_preview_cache = ((mid, v, id(self.catalog)), out)
+        self._qt_preview_cache = ((mid, v, id(self.catalog), path), out)
         return out
 
     def _qt_thumbs(self, items):
@@ -585,7 +585,7 @@ class QtShell:
         for _r, _l, mid, v in items:
             path = out.get((mid, v))
             if path is None:
-                path = self._map_file(mid, v, make=False)[0]
+                path = self._map_file(mid, v, request=False)[0]       # the warm-up makes them
                 if style == "classic" or path != self.catalog.image_path(mid, v)[0]:
                     out[(mid, v)] = path           # the original in the dark style: the warm-up may still make it
             paths[(mid, v)] = path

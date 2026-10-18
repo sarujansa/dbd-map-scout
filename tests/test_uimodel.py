@@ -1130,3 +1130,47 @@ def test_the_master_switch_hides_every_overlay_window_and_detection_goes_on(app_
             assert json.load(fh)["overlay_on"] is False
     finally:
         app.quit()
+
+
+def test_a_map_style_click_never_makes_a_picture_in_the_window_thread(app_root, monkeypatch):
+    """1.8.21 (user: "im Maps ist alles sehr langsam beim Wechseln, wenn ich zwischen den Buttons klicke"): the
+    overlay preview's sample and the maps page picture made the styled picture in the window thread – ~2 s per
+    floor style. Now the original shows at once, a thread makes it, ``_style_ready`` takes it."""
+    import threading
+    from dbdmapscout import mapstyle
+    from dbdmapscout.app import App
+    calls = []
+    real = mapstyle.styled_path
+
+    def spy(path, cache_dir, make=True, style="dark"):
+        calls.append((threading.current_thread() is threading.main_thread(), make))
+        return real(path, cache_dir, make, style)
+    monkeypatch.setattr(mapstyle, "styled_path", spy)
+    monkeypatch.setattr(mapstyle, "warm", lambda *a, **k: 0)           # only the asked pictures, not all 52
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        app.qt.show()
+        app.qt.show_page("maps")
+        mid = list(app.catalog.maps)[0]
+        app._qt_preview_sel = (mid, 1)
+        app._set_map_style("grey")
+        app._qt_refresh(force=True)
+        app._preview_data()
+        app.show_map(mid, 1, "manual")
+        assert not [c for c in calls if c == (True, True)]                    # never made in the window thread
+        original = app.catalog.image_path(mid, 1)[0]
+        assert app._map_file(mid, 1, request=False)[0] == original
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline and app._map_file(mid, 1, request=False)[0] == original:
+            time.sleep(0.05)
+        styled = app._map_file(mid, 1, request=False)[0]
+        assert styled != original and "-grey-" in styled
+        ev = app.events.get(timeout=10)
+        while ev[0] != "call" or getattr(ev[1], "__name__", "") != "_style_ready":
+            ev = app.events.get(timeout=10)
+        reloads = []
+        monkeypatch.setattr(app, "_reload_picture", lambda: reloads.append(1))
+        app._dispatch(ev)                                                     # the map on display takes it
+        assert reloads and app._qt_preview_cache is None
+    finally:
+        app.quit()
