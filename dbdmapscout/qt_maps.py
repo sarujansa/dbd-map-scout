@@ -157,7 +157,7 @@ class MapsPage(QWidget):
         body.setSpacing(16)
         self.realms = QListWidget()
         self.realms.setObjectName("realms")
-        self.realms.setFixedWidth(230)
+        self.realms.setFixedWidth(250)          # 1.8.2: 230 cut "Hawkins National Laboratory"
         self.realms.setItemDelegate(RealmDelegate(self.realms))
         self.realms.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.realms.currentItemChanged.connect(self._realm_picked)

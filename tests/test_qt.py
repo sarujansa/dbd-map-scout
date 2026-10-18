@@ -1328,3 +1328,66 @@ def test_the_navigation_and_the_overlay_tabs_can_be_reordered_and_remembered(qap
     assert ("tab_order", ("overlay", tabs_id, form._tab_ids(tabs, ids))) in [posted.get() for _ in range(posted.qsize())]
     form.apply_tab_order({tabs_id: ["ov.look", "bogus"]})          # no permutation: built-in order
     assert form._tab_ids(tabs, ids) == frames
+
+
+def test_the_setup_assistant_survives_the_navigation_getting_focus(qapp, keep):
+    """1.8.2: on the first start the navigation list got the keyboard focus and – Qt's list view picks the first
+    row when none is current – left the setup assistant about a second after it came up."""
+    from dbdmapscout import qt_window
+    posted = queue.Queue()
+    win = keep(qt_window.MainWindow(lambda a, arg=None: posted.put((a, arg))))
+    win.show_setup(True)
+    win.show()
+    qapp.processEvents()
+    win.nav.setFocus()
+    qapp.processEvents()
+    assert win.nav.hasFocus() and win.nav.currentRow() == -1
+    assert win.current_key() == "setup" and win.stack.currentWidget() is win.setup
+    win.nav.setCurrentRow(0)                                   # a real choice still leaves the assistant
+    assert win.current_key() == "overview" and win.stack.currentWidget() is win._pages["overview"]
+
+
+def test_the_search_finds_settings_under_more_and_unfolds_them(qapp, keep):
+    """1.8.2: a setting under the fold "Mehr" (Spotify, OBS …) is found while folded; going there asks the App to
+    unfold first. A control hidden for another reason stays out of the index."""
+    from dbdmapscout import qt_window
+    posted = queue.Queue()
+    win = keep(qt_window.MainWindow(lambda a, arg=None: posted.put((a, arg))))
+    win.resize(1100, 800)
+    win.show()
+    qapp.processEvents()
+    shut = {k: {"text": k, "visible": False} for k, c in win.forms["settings"].controls.items()
+            if k.startswith("st.more.") and c[0] == "title"}                  # the fold is shut: no card shows
+    win.show_states("settings", {**shut, "st.more.spotify": {"text": "Spotify", "visible": False},
+                                 "st.more.sp_on": {"text": "„Als nächstes“ aus Spotify zeigen", "value": False,
+                                                   "enabled": True, "visible": True}})
+    win.show_states("overlay", {"ov.map_size_reset": {"text": "Eigene Grösse zurücksetzen", "visible": False,
+                                                      "enabled": True}})
+    win.update_search_index()
+    hit = next(e for e in win._found if e.startswith("„Als nächstes“ aus Spotify"))
+    assert win._found[hit][2] is True                           # folded under "Mehr"
+    assert not any(e.startswith("Eigene Grösse zurücksetzen") for e in win._found)
+    while not posted.empty():
+        posted.get_nowait()
+    win.go_to_found(hit)
+    assert win.current_key() == "settings"
+    assert ("act", ("st.more_btn", None)) in [posted.get_nowait() for _i in range(posted.qsize())]
+
+
+def test_the_overlay_preview_and_its_tools_sit_side_by_side_on_a_wide_page(qapp, keep):
+    """1.8.2: preview left, the picked element's tools right while the page is wide; below each other when it
+    is narrow (the tabs with the settings were below the fold on a 760-px window)."""
+    from dbdmapscout import qt_pages, qt_window
+    page = keep(qt_window.FormPage(lambda a, arg=None: None, "Overlay", qt_window.SPECS["overlay"], "overlay"))
+    side = page.findChild(qt_pages.SideBySide)
+    assert side is not None and len(side.cards) == 2
+    assert page.controls["ov.preview"][1].parentWidget() is side.cards[0]
+    assert page.controls["ov.edit"][1].parentWidget() is side.cards[1]
+    page.resize(1100, 700)
+    page.show()
+    qapp.processEvents()
+    assert side.beside() and side.cards[0].x() < side.cards[1].x()
+    page.resize(600, 700)
+    qapp.processEvents()
+    assert not side.beside() and side.cards[0].y() < side.cards[1].y()
+    assert "ov.preview" in qt_window.page_keys("overlay") and "ov.undo" in qt_window.page_keys("overlay")

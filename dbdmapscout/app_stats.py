@@ -139,6 +139,41 @@ class StatsTab:
                                 "Escapes und Bloodpoints laut stats.deadbydaylight.com, sobald eine Runde dort "
                                 "zugeordnet ist."),
                   style="Dim.TLabel", wraplength=540).pack(anchor="w", pady=(6, 0))
+        self._stats_alias_choices = sorted(KILLERS, key=killer_label)
+        box2 = self._stats_page(_("Letzte Runden"))      # 1.8.2: second tab – the most used after the overview
+        self.stats_last = self._stats_tree(box2, (("when", _("Wann"), 120, "w"), ("map", _("Map"), 130, "w"),
+                                                  ("dur", _("Dauer"), 60, "e"), ("wait", _("Warten"), 65, "e"),
+                                                  ("role", _("Rolle/Killer"), 115, "w"), ("res", _("Ergebnis"), 75, "w"),
+                                                  ("srv", _("Server"), 100, "w")), 7,
+                                           select=True, multi=True)      # 1.5.4: several rows (Ctrl/Shift)
+        self.stats_last.bind("<<TreeviewSelect>>", lambda e: self._stats_role_buttons())
+        self.stats_more_btn = ui.Button(box2, text=_("Weitere 100 Runden anzeigen"), command=self._stats_more_rounds)
+        rr = ui.Frame(box2)
+        rr.pack(fill="x", pady=(6, 0))
+        self._stats_last_rr = rr
+        ui.Label(rr, text=_("Markierte Runde:")).pack(side="left")
+        self.stats_role_btns = []
+        for role, label in (("killer", N_("Killer")), ("survivor", N_("Survivor")), ("custom", N_("Custom Game"))):
+            b = ui.Button(rr, text=_(label), command=lambda r=role: self._stats_set_role(r), state="disabled")
+            b.pack(side="left", padx=(6, 0))
+            self.stats_role_btns.append(b)
+        b = ui.Button(rr, text=_("Farming an/aus"), command=self._stats_toggle_farming, state="disabled")   # 1.2.20
+        b.pack(side="left", padx=(6, 0))
+        self.stats_role_btns.append(b)
+        self.stats_delete_btn = ui.Button(rr, text=_("Runde löschen"), command=self._stats_delete_round,
+                                           state="disabled")
+        self.stats_delete_btn.pack(side="left", padx=(6, 0))
+        kr = ui.Frame(box2)                                 # 1.8.2: two tidy rows (the delete button stood alone)
+        kr.pack(fill="x", pady=(6, 0))
+        ui.Label(kr, text=_("Killer der Runde:")).pack(side="left")
+        self.stats_round_killer_var = ui.StringVar(value="")
+        self.stats_round_killer_cb = ui.Combobox(kr, textvariable=self.stats_round_killer_var, state="disabled",
+                                                  width=16, values=[killer_label(k) for k in self._stats_alias_choices])
+        self.stats_round_killer_cb.pack(side="left", padx=(6, 0))
+        self.stats_round_killer_btn = ui.Button(kr, text=_("Killer setzen"), command=self._stats_set_killer,
+                                                 state="disabled")
+        self.stats_round_killer_btn.pack(side="left", padx=(6, 0))
+        ui.Button(kr, text=_("Als CSV exportieren …"), command=self._stats_export_csv).pack(side="right")
         box = self._stats_page(_("Maps"))
         self.stats_maps = self._stats_tree(box, (("map", _("Map"), 130, "w"), ("n", _("Runden"), 62, "e"),
                                                  ("k", _("Killer"), 58, "e"), ("kills", _("Ø Kills"), 62, "e"),
@@ -152,7 +187,6 @@ class StatsTab:
         self.stats_kill.bind("<<TreeviewSelect>>", lambda e: self._stats_alias_buttons())
         ar = ui.Frame(box_k)
         ar.pack(fill="x", pady=(6, 0))
-        self._stats_alias_choices = sorted(KILLERS, key=killer_label)
         self.stats_alias_var = ui.StringVar(value="")
         self.stats_alias_cb = ui.Combobox(ar, textvariable=self.stats_alias_var, state="disabled", width=16,
                                            values=[killer_label(k) for k in self._stats_alias_choices])
@@ -227,13 +261,13 @@ class StatsTab:
                                 "Maps oder zu welcher Tageszeit der PC am heißesten läuft. „Gedrosselt“: Sekunden, in "
                                 "denen die GPU wegen Temperatur oder Hardware langsamer lief (nur NVIDIA)."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(6, 0))
-        box_r = self._stats_page(_("Serverregionen"))
+        box_r = self._stats_page(_("Regionen"))           # 1.8.2: short names – all ten tabs fit
         self.stats_regs = self._stats_tree(box_r, (("reg", _("Region"), 190, "w"), ("n", _("Runden"), 65, "e"),
                                                    ("avg", _("Ø Dauer"), 75, "e"), ("share", _("Anteil"), 65, "e"),
                                                    ("ping", _("Ø Ping"), 70, "e")), 5)
         ui.Label(box_r, text=_("Region nur bekannt, wenn im Tab Server „Verbundener Spielserver“ an war."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
-        box_w = self._stats_page(_("Wartezeit in der Lobby"))
+        box_w = self._stats_page(_("Wartezeit"))
         self.stats_wait_tiles = ui.Tiles(box_w)          # 1.2.16: Ø / median / shortest / longest as tiles
         self.stats_wait_tiles.pack(fill="x", pady=(0, 6))
         wr = ui.Frame(box_w)
@@ -252,40 +286,6 @@ class StatsTab:
         ui.Label(box_w, text=_("Gemessen von „CANCEL“ (Suche läuft) bis zur gefundenen Lobby – nur wenn das Programm "
                                 "die Suche gesehen hat. Custom Games haben keine Wartezeit."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
-        box2 = self._stats_page(_("Letzte Runden"))
-        self.stats_last = self._stats_tree(box2, (("when", _("Wann"), 120, "w"), ("map", _("Map"), 130, "w"),
-                                                  ("dur", _("Dauer"), 60, "e"), ("wait", _("Warten"), 65, "e"),
-                                                  ("role", _("Rolle/Killer"), 115, "w"), ("res", _("Ergebnis"), 75, "w"),
-                                                  ("srv", _("Server"), 100, "w")), 7,
-                                           select=True, multi=True)      # 1.5.4: several rows (Ctrl/Shift)
-        self.stats_last.bind("<<TreeviewSelect>>", lambda e: self._stats_role_buttons())
-        self.stats_more_btn = ui.Button(box2, text=_("Weitere 100 Runden anzeigen"), command=self._stats_more_rounds)
-        rr = ui.Frame(box2)
-        rr.pack(fill="x", pady=(6, 0))
-        self._stats_last_rr = rr
-        ui.Label(rr, text=_("Rolle der markierten Runde:")).pack(side="left")
-        self.stats_role_btns = []
-        for role, label in (("killer", N_("Killer")), ("survivor", N_("Survivor")), ("custom", N_("Custom Game"))):
-            b = ui.Button(rr, text=_(label), command=lambda r=role: self._stats_set_role(r), state="disabled")
-            b.pack(side="left", padx=(6, 0))
-            self.stats_role_btns.append(b)
-        b = ui.Button(rr, text=_("Farming an/aus"), command=self._stats_toggle_farming, state="disabled")   # 1.2.20
-        b.pack(side="left", padx=(6, 0))
-        self.stats_role_btns.append(b)
-        self.stats_delete_btn = ui.Button(rr, text=_("Runde löschen"), command=self._stats_delete_round,
-                                           state="disabled")
-        self.stats_delete_btn.pack(side="right")
-        ui.Button(rr, text=_("Als CSV exportieren …"), command=self._stats_export_csv).pack(side="right", padx=(0, 6))
-        kr = ui.Frame(box2)
-        kr.pack(fill="x", pady=(6, 0))
-        ui.Label(kr, text=_("Killer der markierten Runde:")).pack(side="left")
-        self.stats_round_killer_var = ui.StringVar(value="")
-        self.stats_round_killer_cb = ui.Combobox(kr, textvariable=self.stats_round_killer_var, state="disabled",
-                                                  width=16, values=[killer_label(k) for k in self._stats_alias_choices])
-        self.stats_round_killer_cb.pack(side="left", padx=(6, 0))
-        self.stats_round_killer_btn = ui.Button(kr, text=_("Killer setzen"), command=self._stats_set_killer,
-                                                 state="disabled")
-        self.stats_round_killer_btn.pack(side="left", padx=(6, 0))
         self._stats_sort = ("n", True)
         return outer
 
@@ -428,9 +428,9 @@ class StatsTab:
         if c is None or i not in self._stats_dirty:
             return
         self._stats_dirty.discard(i)
-        part = (self._stats_part_dash, self._stats_part_maps, self._stats_part_killers, self._stats_part_bp,
-                self._stats_part_records, self._stats_part_trend,
-                self._stats_part_sys, self._stats_part_regions, self._stats_part_wait, self._stats_part_last)
+        part = (self._stats_part_dash, self._stats_part_last, self._stats_part_maps, self._stats_part_killers,
+                self._stats_part_bp, self._stats_part_records, self._stats_part_trend,
+                self._stats_part_sys, self._stats_part_regions, self._stats_part_wait)      # tab order (1.8.2)
         if i < len(part):
             part[i](c)
 

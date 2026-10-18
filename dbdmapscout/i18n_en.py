@@ -161,8 +161,9 @@ EN = {
     "Lobby gefunden{role}.": "Lobby found{role}.",
     "Wartezeit {time}": "waited {time}",
     "Ergebnisbildschirm: gespielt als {role}.": "Results screen: played as {role}.",
-    "Wartezeit in der Lobby": "Waiting time in the lobby",
-    "Rolle der markierten Runde:": "Role of the selected round:",
+    "Wartezeit": "Waiting time",
+    "Regionen": "Regions",
+    "Markierte Runde:": "Selected round:",
     "Benachrichtigungen": "Notifications",
     "⚠ Nicht gezählt: {n} × Rundenende nicht erkannt (die nächste Map kam, bevor das Ende erkannt wurde). "
     "Zuletzt: {map}, {when}.":
@@ -458,7 +459,7 @@ EN = {
         "While DBD runs and no map is shown, the overlay shows a small card: \"Waiting for map\", below it the "
         "search/lobby (e.g. \"Searching: 02:13 · Nurse\") or the last round. Not when you hid the map yourself.",
     "Ohne Karte: „Warte auf Map“ und Lobby-Status anzeigen": "Without a map: show \"Waiting for map\" and the lobby state",
-    "Killer der markierten Runde:": "Killer of the selected round:",
+    "Killer der Runde:": "Killer of the round:",
     "Killer setzen": "Set killer",
     "Killer konnte nicht gespeichert werden: {error}": "Could not save the killer: {error}",
     "Killer für {map} ({when}) auf {killer} gesetzt.": "Killer for {map} ({when}) set to {killer}.",
@@ -1369,7 +1370,7 @@ EN = {
     'Klick: sortieren · Rechtsklick: Spalten ein-/ausblenden': 'Click: sort · right-click: show/hide columns',
     'Alle Spalten zeigen': 'Show all columns',
     # 1.4: recordings with OBS
-    'Mehr (Map-Zuordnungen, Match-Daten, Aufnahmen, Sicherung, Ordner)': 'More (map assignments, match data, recordings, backup, folders)',
+    'Mehr (Match-Daten, Farming, OBS-Aufnahmen, Discord, Spotify, Sicherung, Ordner)': 'More (match data, farming, OBS recordings, Discord, Spotify, backup, folders)',
     'Aufnahmen mit OBS': 'Recordings with OBS',
     'Jede Runde mit OBS aufnehmen': 'Record every round with OBS',
     'Port': 'Port',
