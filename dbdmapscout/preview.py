@@ -42,16 +42,13 @@ def overlay_picture(pic, map_h: int, caption: str, transparent: bool, timer: str
                     realm: str = ""):
     """The map window's picture (PictureOverlay.render for one frame); ``pic`` None = info only; ``text_h``: size
     of the name and the lines below (1.65: its own, not the map's). ``style`` (1.3.1): glass / chips / line draw
-    the card in skin.map_card (``name``/``realm`` for its header)."""
+    the card in skin.map_card (``name``/``realm`` for its header; 1.8.27: chips too)."""
     text_h = max(40, text_h or map_h)
-    if style in ("glass", "line"):
+    if style != "classic":                           # 1.8.27: one card for every modern style
         body = map_body(pic, map_h, _split(pic)) if pic is not None else None
         return skin.map_card(body, name, realm, timer, "", record, server, ping, (), text_h, style, accent)
     base = compose(pic, map_h, caption, transparent, False, text_h, _split(pic), _cols(pic)) \
         if pic is not None else Image.new("RGBA", (1, 1), (0, 0, 0, 0))
-    if style == "chips":
-        return skin.map_card(base if pic is not None else None, name, realm, timer, "", record, server, ping, (),
-                             text_h, style, accent)
     if timer or server or record:
         base = add_info(base, timer, server, text_h, backdrop=not transparent, ping=ping, record=record)
     return map_backdrop([base], text_h)[0] if dark_area else base
