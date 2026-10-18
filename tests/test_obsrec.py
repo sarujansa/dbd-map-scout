@@ -926,6 +926,18 @@ def test_the_audio_graph_mixes_the_wanted_sources_from_the_tracks():
     assert g(2, {"dbd": 0, "discord": 0}) == ("", None) and g(2, {"dbd": 0.5, "discord": 0}) == ("[0:a:1]volume=0.500[aout]", "[aout]")
 
 
+def test_the_track_hint_stays_in_the_status_when_dbd_starts(obs, tmp_path):
+    """1.8.7: "OBS bereit" used to overwrite the hint about the missing audio tracks right away – now it keeps it."""
+    r, posted = _recorder(obs, str(tmp_path), pre=False)
+    obs.profile[("Output", "Mode")] = "Simple"
+    r._game_changed(True)
+    assert r.status.startswith("OBS bereit") and "Audiospur 1 bis 4" in r.status
+    assert _drain(posted)[-1] == ("status", {"text": r.status, "ok": False})
+    obs.profile[("Output", "Mode")] = "Advanced"
+    r._game_changed(True)
+    assert r.status == "OBS bereit – Runden werden aufgenommen"
+
+
 def test_the_buffer_runs_for_instant_clips_without_a_pre_roll(obs, tmp_path):
     r, posted = _recorder(obs, str(tmp_path), pre=False, instant=True, buffer_auto=True)
     r._game_changed(True)
