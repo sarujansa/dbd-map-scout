@@ -185,10 +185,16 @@ class SysInfo:
         style = dict(skin=self._skin(), accent=self._skin_accent(), title=_("SYSTEM"))     # 1.3
         w, h = self.hud.render(rows, hh, look=look, **style)
         f = layout.fit_scale(w, h, avail_w, avail_h)
+        hh2 = hh
         if f < 1:                                           # narrow bar / low bar: smaller text
-            w, h = self.hud.render(rows, max(200, int(hh * f)), look=look, **style)
+            hh2 = max(200, int(hh * f))
+            w, h = self.hud.render(rows, hh2, look=look, **style)
         labels = tuple(r[0][0] for r in rows if r)
         self._hud_steady, sw = layout.steady_width(getattr(self, "_hud_steady", None), (side, hh, labels), w)
+        col = self._column_min_w("hud", w, avail_w)         # 1.8.29: as wide as the other cards in its bar
+        if max(sw, col) > w:
+            w, h = self.hud.render(rows, hh2, look=look, min_w=int(max(sw, col)), **style)
+            sw = max(sw, w)
         if follow or beside:                                # shown by _hud_follow_map() after the map
             self._hud_pending = "beside" if beside else "above"
             return ("above", h) if follow else None
@@ -293,7 +299,8 @@ class SysInfo:
             height = max(200, int(height * avail / w))
             w, h = win.render(rows, height, look=look, **style)
         labels = tuple(r[0][0] for r in rows if r)
-        sw = self._steady_width("today", (style["skin"], height, look, labels, int(avail), editing), w)
+        sw = max(self._steady_width("today", (style["skin"], height, look, labels, int(avail), editing), w),
+                 self._column_min_w("today", w, avail))      # 1.8.29: and as wide as the other cards in its bar
         if sw > w:                                          # 1.8.28: as wide as it ever was with these rows
             w, h = win.render(rows, height, look=look, min_w=sw, **style)
         return (w, h)
@@ -306,6 +313,22 @@ class SysInfo:
             steady = self._steady = {}
         steady[name], sw = layout.steady_width(steady.get(name), key, int(w))
         return sw
+
+    CARDS = ("hud", "today", "music")               # the cards that share a width in a bar (1.8.29)
+
+    def _column_min_w(self, name, w: int, avail) -> int:
+        """1.8.29 (user: "rechts sind die Felder nicht untereinander"): the width the other cards in the same
+        black bar had last tick (layout.column_widths, computed in _el_resolve from the natural widths) – the
+        card is drawn at it, so System values, "today" and music make one column. ``w`` = this card's natural
+        width (remembered for the others); never wider than ``avail``."""
+        nat = getattr(self, "_col_nat", None)
+        if nat is None:
+            nat = self._col_nat = {}
+        nat[name] = int(w)
+        if not self.settings["overlay"].get("cards_same_width", True):
+            return 0
+        col = getattr(self, "_col_min", {}).get(name, 0)
+        return int(min(col, avail)) if avail else int(col)
 
     def _today_dragged(self, x, y):
         """"Today" dropped somewhere (edit mode): from now on its own place there."""
@@ -521,7 +544,7 @@ class SysInfo:
         up = kw.get("upnext")
         key = (kw.get("skin"), kw.get("style"), kw.get("height"), kw.get("cover") is not None, kw.get("look"),
                kw.get("upnext_pos"), len(up[1]) if up and up[1] else 0, int(avail), bool(win.editing))
-        sw = self._steady_width("music", key, w)
+        sw = max(self._steady_width("music", key, w), self._column_min_w("music", w, avail))
         if sw > w:
             kw["min_w"] = sw
             if self._media_trans is not None:
@@ -681,8 +704,11 @@ class SysInfo:
             win = getattr(self, attr, None)
             if win is not None and win.shown and name in orig:
                 boxes.append((name, orig[name]))
-        shift = layout.resolve(boxes, [self.worker.overlay_rect] + layout.keep_out_boxes(o, game), game,
-                               self._bands(gx, gy, gw, gh), layout.stack_gap(o, gh)) if gh else {}
+        shift = layout.resolve(boxes, [self.worker.overlay_rect], game, self._bands(gx, gy, gw, gh),
+                               layout.stack_gap(o, gh), soft=layout.keep_out_boxes(o, game)) if gh else {}
+        # 1.8.29: which cards stand in the same bar – next tick they are drawn at the widest natural width
+        self._col_min = layout.column_widths({n: b for n, b in boxes if n in self.CARDS}, game,
+                                             getattr(self, "_col_nat", {})) if gh else {}
         if shift != self._el_shift:
             self._el_shift = shift
             for name, attr, rect in self.ELEMENT_WINDOWS:

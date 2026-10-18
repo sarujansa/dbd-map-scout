@@ -168,6 +168,7 @@ SPECS = {
                 ("check", "ov.limits"),                                                          # 1.8.14
                 ("row", (("check", "ov.limits_same"), ("button", "ov.limits_reset"), ("stretch",))),
                 ("hint", "ov.limits_hint"), ("check", "ov.keep_out"),                         # 1.8.25
+                ("row", (("check", "ov.same_width"), ("button", "ov.merge_column"), ("stretch",))),   # 1.8.29
                 ("row", (("label", "ov.preset.label"), ("combo", "ov.preset"), ("button", "ov.preset_apply"),
                          ("stretch",))),
                 ("check", "ov.fade"), ("check", "ov.per_size"), ("hint", "ov.per_size_hint"))))),

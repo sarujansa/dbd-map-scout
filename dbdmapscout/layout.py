@@ -452,12 +452,26 @@ def boxes_overlap(a, b, pad: int = 0) -> bool:
             a[1] < b[1] + b[3] + pad and b[1] < a[1] + a[3] + pad)
 
 
-def resolve(boxes, fixed, game, bands, gap: int) -> dict:
+def resolve(boxes, fixed, game, bands, gap: int, soft=()) -> dict:
     """1.8.25 (user: "alle UI-Elemente beachten, damit es immer sauber aussieht"): {name: (dx, dy)} so that no box
-    lies on an earlier one or on a ``fixed`` box (the map, keep-out areas). ``boxes`` = [(name, (x, y, w, h))] in
-    priority order; a box that collides moves up or down to the nearest free place in its bar between its lines
-    (else on the screen) – without one, sideways within its bar (a narrow area reaching in from the game picture);
-    with no free place at all it stays where it is."""
+    lies on an earlier one or on a ``fixed`` box (the map). ``boxes`` = [(name, (x, y, w, h))] in priority order;
+    a box that collides moves up or down to the nearest free place in its bar between its lines (else on the
+    screen) – without one, sideways within its bar (a narrow area reaching in from the game picture); with no
+    free place at all it stays where it is. ``soft`` (1.8.29) = the keep-out areas (Discord): kept free when
+    that leaves every element off the others – else ignored, so two cards never end up on each other because
+    a zone reaches a few pixels into the bar (bar-wide cards of one column did)."""
+    out = _resolve(boxes, list(fixed) + list(soft), game, bands, gap)
+    if soft:
+        final = [(x + out.get(n, (0, 0))[0], y + out.get(n, (0, 0))[1], w, h) for n, (x, y, w, h) in
+                 ((n, b) for n, b in boxes if b)]
+        hard = [tuple(f) for f in fixed if f]
+        for i, b in enumerate(final):
+            if any(boxes_overlap(b, p) for p in hard + final[:i]):
+                return _resolve(boxes, fixed, game, bands, gap)
+    return out
+
+
+def _resolve(boxes, fixed, game, bands, gap: int) -> dict:
     gx, gy, gw, gh = game
     bar = bar_width(gw, gh)
     placed = [tuple(f) for f in fixed if f]
@@ -489,6 +503,22 @@ def resolve(boxes, fixed, game, bands, gap: int) -> dict:
         if (x, y) != tuple(box[:2]):
             out[name] = (int(x - box[0]), int(y - box[1]))
         placed.append((x, y, w, h))
+    return out
+
+
+def column_widths(boxes: dict, game, widths: dict | None = None) -> dict:
+    """1.8.29 (user: "rechts sind die Felder nicht untereinander"): the cards in the same black bar share one
+    width – the widest of them. ``boxes`` = {name: (x, y, w, h)} as placed; ``widths`` = natural widths to count
+    instead of the boxes' (the App: before any widening). Returns {name: width} for the cards that get wider."""
+    sides = {n: box_side(b, game) for n, b in boxes.items() if b}
+    nat = {n: int((widths or {}).get(n, boxes[n][2])) for n in sides}
+    out = {}
+    for n, s in sides.items():
+        if s is None:
+            continue
+        w = max(nat[m] for m, s2 in sides.items() if s2 == s)
+        if w > nat[n]:
+            out[n] = w
     return out
 
 
