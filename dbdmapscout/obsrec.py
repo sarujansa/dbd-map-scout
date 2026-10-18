@@ -419,6 +419,156 @@ def select_recordings(recs: list[Recording], since: float | None = None, map_lab
     return sorted(out, key=lambda r: r.t, reverse=True)
 
 
+
+# ------------------------------------------------------------------ clips (1.8.13): the list in the tab "Aufnahmen"
+CLIPS_INDEX = "dbdmapscout-clips.jsonl"     # in Clips/: what the program made there (only these are deleted)
+CLIP_EXTS = (".mp4", ".mkv", ".mov", ".webm", ".flv", ".png", ".jpg")
+STILL_EXTS = (".png", ".jpg")
+CLIP_KINDS = ("clip", "instant", "still")
+_STAMP_RE = re.compile(r"^(\d{4}-\d\d-\d\d \d\d-\d\d) (.+)$")
+_COPY_RE = re.compile(r" \(\d+\)$")                     # unique_path / _unique: "name (2)"
+
+
+@dataclass
+class Clip:
+    file: str                    # name inside Clips/
+    t: float = 0.0               # made at
+    kind: str = "clip"           # clip (editor) / instant (F8) / still (picture from the editor)
+    source: float = 0.0          # banner time of the round it came from (0 = unknown)
+    map_id: str = ""
+    label: str = ""
+    role: str = ""
+    killer: str = ""
+    farming: bool = False
+    seconds: float = 0.0         # length (0 = unknown / a still)
+    size: int = 0                # bytes, filled when listed
+    adopted: bool = False        # not in the index: an older version made it (told by its name), never saved
+
+
+def clips_dir(folder: str) -> str:
+    return os.path.join(folder, CLIPS_DIR)
+
+
+def load_clips(cdir: str) -> list[Clip]:
+    out = []
+    try:
+        with open(os.path.join(cdir, CLIPS_INDEX), encoding="utf-8") as f:
+            for line in f:
+                try:
+                    d = json.loads(line)
+                    out.append(Clip(**{k: v for k, v in d.items() if k in Clip.__dataclass_fields__}))
+                except (ValueError, TypeError):
+                    continue
+    except OSError:
+        pass
+    return out
+
+
+def save_clips(cdir: str, clips: list[Clip]):
+    path = os.path.join(cdir, CLIPS_INDEX)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        for c in sorted(clips, key=lambda c: c.t):
+            d = asdict(c)
+            d.pop("adopted", None)
+            f.write(json.dumps(d, ensure_ascii=False) + "\n")
+    os.replace(tmp, path)
+
+
+def _who(who: str) -> tuple[str, str]:
+    """The name part after " – " → (role, killer): "Survivor" / "Killer" / a killer's name."""
+    who = (who or "").strip()
+    if not who:
+        return "", ""
+    if who.lower() == "survivor":
+        return "survivor", ""
+    if who.lower() == "killer":
+        return "killer", ""
+    return "killer", who
+
+
+def adopt_clip(name: str, recs: list[Recording]) -> Clip | None:
+    """A file in Clips/ that is not in the index: made by this program before 1.8.13 when its name says so –
+    an editor clip/still starts with the name of a recording and goes on with " – Clip …" / " – Bild …",
+    an instant clip ends with "(Sofort-Clip)" – then its round comes from that recording or from the name.
+    Anything else is someone else's file: None (listed nowhere, never deleted)."""
+    stem, ext = os.path.splitext(name)
+    ext = ext.lower()
+    if ext not in CLIP_EXTS:
+        return None
+    stem = _COPY_RE.sub("", stem)
+    still = ext in STILL_EXTS
+    for r in recs:
+        base = os.path.splitext(re.split(r"[\\/]", r.file)[-1])[0]
+        if base and stem.startswith(base + " – "):
+            return Clip(file=name, kind="still" if still else "clip", source=r.t, map_id=r.map_id, label=r.label,
+                        role=r.role, killer=r.killer, farming=r.farming, adopted=True)
+    tails = [(" " + t, "instant") for t in {"(Sofort-Clip)", _("(Sofort-Clip)")}]
+    kind = next((k for tail, k in tails if stem.endswith(tail) and not still), None)
+    if kind is not None:
+        stem = stem[:-len(next(tail for tail, _k in tails if stem.endswith(tail)))]
+    else:
+        m = re.search(r" – (?:Clip \d+m\d\ds-\d+m\d\ds|(?:Bild|{}) \d+-\d\d(?:\.\d)?)$".format(re.escape(_("Bild"))),
+                      stem)
+        if m is None:
+            return None
+        kind, stem = ("still" if still else "clip"), stem[:m.start()]
+    m = _STAMP_RE.match(stem)
+    if m is None:
+        return None
+    rest = m.group(2)
+    label, _sep, who = rest.rpartition(" – ") if " – " in rest else (rest, "", "")
+    role, killer = _who(who)
+    return Clip(file=name, kind=kind, label=label.strip(), role=role, killer=killer, adopted=True)
+
+
+def list_clips(cdir: str, recs: list[Recording]) -> list[Clip]:
+    """The clips on the drive: index entries whose file is there, plus the program's older clips (adopt_clip);
+    ``size`` and – for adopted ones – ``t`` (file time) filled. Newest first."""
+    try:
+        names = os.listdir(cdir)
+    except OSError:
+        return []
+    index = {c.file: c for c in load_clips(cdir)}
+    out = []
+    for name in names:
+        p = os.path.join(cdir, name)
+        if name in (CLIPS_INDEX, CLIPS_INDEX + ".tmp") or not os.path.isfile(p):
+            continue
+        c = index.get(name) or adopt_clip(name, recs)
+        if c is None:
+            continue
+        try:
+            st = os.stat(p)
+        except OSError:
+            continue
+        c.size = st.st_size
+        if not c.t:
+            c.t = st.st_mtime
+        out.append(c)
+    return sorted(out, key=lambda c: c.t, reverse=True)
+
+
+def select_clips(clips: list[Clip], since: float | None = None, role: str | None = None, killer: str | None = None,
+                 kind: str | None = None) -> list[Clip]:
+    """1.8.13 (user: "filtern nach Killer/Survivor"): ``role`` like the recordings ("killer" / "survivor" /
+    "farming"), ``killer`` = one killer (rounds as killer), ``kind`` clip / instant / still."""
+    out = []
+    for c in clips:
+        if since is not None and c.t < since:
+            continue
+        if role == "farming":
+            if not c.farming:
+                continue
+        elif role and (c.role != role or c.farming):
+            continue
+        if killer and (c.role != "killer" or c.killer != killer):
+            continue
+        if kind and c.kind != kind:
+            continue
+        out.append(c)
+    return sorted(out, key=lambda c: c.t, reverse=True)
+
 @dataclass
 class Space:
     """1.4.2: what the overview's tile "Aufnahmen" shows – measured by the recorder thread, never on the UI thread."""
@@ -683,6 +833,14 @@ class Recorder(threading.Thread):
         """1.5: remove one recording (its files from the index only) and its index entry."""
         self.cmds.put(("delete", float(t)))
 
+    def add_clip(self, **meta):
+        """1.8.13: the editor saved a clip / still – into the clips index (written on this thread only)."""
+        self.cmds.put(("clip_add", meta))
+
+    def delete_clip(self, name: str):
+        """1.8.13: remove one clip – only a file of the clips index (or one the program made before it)."""
+        self.cmds.put(("clip_delete", str(name)))
+
     def set_farming(self, t: float, on: bool):
         """1.5.4: the statistics marked the round as farming (or not): the recording follows – flag in the index,
         file into / out of the subfolder FARMING_DIR. Unknown rounds are ignored."""
@@ -738,6 +896,10 @@ class Recorder(threading.Thread):
                     self._delete_one(arg)
                 elif cmd == "farming":
                     self._set_farming(*arg)
+                elif cmd == "clip_add":
+                    self._add_clip(arg)
+                elif cmd == "clip_delete":
+                    self._delete_clip(arg)
             except ObsError as e:
                 self._say(str(e), False)
             except Exception as e:                     # never let the thread die
@@ -831,6 +993,50 @@ class Recorder(threading.Thread):
         self._post("changed", what="delete", t=t, file=hit.file)
         if gone:
             self._post("deleted", files=gone, manual=True)
+        self._look_at_space(force=True)
+
+    def _add_clip(self, meta, folder=None):
+        folder = folder or self.folder()
+        name = os.path.basename(str(meta.get("file") or ""))
+        if folder is None or not name:
+            return
+        cdir = clips_dir(folder)
+        clips = [c for c in load_clips(cdir) if c.file != name]
+        try:
+            size = os.path.getsize(os.path.join(cdir, name))
+        except OSError:
+            return                                          # not in Clips/: not ours to list
+        fields = {k: v for k, v in meta.items() if k in Clip.__dataclass_fields__ and k not in ("file", "size")}
+        clips.append(Clip(file=name, size=size, **{"t": time.time(), **fields}))
+        try:
+            save_clips(cdir, clips)
+        except OSError as e:
+            log.info("Clip-Index nicht geschrieben: %s", e)
+            return
+        self._post("changed", what="clip", file=name)
+
+    def _delete_clip(self, name):
+        folder = self.folder()
+        if folder is None:
+            self._warn(_("Aufnahme-Laufwerk nicht angeschlossen."))
+            return
+        cdir = clips_dir(folder)
+        if os.path.basename(name) != name or name in (CLIPS_INDEX, ""):
+            return                                          # only a plain name inside Clips/
+        hit = next((c for c in list_clips(cdir, load_index(folder)) if c.file == name), None)
+        if hit is None:
+            return                                          # someone else's file: never
+        try:
+            os.remove(os.path.join(cdir, name))
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            self._warn(_("Clip nicht gelöscht ({error}): {file}", error=e.__class__.__name__, file=name))
+            return
+        clips = load_clips(cdir)
+        if any(c.file == name for c in clips):
+            save_clips(cdir, [c for c in clips if c.file != name])
+        self._post("changed", what="clip_delete", file=name)
         self._look_at_space(force=True)
 
     def _look_at_space(self, force=False):
@@ -1294,5 +1500,9 @@ class Recorder(threading.Thread):
         else:                                            # no ffmpeg / cut failed: the whole buffer is the clip
             target = os.path.join(clips, self._unique(clips, name + (os.path.splitext(src)[1] or ".mkv")))
             out = self._move(src, target)
+        if os.path.dirname(out) == clips:                 # 1.8.13: into the clips list with its round
+            self._add_clip({"file": os.path.basename(out), "kind": "instant", "seconds": float(self.cfg.clip_s),
+                            **{k: meta[k] for k in ("source", "map_id", "label", "role", "killer", "farming")
+                               if k in meta}}, folder)
         self._post("clip", ok=True, file=os.path.basename(out), seconds=int(self.cfg.clip_s))
         self._look_at_space(force=True)

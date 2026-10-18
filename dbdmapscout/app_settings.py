@@ -267,6 +267,10 @@ class SettingsTab:
                                                         values=[lbl for _s, lbl in self._rec_clips]))
         cc.pack(side="left", padx=6)
         cc.bind("<<ComboboxSelected>>", lambda e: self._rec_setting())
+        self.rec_clip_notify_var = ui.BooleanVar(value=bool(self.settings.get("rec_clip_notify", True)))   # 1.8.13
+        self._reg("st.more.rec_clip_notify", ui.Checkbutton(ri, text=_("mit kurzer Meldung"),
+                                                             variable=self.rec_clip_notify_var,
+                                                             command=self._rec_setting)).pack(side="left", padx=(6, 0))
         self.rec_audio_var = ui.BooleanVar(value=bool(self.settings.get("rec_audio", True)))      # 1.6
         self._reg("st.more.rec_audio", ui.Checkbutton(rc, text=_("Ton in OBS einstellen, sobald DBD startet:"),
                                                        variable=self.rec_audio_var, command=self._rec_setting)).pack(anchor="w", pady=(4, 0))
@@ -540,6 +544,7 @@ class SettingsTab:
             self.settings.set("rec_early", cfg.early)
             self.settings.set("rec_instant", cfg.instant)
             self.settings.set("rec_clip_s", int(cfg.clip_s))
+            self.settings.set("rec_clip_notify", bool(self.rec_clip_notify_var.get()))
             self.settings.set("rec_audio", cfg.audio)
             for key in ("dbd", "discord", "desktop", "mic"):
                 self.settings.set("rec_audio_" + key, bool(getattr(cfg, "audio_" + key)))
@@ -612,8 +617,10 @@ class SettingsTab:
                 self._log(_("Sofort-Clip gespeichert ({n} s): {file}", n=d.get("seconds", 0), file=d.get("file", "")),
                           "System")
                 self._rec_dirty = True
+                self._clip_toast(_("Clip gespeichert ✓"), _("{n} s · im Tab Aufnahmen → Clips", n=d.get("seconds", 0)))
             else:
                 self._log(_("Kein Sofort-Clip: {why}", why=d.get("why", "")), "Fehler")
+                self._clip_toast(_("Kein Clip"), d.get("why", ""), 5)
         elif kind == "changed":                 # 1.5: keep / delete done by the recorder thread
             self._rec_changed(d)
         elif kind == "marked":                  # 1.4.2: F8
@@ -633,9 +640,19 @@ class SettingsTab:
             self._log(_("Keine Aufnahme läuft – keine Clip-Marke gesetzt."), "System")
             return
         if instant:
+            self._clip_toast(_("Clip wird gespeichert …"),
+                             _("Die letzten {n} s aus dem Puffer von OBS", n=int(self.settings.get("rec_clip_s", 30))),
+                             6)
             hist = self._hist or {}
             self.recorder.instant_clip(label=hist.get("map", ""), role=hist.get("role", ""),
-                                       killer=hist.get("killer", ""))
+                                       killer=hist.get("killer", ""), map_id=hist.get("map_id", ""),   # 1.8.13
+                                       farming=bool(hist.get("farming")), source=float(hist.get("t") or 0.0))
+
+    def _clip_toast(self, title, text, seconds=3):
+        """1.8.13 (user: "eine kleine Benachrichtigung, wenn ich mit F8 einen Clip mache"): the own notification
+        window bottom right – also while DBD is in front (that is when F8 is pressed); no sound."""
+        if self.settings.get("rec_clip_notify", True):
+            self.toast.show(title, text, seconds)
 
     def _reveal_rec(self):
         """Overview tile "Aufnahmen" → Settings, "Mehr" open, the card "Aufnahmen mit OBS" lit up."""

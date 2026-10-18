@@ -508,6 +508,7 @@ class ClipWindow(QWidget):
         self.compact, self.on_expand = bool(compact), on_expand
         self.path, self.marks, self.clips_dir = path, sorted(float(m) for m in marks or ()), clips_dir
         self.on_saved, self.on_setting, self.log = on_saved, on_setting, (log or (lambda text, kind="System": None))
+        self.saved_seconds = {}           # 1.8.13: out path -> length of the clip (the clips list shows it)
         self.dark = dark
         self.info = clipedit.probe(path)
         self.ffmpeg = clipedit.ffmpeg_exe()
@@ -1154,6 +1155,7 @@ class ClipWindow(QWidget):
         self.save_btn.setEnabled(False)
         self.status.setText(_("Schreibe {file} …", file=os.path.basename(out)))
         start, end = tl.start, tl.end
+        self.saved_seconds[out] = round(max(0.0, end - start), 1)
 
         target, info, mix = self._target_mb, self.info, self.mix()
         censor = self._censor_args()
@@ -1213,6 +1215,8 @@ class ClipWindow(QWidget):
             self.show_btn.setEnabled(True)
             self.status.setText(_("Standbild gespeichert: {file}", file=os.path.basename(out)))
             self.log(_("Standbild gespeichert: {file}", file=out), "System")
+            if self.on_saved:                       # 1.8.13: stills are in the clips list too
+                self.on_saved(out)
         else:
             self.status.setText(_("Standbild nicht gespeichert."))
 
