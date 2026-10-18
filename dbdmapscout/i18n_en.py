@@ -1589,6 +1589,7 @@ EN = {
     'Andere Programme mit eigener Tonquelle in OBS (z. B. Spotify, Browser) – OBS-Spur 5. Der Desktop-Ton von Windows enthält auch DBD und Discord und liegt nur auf Spur 1.': "Other programs with a sound source of their own in OBS (e.g. Spotify, browser) – OBS track 5. Windows' desktop sound holds DBD and Discord too and sits on track 1 only.",
     'Andere Programme mit eigener Tonquelle in OBS (z. B. Spotify, Browser) im Sofort-Clip – OBS-Spur 5.': 'Other programs with a sound source of their own in OBS (e.g. Spotify, browser) in the instant clip – OBS track 5.',
     'Tonquelle angelegt: {name}': 'Sound source created: {name}',
+    'Tonquelle {name} hört jetzt auf {exe}': 'Sound source {name} now listens to {exe}',
     'Auf Spur 5 (Hintergrund) statt bei Spiel/Discord/Mikrofon: {names}': 'On track 5 (background) instead of with game/Discord/microphone: {names}',
     'Auf Spur {n} ist in der ganzen Aufnahme nichts zu hören.': 'Nothing can be heard on track {n} in the whole recording.',
     'Tonquelle zur Szene „{scene}“ hinzugefügt: {name}': 'Sound source added to the scene "{scene}": {name}',
