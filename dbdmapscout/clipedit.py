@@ -21,6 +21,7 @@ from .obsrec import CLIPS_DIR as _CLIPS_DIR, NAME_CHARS, ffmpeg_exe
 PREVIEW_H = 540                  # px: frames for the preview picture
 THUMB_H = 54                     # px: pictures of the timeline strip
 THUMBS = 24                      # pictures along the strip
+THUMB_WORKERS = 4                # 1.8.3: key-frame seeks for the strip running at once
 FPS_CAP = 30.0                   # playback: at most this many frames a second (preview, not the file)
 SIZE_RE = re.compile(rb"Video: .*?, (\d{2,5})x(\d{2,5})")
 FPS_RE = re.compile(rb"(\d+(?:\.\d+)?) fps")
@@ -86,18 +87,25 @@ def scaled(info: Info, height: int) -> tuple[int, int]:
     return max(2, round(info.width * h / info.height / 2) * 2), h
 
 
-def frame_at(path: str, t: float, height: int = PREVIEW_H, info: Info | None = None, ffmpeg: str | None = None):
+def frame_at(path: str, t: float, height: int = PREVIEW_H, info: Info | None = None, ffmpeg: str | None = None,
+             keyframe: bool = False):
     """One picture at second ``t`` as PIL image (RGB), or None. Seeks to the key frame before ``t`` and decodes
-    up to it – about 40 ms for 1080p, more for 1440p."""
+    up to it – about 40 ms for 1080p, more for 1440p and up to a key-frame interval of decoding (OBS: 2–4 s of
+    frames, measured 70–190 ms at 1080p60). ``keyframe`` (1.8.3): only the key frame at or before ``t``, no decoding
+    up to ``t`` – ~40 ms whatever the interval, the picture up to one interval early (strip, first look). Needs
+    ``-fps_mode passthrough``: that frame carries a negative output timestamp, and the constant-rate default
+    drops it unless a later frame follows – near the end of a file none does (measured: nothing came back)."""
     from PIL import Image
     ffmpeg = ffmpeg or ffmpeg_exe()
     info = info or probe(path, ffmpeg)
     if not ffmpeg or not info.ok:
         return None
     w, h = scaled(info, height)
+    quick = ["-noaccurate_seek", "-skip_frame", "nokey"] if keyframe else []
+    out = ["-an", "-fps_mode", "passthrough"] if keyframe else []
     try:
-        p = subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-ss", f"{max(0.0, t):.3f}", "-i", path,
-                            "-frames:v", "1", "-vf", f"scale={w}:{h}", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+        p = subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", *quick, "-ss", f"{max(0.0, t):.3f}", "-i", path,
+                            *out, "-frames:v", "1", "-vf", f"scale={w}:{h}", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
                            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=30,
                            creationflags=_flags())
     except (OSError, subprocess.TimeoutExpired):
@@ -109,50 +117,28 @@ def frame_at(path: str, t: float, height: int = PREVIEW_H, info: Info | None = N
 
 
 def thumb_strip(path: str, times: list, height: int = THUMB_H, info: Info | None = None, ffmpeg: str | None = None,
-                stop=lambda: False):
-    """1.7.1 (user: the strip loaded slowly): the pictures for evenly spaced ``times`` from ONE ffmpeg run that
-    decodes key frames only (``-skip_frame nokey``; the fps filter repeats the key frame before each moment) –
-    yields (index, image) as they arrive instead of one seek + decode per picture. A picture may show the key
-    frame up to one key-frame interval earlier (OBS: ~2–4 s), which is fine for a strip. ``stop()`` True ends it."""
-    from PIL import Image
+                stop=lambda: False, workers: int = THUMB_WORKERS):
+    """The pictures of the strip for ``times``, yielded as (index, image) in the order they finish. 1.8.3 (user:
+    "das Laden optimieren"): ``workers`` key-frame seeks at once (frame_at(keyframe=True)) – the strip takes
+    ~0.4 s whatever the length of the recording (measured 1080p60, 4 cores). 1.7.1 streamed it from one
+    key-frame-only run over the whole file, which grew with its length (6 min: 1.7 s, 15 min: ~4.5 s). A picture
+    may show the key frame up to one key-frame interval earlier (OBS: ~2–4 s), fine for a strip. ``stop()`` True
+    ends it; a picture ffmpeg could not give is left out (the caller fetches it the exact way)."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     ffmpeg = ffmpeg or ffmpeg_exe()
     info = info or probe(path, ffmpeg)
-    if not ffmpeg or not info.ok or len(times) < 2:
+    if not ffmpeg or not info.ok or len(times) < 2 or stop():
         return
-    step = times[1] - times[0]
-    if step <= 0:
-        return
-    w, h = scaled(info, height)
-    need = w * h * 3
-    try:
-        proc = subprocess.Popen([ffmpeg, "-hide_banner", "-loglevel", "error", "-skip_frame", "nokey",
-                                 "-ss", f"{max(0.0, times[0]):.3f}", "-i", path, "-an", "-sn",
-                                 # the fps filter emits a moment only once a later frame arrived: clone the last
-                                 # key frame long enough (tpad) so the strip's tail is not missing
-                                 "-vf", f"scale={w}:{h},tpad=stop_mode=clone:stop_duration={6 * step:.3f},"
-                                        f"fps=1/{step:.6f}", "-frames:v", str(len(times)),
-                                 "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
-                                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                creationflags=_flags())
-    except OSError:
-        return
-    try:
-        for i in range(len(times)):
-            buf = b""
-            while len(buf) < need and not stop():
-                part = proc.stdout.read(need - len(buf))
-                if not part:
-                    break
-                buf += part
-            if len(buf) < need:
+    with ThreadPoolExecutor(max(1, int(workers)), thread_name_prefix="clip-thumb") as ex:
+        jobs = {ex.submit(frame_at, path, t, height, info, ffmpeg, True): i for i, t in enumerate(times)}
+        for fut in as_completed(jobs):
+            if stop():
+                for other in jobs:
+                    other.cancel()
                 return
-            yield i, Image.frombytes("RGB", (w, h), buf)
-    finally:
-        try:
-            proc.kill()
-        except OSError:
-            pass
-        proc.wait(timeout=5)
+            img = fut.result()
+            if img is not None:
+                yield jobs[fut], img
 
 
 def thumb_times(duration: float, n: int = THUMBS) -> list[float]:
