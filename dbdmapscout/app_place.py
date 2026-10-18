@@ -143,6 +143,7 @@ class OverlayPlacement:
         # 1.8.24: timer/record/server as their own element – measured first, the map makes room for them
         apart = layout.info_apart(o) and self.info_win is not None and not vb
         self.overlay.set_info_apart(apart)
+        self.overlay.set_lines_top(o.get("info_pos") == "inside_top")      # 1.8.34: one block, lines on top
         info = self._info_card(gh, margin, bar) if apart else None
         if not apart:
             self._info_hide(fade)

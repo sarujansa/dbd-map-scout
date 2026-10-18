@@ -741,13 +741,15 @@ def frame_pad(style: str, text_h: int) -> int:
 
 
 def map_card(body, name: str, realm: str, timer: str, note: str, record: str, server: str, ping, status,
-             text_h: int, style: str, accent=None, rec=None) -> Image.Image:
+             text_h: int, style: str, accent=None, rec=None, lines_top: bool = False) -> Image.Image:
     """The map window in ``style``: ``body`` = the map picture without its drawn name (None: the lines alone –
     the info element – or the waiting card with ``status`` lines); ``name``/``realm`` for the header; ``timer``
     big, ``note`` (amber chip), ``record`` and ``server`` + ``ping`` as chips below a hairline; ``text_h`` sizes
     the text. ``rec``: OBS records – True/False = on/off phase of the blinking "● REC" chip right of the server
     (1.8.33, user: "das Rekord-Zeichen neben Global als REC blinkend"; before: a dot right of the timer), None =
-    no chip. One drawing for every modern style (1.8.27), the surface comes from SURFACES."""
+    no chip. ``lines_top`` (1.8.34, user: "mit der Map kombinieren, oben oder unten"): timer and chips between the
+    header and the map instead of below it. One drawing for every modern style (1.8.27), the surface comes from
+    SURFACES."""
     from .overlay_win32 import INFO_WARN, REC_DOT, ping_colour
     u = max(0.25, text_h / MAP_U)
     acc = accent_rgba(accent)
@@ -791,14 +793,18 @@ def map_card(body, name: str, realm: str, timer: str, note: str, record: str, se
         blocks.append(("realm", int(HEAD_H * u), 0))
     if name:
         blocks.append(("name", int(30 * u), 0))
-    if body is not None:
+    top = bool(lines_top and body is not None and (timer or lines or row_pic))
+    if body is not None and not top:
         blocks.append(("body", body.height, int(6 * u) if head else 0))
     if timer:
-        blocks.append(("timer", int(52 * u), int(10 * u) if body is not None else 0))
+        blocks.append(("timer", int(52 * u), 0 if top else int(10 * u) if body is not None else 0))
     for i in range(len(lines)):
         blocks.append((f"status{i}", int(28 * u), int(8 * u) if i == 0 and body is not None else 0))
     if row_pic:
         blocks.append(("chips", row_pic.height, int(16 * u) if (timer or lines) else int(10 * u) if body is not None else 0))
+    if top:                                          # 1.8.34: the map below the lines, a hairline between – the
+        blocks.append(("body_below", body.height,   # gaps add up as below the map: switching never resizes the card
+                       (int(6 * u) if head else 0) + int(10 * u)))
     h = pad + sum(bh + g for _k, bh, g in blocks) + pad
     im = _frame(w, h, style, u)
     y = pad
@@ -809,6 +815,9 @@ def map_card(body, name: str, realm: str, timer: str, note: str, record: str, se
         elif kind == "name":
             _text(im, pad, y - int(2 * u), name, nf, WHITE)
         elif kind == "body":
+            im.alpha_composite(body, ((w - body.width) // 2, y))
+        elif kind == "body_below":
+            _hairline(im, pad, w - pad, y - g // 2)
             im.alpha_composite(body, ((w - body.width) // 2, y))
         elif kind == "timer":
             x = (w - field_w) / 2 if body is not None else pad
