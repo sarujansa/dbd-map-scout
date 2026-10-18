@@ -1477,3 +1477,42 @@ def test_the_notification_window_tells_where_it_is_so_the_detection_skips_it(qap
     assert w > 300 and h > 40
     t.close()
     assert rects[-1] is None and not t.shown
+
+
+def test_the_preview_draws_the_limiter_lines_and_drags_them_in_moving_mode(qapp, keep):
+    """1.8.14 (user: "Limiter … oben und unten" in both black bars): the lines of each bar are drawn; in moving
+    mode a line is grabbed before the element under it and dragged – with "both alike" the other bar's line
+    follows at once."""
+    from PIL import Image
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtTest import QTest
+    from dbdmapscout import qt_window
+    posted = queue.Queue()
+    view = keep(qt_window.PreviewView("ov.preview", lambda a, arg=None: posted.put((a, arg))))
+    view.resize(1000, 459)
+    data = {"screen": (3440, 1440), "bar": 440, "rect": (20, 150, 300, 400, 400), "opacity": 1.0,
+            "pics": {"map": Image.new("RGBA", (200, 100), "white")}, "layers": [("map", 20, 150, 300, 400)],
+            "limits": {"left": (144, 1296), "right": (115, 1325)}, "limits_same": True}
+    view.show_state({"data": data, "visible": True})
+    view.show()
+    assert len(view._limit_lines()) == 4
+    view.grab()                                               # drawn without moving mode too
+    view.show_state({"data": dict(data, editing=True), "visible": True})
+    view.grab()
+    ox, oy, s = view._frame()
+
+    def at(x, y):
+        return QPoint(round(ox + x * s), round(oy + y * s))
+    QTest.mousePress(view, Qt.LeftButton, Qt.NoModifier, at(100, 147))       # on the left top line (over the map)
+    assert view._limit == ("left", "top") and posted.empty()                  # the line, not the map
+    QTest.mouseMove(view, at(100, 300))
+    action, (key, (what, side, which, y)) = posted.get_nowait()
+    assert (what, side, which) == ("limit", "left", "top") and abs(y - 300) < 5
+    lines = {(sd, w): yy for sd, w, _x0, _x1, yy in view._limit_lines()}
+    assert lines[("right", "top")] == lines[("left", "top")]                  # "both alike": the other follows
+    view.grab()
+    QTest.mouseRelease(view, Qt.LeftButton, Qt.NoModifier, at(100, 300))
+    assert view._limit is None
+    QTest.mousePress(view, Qt.LeftButton, Qt.NoModifier, at(1700, 147))      # over the game picture: no line
+    assert view._limit is None
+    QTest.mouseRelease(view, Qt.LeftButton, Qt.NoModifier, at(1700, 147))

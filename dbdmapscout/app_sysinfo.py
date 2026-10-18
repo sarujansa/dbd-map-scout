@@ -191,6 +191,8 @@ class SysInfo:
         else:                                               # own place in the narrow window: the bar above
             x, y = layout.hud_x("left" if side == "left" else "right", gx, gw, margin, sw, 0 if vb else bar,
                                 o.get("bar_align", "centre")), gy + margin
+        if not vb:                                          # 1.8.14: between the limiter lines of its bar
+            y = layout.clamp_box((x, y, sw, h), (gx, gy, gw, gh), self._bands(gx, gy, gw, gh))[1]
         self._fade_show("hud", fade)
         self.hud.show_at(int(x), int(y))
         self.worker.hud_rect = (int(x), int(y), w, h)
@@ -235,7 +237,7 @@ class SysInfo:
                                     o.get("bar_align", "centre"), layout.stack_gap(o, gh),
                                     up=self.settings.get("sysinfo") == "above" and hud is not None
                                     and bool(self._last_place) and hud[1] < self._last_place[1],
-                                    below_box=self._last_place)
+                                    below_box=self._last_place, bands=self._bands(gx, gy, gw, gh))
         self._today_box = placed.get("today")
         if "today" in placed:
             self._fade_show("today", bool(o.get("fade", True)) and not self.overlay.editing)
@@ -328,6 +330,44 @@ class SysInfo:
         self._save_soon()
         self._tick_overlay(reschedule=False)
 
+    def _limits_changed(self):
+        """1.8.14: limiter lines on/off, both bars alike (switched on: the right bar takes the left one's lines)."""
+        self._layout_mark()
+        o = self.settings["overlay"]
+        o["bar_limits_on"] = bool(self.limits_var.get())
+        same = bool(self.limits_same_var.get())
+        lim = [layout.limit_pair(o.get("bar_limits"), s)[i] for s in layout.LIMIT_SIDES for i in (0, 1)]
+        if same and not o.get("bar_limits_same", True):
+            lim[2:] = lim[:2]
+        o["bar_limits"], o["bar_limits_same"] = lim, same
+        self._save_soon()
+        self._tick_overlay(reschedule=False)
+
+    def _limits_reset(self):
+        self._layout_mark()
+        o = self.settings["overlay"]
+        o["bar_limits"] = [layout.LIMIT_DEFAULT] * 4
+        self._save_soon()
+        self._tick_overlay(reschedule=False)
+
+    def _limit_dragged(self, side, which, y):
+        """1.8.14: a limiter line dragged in the preview (edit mode) to ``y`` (screen px from the top of the game)."""
+        o = self.settings["overlay"]
+        if not o.get("bar_limits_on") or side not in layout.LIMIT_SIDES:
+            return
+        self._layout_mark()
+        _gx, _gy, _gw, gh = self._game_rect()
+        f = y / max(1, gh)
+        val = round(min(layout.LIMIT_MAX, max(0.0, f if which == "top" else 1 - f)), 4)
+        lim = [layout.limit_pair(o.get("bar_limits"), s)[i] for s in layout.LIMIT_SIDES for i in (0, 1)]
+        i = (0 if side == "left" else 2) + (0 if which == "top" else 1)
+        lim[i] = val
+        if o.get("bar_limits_same", True):
+            lim[(i + 2) % 4] = val
+        o["bar_limits"] = lim
+        self._save_soon()
+        self._tick_overlay(reschedule=False)
+
     def _today_spot_changed(self):
         self._layout_mark()
         key = dict((_(label), k) for k, label in TODAY_SPOTS).get(self.today_pos_var.get(), "below")
@@ -366,7 +406,11 @@ class SysInfo:
         elif bar >= layout.MIN_BAR and x + w > gx + gw - bar:
             lo, hi = gx + gw - bar + gap, gx + gw - gap - hw
         hx = min(max(hx, lo), max(lo, hi))
-        hy = y - gap - hh if y - gap - hh >= gy else y + h + gap
+        bands = self._bands(gx, gy, gw, gh)                 # 1.8.14: no room above the top line: below the map
+        side = layout.box_side((hx, y, hw, hh), (gx, gy, gw, gh)) if bands else None
+        top = bands[side][0] if side else gy
+        hy = y - gap - hh if y - gap - hh >= top else y + h + gap
+        hy = layout.clamp_box((hx, hy, hw, hh), (gx, gy, gw, gh), bands)[1]
         self._fade_show("hud", fade)
         self.hud.show_at(int(hx), int(hy))
         self.worker.hud_rect = (int(hx), int(hy), hw, hh)
@@ -565,12 +609,17 @@ class SysInfo:
             self._fade_stop(name)
             win.hide()
 
+    def _bands(self, gx, gy, gw, gh):
+        """1.8.14: the room between the limiter lines of each black bar, or None (off / no side bars)."""
+        o = self.settings["overlay"]
+        return layout.bar_bands(o, (gx, gy, gw, gh), int(gh * o.get("margin", 0.012))) if gh else None
+
     def _guides_place(self):
         """Centre cross over the DBD window while moving (1.64.5): two thin click-through windows, hidden
         otherwise. The worker blacks them out (a long light line would look like a banner's separator)."""
         on = self.overlay.editing and self.game is not None
         if not on:
-            for g in getattr(self, "_guides", ()):
+            for g in (*getattr(self, "_guides", ()), *getattr(self, "_limit_guides", ())):
                 g.hide()
             self.worker.guide_rects = ()
             return
@@ -587,7 +636,20 @@ class SysInfo:
         vx, hy = gx + gw // 2 - 1, gy + gh // 2 - 1
         v.show_at(vx, gy)
         hz.show_at(gx, hy)
-        self.worker.guide_rects = ((vx, gy, 3, gh), (gx, hy, gw, 3))
+        rects = [(vx, gy, 3, gh), (gx, hy, gw, 3)]
+        # 1.8.14: the limiter lines of the black bars, in the game too while moving
+        bands, bar = self._bands(gx, gy, gw, gh), int(layout.bar_width(gw, gh))
+        lines = [(gx if side == "left" else gx + gw - bar, y - 1) for side, ys in (bands or {}).items() for y in ys]
+        if lines and not getattr(self, "_limit_guides", None):
+            self._limit_guides = [g for g in (make_hud("DbD Map Scout Grenze") for _i in range(4)) if g is not None]
+        for i, g in enumerate(getattr(self, "_limit_guides", ())):
+            if i < len(lines):
+                g.set_picture(guide_line(bar, False), ("h", bar))
+                g.show_at(int(lines[i][0]), int(lines[i][1]))
+                rects.append((int(lines[i][0]), int(lines[i][1]), bar, 3))
+            else:
+                g.hide()
+        self.worker.guide_rects = tuple(rects)
 
     def _media_dragged(self, x, y):
         """Music card dropped somewhere (edit mode): from now on its own place there."""

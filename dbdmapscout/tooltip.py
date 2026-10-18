@@ -177,6 +177,12 @@ TIPS = {
     "mit kurzer Meldung": "Zeigt beim Sofort-Clip (F8) unten rechts ein kleines Hinweisfenster – „Clip wird "
                           "gespeichert …“ und danach „Clip gespeichert“ bzw. warum nicht. Auch im Spiel, ohne Ton; "
                           "nimmt nie den Fokus.",
+    "Grenzen oben und unten in den schwarzen Balken": "In jedem schwarzen Balken (links und rechts) eine Linie oben "
+                                                       "und eine unten: Karte, Systemwerte, Heute und Musik bleiben "
+                                                       "dazwischen – z. B. frei für eine FPS-Anzeige oder "
+                                                       "Benachrichtigungen. Die Karte wird bei Bedarf kleiner.",
+    "Links und rechts gleich": "Eine Linie ziehen bewegt die gleiche Linie im anderen Balken mit.",
+    "Grenzen zurücksetzen": "Setzt alle vier Linien auf 8 % vom Rand zurück.",
     "Clip abspielen": "Spielt den markierten Clip im Standard-Player von Windows ab.",
     "Clip im Explorer zeigen": "Öffnet den Explorer mit dem markierten Clip.",
     "Clip löschen": "Löscht den markierten Clip von der Platte – nach Rückfrage. Nur Dateien, die das Programm "
