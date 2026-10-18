@@ -62,6 +62,12 @@ AUDIO_APPS = {
     "discord": ("DbD Map Scout – Discord", "Discord:Chrome_WidgetWin_1:Discord.exe"),
 }
 AUDIO_PRIORITY_EXE = 2
+# 1.8.20 (user plays on Epic: the game track stayed silent – the source looked for the Steam executable): which of
+# the windows OBS itself lists for the source is ours. Steam: DeadByDaylight-Win64-Shipping.exe, Epic:
+# DeadByDaylight-EGS-Shipping.exe, Microsoft Store/Xbox: DeadByDaylight-WinGDK-Shipping.exe (the user plays mostly
+# on Steam, sometimes on the others); Discord also as PTB/Canary. Only OBS's own list is read, never the game.
+WINDOW_EXES = {"dbd": re.compile(r"^DeadByDaylight[\w-]*\.exe$", re.I),
+               "discord": re.compile(r"^Discord(PTB|Canary)?\.exe$", re.I)}
 TAILS_S = (0, 3, 5, 8, 10)      # 1.4.1: seconds recorded after the detected end (the result screen)
 DEFAULT_TAIL_S = 5
 MIN_FILE_BYTES = 1024 * 1024    # 1.4.1: a recording smaller than this is reported as broken/empty
@@ -1401,6 +1407,8 @@ class Recorder(threading.Thread):
                         cur = c.request("GetCurrentProgramScene")
                         scene = cur.get("currentProgramSceneName") or cur.get("sceneName") or ""
                     notes += self._in_scene(c, scene, name)
+                if on:
+                    notes += self._follow_window(c, key, name)
                 c.request("SetInputMute", {"inputName": name, "inputMuted": not on})
             special = c.request("GetSpecialInputs")
             others = []
@@ -1420,6 +1428,29 @@ class Recorder(threading.Thread):
         for n in notes:
             log.info("OBS: %s", n)
         return hint
+
+    @staticmethod
+    def _follow_window(c: ObsClient, key: str, name: str) -> list:
+        """1.8.20: point our source at the window OBS offers for the program (WINDOW_EXES) – Steam or Epic DBD,
+        Discord stable/PTB/Canary. Nothing when the program is not running (OBS does not list it then) or the
+        source already points at a listed match; a failure only goes to the log."""
+        try:
+            items = c.request("GetInputPropertiesListPropertyItems",
+                              {"inputName": name, "propertyName": "window"}).get("propertyItems") or []
+            found = [i.get("itemValue") for i in items if i.get("itemEnabled", True)
+                     and WINDOW_EXES[key].match(str(i.get("itemValue") or "").rsplit(":", 1)[-1])]
+            if not found:
+                return []
+            found.sort(key=lambda v: ("Shipping" not in v, ":UnrealWindow:" not in v))   # the game, not a launcher
+            current = (c.request("GetInputSettings", {"inputName": name}).get("inputSettings") or {}).get("window")
+            if current in found:
+                return []
+            c.request("SetInputSettings", {"inputName": name, "inputSettings": {"window": found[0],
+                                                                                "priority": AUDIO_PRIORITY_EXE}})
+        except ObsError as e:
+            log.info("OBS: Fenster der Tonquelle nicht geprüft (%s)", e)
+            return []
+        return [_("Tonquelle {name} hört jetzt auf {exe}", name=name, exe=found[0].rsplit(":", 1)[-1])]
 
     @staticmethod
     def _in_scene(c: ObsClient, scene: str, name: str) -> list:
