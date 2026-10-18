@@ -1377,3 +1377,57 @@ def test_an_element_dropped_on_the_map_moves_off_it_and_keeps_out_of_discords_wi
         assert app._last_place[1] + app._last_place[3] <= voice[1]   # the map stays above Discord's voice widget
     finally:
         app.quit()
+
+
+def test_a_farming_lobby_that_looked_custom_and_the_pages_role_and_killer_win(app_root):
+    """1.8.36 (user's diagnosis: "Rolle/Killer nicht sauber", killer read as "Aeaiily"; "Farming-Runden rutschen
+    immer noch als normale Runden in die Statistik"): cross-play off makes a farming round even when the lobby
+    looked like a custom game (READY without countdown) – the stats page then shows it public: farming, never a
+    normal round; a real custom game stays custom. The page's role and killer win over the lobby reading, also
+    for a killer not on our list; the overlay's "Heute" leaves farming rounds out of Ø kills like the overview."""
+    import json
+    from dbdmapscout import app_sysinfo, history, official
+    from dbdmapscout.app import App
+    from dbdmapscout.lobby import Found
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    starts = []
+    app.recorder.start_round = lambda **k: starts.append(k)
+    try:
+        def play(found, seconds=600):
+            app._queue = {"state": "lobby", "found": found}
+            app._hist_open("coal-tower", 1, "auto")
+            t = app._hist["t"]
+            app._hist_close(t + seconds)
+            return t
+
+        t1 = play(Found(time.time(), None, "killer", custom=True, killer="Aeaiily", crossplay_off=True))
+        assert starts[-1]["farming"] is False                     # the recording waits for the page (custom?)
+        t2 = play(Found(time.time(), None, "survivor", custom=True, crossplay_off=True))
+        t3 = play(Found(time.time(), 30.0, "survivor", crossplay_off=False))
+        saved = {r.t: r for r in history.load(str(app_root / history.FILE))}
+        assert saved[t1].farming and saved[t1].custom and saved[t2].farming and not saved[t3].farming
+        with open(app_root / official.FILE, "a", encoding="utf-8") as f:
+            for t, custom, role, char, kills in ((t1, False, "killer", "The Newcomer", 4),
+                                                 (t2, True, "survivor", "Meg Thomas", None),
+                                                 (t3, False, "killer", "The Nurse", 2)):
+                d = {"t": t - 38, "map": "Coal Tower", "custom": custom, "role": role, "character": char,
+                     "seconds": 600, "status": "ESCAPED" if role == "survivor" else ""}
+                if kills is not None:
+                    d["opp"] = [{"role": "survivor", "status": "SACRIFICED" if i < kills else "ESCAPED"}
+                                      for i in range(4)]
+                f.write(json.dumps(d) + "\n")
+        app._joined_cache = None
+        j = app._joined()
+        got = {r.t: r for r in j.rounds}
+        assert got[t1].farming and not got[t1].custom and got[t1].killer == "The Newcomer"
+        assert got[t2].custom                                     # a real custom game stays one
+        assert (got[t3].role, got[t3].killer) == ("killer", "The Nurse")      # the page over the lobby's survivor
+        assert [r.t for r in history.select(j.rounds)] == [t2, t3]            # "Alle Rollen": custom yes, farming no
+        assert [r.t for r in history.select(j.rounds, role="farming")] == [t1]
+        assert not app._stats_farm_candidates()
+        rows = app_sysinfo.today_rows(j, time.time())
+        kills = [t for row in rows for t, _c in row if "." in t and t.replace(".", "").isdigit()]
+        assert kills == ["2.0"]                                   # Ø kills of the normal killer round only
+    finally:
+        app.quit()

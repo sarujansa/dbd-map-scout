@@ -49,7 +49,11 @@ REDIRECT_PORT = 27831                 # fixed: Spotify matches the registered re
 REDIRECT_PATH = "/callback"
 REDIRECT_URI = f"http://127.0.0.1:{REDIRECT_PORT}{REDIRECT_PATH}"
 LOGIN_WAIT_S = 180.0                  # the browser has this long to come back
-POLL_S = 10.0                         # the queue is read this often while the music card is active
+POLL_S = 30.0                         # the queue is read this often while the music card is active (1.8.36:
+                                      # 10 → 30 s – a song change reads it at once anyway; Development Mode
+                                      # quotas count per developer account since July 2026)
+RATE_WAIT_S = (5.0, 300.0)            # 429 without Retry-After: wait from … doubling up to …
+QUOTA_WAIT_S = 900.0                  # 429 "QUOTA_EXCEEDED": at least this long before asking again
 RETRY_S = 30.0                        # after a network error
 HTTP_TIMEOUT = 8.0
 MAX_ITEMS = 10                        # coming tracks kept (the card shows 1–5)
@@ -61,10 +65,11 @@ class SpotifyError(Exception):
     """``kind``: auth (login needed / refused), expired (401 on the API: refresh first), rate (429), forbidden
     (403: account not allowed in the app), net (everything else)."""
 
-    def __init__(self, msg: str, kind: str = "net", retry_after: float = 0.0):
+    def __init__(self, msg: str, kind: str = "net", retry_after: float = 0.0, reason: str = ""):
         super().__init__(msg)
         self.kind = kind
-        self.retry_after = retry_after
+        self.retry_after = retry_after    # 0 = the answer named no wait
+        self.reason = reason              # 1.8.36: the API's "reason" (QUOTA_EXCEEDED, …)
 
 
 # ------------------------------------------------------------------ HTTP (standard library only)
@@ -91,12 +96,14 @@ def _request(url: str, data: bytes | None = None, headers: dict | None = None) -
         err = d.get("error") if isinstance(d, dict) else None
         msg = d.get("error_description") if isinstance(d, dict) else None
         msg = msg or (err.get("message") if isinstance(err, dict) else err) or f"HTTP {e.code}"
+        reason = str((err.get("reason") if isinstance(err, dict) else None) or
+                     (d.get("reason") if isinstance(d, dict) else None) or "")
         if e.code == 429:
             try:
-                wait = float(e.headers.get("Retry-After", 5) or 5)
+                wait = max(1.0, float(e.headers.get("Retry-After") or 0))
             except ValueError:
-                wait = 5.0
-            raise SpotifyError(str(msg), "rate", max(1.0, wait)) from None
+                wait = 0.0
+            raise SpotifyError(str(msg), "rate", wait if e.headers.get("Retry-After") else 0.0, reason) from None
         if e.code == 401:
             raise SpotifyError(str(msg), "expired") from None
         if e.code == 400:
@@ -203,6 +210,12 @@ def matches(up: UpNext, title: str, artist: str = "") -> bool:
         return True
     first_a, first_b = a.split(",")[0].strip(), b.split(",")[0].strip()
     return first_a in b or first_b in a
+
+
+def is_spotify(app_id) -> bool:
+    """The Windows media session belongs to Spotify (desktop app "Spotify.exe" or the Store app
+    "SpotifyAB.SpotifyMusic_…!Spotify") – then the queue is Spotify's even when the titles are not written alike."""
+    return "spotify" in str(app_id or "").casefold()
 
 
 def lines(up: UpNext, n: int) -> tuple:
@@ -399,6 +412,7 @@ class SpotifyLink(threading.Thread):
         self._verifier = ""
         self._next_fetch = 0.0
         self._retry_at = 0.0
+        self._rate_wait = 0.0             # the last wait after a 429 without Retry-After (doubles)
         self._kicked = False
         self._refreshed_once = False
 
@@ -528,6 +542,7 @@ class SpotifyLink(threading.Thread):
             self._ensure_access(now)
             self.upnext = fetch_queue(self._token.access)
             self._refreshed_once = False
+            self._rate_wait = 0.0
             self.state = "linked"
             self._say(_("Spotify: verbunden"), True)
         except SpotifyError as e:
@@ -535,7 +550,21 @@ class SpotifyLink(threading.Thread):
 
     def _failed(self, e: SpotifyError, now: float):
         if e.kind == "rate":
-            self._retry_at = now + e.retry_after
+            # 1.8.36 (user: "auf Spotify wird mir die Warteschlange nicht mehr angezeigt"): since July 2026 the
+            # quota of Development Mode apps counts per developer account and an exhausted one answers 429
+            # QUOTA_EXCEEDED – before, that was silent and, without Retry-After, asked again every 5 s
+            if e.reason.upper() == "QUOTA_EXCEEDED":
+                wait = max(e.retry_after, QUOTA_WAIT_S)
+                self.state = "error"
+                self._say(_("Spotify: Kontingent der Developer-App aufgebraucht – „Als nächstes“ pausiert bis "
+                            "{time}.", time=time.strftime("%H:%M", time.localtime(now + wait))), False)
+            elif e.retry_after:
+                wait = e.retry_after
+            else:
+                wait = self._rate_wait = min(RATE_WAIT_S[1], max(RATE_WAIT_S[0], 2 * self._rate_wait))
+            if wait >= 60:
+                self.upnext = UpNext()                   # a list that long out of date would be wrong
+            self._retry_at = now + wait
         elif e.kind == "expired" and not self._refreshed_once:     # 401 on the API: refresh first, once
             self._refreshed_once = True
             self._token = Token()
