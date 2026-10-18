@@ -206,6 +206,7 @@ SPECS = {
                                  ("check", "st.more.rec_pre"), ("check", "st.more.rec_buffer"),
                                  ("check", "st.more.rec_merge"), ("check", "st.more.rec_early"),
                                  ("row", (("check", "st.more.rec_instant"), ("combo", "st.more.rec_clip"),
+                                          ("check", "st.more.rec_clip_notify"),
                                           ("stretch",))),
                                  ("check", "st.more.rec_audio"),
                                  ("row", (("check", "st.more.rec_audio_dbd"), ("check", "st.more.rec_audio_discord"),

@@ -135,6 +135,7 @@ DEFAULTS = {
     "rec_early": True,                  # 1.6: start at the end of the loading screen (spawn), the banner names it
     "rec_instant": True,                # 1.6: F8 also saves the last seconds of the replay buffer as a clip
     "rec_clip_s": 30,
+    "rec_clip_notify": True,            # 1.8.13: a short notification for the F8 clip (also while DBD is in front)
     "rec_audio": True,                  # 1.6: set OBS's audio sources when DBD starts (user: only DBD + Discord)
     "rec_audio_dbd": True,
     "rec_audio_discord": True,
