@@ -10,10 +10,10 @@ from __future__ import annotations
 import os
 import threading
 
-from PySide6.QtCore import QObject, QRectF, Qt, Signal
+from PySide6.QtCore import QObject, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-                               QSizePolicy, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit, QProgressBar,
+                               QPushButton, QSizePolicy, QVBoxLayout, QWidget)
 
 from . import clipedit, qt_theme
 from .i18n import N_, _
@@ -26,6 +26,7 @@ MODE_LABELS = {"copy": N_("Schnell (an Schlüsselbildern, Anfang bis zu ein paar
 KEY_HINT = N_("Leertaste Abspielen · ←/→ 1 s · Shift 5 s · Strg 1 Bild · I/O Start/Ende · M Marke · "
               "Pos1/Ende Anfang/Schluss · Entf Kasten weg · Esc schliessen")
 STEP_SMALL, STEP_BIG = 1.0, 5.0
+LOAD_TIMEOUT_MS = 30000           # 1.8.3: the loading screen gives up after this and frees the window
 PREVIEW_MIN = (640, 360)
 
 
@@ -44,6 +45,7 @@ class _Bridge(QObject):
     ended = Signal(object)                # the player that ended
     saved = Signal(bool, str, str)        # ok, path, why
     sound = Signal(object, float)         # wav path (or None) ready for a playback from t
+    strip_done = Signal()                 # 1.8.3: the thumbnail thread is through (all it could get)
 
 
 class Timeline(QWidget):
@@ -408,6 +410,65 @@ class PreviewView(QWidget):
         self.boxes_changed.emit()
 
 
+class LoadingScreen(QWidget):
+    """1.8.3 (user's wish): a screen over the editor while the clip loads – the first picture and the strip of
+    thumbnails come from ffmpeg threads and took a few seconds on long recordings, during which the window
+    looked broken (black picture, empty strip). Shows the file name and a bar; ``finish()`` fades it away."""
+
+    def __init__(self, parent, name: str, total: int):
+        super().__init__(parent)
+        self.total = max(1, total)
+        self.done_n = 0
+        self.finished = False
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setStyleSheet("LoadingScreen { background: rgba(14, 15, 18, 215); }")
+        outer = QVBoxLayout(self)
+        outer.addStretch()
+        row = QHBoxLayout()
+        row.addStretch()
+        card = QFrame()
+        card.setProperty("class", "card")
+        card.setMinimumWidth(380)
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(22, 18, 22, 18)
+        cl.setSpacing(8)
+        self.title = QLabel(_("Clip wird geladen …"))
+        self.title.setProperty("class", "kpi")
+        cl.addWidget(self.title)
+        self.name = QLabel(name)
+        self.name.setProperty("class", "dim")
+        self.name.setWordWrap(True)
+        cl.addWidget(self.name)
+        self.bar = QProgressBar()
+        self.bar.setRange(0, self.total)
+        self.bar.setValue(0)
+        self.bar.setTextVisible(False)
+        cl.addWidget(self.bar)
+        self.detail = QLabel("")
+        self.detail.setProperty("class", "dim")
+        self.detail.setWordWrap(True)
+        cl.addWidget(self.detail)
+        row.addWidget(card)
+        row.addStretch()
+        outer.addLayout(row)
+        outer.addStretch()
+        self.progress(0, _("Vorschaubild und Zeitleiste kommen aus der Aufnahme."))
+
+    def progress(self, n: int, text: str):
+        self.done_n = min(self.total, n)
+        self.bar.setValue(self.done_n)
+        self.detail.setText(text)
+
+    def finish(self, late: bool = False):
+        """Done (or given up): the screen goes away; ``late`` = the timeout, not completion."""
+        if self.finished:
+            return
+        self.finished = True
+        self.hide()
+        if late:
+            self.detail.setText(_("Lädt länger als erwartet – das Fenster ist trotzdem bedienbar."))
+
+
 class ClipWindow(QWidget):
     """One editor per recording. ``on_saved(path)`` / ``on_setting(key, value)`` / ``log(text, kind)`` come from
     the App; ``mode``/``sound`` are the remembered settings."""
@@ -426,7 +487,8 @@ class ClipWindow(QWidget):
         self.player = None
         self.playing = False
         self._wav = None
-        self._want = None                   # latest scrub moment asked for
+        self._want = None                   # latest scrub moment asked for: (t, quick first look?)
+        self._first_look = True             # 1.8.3: the first picture comes as a key frame at once, exact after
         self._scrub_lock = threading.Condition()
         self._closed = False
         self._target_mb = int(target_mb) if target_mb in clipedit.TARGETS_MB else clipedit.DEFAULT_TARGET_MB
@@ -442,10 +504,16 @@ class ClipWindow(QWidget):
         self.resize(1100, 780)
         self.setMinimumSize(760, 600)
         self.setFocusPolicy(Qt.StrongFocus)
+        self.loading = None                 # 1.8.3: LoadingScreen until picture + strip are there
+        self._load_state = {"frame": False, "strip": False, "thumbs": 0}
         if not self.info.ok or not self.ffmpeg:
             self.status.setText(_("Datei nicht lesbar oder ffmpeg fehlt – keine Vorschau."))
             self.save_btn.setEnabled(False)
             return
+        self.loading = LoadingScreen(self, os.path.basename(path), self.timeline.n_thumbs + 1)
+        self.loading.setGeometry(self.rect())
+        self.loading.raise_()
+        QTimer.singleShot(LOAD_TIMEOUT_MS, lambda: self.loading is not None and self.loading.finish(late=True))
         self.timeline.set_duration(self.info.duration)
         self.timeline.marks = self.marks
         self.timeline.set_range(0.0, self.info.duration)
@@ -681,6 +749,8 @@ class ClipWindow(QWidget):
         b.frame.connect(self._show_frame)
         b.played.connect(self._show_played)
         b.thumb.connect(self.timeline.set_thumb)
+        b.thumb.connect(self._thumb_loaded)
+        b.strip_done.connect(lambda: self._loaded("strip"))
         b.ended.connect(self._player_ended)
         b.saved.connect(self._saved)
         b.sound.connect(self._sound_ready)
@@ -692,9 +762,17 @@ class ClipWindow(QWidget):
             with self._scrub_lock:
                 while self._want is None and not self._closed:
                     self._scrub_lock.wait(0.5)
-                t, self._want = self._want, None
-            if t is None:
+                want, self._want = self._want, None
+            if want is None:
                 continue
+            t, quick = want
+            if quick:                                   # 1.8.3: the key frame at once (~40 ms), the exact frame after
+                img = clipedit.frame_at(self.path, t, clipedit.PREVIEW_H, self.info, self.ffmpeg, keyframe=True)
+                if img is not None and not self._closed:
+                    self.bridge.frame.emit(t, img)
+                with self._scrub_lock:
+                    if self._want is not None:          # a newer wish meanwhile: that one, not this exact frame
+                        continue
             img = clipedit.frame_at(self.path, t, clipedit.PREVIEW_H, self.info, self.ffmpeg)
             if img is not None and not self._closed:
                 self.bridge.frame.emit(t, img)
@@ -714,6 +792,30 @@ class ClipWindow(QWidget):
             img = clipedit.frame_at(self.path, t, clipedit.THUMB_H, self.info, self.ffmpeg)
             if img is not None and not self._closed:
                 self.bridge.thumb.emit(i, img)
+        if not self._closed:
+            self.bridge.strip_done.emit()
+
+    # ---- loading screen (1.8.3)
+    def _thumb_loaded(self, _i, _img):
+        self._load_state["thumbs"] += 1
+        self._loaded(None)
+
+    def _loaded(self, what):
+        """A piece arrived (the first picture, the whole strip); the screen shows the count and goes when all is in."""
+        if what:
+            self._load_state[what] = True
+        if self.loading is None or self.loading.finished:
+            return
+        st = self._load_state
+        n = min(self.timeline.n_thumbs, st["thumbs"]) + (1 if st["frame"] else 0)
+        self.loading.progress(n, _("{n} von {total} Bildern", n=n, total=self.timeline.n_thumbs + 1))
+        if st["frame"] and st["strip"]:
+            self.loading.finish()
+
+    def resizeEvent(self, e):
+        if self.loading is not None:
+            self.loading.setGeometry(self.rect())
+        super().resizeEvent(e)
 
     # ---- position
     def goto(self, t: float):
@@ -724,7 +826,8 @@ class ClipWindow(QWidget):
         self.timeline.set_position(t)
         self._show_pos()
         with self._scrub_lock:
-            self._want = t
+            self._want = (t, self._first_look)
+            self._first_look = False
             self._scrub_lock.notify()
 
     def step(self, seconds: float):
@@ -800,6 +903,7 @@ class ClipWindow(QWidget):
     def _show_frame(self, t, img):
         if not self.playing:
             self._paint(img)
+        self._loaded("frame")
 
     def _show_played(self, t, img):
         if self.playing:
