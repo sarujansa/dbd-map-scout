@@ -16,7 +16,7 @@ from functools import lru_cache
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from .i18n import N_
-from .overlay_win32 import _draw_run, _run_len, fira
+from .overlay_win32 import _draw_run, _run_len, cover_radius, fira
 
 STYLES = ("classic", "glass", "chips", "line")
 STYLE_LABELS = [("classic", N_("Klassisch")), ("glass", N_("Glas-Karten")), ("chips", N_("Chips & Icons")),
@@ -217,6 +217,8 @@ def _icon(d, kind, x, y, u, colour=GREY):
 
 
 def _round_cover(cover, side: int, radius: int) -> Image.Image:
+    if radius <= 0:                                 # 1.8.24: square corners chosen
+        return _square_cover(cover, side)
     memo = cover.info if isinstance(getattr(cover, "info", None), dict) else {}
     key = ("_dbdms_round", side, radius)            # 1.6.1: once per cover and size, not every second
     if key in memo:
@@ -437,9 +439,20 @@ def music(rows, cover, height: int, style: str, progress=None, look=(), accent=N
     else:
         im = _music_glass(title, artist, cover, u, acc, progress, look)
     if upnext and upnext[1]:
-        block = upnext_panel(upnext[0], upnext[1], u, style, anim)
+        items = upnext[1]
+        if upnext_pos == "right":                    # 1.8.24: as many rows as fit beside the card
+            items = items[:upnext_fit(upnext[0], len(items), im.height, u)]
+        block = upnext_panel(upnext[0], items, u, style, anim)
         im = _attach(im, block, upnext_pos, int(8 * u), centred=layout == "big" and cover is not None)
     return im
+
+
+def upnext_fit(label: str, n: int, room: int, u: float) -> int:
+    """How many rows of upnext_panel fit into ``room`` px of height (its size is pad + header + rows · row height,
+    1.8.24) – at least one."""
+    pad, head_h, row_h = int(12 * u), int(16 * u) if label else 0, max(1, int(20 * u))
+    fit = (room - 2 * pad - head_h + int(4 * u)) // row_h
+    return max(min(n, 1), min(n, int(fit)))
 
 
 def upnext_panel(label: str, items, u: float, style: str, anim=None) -> Image.Image:
@@ -542,11 +555,10 @@ def _music_big(title, artist, cover, u, acc, progress, look, style) -> Image.Ima
         im = _panel(w, h, int(20 * u), GLASS_FILL, GLASS_EDGE)
     d = ImageDraw.Draw(im)
     cx = (w - side) // 2
-    if line:
-        im.alpha_composite(_square_cover(cover, side), (cx, pad))
+    radius = cover_radius(look, side, 0 if line else side // 2 if style == "chips" else int(14 * u))
+    im.alpha_composite(_round_cover(cover, side, radius), (cx, pad))
+    if line and not radius:
         d.rectangle((cx, pad, cx + side - 1, pad + side - 1), outline=LINE_EDGE)
-    else:
-        im.alpha_composite(_round_cover(cover, side, side // 2 if style == "chips" else int(14 * u)), (cx, pad))
     y = pad + side + int(14 * u)
     _text(im, (w - _width(tf, title)) / 2, y, title, tf, WHITE)
     y += int(26 * u)
@@ -594,7 +606,7 @@ def _music_glass(title, artist, cover, u, acc, progress, look) -> Image.Image:
     im = _panel(w, h, int(20 * u), GLASS_FILL, GLASS_EDGE)
     d = ImageDraw.Draw(im)
     if cover is not None:
-        im.alpha_composite(_round_cover(cover, side, int(10 * u)), (pad, (h - side) // 2))
+        im.alpha_composite(_round_cover(cover, side, cover_radius(look, side, int(10 * u))), (pad, (h - side) // 2))
     _text(im, text_x, int(18 * u), title, tf, WHITE)
     if artist:
         _text(im, text_x, int(44 * u), artist, af, GREY)
@@ -622,11 +634,7 @@ def _music_chips(title, artist, cover, u, acc, progress, look) -> Image.Image:
     im = _panel(w, h, h // 2, GLASS_FILL, GLASS_EDGE)
     d = ImageDraw.Draw(im)
     if cover is not None:
-        art = cover.convert("RGBA").resize((side, side), Image.LANCZOS)
-        mask = Image.new("L", (side, side), 0)
-        ImageDraw.Draw(mask).ellipse((0, 0, side - 1, side - 1), fill=255)
-        art.putalpha(mask)
-        im.alpha_composite(art, (int(12 * u), (h - side) // 2))
+        im.alpha_composite(_round_cover(cover, side, cover_radius(look, side, side // 2)), (int(12 * u), (h - side) // 2))
     _text(im, text_x, int(14 * u), title, tf, WHITE)
     if sub:
         _text(im, text_x, int(38 * u), sub, af, GREY)
@@ -653,7 +661,7 @@ def _music_line(title, artist, cover, u, acc, progress, look) -> Image.Image:
     im = _panel(w, h, int(10 * u), (0, 0, 0, 0), LINE_EDGE, max(1, int(u)))
     d = ImageDraw.Draw(im)
     if cover is not None:
-        im.alpha_composite(_square_cover(cover, side), (pad, pad))
+        im.alpha_composite(_round_cover(cover, side, cover_radius(look, side, 0)), (pad, pad))
         d.rectangle((pad, pad, pad + side - 1, pad + side - 1), outline=LINE_EDGE)
     _text(im, text_x, pad, title, tf, WHITE)
     if sub:

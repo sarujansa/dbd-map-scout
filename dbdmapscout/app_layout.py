@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import time
 
-from . import layout, layoutmem
+from . import layoutmem
+from .app_sysinfo import SELECTABLE
 from .i18n import _
 
+CAP_FIT = 0.97             # 1.8.24: shown below 97 % of the asked size = the bar holds the element back
 SIZE_SETTLE = 2.0          # s a new window size must stay before its layout is loaded (no switch while resizing)
 
 
@@ -52,6 +54,9 @@ class LayoutMemory:
             self.media_size_var.set(round(o.get("media_scale", 1.0) * 100))
             self.media_pos_var.set(_(dict(MEDIA_SPOTS).get(o.get("media_pos", "bottom_right"), "")))
             self.today_pos_var.set(_(dict(TODAY_SPOTS).get(o.get("today_pos", "below"), "")))
+            if hasattr(self, "info_pos_var"):                                # 1.8.24
+                from .app_overlay import INFO_SPOTS
+                self.info_pos_var.set(_(dict(INFO_SPOTS).get(o.get("info_pos", "below"), "")))
             self.bar_align_var.set(_(dict(BAR_ALIGNS).get(o.get("bar_align", "centre"), "")))
             self.gap_var.set(float(o.get("stack_gap", 8)))
             self.limits_var.set(bool(o.get("bar_limits_on", False)))         # 1.8.14
@@ -128,26 +133,30 @@ class LayoutMemory:
     # ---------------------------------------------------------------- the bar limits the map
     def _size_cap_tick(self):
         """1.65.2 (user: "die Map wird nicht grösser"): in a black bar the map can only be as wide as the bar – on
-        3440×1440 about 31 % of the height. Say so under the size slider when that is what holds it back."""
+        3440×1440 about 31 % of the height. Say so under the size slider when that is what holds it back.
+        1.8.24 (user: "die Map mit der Scrollbar grösser – ändert sich nicht in der Vorschau, evtl. die anderen
+        Elemente auch"): for every element, from the preview's own fitting (``fits``) – the slider marks the size
+        from which on nothing grows (``_dbdms_cap``, the value reads "36 % → 31 %") and the hint says why."""
         if not hasattr(self, "size_cap_var"):
             return
+        name = getattr(self, "_sel", "map")
+        data = self._preview_data()
+        fit = float(data.get("fits", {}).get(name, 1.0))
+        lo, _hi, value = self._sel_range(name)
+        cap = max(lo, value * fit) if fit < CAP_FIT else None
+        if cap is not None and value - cap < 1:
+            cap = None                            # rounding: not worth a mark
         text = ""
-        if getattr(self, "_sel", "map") == "map":
-            data = self._preview_data()
-            gw, gh = data["screen"]
-            bar = data.get("bar", 0)
-            lay = next((lay for lay in data["layers"] if lay[0] == "map"), None)
+        if cap is not None:
             o = self.settings["overlay"]
-            in_bar = (o["anchor"] == "auto" or o.get("keep_in_bar", True)) and not o.get("grow_past_bar", False)
-            iw, ih = self.overlay.map_size() if self.overlay.has_map() else (0, 0)
-            if not ih:
-                pic = self._preview_sample()
-                iw, ih = pic.size if pic is not None else (4, 5)
-            if lay and in_bar and bar >= layout.MIN_BAR and (lay[1] < bar or lay[1] + lay[3] > gw - bar):
-                avail = layout.max_width(bar, int(gh * o["margin"]))
-                if self._map_height() * gh * iw / ih > avail + 2:     # the map itself wider than the bar
-                    text = _("Die Karte ist so breit wie der schwarze Balken – grösser geht so nicht. Grösser mit "
-                             "„Karte darf grösser als der Balken werden“ (ragt dann ins Spielbild).")
+            what = _(dict(SELECTABLE).get(name, "Karte"))
+            text = _("{what} ist hier schon so gross wie möglich – ab {cap} % ändert der Regler nichts mehr "
+                     "(der schwarze Balken ist voll).", what=what, cap=f"{cap:.0f}")
+            if name in ("map", "text") and not o.get("grow_past_bar", False):
+                text += " " + _("Grösser mit „Karte darf grösser als der Balken werden“ (ragt dann ins Spielbild).")
+        scale = getattr(self, "sel_scale", None)
+        if scale is not None and getattr(scale, "_dbdms_cap", None) != cap:
+            scale._dbdms_cap = cap
         if text != self.size_cap_var.get():
             self.size_cap_var.set(text)
 

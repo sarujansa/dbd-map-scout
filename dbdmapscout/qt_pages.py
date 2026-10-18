@@ -3,16 +3,16 @@ a tab's structure (AutoPage), dialogs and the setup assistant.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QSize, Qt, QTimer
-from PySide6.QtGui import QPalette
+from PySide6.QtCore import QEvent, QRectF, QSize, Qt, QTimer
+from PySide6.QtGui import QColor, QPainter, QPalette, QPen
 from PySide6.QtWidgets import (QBoxLayout, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QProgressBar,
                                QPushButton, QRadioButton, QScrollArea, QSizePolicy, QSlider, QStackedWidget,
-                               QTabWidget, QVBoxLayout, QWidget)
+                               QStyle, QStyleOptionSlider, QTabWidget, QVBoxLayout, QWidget)
 
 from . import qt_theme
 from .qt_layouts import FlowRow, TileGrid, WrapCheck
 from .i18n import N_, _
-from .qt_common import SLIDER_MAX, pixmap_from_pil, _label, _tip, _card, _set, _scroll_page
+from .qt_common import SLIDER_MAX, pixmap_from_pil, steady_scroll, _label, _tip, _card, _set, _scroll_page
 from .qt_views import FactBox, Table, LogView, HotkeyButton, Chart, SwatchView, TilesView, DashboardView
 from .qt_preview import PreviewView
 
@@ -77,6 +77,7 @@ class OverviewPage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
+        steady_scroll(scroll)
         outer.addWidget(scroll)
         body = QWidget()
         body.setObjectName("page")
@@ -293,6 +294,43 @@ class OverviewPage(QWidget):
         self.last_empty.setVisible(not rounds)
 
 
+NOTE_KEYS = {"ov.size_cap"}                 # 1.8.24: hints that warn (amber) instead of explaining (grey)
+
+
+class CapSlider(QSlider):
+    """A slider that marks ``cap`` (1.8.24, user: "Map mit der Scrollbar grösser – ändert sich nicht"): from that
+    value on the element does not grow any more (the black bar is full) – a line there, the rest of the groove
+    tinted."""
+    cap = None
+
+    def set_cap(self, cap):
+        if cap != self.cap:
+            self.cap = cap
+            self.update()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        lo, hi = self.minimum(), self.maximum()
+        if self.cap is None or hi <= lo or not lo <= self.cap < hi:
+            return
+        opt = QStyleOptionSlider()
+        self.initStyleOption(opt)
+        groove = self.style().subControlRect(QStyle.CC_Slider, opt, QStyle.SC_SliderGroove, self)
+        handle = self.style().subControlRect(QStyle.CC_Slider, opt, QStyle.SC_SliderHandle, self)
+        span = max(1, groove.width() - handle.width())
+        x = groove.x() + handle.width() / 2 + QStyle.sliderPositionFromValue(lo, hi, round(self.cap), span)
+        colour = QColor(qt_theme.DOT["warn"])
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        tint = QColor(colour)
+        tint.setAlpha(70)
+        cy = groove.center().y()
+        p.fillRect(QRectF(x, cy - 3, groove.right() - x, 6), tint)
+        p.setPen(QPen(colour, 2))
+        p.drawLine(round(x), self.rect().top() + 3, round(x), self.rect().bottom() - 3)
+        p.end()
+
+
 def make_control(kind, key, post):
     """(widget, extra) of one control of the UI model; clicks go out as post("act", (key, value))."""
     extra = None
@@ -319,7 +357,7 @@ def make_control(kind, key, post):
         name.setMinimumWidth(110)
         value.setMinimumWidth(56)
         value.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        s = QSlider(Qt.Horizontal)
+        s = CapSlider(Qt.Horizontal)
         s.setMaximumWidth(SLIDER_MAX)              # a wide window: no slider across the whole page
         s.valueChanged.connect(lambda v: post("act", (key, v)))
         r.addWidget(name)
@@ -358,7 +396,7 @@ def make_control(kind, key, post):
     elif kind == "hotkey":
         w = HotkeyButton(key, post)
     elif kind in ("hint", "plain"):
-        w = _label(cls="dim", wrap=True)
+        w = _label(cls="note" if key in NOTE_KEYS else "dim", wrap=True)
     elif kind == "big":
         w = _label(cls="big", wrap=True)
     elif kind == "value":
@@ -436,6 +474,7 @@ def show_control(kind, w, extra, st):
             s.setRange(round(st.get("lo", 0)), round(st.get("hi", 100)))
             s.setValue(round(st.get("value", 0)))
             s.blockSignals(False)
+        s.set_cap(st.get("cap"))
     elif kind in ("table", "chart", "log", "dashboard", "tiles", "preview", "swatches", "host"):
         w.show_state(st)
     elif kind == "hotkey":
@@ -1110,6 +1149,7 @@ class AutoPage(QWidget, _Arranged):
                     sa = QScrollArea()
                     sa.setWidgetResizable(True)
                     sa.setFrameShape(QFrame.NoFrame)
+                    steady_scroll(sa)
                     sa.setWidget(pw)
                     tw.addTab(sa, "")
                     ids[str(j)] = sa

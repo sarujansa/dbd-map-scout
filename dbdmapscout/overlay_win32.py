@@ -193,22 +193,33 @@ def _draw_run(pic: Image.Image, x: float, y: float, text: str, font, fill, strok
     return x
 
 
+def body_cols(img: Image.Image, split: int | None):
+    """1.8.24 (user: "die Map wird nicht grösser"): columns (x0, x1) of what is drawn below the map's name – the
+    transparent strips beside it made the picture as wide as the black bar while the map itself took two thirds
+    of it (Coal Tower: 270 of 406 px), so it could not grow. None = keep the whole width."""
+    if not split or not 0 < split < img.height:
+        return None
+    box = img.crop((0, split, img.width, img.height)).getchannel("A").getbbox()
+    return (box[0], box[2]) if box and box[2] - box[0] < img.width else None
+
+
 def compose(img: Image.Image, height: int, caption: str, transparent: bool, border: bool,
-            text_h: int = 0, split: int | None = None) -> Image.Image:
+            text_h: int = 0, split: int | None = None, cols=None) -> Image.Image:
     """Scaled map + optional caption bar (+ edit border) as one RGBA picture; ``text_h``: height the
     caption is sized for (stacked floors: one floor), 0 = ``height``. ``split``: first row of the map below the
     name drawn into the picture (mapimage.title_split) – the name is then scaled by ``text_h`` like the lines
-    below the map, the map alone by ``height`` (1.65.4, user: the map's size freely, the name stays)."""
+    below the map, the map alone by ``height`` (1.65.4, user: the map's size freely, the name stays). ``cols``
+    (1.8.24, body_cols): the map cut to what is drawn – the same for every frame of an animation."""
     if split and text_h and text_h != height and 0 < split < img.height:
         title = img.crop((0, 0, img.width, split))
-        body = img.crop((0, split, img.width, img.height))
+        body = img.crop((cols[0] if cols else 0, split, cols[1] if cols else img.width, img.height))
         tb = title.getchannel("A").getbbox()        # 1.2.7: the name itself, not the empty strip beside it – the
         if tb:                                      # whole strip made the overlay as wide as the name's size, and
             title = title.crop((tb[0], 0, tb[2], split))     # the lines below were shrunk for nothing
         th = max(1, round(split * text_h / img.height))
         bh = max(1, round(body.height * height / img.height))
         title = title.resize((max(1, round(title.width * text_h / img.height)), th), Image.LANCZOS)
-        body = body.resize((max(1, round(img.width * height / img.height)), bh), Image.LANCZOS)
+        body = body.resize((max(1, round(body.width * height / img.height)), bh), Image.LANCZOS)
         w = max(title.width, body.width)
         pic = Image.new("RGBA", (w, th + bh), (0, 0, 0, 0))
         pic.alpha_composite(title, ((w - title.width) // 2, 0))
@@ -632,7 +643,17 @@ def _stack(lines, pad: int, centred: bool) -> Image.Image:
     return pic
 
 
-def render_music_compact(rows, cover, height: int) -> Image.Image:
+def cover_radius(look, side: int, default: int) -> int:
+    """Corner radius of the music card's cover (1.8.24, user: "zwischen runden und eckigen Bildern"): ``look``
+    "cover_round" = a circle, "cover_square" = square corners, neither = the style's own (``default``)."""
+    if "cover_round" in look:
+        return side // 2
+    if "cover_square" in look:
+        return 0
+    return default
+
+
+def render_music_compact(rows, cover, height: int, look=()) -> Image.Image:
     """Music card "Kompakt" (1.64): the cover left of the title/artist rows, as tall as the two lines."""
     text = _stack(fit_lines(rows, height), 3 * max(2, height // 300), False)
     if cover is None:
@@ -643,7 +664,8 @@ def render_music_compact(rows, cover, height: int) -> Image.Image:
     side = max(16, text.height - 2 * pad)
     art = cover.convert("RGBA").resize((side, side), Image.LANCZOS)
     mask = Image.new("L", (side, side), 0)
-    ImageDraw.Draw(mask).rounded_rectangle((0, 0, side - 1, side - 1), radius=max(2, size // 4), fill=255)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, side - 1, side - 1),
+                                           radius=cover_radius(look, side, max(2, size // 4)), fill=255)
     art.putalpha(mask)
     gap = max(6, size // 2)
     pic = Image.new("RGBA", (pad + side + gap + text.width - pad, max(text.height, side + 2 * pad)), (0, 0, 0, 0))
@@ -677,7 +699,8 @@ def music_picture(rows, height: int, cover=None, style="big", progress=None, loo
     if skin != "classic":
         from . import skin as skins
         return skins.music(rows, cover, height, skin, progress, look, accent, style, upnext, upnext_pos, anim)
-    key = (tuple(tuple(r) for r in rows), int(height), id(cover), style, "accent" in look)
+    key = (tuple(tuple(r) for r in rows), int(height), id(cover), style, "accent" in look,
+           tuple(k for k in look if k.startswith("cover_")))          # 1.8.24: the cover's shape
     if bodies is None:
         bodies = {}
     if key not in bodies:
@@ -731,6 +754,19 @@ def upnext_block(label: str, items, height: int, anim=None) -> Image.Image:
     return out
 
 
+def upnext_rows(label: str, items, height: int, room: int) -> int:
+    """How many of ``items`` fit as upnext_block rows into ``room`` px of height (1.8.24: the list beside the card
+    fills its height) – at least one."""
+    if len(items) <= 1:
+        return len(items)
+    full = upnext_block(label, items, height)
+    if full.height <= room:
+        return len(items)
+    one = upnext_block(label, items[:1], height)
+    pitch = (full.height - one.height) / (len(items) - 1)
+    return max(1, min(len(items), 1 + int((room - one.height) // pitch))) if pitch > 0 else 1
+
+
 def _paste(layer: Image.Image, pic: Image.Image, x: int, y: int):
     """``pic`` onto ``layer`` at (x, y), cropped to the layer (alpha_composite refuses what sticks out)."""
     sx, sy = max(0, -x), max(0, -y)
@@ -775,7 +811,7 @@ def music_body(rows, cover, height: int, style: str, look=()):
     blur = max(2, height // 300)
     pad = 3 * blur
     if style == "compact":
-        pic = render_music_compact(rows, cover, height)
+        pic = render_music_compact(rows, cover, height, look)
         return pic, pic.width - 2 * pad, accent
     lines = fit_lines(rows, height, [TITLE_SCALE if i == 0 else 1.0 for i in range(len(rows))])
     side = max(32, height // 6) if cover is not None else 0
@@ -788,7 +824,8 @@ def music_body(rows, cover, height: int, style: str, look=()):
     if cover is not None:
         art = cover.convert("RGBA").resize((side, side), Image.LANCZOS)
         mask = Image.new("L", (side, side), 0)
-        ImageDraw.Draw(mask).rounded_rectangle((0, 0, side - 1, side - 1), radius=max(2, side // 14), fill=255)
+        ImageDraw.Draw(mask).rounded_rectangle((0, 0, side - 1, side - 1),
+                                               radius=cover_radius(look, side, max(2, side // 14)), fill=255)
         art.putalpha(mask)
         ax = (w - side) // 2
         shadow = Image.new("RGBA", pic.size, (0, 0, 0, 0))
@@ -814,7 +851,10 @@ def music_card(body, height: int, style: str, progress=None, look=(), upnext=Non
                                "remaining" in look)
         pic = _below(pic, strip, style != "compact")
     if upnext and upnext[1]:
-        block = upnext_block(upnext[0], upnext[1], height, anim)
+        items = upnext[1]
+        if upnext_pos == "right":                    # 1.8.24: as many rows as fit beside the card
+            items = items[:upnext_rows(upnext[0], items, height, pic.height)]
+        block = upnext_block(upnext[0], items, height, anim)
         pic = _beside(pic, block, max(6, height // 120)) if upnext_pos == "right" else \
             _below(pic, block, style != "compact")
     return backdrop(pic, height) if "backdrop" in look else pic
@@ -1010,6 +1050,19 @@ def rec_phase(now: float | None = None) -> bool:
     return int(time.time() if now is None else now) % 2 == 0
 
 
+def info_card(timer: str, server: str, ping, note: str, record: str, text_h: int, style: str = "classic",
+              accent=None, transparent: bool = True, dark_area: bool = False, rec=None) -> Image.Image:
+    """1.8.24 (user: "Zeit etc. nicht mehr mit der Map verbunden, eigene Elemente – ich will ab und zu nur die
+    eigentliche Map-Grösse ändern"): timer, note, record, server and ping as a card of their own – the same lines
+    as below the map, without the map; shared by the overlay (App.info_win) and the preview."""
+    if style != "classic":
+        from .skin import map_card
+        return map_card(None, "", "", timer, note, record, server, ping, (), text_h, style, accent, rec=rec)
+    pic = add_info(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), timer, server, text_h, backdrop=not transparent,
+                   ping=ping, note=note, record=record, rec=rec)
+    return map_backdrop([pic], text_h)[0] if dark_area else pic
+
+
 class PictureOverlay:
     """The overlay's content and logic: map picture (+ caption), timer/server/ping/notes below it, the waiting
     card, floors, animation, edit mode. The window that shows it is a subclass's (Win32Overlay, QtOverlay):
@@ -1024,6 +1077,7 @@ class PictureOverlay:
         self.show_map = True            # off: only timer, server and ping ("nur Infos")
         self.edit_label = ""            # name on the edit frame (1.64.7: "KARTE · Strg+Mausrad = Grösse")
         self.info_beside = False        # timer/server right of the map (low bar above/below the picture)
+        self.info_apart = False         # 1.8.24: the lines are an element of their own (info_picture), not drawn here
         self.text_height = 0            # px the timer/name/info are sized for (1.65: not the map's size); 0 = map
         self.backdrop = False           # dark area with rounded corners behind map and lines (1.2.4)
         self.skin = "classic"           # 1.3.1: overlay style of the map card (skin.map_card) – classic as before
@@ -1109,7 +1163,8 @@ class PictureOverlay:
         return bool(self._frames)
 
     def _title_split(self, frames):
-        """Row where the map starts below its drawn-in name (first picture; GIF floors have none), cached."""
+        """Row where the map starts below its drawn-in name (first picture; GIF floors have none), cached – with
+        the columns of the map below it (``_cols``, 1.8.24)."""
         if not frames:
             return None
         key = (id(frames[0][0]), len(frames))
@@ -1117,7 +1172,15 @@ class PictureOverlay:
             from .mapimage import title_split
             parts = title_split(frames[0][0]) if len(frames) == 1 or self.stacked() <= 1 else None
             self._split_key, self._split = key, (parts[2] if parts else None)
+            self._cols = body_cols(frames[0][0], self._split)
         return self._split
+
+    def map_extent(self):
+        """(w, h) to fit the map's size by (1.8.24): the loaded picture, as wide as what is drawn below its name."""
+        iw, ih = self.map_size()
+        if ih and self._title_split(self._view_frames()[0]) and self._cols:
+            iw = self._cols[1] - self._cols[0]
+        return iw, ih
 
     def floors(self) -> list:
         """Frame indices of the floors of the map (Midwich: bottom, top); [] = one floor."""
@@ -1146,6 +1209,34 @@ class PictureOverlay:
 
     def has_info(self) -> bool:
         return bool(self._timer or self._server or self._note or self._record)
+
+    def set_info_apart(self, on: bool):
+        """1.8.24: timer/record/server as their own element – the map window draws the map (+ name) alone."""
+        if bool(on) != self.info_apart:
+            self.info_apart = bool(on)
+            self._base_key = self._key = self._fit = self._fit_room = None
+
+    def _lines_here(self) -> bool:
+        """The lines are drawn in this window (not apart; "nur Infos" always here)."""
+        return not (self.info_apart and self.show_map)
+
+    def waiting(self) -> bool:
+        return bool(self._waiting)
+
+    def info_picture(self, text_h: int, placeholder: str = ""):
+        """The lines as a card of their own (1.8.24), None when there are none; ``placeholder``: a timer text to
+        show without any lines (moving mode – something to drag)."""
+        timer = self._timer or ("" if self.has_info() else placeholder)
+        if not (timer or self._server or self._note or self._record):
+            return None
+        rec = rec_phase() if self._rec else None
+        key = (int(text_h), timer, self._server, self._ping, self._note, self._record, rec, self.skin, self.accent,
+               self.transparent, self.backdrop)
+        if getattr(self, "_info_key", None) != key:
+            self._info_key = key
+            self._info_pic = info_card(timer, self._server, self._ping, self._note, self._record, int(text_h),
+                                       self.skin, self.accent, self.transparent, self.backdrop, rec)
+        return self._info_pic
 
     def set_show_map(self, on: bool):
         self.show_map = bool(on)
@@ -1208,13 +1299,17 @@ class PictureOverlay:
                 if headed:                # 1.3.1: the map alone, its drawn name becomes the header
                     self._base = [(map_body(img, height, split), dur) for img, dur in frames]
                 else:
-                    self._base = [(compose(img, height, base_key[1], self.transparent, False, text_h, split), dur)
+                    self._base = [(compose(img, height, base_key[1], self.transparent, False, text_h, split,
+                                           self._cols if split else None), dur)
                                   for img, dur in frames]
             else:                         # info only: an empty picture, the info block is drawn below it
                 self._base = [(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), 0)]
             self._base_key = base_key
-        rec = rec_phase() if self._rec else None     # 1.5.2: the dot blinks with the seconds
-        key = (base_key, self._editing, self._timer, self._server, self._ping, self._note, self._record,
+        here = self._lines_here()                    # 1.8.24: the lines apart – the map alone
+        rec = rec_phase() if self._rec and here else None     # 1.5.2: the dot blinks with the seconds
+        timer, server, ping, note, record = (self._timer, self._server, self._ping, self._note, self._record) \
+            if here else ("", "", None, "", "")
+        key = (base_key, self._editing, timer, server, ping, note, record,
                self.info_beside, self.backdrop, self.skin, self.accent, self.realm, rec)
         if key != self._key:
             self._prepared = []
@@ -1222,11 +1317,11 @@ class PictureOverlay:
             if modern:
                 from .skin import map_card
                 for pic, dur in self._base:
-                    pics.append(map_card(pic if self.show_map else None, self._caption, self.realm, self._timer,
-                                         self._note, self._record, self._server, self._ping, (), text_h, self.skin,
+                    pics.append(map_card(pic if self.show_map else None, self._caption, self.realm, timer,
+                                         note, record, server, ping, (), text_h, self.skin,
                                          self.accent, rec=rec))
             for pic, dur in ([] if modern else self._base):
-                if self.has_info():
+                if here and self.has_info():
                     pic = add_info(pic, self._timer, self._server, text_h, backdrop=not self.transparent,
                                    ping=self._ping, note=self._note, record=self._record,
                                    beside=self.info_beside and self.show_map, rec=rec)
@@ -1262,7 +1357,7 @@ class PictureOverlay:
             try:
                 self.text_height = text_h
                 pad2 = 2 * self.backdrop_pad(text_h)
-                iw, ih = self.map_size()
+                iw, ih = self.map_extent()
                 if pad2 and ih:                 # the dark area's edge does not scale: the map makes room for it
                     height = fit_height(height, avail - pad2, iw, ih)
                 w, _h = self.render(height, push=False)
@@ -1288,6 +1383,7 @@ class PictureOverlay:
     def _content_key(self) -> tuple:
         """What the overlay's size depends on besides the heights (the timer with its widest digits)."""
         return (re.sub(r"\d", "0", self._timer), self._server, self._ping, self._note, self._record, self.info_beside,
+                self.info_apart,
                 self._editing, self.show_map, self.show_caption, self._caption, self.transparent, self.backdrop,
                 self._floor, id(self._frames[0][0]) if self._frames else None, self.skin, self.accent, self.realm,
                 self._rec)

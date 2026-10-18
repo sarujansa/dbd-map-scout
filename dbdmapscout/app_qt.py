@@ -151,8 +151,13 @@ def ui_state(w) -> dict:
         return st
     if isinstance(w, ui.Scale):
         value = w.get()
+        fmt = getattr(w, "_dbdms_fmt", "{:.0f}")
+        cap = getattr(w, "_dbdms_cap", None)      # 1.8.24: from here on the element does not grow (bar full)
+        text = fmt.format(value)
+        if cap is not None and value > cap + 0.5:
+            text += " → " + fmt.format(cap)
         st.update(value=value, lo=float(w.cget("from") or 0), hi=float(w.cget("to") or 100),
-                  label=getattr(w, "_dbdms_label", ""), text=getattr(w, "_dbdms_fmt", "{:.0f}").format(value))
+                  label=getattr(w, "_dbdms_label", ""), text=text, cap=cap)
         return st
     if isinstance(w, (ui.LabelFrame, ui.Label, ui.Button, ui.Checkbutton, ui.Radiobutton)):
         st["text"] = w.cget("text")

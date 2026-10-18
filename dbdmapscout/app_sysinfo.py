@@ -50,13 +50,14 @@ MEDIA_SPOTS = [("below", N_("Unter den Systemwerten")), ("under_today", N_("Unte
 TODAY_SPOTS = [("below", N_("Unter den Systemwerten")), ("under_music", N_("Unter der Musik")),
                ("bottom_right", N_("Rechts unten im Balken")), ("bottom_left", N_("Links unten im Balken")),
                ("custom", N_("Eigene Position (mit der Maus verschieben)"))]
-OPACITY_KEYS = {"hud": "hud_opacity", "today": "today_opacity", "music": "media_opacity"}   # 1.2.7; else "opacity"
+OPACITY_KEYS = {"hud": "hud_opacity", "today": "today_opacity", "music": "media_opacity",   # 1.2.7; else "opacity"
+                "text": "info_opacity"}      # 1.8.24: the lines as their own element
 MEDIA_STYLES = [("big", N_("Gross – Cover oben, Titel darunter")), ("compact", N_("Kompakt – Cover links"))]
 MEDIA_SCALE = (60, 200)                     # slider of the music card, percent
 HUD_SCALE = (60, 200)                       # size of the system values / "today", percent (1.64.9)
 MAP_SCALE = (15, 90)                        # size of the map, percent of the game height
 # 1.64.9 (user: one size for what was picked instead of three sliders): the elements of the preview
-SELECTABLE = (("map", N_("Karte")), ("text", N_("Schrift der Karte (Name, Timer, Infos)")),
+SELECTABLE = (("map", N_("Karte")), ("text", N_("Infos und Schrift (Name, Timer, Bilanz, Server)")),
               ("hud", N_("Systemwerte")), ("today", N_("Heute")), ("music", N_("Musik")))
 TODAY_SCALE = (60, 200)                     # size of "today", percent (1.2.6)
 TEXT_SCALE = (50, 200)                      # size of the map's name/timer/info lines, percent (1.65)
@@ -110,6 +111,12 @@ class SysInfo:
         if self.today_win is not None:
             self.today_win.on_moved = lambda x, y: self.events.put(("call", self._today_dragged, (x, y)))
             self.today_win.edit_label = _("HEUTE")
+        self.info_win = make_hud("DbD Map Scout Infos")      # 1.8.24: timer/record/server, an element of their own
+        if self.info_win is not None:
+            self.info_win.on_moved = lambda x, y: self.events.put(("call", self._info_dragged, (x, y)))
+            self.info_win.edit_label = _("INFOS")
+        self._info_size = None             # (w, h) of the lines' card this tick, None = not shown
+        self._map_block = None             # map + lines on screen: what hangs above/below the map goes around both
         self._today_box = None             # (x, y, w, h) of "today" on screen (the music card hangs below it)
         self._media_ctx = None             # (gx, gy, gw, gh, show) of the last placement
         self._fades = {}                   # name: [media.Fader, timer job] – 1.2.4 music, 1.2.9 every element
@@ -237,7 +244,8 @@ class SysInfo:
                                     o.get("bar_align", "centre"), layout.stack_gap(o, gh),
                                     up=self.settings.get("sysinfo") == "above" and hud is not None
                                     and bool(self._last_place) and hud[1] < self._last_place[1],
-                                    below_box=self._last_place, bands=self._bands(gx, gy, gw, gh))
+                                    below_box=getattr(self, "_map_block", None) or self._last_place,
+                                    bands=self._bands(gx, gy, gw, gh))
         self._today_box = placed.get("today")
         if "today" in placed:
             self._fade_show("today", bool(o.get("fade", True)) and not self.overlay.editing)
@@ -546,7 +554,7 @@ class SysInfo:
 
     # ---- fading (1.2.4 the music card, 1.2.9 map, system values and "today" too): media.Fader per window
     def _fade_win(self, name):
-        attr = {"map": "overlay", "hud": "hud", "today": "today_win", "music": "media_win"}[name]
+        attr = {"map": "overlay", "hud": "hud", "today": "today_win", "music": "media_win", "info": "info_win"}[name]
         return getattr(self, attr, None)
 
     def _fade_state(self, name):

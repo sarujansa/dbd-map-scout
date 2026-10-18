@@ -454,6 +454,7 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         self._fade_hide("map", bool(o.get("fade", True)))
         self._fade_hide("today", bool(o.get("fade", True)))
         self._fade_hide("music", bool(o.get("media_fade", True)))
+        self._info_hide(bool(o.get("fade", True)))
         self.worker.overlay_rect = self.worker.today_rect = self.worker.media_rect = None
         self._vis_state = "aus"                     # set_overlay_on logged it already
         self._guides_place()
@@ -1110,6 +1111,7 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         fade = bool(o.get("fade", True)) and not self.overlay.editing      # 1.2.9
         if reason:
             self._fade_hide("map", fade)
+            self._info_hide(fade)
             self.worker.overlay_rect = None
             return
         if self.overlay.editing and self.overlay.dragging:
@@ -1120,6 +1122,16 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         height = int(gh * min(MAX_HEIGHT, self._map_height() * self.overlay.stacked()))
         a = o["anchor"]
         bar = layout.bar_width(gw, gh)          # black bar left/right of a 16:9 picture (ultrawide)
+        # window narrower than 16:9: the trial has bars above/below – the map goes there whatever the position
+        # setting says (user: own position at 1440p, the bar in the small window); not while dragging it
+        vb = None if self.overlay.editing else layout.vbars(self.worker.vbars, gw, gh, time.time())
+        # 1.8.24: timer/record/server as their own element – measured first, the map makes room for them
+        apart = layout.info_apart(o) and self.info_win is not None and not vb
+        self.overlay.set_info_apart(apart)
+        info = self._info_card(gh, margin, bar) if apart else None
+        if not apart:
+            self._info_hide(fade)
+        idrop, ilift = layout.info_reserve(o, info, layout.stack_gap(o, gh))
         drop = lift = 0                         # what stands at the top / bottom of the map's bar (1.2.11)
         span = layout.map_bar_range(a, o.get("pos_x", 0.0), gx, gw, bar)
         bands = layout.bar_bands(o, (gx, gy, gw, gh), margin)       # 1.8.14: the limiter lines of the bars
@@ -1137,10 +1149,8 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
                 drop += layout.follow_reserve(self.hud.size[1], getattr(self, "_card_sizes", None) or {},
                                               {"today": o.get("today_pos", "below"),
                                                "music": o.get("media_pos", "below")}, layout.stack_gap(o, gh))
+        drop, lift = drop + idrop, lift + ilift
         height = max(40, min(height, gh - drop - lift - 2 * margin))
-        # window narrower than 16:9: the trial has bars above/below – the map goes there whatever the position
-        # setting says (user: own position at 1440p, the bar in the small window); not while dragging it
-        vb = None if self.overlay.editing else layout.vbars(self.worker.vbars, gw, gh, time.time())
         self.overlay.info_beside = bool(vb)
         if vb:
             self._place_in_bottom_bar(gx, gy, gw, gh, vb[1], margin, height, sliders=a != "custom")
@@ -1164,7 +1174,7 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
                     gy + margin + drop if a.startswith("top") else gy + gh - h - margin - lift)
 
         # Fit before rendering: only the final size may reach the screen (render() shows it at once).
-        iw, ih = self.overlay.map_size()
+        iw, ih = self.overlay.map_extent()              # 1.8.24: what is drawn, not the transparent strips
         w_est = round(iw * height / ih) if ih else 0
         side = (layout.bar_side(a, place(w_est, 0)[0], w_est, gx, gw, bar)
                 if slot is None and (a == "auto" or o.get("keep_in_bar", True)) else None)
@@ -1185,6 +1195,8 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         if a == "custom":                                # 1.8.22: an own place – between the lines of its bar
             w, h = self.overlay.render(height, push=False)
             room = layout.own_room((place(w, h)[0], 0, w, h), (gx, gy, gw, gh), bands)
+            if info and o.get("info_pos", "below") in ("below", "above"):     # the lines right below/above it
+                room -= info[1] + layout.stack_gap(o, gh)
         if not self.overlay.dragging:                    # the lines below made it too tall: smaller (1.2.11) –
             height = self.overlay.fit_room(height, room)     # measured off screen (1.8.23), shown once
         w, h = self.overlay.render(height)
@@ -1199,7 +1211,11 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         self.overlay.show_at(int(x), int(y))
         self._last_place = (int(x), int(y), w, h)
         self.worker.overlay_rect = self._last_place if self.overlay.shown else None
-        self._hud_follow_map(self._last_place, gx, gy, gw, gh, margin)       # system values "above the map"
+        block = self._info_place(self._last_place, gx, gy, gw, gh, margin, fade) if apart else None
+        # what hangs above/below the map (system values, cards) goes around map and lines together
+        self._map_block = layout.union(self._last_place, block) \
+            if block and o.get("info_pos", "below") != "custom" else self._last_place
+        self._hud_follow_map(self._map_block, gx, gy, gw, gh, margin)       # system values "above the map"
         if a != "custom":                      # sliders follow the preset position
             self._set_pos_sliders((x - gx) / max(1, gw - w), (y - gy) / max(1, gh - h))
 
@@ -1220,7 +1236,7 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         x, y = gx + margin, gy + gh - bottom + margin
         self._fade_show("map", bool(self.settings["overlay"].get("fade", True)) and not self.overlay.editing)
         self.overlay.show_at(int(x), int(y))
-        self._last_place = (int(x), int(y), w, h)
+        self._last_place = self._map_block = (int(x), int(y), w, h)
         self.worker.overlay_rect = self._last_place if self.overlay.shown else None
         self._hud_follow_map(self._last_place, gx, gy, gw, gh, margin)       # "above the map": right of it here
         if sliders:                              # an own position stays as it is (it applies again at 1440p)
@@ -1345,15 +1361,16 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         if cached is None or cached[0] != key:
             # rendered at a smaller game height (everything scales with it) and drawn back at screen size
             f = min(1.0, preview.RENDER_H / max(1, gh))
+            fits = {}                                    # 1.8.24: how much the bar holds each element back
             layers, rect = preview.layers(round(gw * f), round(gh * f), o, hud_side, rows,
                                           self.settings.get("sysinfo_pos"), pic, caption, info, self._map_height(),
-                                          music, today_rows, bool(self.overlay.editing), accent, upnext)
-            self._preview_cache = cached = (key, layers, tuple(round(v / f) for v in rect), f)
-        _key, layers, (x, y, w, h), f = cached
+                                          music, today_rows, bool(self.overlay.editing), accent, upnext, fits)
+            self._preview_cache = cached = (key, layers, tuple(round(v / f) for v in rect), f, fits)
+        _key, layers, (x, y, w, h), f, fits = cached
         return {"screen": (gw, gh), "bar": layout.bar_width(gw, gh), "rect": (x, y, w, h, h),
                 "layers": [(name, round(lx / f), round(ly / f), round(img.width / f), round(img.height / f))
                            for name, img, lx, ly in layers],
-                "pics": {name: img for name, img, _lx, _ly in layers}, "opacity": o["opacity"],
+                "pics": {name: img for name, img, _lx, _ly in layers}, "opacity": o["opacity"], "fits": dict(fits),
                 "opacities": {n: float(o.get(k, o["opacity"])) for n, k in OPACITY_KEYS.items()},
                 "editing": bool(self.overlay.editing), "selected": getattr(self, "_sel", "map"),
                 # 1.8.14; 1.8.15 (user: "ich sehe die Balken nicht beim Bearbeiten"): while moving the lines show
@@ -1407,7 +1424,8 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         dark area behind it, hide ("Heute"/music) – the same switches as on the page."""
         self._select(name)
         reg = self.__dict__.get("_qt_reg", {})
-        dark = reg.get({"map": "ov.map_backdrop", "hud": "ov.hud_backdrop", "today": "ov.today_backdrop",
+        dark = reg.get({"map": "ov.map_backdrop", "text": "ov.map_backdrop", "hud": "ov.hud_backdrop",
+                        "today": "ov.today_backdrop",
                         "music": "ov.media_backdrop"}.get(name, ""))
         hide = reg.get({"today": "ov.today", "music": "ov.media"}.get(name, ""))
         items = [("size", _("Grösse zurücksetzen"), True)]
@@ -1445,7 +1463,7 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
                 return
             fx = round(min(1.0, max(0.0, x / max(1, gw - size[0]))), 4)
             fy = round(min(1.0, max(0.0, y / max(1, gh - size[1]))), 4)
-            if name in ("music", "today"):
+            if name in ("music", "today", "text"):
                 fx, fy = layout.media_own(gw, gh, size, x, y)       # by its centre (1.2.5)
             if name == "hud":
                 self._hud_own_place(fx, fy)
@@ -1453,6 +1471,8 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
                 self._music_own_place(fx, fy)
             elif name == "today":
                 self._today_own_place(fx, fy)
+            elif name == "text":                                     # 1.8.24: the map's lines apart
+                self._info_own_place(fx, fy)
             elif name == "map":
                 self._map_own_place(fx, fy)
             return
@@ -1775,8 +1795,9 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
                 self.overlay.destroy()
             if self.hud is not None:
                 self.hud.destroy()
-            if self.media_win is not None:
-                self.media_win.destroy()
+            for win in (self.media_win, getattr(self, "today_win", None), getattr(self, "info_win", None)):
+                if win is not None:
+                    win.destroy()
             for g in getattr(self, "_guides", ()):
                 g.destroy()
             self.toast.close()

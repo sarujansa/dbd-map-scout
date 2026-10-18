@@ -3,6 +3,7 @@ model (``_tab_overlay``, the widgets the Qt page draws by key) and the handlers 
 opacity, map style, the tick boxes of the map and the cards. Mixin of App; never imports app.py."""
 from __future__ import annotations
 
+from . import layout
 from . import uimodel as ui
 from .i18n import N_, _
 from .skin import STYLE_LABELS
@@ -14,6 +15,11 @@ ANCHORS = [("auto", N_("automatisch")), ("top-left", N_("oben links")), ("top-ri
            ("bottom-left", N_("unten links")), ("bottom-right", N_("unten rechts")), ("custom", N_("eigene Position"))]
 
 
+# 1.8.24: where the map's lines (timer, record, server) go – an element of their own, or drawn with the map as before
+INFO_SPOTS = [("below", N_("Eigenes Element unter der Karte")), ("above", N_("Eigenes Element über der Karte")),
+              ("custom", N_("Eigenes Element, eigene Position")), ("inside", N_("Mit der Karte verbunden (wie früher)"))]
+# 1.8.24 (user: "zwischen runden und eckigen Bildern"): the shape of the music card's cover
+COVER_SHAPES = [("style", N_("Wie der Stil")), ("round", N_("Rund")), ("square", N_("Eckig"))]
 STYLE_DEFER_MS = 30                     # 1.3.4: the window repaints before the slow part of a map style change
 MAP_STYLES = [("classic", N_("Original")), ("dark", N_("Dunkel")),            # 1.66, mapstyle.py
               ("grey", N_("Grau")), ("grey_edge", N_("Grau mit Rand")),         # 1.8.16: with a floor
@@ -161,6 +167,15 @@ class OverlayTab:
                                                       values=[_(t) for _k, t in MAP_STYLES]))
         mscb.pack(side="left", padx=6)
         mscb.bind("<<ComboboxSelected>>", lambda e: self._map_style_changed())
+        ir = ui.Frame(look)
+        ir.pack(fill="x", pady=(4, 0))
+        self._reg("ov.info_pos.label", ui.Label(ir, text=_("Infos"), width=12)).pack(side="left")
+        spots = dict(INFO_SPOTS)
+        self.info_pos_var = ui.StringVar(value=_(spots.get(o.get("info_pos", "below"), spots["below"])))
+        icb = self._reg("ov.info_pos", ui.Combobox(ir, textvariable=self.info_pos_var, state="readonly", width=38,
+                                                    values=[_(t) for _k, t in INFO_SPOTS]))
+        icb.pack(side="left", padx=6)
+        icb.bind("<<ComboboxSelected>>", lambda e: self._info_spot_changed())
         self.focus_var = ui.BooleanVar(value=o["only_when_game_focused"])
         self.caption_var = ui.BooleanVar(value=o["show_caption"])
         self.transp_var = ui.BooleanVar(value=o.get("transparent", True))
@@ -282,6 +297,15 @@ class OverlayTab:
         self.media_size_var = ui.DoubleVar(value=round(float(o.get("media_scale", 1.0)) * 100))
         self._slider(mf, _("Grösse Musik"), self.media_size_var, *MEDIA_SCALE, self._media_size_changed,
                      key="ov.media_size")
+        cr = ui.Frame(mf)                                    # 1.8.24: round or square cover
+        cr.pack(fill="x", pady=(4, 0))
+        self._reg("ov.media_shape.label", ui.Label(cr, text=_("Cover"), width=12)).pack(side="left")
+        shapes = dict(COVER_SHAPES)
+        self.media_shape_var = ui.StringVar(value=_(shapes.get(o.get("media_cover_shape", "style"), shapes["style"])))
+        ccb = self._reg("ov.media_shape", ui.Combobox(cr, textvariable=self.media_shape_var, state="readonly",
+                                                       width=38, values=[_(t) for _k, t in COVER_SHAPES]))
+        ccb.pack(side="left", padx=6)
+        ccb.bind("<<ComboboxSelected>>", lambda e: self._media_shape_changed())
         self.media_cover_var = ui.BooleanVar(value=o.get("media_cover", True))
         self._reg("ov.media_cover", ui.Checkbutton(mf, text=_("Albumcover zeigen"), variable=self.media_cover_var,
                                                    command=self._look_flags_changed)).pack(anchor="w", pady=(2, 0))
@@ -526,5 +550,83 @@ class OverlayTab:
         if self.current:
             self.overlay.show_caption = o["show_caption"]
             self._reload_picture()
+        self._save_soon()
+        self._tick_overlay(reschedule=False)
+
+    # ---- 1.8.24: the map's lines as an element of their own (user: "Zeit etc. nicht mehr mit der Map verbunden")
+    def _info_spot_changed(self):
+        self._layout_mark()
+        key = dict((_(label), k) for k, label in INFO_SPOTS).get(self.info_pos_var.get(), "below")
+        self.settings["overlay"]["info_pos"] = key
+        self._save_soon()
+        self._tick_overlay(reschedule=False)
+
+    def _info_card(self, gh, margin, bar):
+        """Render the lines' card for this tick (their own size, ``text_scale`` – never the map's) into
+        ``info_win``; returns (w, h), or None when there is nothing to show. In a black bar never wider than it."""
+        from .overlay_win32 import add_border
+        win, o = self.info_win, self.settings["overlay"]
+        editing = bool(self.overlay.editing)
+        win.set_editing(editing)
+        self._info_size = None
+        if self.overlay.waiting() or not self.overlay.has_map():
+            return None
+        text_h = self._text_height(gh)
+        avail = layout.max_width(bar, margin) if bar >= layout.MIN_BAR and o.get("info_pos") != "custom" else None
+        placeholder = "0:00" if editing else ""             # something to drag while moving
+        pic = self.overlay.info_picture(text_h, placeholder)
+        for _try in range(3):                               # wider than the bar: smaller text, the map stays
+            if pic is None or avail is None or pic.width <= avail or text_h <= 40:
+                break
+            text_h = max(40, int(text_h * avail / pic.width) - 1)
+            pic = self.overlay.info_picture(text_h, placeholder)
+        if pic is None:
+            return None
+        key = (self.overlay._info_key, editing, win.edit_label)
+        if editing:
+            pic = add_border(pic.copy(), win.edit_label)
+        win.opacity = float(o.get("info_opacity", o["opacity"]))
+        self._info_size = win.set_picture(pic, key)
+        return self._info_size
+
+    def _info_place(self, rect, gx, gy, gw, gh, margin, fade):
+        """Show the lines right below / above the map ``rect`` (or at their own place); returns their box."""
+        o = self.settings["overlay"]
+        if not self._info_size or not self.overlay.shown:
+            self._info_hide(fade)
+            return None
+        x, y = layout.info_xy(o.get("info_pos", "below"), rect, self._info_size, (gx, gy, gw, gh),
+                              layout.stack_gap(o, gh), margin, o.get("info_xy"), o.get("bar_align", "centre"),
+                              self._bands(gx, gy, gw, gh))
+        self._fade_show("info", fade)
+        self.info_win.show_at(x, y)
+        self.worker.info_rect = (x, y) + tuple(self._info_size)
+        return self.worker.info_rect
+
+    def _info_hide(self, fade):
+        if getattr(self, "info_win", None) is not None:
+            self._fade_hide("info", fade)
+        self.worker.info_rect = None
+        self._info_size = None
+
+    def _info_dragged(self, x, y):
+        """The lines dropped somewhere (moving mode): from now on their own place there."""
+        self._layout_mark()
+        gx, gy, gw, gh = self._game_rect()
+        self._info_own_place(*layout.media_own(gw, gh, self.info_win.size, x - gx, y - gy))
+
+    def _info_own_place(self, fx, fy):
+        """The lines dragged in the preview or the game: their own place (their centre) from now on."""
+        o = self.settings["overlay"]
+        o["info_xy"], o["info_pos"] = [fx, fy], "custom"
+        if hasattr(self, "info_pos_var"):
+            self.info_pos_var.set(_(dict(INFO_SPOTS)["custom"]))
+        self._save_soon()
+        self._tick_overlay(reschedule=False)
+
+    def _media_shape_changed(self):
+        """The music card's cover round / square / like its style (1.8.24)."""
+        key = dict((_(label), k) for k, label in COVER_SHAPES).get(self.media_shape_var.get(), "style")
+        self.settings["overlay"]["media_cover_shape"] = key
         self._save_soon()
         self._tick_overlay(reschedule=False)
