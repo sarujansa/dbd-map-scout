@@ -280,7 +280,7 @@ class SettingsTab:
             return ui.Checkbutton(ra, text=text, variable=self.rec_audio_vars[key], command=self._rec_audio_changed)
         self._reg("st.more.rec_audio_dbd", sound_box("dbd", _("DBD"))).pack(side="left", padx=(0, 10))
         self._reg("st.more.rec_audio_discord", sound_box("discord", _("Discord"))).pack(side="left", padx=(0, 10))
-        self._reg("st.more.rec_audio_desktop", sound_box("desktop", _("übriger Desktop-Ton"))).pack(side="left", padx=(0, 10))
+        self._reg("st.more.rec_audio_desktop", sound_box("desktop", _("Übriger Desktop-Ton"))).pack(side="left", padx=(0, 10))
         self._reg("st.more.rec_audio_mic", sound_box("mic", _("Mikrofon"))).pack(side="left")
         self.rec_tracks_var = ui.BooleanVar(value=bool(self.settings.get("rec_tracks", True)))      # 1.8.5
         self._reg("st.more.rec_tracks", ui.Checkbutton(rc, text=_("Jede Tonquelle auf eine eigene OBS-Tonspur legen (1 alles, 2 Spiel, 3 Discord, 4 Mikrofon) – zum Mischen im Clip-Editor"),

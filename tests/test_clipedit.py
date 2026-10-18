@@ -466,3 +466,58 @@ def test_the_retouch_style_paints_the_box_over_from_its_surroundings(clip, tmp_p
     outside = sum(abs(a - b) for a, b in zip(before.getpixel((250, 60)), after.getpixel((250, 60))))
     assert inside > 30 and outside < 30                     # changed inside the box, untouched outside
     assert "retouch" in clipedit.CENSOR_STYLES
+
+
+def test_marking_a_recording_shows_the_compact_editor_beside_the_table(four_track, tmp_path):
+    """1.8.8 (user: "click on it and a preview comes where I can play it and quickly edit, sound tracks on/off"):
+    marking a row puts a compact clip editor beside the recordings table – picture, sources on/off, start/end,
+    save; another row replaces it, no row hides it, "Grosser Editor" opens the full window at the same range."""
+    if sys.platform == "win32":
+        pytest.skip("Linux: the whole program offscreen (like tests/test_uimodel.py)")
+    pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
+    import json
+    import shutil
+    from PySide6.QtWidgets import QApplication
+    from dbdmapscout.app import App
+    from dbdmapscout.app_qt import ui_shown
+    root = os.path.join(os.path.dirname(__file__), "..")
+    for name in ("maps", "models", "maps.json"):
+        os.symlink(os.path.abspath(os.path.join(root, name)), tmp_path / name)
+    (tmp_path / "sim").mkdir()
+    folder = tmp_path / "rec"
+    folder.mkdir()
+    shutil.copy(four_track, folder / "one.mkv")
+    t1 = time.time() - 600
+    obsrec.save_index(str(folder), [obsrec.Recording(t=t1, file="one.mkv", label="Ormond", end=t1 + 6, size=1,
+                                                     marks=[2.0])])
+    (tmp_path / "settings.json").write_text(json.dumps({"rec_on": True, "rec_folder": str(folder),
+                                                       "welcome_seen": True,
+                                                       "clip_mix_on": {"discord": False}}), encoding="utf-8")
+    app = App(str(tmp_path), simulate=str(tmp_path / "sim"))
+    try:
+        qapp = QApplication.instance()
+        app._rec_render()
+        host = app.qt.host(str(app.rec_host))
+        assert host is not None and host.content is None and not ui_shown(app.rec_host)
+        app.rec_table.selection_set(repr(t1))
+        app.rec_table.event_generate("<<TreeviewSelect>>")
+        ed = host.content
+        assert ed is not None and ed.compact and not ed.isWindow() and ui_shown(app.rec_host)
+        assert ed.info.audio_tracks == 4 and ed.mix() == {"dbd": 1.0, "discord": 0.0, "mic": 1.0}
+        assert ed.mix_boxes["dbd"].isVisibleTo(ed) and not ed.mix_sliders["dbd"].isVisibleTo(ed)   # on/off only
+        assert ed.expand_btn is not None and not ed.open_btn.isVisibleTo(ed)
+        app._rec_buttons()                                          # the same row again: the same editor
+        assert host.content is ed
+        ed.timeline.set_range(1.0, 3.0)
+        ed.goto(2.0)
+        ed.expand_btn.click()
+        full = app._clip_windows[-1]
+        assert full is not ed and full.isWindow() and not full.compact
+        assert (full.timeline.start, full.timeline.end) == (1.0, 3.0)
+        full.close()
+        app.rec_table.selection_remove(repr(t1))
+        app.rec_table.event_generate("<<TreeviewSelect>>")
+        qapp.processEvents()
+        assert host.content is None and not ui_shown(app.rec_host)
+    finally:
+        app.quit()

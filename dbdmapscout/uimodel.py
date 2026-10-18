@@ -164,9 +164,10 @@ class Widget:
         if self._manager == "pack":
             self._manager = ""
 
-    def grid(self, row=0, column=0, **_kw):
+    def grid(self, row=0, column=0, columnspan=1, sticky="", **_kw):
         self.pack_forget()
-        self._manager, self._grid = "grid", {"row": int(row), "column": int(column)}
+        self._manager, self._grid = "grid", {"row": int(row), "column": int(column),
+                                             "columnspan": int(columnspan), "sticky": str(sticky)}
 
     def grid_forget(self):
         if self._manager == "grid":
@@ -603,6 +604,11 @@ class Preview(Widget):
         super().__init__(master, **kw)
         self.source = source or (lambda: {})
         self.command = command
+
+
+class Host(Widget):
+    """1.8.8: a place on an auto-built page where the App puts a real Qt widget of its own (the compact clip editor
+    of the recordings tab) – the model only says whether it is shown (packed)."""
 
 
 class Toplevel(Widget):
