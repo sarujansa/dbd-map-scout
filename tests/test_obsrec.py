@@ -479,9 +479,10 @@ def _reds(img, x0=0):
 
 
 def test_the_rec_dot_blinks_right_of_the_timer_in_every_style_and_on_the_tray_icon():
-    """1.5.2 (user: "rechts von der Rundenzeit blinkend"): the red dot sits right of the round timer – classic
-    info block and the three modern cards – on during even seconds, off during odd ones, never while not
-    recording; the card keeps its size between the phases (nothing jumps)."""
+    """1.5.2 (user: "rechts von der Rundenzeit blinkend"): the red dot sits right of the round timer in the
+    classic info block; since 1.8.33 the three modern cards show a "● REC" chip beside the server instead – on
+    during even seconds, off during odd ones, never while not recording; the card keeps its size between the
+    phases (nothing jumps)."""
     from PIL import Image
     from dbdmapscout import icon, overlay_win32, skin
     assert overlay_win32.rec_phase(10.2) and not overlay_win32.rec_phase(11.7)
@@ -499,8 +500,12 @@ def test_the_rec_dot_blinks_right_of_the_timer_in_every_style_and_on_the_tray_ic
                                     "#c9a227", rec=rec) for rec in (True, False, None)}
         assert cards[True].size == cards[False].size, style
         reds = _reds(cards[True])
-        assert reds and min(x for x, _y in reds) > cards[True].width // 2, style
+        # 1.8.33 (user: "neben Global als REC blinkend"): a "● REC" chip in the chip row below the timer
+        assert reds and min(y for _x, y in reds) > cards[True].height - 70, style
         assert not _reds(cards[False]) and not _reds(cards[None]), style
+        chips = skin.map_card(None, "", "", "03:12", "", "", "Global", None, (), 480, style, None, rec=True)
+        plain = skin.map_card(None, "", "", "03:12", "", "", "Global", None, (), 480, style, None)
+        assert chips.width > plain.width and chips.height == plain.height, style   # beside "Global", same row
     plain, rec = icon.draw_status(64, None), icon.draw_status(64, None, rec=True)
     assert plain.tobytes() != rec.tobytes()
     r, g, b, a = rec.getpixel((52, 12))
