@@ -146,6 +146,7 @@ class StatsTab:
                                                   ("role", _("Rolle/Killer"), 115, "w"), ("res", _("Ergebnis"), 75, "w"),
                                                   ("srv", _("Server"), 100, "w")), 7,
                                            select=True, multi=True)      # 1.5.4: several rows (Ctrl/Shift)
+        self._table_menu(self.stats_last, self._stats_last_menu_items, self._stats_last_menu_act)   # 1.8.10
         self.stats_last.bind("<<TreeviewSelect>>", lambda e: self._stats_role_buttons())
         self.stats_more_btn = ui.Button(box2, text=_("Weitere 100 Runden anzeigen"), command=self._stats_more_rounds)
         rr = ui.Frame(box2)
@@ -706,6 +707,29 @@ class StatsTab:
         self._save_soon()
         self._log(_("Killer-Zuordnungen gelöscht."), "System")
         self._stats_render()
+
+    def _stats_last_menu_items(self):
+        """1.8.10: right click on "Letzte Runden" – role, farming, stats page, delete for the marked rounds."""
+        sel = self.stats_last.selection()
+        if not sel:
+            return []
+        ok = self.stats_delete_btn.instate(["!disabled"])         # not for rounds rescued from the stats page
+        n = len(sel)
+        return [("killer", _("Als Killer-Runde"), ok), ("survivor", _("Als Survivor-Runde"), ok),
+                ("custom", _("Als Custom Game"), ok), None,
+                ("farming", _("Farming an/aus"), ok), None,
+                ("site", _("Stats-Seite öffnen"), True), None,
+                ("delete", _("Runde löschen") if n == 1 else _("{n} Runden löschen", n=n), ok)]
+
+    def _stats_last_menu_act(self, ident):
+        if ident in ("killer", "survivor", "custom"):
+            self._stats_set_role(ident)
+        elif ident == "farming":
+            self._stats_toggle_farming()
+        elif ident == "site":
+            self._official_open(False)
+        elif ident == "delete":
+            self._stats_delete_round()
 
     def _stats_selected_ts(self) -> list:
         """Banner times of the rows marked in "Letzte Runden" (1.5.4: several at once)."""

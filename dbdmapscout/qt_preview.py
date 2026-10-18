@@ -200,6 +200,17 @@ class PreviewView(QWidget):
             p.drawRect(QRectF(rx, ry, w * s, h * s))
         p.end()
 
+    def contextMenuEvent(self, e):
+        """1.8.10: right click on an element: the App shows its quick actions (size, dark area, hide …)."""
+        ox, oy, s = self._frame()
+        if s <= 0:
+            return
+        hit = self.layer_at((e.pos().x() - ox) / s, (e.pos().y() - oy) / s)
+        if hit is None:
+            return
+        gp = e.globalPos()
+        self._post("act", (self._key, ("menu", hit[0], gp.x(), gp.y())))
+
     def _screen_pos(self, e):
         ox, oy, s = self._frame()
         pos = e.position()
