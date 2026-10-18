@@ -145,16 +145,17 @@ def fit_scale(w: float, h: float, avail_w: float, avail_h: float) -> float:
 
 
 def preview_place(gw: int, gh: int, anchor: str, pos_x: float, pos_y: float, margin: int, keep_in_bar: bool,
-                  w: int, h: int, drop: int = 0, align: str = "centre", lift: int = 0):
+                  w: int, h: int, drop: int = 0, align: str = "centre", lift: int = 0, block=(0, 0)):
     """Top-left corner of an overlay of w × h on a full-screen DBD (App._place_overlay's rules for the preview);
     ``drop``: room the system values (and the cards below them) take above a map at the top of the same bar,
-    ``lift`` (1.2.11): room the cards at the bottom of the bar take below a map at the bottom."""
+    ``lift`` (1.2.11): room the cards at the bottom of the bar take below a map at the bottom, ``block`` (1.8.24):
+    own_block() – an own place puts map + lines as one block."""
     bar = bar_width(gw, gh)
     if anchor == "auto":                                    # like App._place_overlay_map's place()
         x = (bar - w) / 2 if align == "centre" else (bar - margin - w if align == "right" else margin)
         x, y = max(margin, x), margin + drop
     elif anchor == "custom":
-        x, y = pos_x * max(0, gw - w), pos_y * max(0, gh - h)
+        x, y = pos_x * max(0, gw - w), pos_y * max(0, gh - h - block[0]) + block[1]
     else:
         x = margin if anchor.endswith("left") else gw - w - margin
         y = margin + drop if anchor.startswith("top") else gh - h - margin - lift
@@ -377,16 +378,117 @@ def limit_pair(limits, side: str) -> tuple:
     return t, b
 
 
-def bar_bands(o: dict, game, margin: int):
+def bar_bands(o: dict, game, margin: int, zones: bool = True):
     """{"left": (top y, bottom y), "right": (…)} – the room between the lines of each black bar (absolute screen
-    y; at least ``margin`` from the edges), or None when the limiter is off or the window has no side bars."""
+    y; at least ``margin`` from the edges), or None when the limiter is off or the window has no side bars.
+    1.8.25: a keep-out area (keep_out_boxes, e.g. Discord's voice widget) at the top / bottom edge of a bar moves
+    that bar's line past it – also with the limiter off; ``zones`` False = the limiter lines alone (drawing)."""
     gx, gy, gw, gh = game
-    if not o.get("bar_limits_on") or gh <= 0 or bar_width(gw, gh) < MIN_BAR:
+    if gh <= 0 or bar_width(gw, gh) < MIN_BAR:
+        return None
+    edges = bar_zone_edges(o, game) if zones else {}
+    if not o.get("bar_limits_on") and not edges:
         return None
     out = {}
     for side in LIMIT_SIDES:
-        t, b = limit_pair(o.get("bar_limits"), side)
-        out[side] = (int(gy + max(margin, round(t * gh))), int(gy + gh - max(margin, round(b * gh))))
+        t, b = limit_pair(o.get("bar_limits"), side) if o.get("bar_limits_on") else (0.0, 0.0)
+        top, bottom = int(gy + max(margin, round(t * gh))), int(gy + gh - max(margin, round(b * gh)))
+        zt, zb = edges.get(side, (None, None))
+        if zt is not None:
+            top = max(top, zt + margin)
+        if zb is not None:
+            bottom = min(bottom, zb - margin)
+        if bottom - top < gh * LIMIT_MIN_ROOM:           # never squeezed to nothing
+            bottom = top + int(gh * LIMIT_MIN_ROOM)
+        out[side] = (top, bottom)
+    return out
+
+
+# 1.8.25 (user screenshots with Discord's overlay open: "was du beachten musst beim Anordnen"): areas our elements
+# keep out of – Discord's overlay widgets where the user has them, as shares of the DBD window (x, y, w, h):
+# voice widget bottom left, streams + notifications top right, text chat right. Nothing is read from Discord.
+# (measured on 2000×837 screenshots: voice 2–160 × 750–812, streams + notifications 1817–2000 × 0–200, the pinned
+# chat 1630–1767 × 470–665 – its wide input line only shows with the overlay open –, quick actions 680–940 × 15–70)
+DISCORD_ZONES = [[0.0, 0.89, 0.082, 0.11], [0.905, 0.0, 0.095, 0.245], [0.814, 0.56, 0.07, 0.235],
+                 [0.34, 0.015, 0.13, 0.07]]
+EDGE_TOUCH = 0.02                                   # a zone this close to the top / bottom edge moves the bar's line
+
+
+def keep_out_boxes(o: dict, game) -> list:
+    """The keep-out areas in screen pixels [(x, y, w, h)], [] when switched off."""
+    if not o.get("keep_out_on", False):            # settings: on by default (config.DEFAULTS)
+        return []
+    gx, gy, gw, gh = game
+    out = []
+    for z in o.get("keep_out") or DISCORD_ZONES:
+        try:
+            x, y, w, h = (float(v) for v in z)
+        except (TypeError, ValueError):
+            continue
+        out.append((gx + x * gw, gy + y * gh, w * gw, h * gh))
+    return out
+
+
+def bar_zone_edges(o: dict, game) -> dict:
+    """{side: (lowest bottom of the zones at the bar's top or None, highest top of those at its bottom or None)}."""
+    gx, gy, gw, gh = game
+    bar = bar_width(gw, gh)
+    out = {}
+    for x, y, w, h in keep_out_boxes(o, game):
+        for side, (b0, b1) in (("left", (gx, gx + bar)), ("right", (gx + gw - bar, gx + gw))):
+            if x >= b1 or x + w <= b0:
+                continue
+            top, bottom = out.get(side, (None, None))
+            if y <= gy + EDGE_TOUCH * gh:
+                top = max(top or 0, int(y + h))
+            elif y + h >= gy + gh - EDGE_TOUCH * gh:
+                bottom = int(y) if bottom is None else min(bottom, int(y))
+            out[side] = (top, bottom)
+    return out
+
+
+def boxes_overlap(a, b, pad: int = 0) -> bool:
+    return (a[0] < b[0] + b[2] + pad and b[0] < a[0] + a[2] + pad and
+            a[1] < b[1] + b[3] + pad and b[1] < a[1] + a[3] + pad)
+
+
+def resolve(boxes, fixed, game, bands, gap: int) -> dict:
+    """1.8.25 (user: "alle UI-Elemente beachten, damit es immer sauber aussieht"): {name: (dx, dy)} so that no box
+    lies on an earlier one or on a ``fixed`` box (the map, keep-out areas). ``boxes`` = [(name, (x, y, w, h))] in
+    priority order; a box that collides moves up or down to the nearest free place in its bar between its lines
+    (else on the screen) – without one, sideways within its bar (a narrow area reaching in from the game picture);
+    with no free place at all it stays where it is."""
+    gx, gy, gw, gh = game
+    bar = bar_width(gw, gh)
+    placed = [tuple(f) for f in fixed if f]
+    out = {}
+    for name, box in boxes:
+        if not box:
+            continue
+        x, y, w, h = box
+        if any(boxes_overlap(box, p) for p in placed):
+            side = box_side(box, game)
+            top, bottom = bands[side] if bands and side else (gy, gy + gh)
+            left, right = ((gx, gx + bar) if side == "left" else (gx + gw - bar, gx + gw)) if side else (gx, gx + gw)
+            free = lambda b: not any(boxes_overlap(b, p) for p in placed)          # noqa: E731
+            cands = {y}
+            for p in placed:
+                cands |= {p[1] + p[3] + gap, p[1] - gap - h}
+            spot = next((c for c in sorted(cands, key=lambda c: (abs(c - y), c))
+                         if top <= c and c + h <= bottom and free((x, c, w, h))), None)
+            if spot is not None:
+                y = spot
+            else:
+                xs = set()
+                for p in placed:
+                    xs |= {p[0] + p[2] + gap, p[0] - gap - w}
+                spot = next((c for c in sorted(xs, key=lambda c: (abs(c - x), c))
+                             if left <= c and c + w <= right and free((c, y, w, h))), None)
+                if spot is not None:
+                    x = spot
+        if (x, y) != tuple(box[:2]):
+            out[name] = (int(x - box[0]), int(y - box[1]))
+        placed.append((x, y, w, h))
     return out
 
 
@@ -494,6 +596,19 @@ def info_reserve(o: dict, size, gap: int):
         return 0, 0
     spot = o.get("info_pos", "below")
     return (size[1] + gap, 0) if spot == "above" else (0, size[1] + gap) if spot == "below" else (0, 0)
+
+
+def own_block(o: dict, size, gap: int):
+    """(extra, shift) of a map at an own place whose lines hang right below / above it (1.8.24, user screenshot:
+    the lines sat on Midwich's top floor): the vertical slider places map + lines as one block – ``extra`` = what
+    the lines add to its height, ``shift`` = how far the map sits below the block's top (lines above it)."""
+    if not size or not info_apart(o) or o.get("anchor") != "custom":
+        return 0, 0
+    spot = o.get("info_pos", "below")
+    if spot not in ("below", "above"):
+        return 0, 0
+    extra = size[1] + gap
+    return extra, (extra if spot == "above" else 0)
 
 
 def info_xy(spot: str, map_rect, size, game, gap: int, margin: int, own=None, align: str = "centre",

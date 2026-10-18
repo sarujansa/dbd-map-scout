@@ -138,9 +138,75 @@ def fira(size: int):
         return _font(size)
 
 
+# 1.8.25 (user: "andere Sprachen werden bei ‚Als nächstes' nicht korrekt angezeigt (russisch)"): the Inter fonts of
+# the modern styles are a Latin subset, Fira has Latin/Greek/Cyrillic but no CJK – a character a font lacks is drawn
+# with the first of these that has it (Windows' own fonts, DejaVu/Noto elsewhere), on the same baseline
+FALLBACK_FONTS = ("segoeuib.ttf", "segoeui.ttf", "msyhbd.ttc", "msyh.ttc", "YuGothB.ttc", "YuGothM.ttc", "malgunbd.ttf",
+                  "malgun.ttf", "Nirmala.ttf", "seguisym.ttf", "arialbd.ttf", "DejaVuSans-Bold.ttf", "DejaVuSans.ttf",
+                  "NotoSansCJK-Bold.ttc", "NotoSansCJK-Regular.ttc", "NotoSans-Bold.ttf")
+_HAS: dict = {}                    # (font file, size, char) -> the font has a glyph for it
 _GLYPHS: dict = {}                 # (font id, char, stroke, x fraction) -> (L mask, offset) as ImageDraw.text uses it
 _CHAR_LEN: dict = {}               # (font id, char) -> textlength
 GLYPHS_KEPT = 6000                 # the caches start over beyond this (a few hundred entries in practice)
+
+
+def _font_key(font):
+    return (getattr(font, "path", None) or id(font), getattr(font, "size", 0))
+
+
+def _has_glyph(font, ch: str) -> bool:
+    """Does ``font`` draw ``ch`` itself? A missing character comes out as the font's "notdef" glyph – the same
+    picture as a code point no font maps (U+FFFF); white space always counts as there."""
+    key = _font_key(font) + (ch,)
+    hit = _HAS.get(key)
+    if hit is None:
+        if ch.isspace() or ord(ch) < 0x80:
+            hit = True
+        else:
+            try:
+                mine, notdef = font.getmask(ch), font.getmask("\uffff")
+                hit = not (mine.size == notdef.size and bytes(mine) == bytes(notdef))
+            except Exception:
+                hit = True
+        if len(_HAS) > GLYPHS_KEPT:
+            _HAS.clear()
+        _HAS[key] = hit
+    return hit
+
+
+@lru_cache(maxsize=256)
+def _fallback_font(name: str, size: int):
+    try:
+        return ImageFont.truetype(name, size)
+    except OSError:
+        return None
+
+
+def font_for(font, ch: str):
+    """``font`` when it has ``ch``, else the first fallback that has it (Fira first: same look for Greek/Cyrillic),
+    else ``font`` (its "notdef" box)."""
+    if _has_glyph(font, ch):
+        return font
+    size = int(getattr(font, "size", 0) or 0)
+    if size <= 0:
+        return font
+    path = str(getattr(font, "path", ""))
+    first = (fira(size),)
+    if "Inter-" in path:                           # the modern styles: Segoe UI in the same weight looks closest
+        weight = "seguisb.ttf" if "SemiBold" in path else "segoeuib.ttf" if "Bold" in path else "segoeui.ttf"
+        first = (_fallback_font(weight, size), fira(size))
+    for cand in first + tuple(_fallback_font(n, size) for n in FALLBACK_FONTS):
+        if cand is not None and cand is not font and _has_glyph(cand, ch):
+            return cand
+    return font
+
+
+@lru_cache(maxsize=256)
+def _ascent(font) -> int:
+    try:
+        return int(font.getmetrics()[0])
+    except Exception:
+        return 0
 
 
 def _char_len(font, ch: str) -> float:
@@ -149,7 +215,7 @@ def _char_len(font, ch: str) -> float:
     if n is None:
         if len(_CHAR_LEN) > GLYPHS_KEPT:
             _CHAR_LEN.clear()
-        n = _CHAR_LEN[key] = font.getlength(ch)
+        n = _CHAR_LEN[key] = font_for(font, ch).getlength(ch)
     return n
 
 
@@ -183,12 +249,14 @@ def _draw_run(pic: Image.Image, x: float, y: float, text: str, font, fill, strok
     same = stroke and fill == stroke_fill          # ImageDraw.text draws the fill only when it differs
     for ch in text:
         ix, fx = int(x), math.modf(x)[0]
+        f = font_for(font, ch)                     # 1.8.25: a character the font lacks from a fallback font
+        jy = iy + (_ascent(font) - _ascent(f) if f is not font else 0)          # … on the same baseline
         if stroke:
-            tile, off = _glyph(font, ch, stroke, fx)
-            d.bitmap((ix + off[0], iy + off[1]), tile, fill=stroke_fill)
+            tile, off = _glyph(f, ch, stroke, fx)
+            d.bitmap((ix + off[0], jy + off[1]), tile, fill=stroke_fill)
         if not same:
-            tile, off = _glyph(font, ch, 0, fx)
-            d.bitmap((ix + off[0], iy + off[1]), tile, fill=fill)
+            tile, off = _glyph(f, ch, 0, fx)
+            d.bitmap((ix + off[0], jy + off[1]), tile, fill=fill)
         x += _char_len(font, ch) + track
     return x
 
