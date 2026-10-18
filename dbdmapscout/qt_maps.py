@@ -325,9 +325,10 @@ class MapsPage(QWidget):
             self._loader.start()
 
     def _load_some(self):
-        """A few pictures per tick, so that the page shows at once and fills in (52 maps ≈ 1 s in all)."""
+        """A picture per tick, so that the page shows at once and fills in (52 maps ≈ 1–2 s in all; 1.8.21: one,
+        not two – each takes 30–45 ms, two made a click wait ~90 ms)."""
         done = 0
-        while self._todo and done < 2:
+        while self._todo and done < 1:
             t = self._todo.pop(0)
             path = self._thumbs.get(t.key)
             if not path:

@@ -692,15 +692,41 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         self._save_soon()
 
     # ------------------------------------------------------------ map style (1.66)
-    def _map_file(self, map_id, variant=1, make=True):
-        """(picture path, variant shown) – in the dark style the converted picture from the cache (made now if the
-        warm-up has not got there yet, ~0.5 s; ``make=False``: the original then); own pictures (user_maps/)
-        always as they are."""
+    def _map_file(self, map_id, variant=1, request=True):
+        """(picture path, variant shown) – in a map style the converted picture from the cache; own pictures
+        (user_maps/) always as they are. 1.8.21 (user: the maps page was very slow when clicking between the
+        buttons – a floor style took ~2 s per picture in the window thread): never made here; until it is there
+        the original, and with ``request`` a background job makes it (``_style_ready`` loads it then)."""
         path, shown = self.catalog.image_path(map_id, variant)
         style = self.settings["overlay"].get("map_style", "classic")
         if path and style in mapstyle.STYLES and not self.catalog.is_own(map_id, variant):    # 1.8.16: + floors
-            path = mapstyle.styled_path(path, os.path.join(self.root_dir, STYLE_CACHE), make, style)
+            styled = mapstyle.styled_path(path, os.path.join(self.root_dir, STYLE_CACHE), False, style)
+            if styled == path and request:
+                self._style_request(path, style)
+            path = styled
         return path, shown
+
+    def _style_request(self, path, style):
+        """1.8.21: one styled picture made in a thread (once per picture and style – one of another kind stays the
+        original), then ``_style_ready`` in the window thread."""
+        asked = self.__dict__.setdefault("_style_asked", set())
+        if (path, style) in asked:
+            return
+        asked.add((path, style))
+        cache = os.path.join(self.root_dir, STYLE_CACHE)
+
+        def run():
+            if mapstyle.styled_path(path, cache, True, style) != path:
+                self.events.put(("call", self._style_ready, (path,)))
+        threading.Thread(target=run, daemon=True, name="mapstyle-one").start()
+
+    def _style_ready(self, path):
+        """A styled picture is there now: the previews take it, the map on display is loaded again."""
+        self._preview_pic = None
+        self._qt_preview_cache = None
+        self._qt_maps_rev = getattr(self, "_qt_maps_rev", 0) + 1
+        if self.current and self.catalog.image_path(*self.current)[0] == path:
+            self._reload_picture()
 
     def _style_warm(self):
         """Dark style on: make all pictures ahead in a thread (~30 s once, then cached)."""
@@ -1287,7 +1313,7 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
             pic = pic or self._preview_sample()
         m = self.catalog.maps.get(self.current[0]) if self.current else None
         if m is None and pic is not None:                  # the sample picture: the catalog's first map
-            m = next((e for e in self.catalog.maps.values() if self._map_file(e.id, 1)[0]), None)
+            m = next((e for e in self.catalog.maps.values() if self._map_file(e.id, 1, request=False)[0]), None)
         name = m.label(self.current[1] if self.current else 1) if m else _("Map-Name")
         caption = name if o.get("show_caption", True) and pic is not None else ""
         info = {"timer": "3:27" if o.get("show_timer", True) else "",
@@ -1335,7 +1361,8 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
                 "limits_same": bool(o.get("bar_limits_same", False))}
 
     def _preview_sample(self):
-        """A map picture for the preview while none is on display (the first one of the catalog), loaded once."""
+        """A map picture for the preview while none is on display (the first one of the catalog), loaded once –
+        1.8.21: the original until the map style's picture is made (``_style_ready`` drops it then)."""
         if getattr(self, "_preview_pic", None) is None:
             from PIL import Image
             for mid in self.catalog.maps:
