@@ -913,8 +913,7 @@ class Recorder(threading.Thread):
             self._warn(_("OBS läuft nicht – die Runden werden nicht aufgenommen. ({error})", error=e))
             return
         try:
-            if self.cfg.audio:
-                self._audio(c)
+            sound = self._audio(c) if self.cfg.audio else ""     # 1.8.7: a sound problem must stay in the status
             if self.cfg.wants_buffer and self.cfg.buffer_auto:
                 try:
                     if not c.request("GetReplayBufferStatus").get("outputActive"):
@@ -922,7 +921,10 @@ class Recorder(threading.Thread):
                         self._buffer_ours = True
                 except ObsError as e:
                     log.info("OBS: Wiederholungspuffer nicht gestartet (%s)", e)
-            self._say(_("OBS bereit – Runden werden aufgenommen"), True)
+            if sound:
+                self._say(_("OBS bereit – Runden werden aufgenommen. {problem}", problem=sound), False)
+            else:
+                self._say(_("OBS bereit – Runden werden aufgenommen"), True)
         finally:
             c.close()
 
@@ -1163,7 +1165,7 @@ class Recorder(threading.Thread):
         finally:
             c.close()
 
-    def _audio(self, c: ObsClient):
+    def _audio(self, c: ObsClient) -> str:
         """DBD and Discord as OBS application audio sources (created in the current scene the first time),
         each muted or not as set; OBS's desktop audio and microphone muted or not as set. Errors only in the log
         and the status: older OBS (< 28) has no application audio capture."""
@@ -1193,14 +1195,15 @@ class Recorder(threading.Thread):
                 if name:
                     c.request("SetInputMute", {"inputName": name, "inputMuted": not on})
                     others.append(("mic" if key.startswith("mic") else "desktop", name))
-            if self.cfg.tracks:
-                self._tracks(c, names, others)
+            hint = self._tracks(c, names, others) if self.cfg.tracks else ""
         except ObsError as e:
             log.info("OBS: Ton nicht eingestellt (%s)", e)
-            self._say(_("Ton in OBS nicht eingestellt: {error}", error=e), False)
-            return
+            text = _("Ton in OBS nicht eingestellt: {error}", error=e)
+            self._say(text, False)
+            return text
         for n in notes:
             log.info("OBS: %s", n)
+        return hint
 
     def _tracks(self, c: ObsClient, names: set, others: list):
         """1.8.6: every source on track 1 (everything) and its own track (SOURCE_TRACKS: game + desktop 2, Discord
@@ -1218,6 +1221,7 @@ class Recorder(threading.Thread):
         if hint:
             log.info("OBS: %s", hint)
             self._say(hint, False)
+        return hint
 
     @staticmethod
     def _profile(c: ObsClient, category: str, name: str) -> str:
