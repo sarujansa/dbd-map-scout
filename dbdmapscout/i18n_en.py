@@ -1230,6 +1230,9 @@ EN = {
     'läuft gerade': 'now playing',
     'Grösse Musik': 'Music size',
     'Albumcover zeigen': 'Show the album cover',
+    "Auch Videos zeigen (YouTube, Twitch …) – aus: nur Musik": "Show videos too (YouTube, Twitch …) – off: music only",
+    "Die Mediensteuerung meldet auch Videos aus dem Browser. An: ein Video erscheint als „▶ Titel“ mit dem Kanal darunter. Aus: die Karte zeigt nur Musik. Unterschieden wird am Album: Musikdienste melden eins, ein Video nicht.":
+        "The media controls report browser videos too. On: a video appears as \"▶ Title\" with the channel below. Off: the card shows music only. Told apart by the album: music services report one, a video does not.",
     'Balken in der Farbe des Covers': "Bar in the cover's colour",
     'Dunkle Fläche hinter Karte und Infos': 'Dark area behind the map and its lines',
     'Dunkle Fläche hinter den Systemwerten': 'Dark area behind the system values',
