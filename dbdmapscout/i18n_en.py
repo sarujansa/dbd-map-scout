@@ -1652,6 +1652,8 @@ EN = {
     'Zeigt in der Musikkarte, was in Spotify als Nächstes kommt (Position und Anzahl unter Overlay → Musik). Die Windows-Mediensteuerung kennt nur den laufenden Titel, die Liste holt das Programm deshalb von Spotify selbst: Dafür im Developer-Dashboard „Create app“ anlegen (Name frei, API „Web API“), als Redirect URI genau {uri} eintragen, die Client-ID kopieren und hier einfügen, dann „Mit Spotify verbinden“ – der Browser fragt einmal nach der Freigabe. Gelesen wird nur die Warteschlange, nichts gesteuert; die Freigabe liegt verschlüsselt auf diesem PC und lässt sich hier trennen. Titel kommen nie ins Log.':
         'Shows on the music card what comes next in Spotify (place and count under Overlay → Music). The Windows media controls know only the current track, so the program gets the list from Spotify itself: in the developer dashboard "Create app" (any name, API "Web API"), enter exactly {uri} as the redirect URI, copy the Client ID and paste it here, then "Connect to Spotify" – the browser asks once for your consent. Only the queue is read, nothing is controlled; the consent is kept encrypted on this PC and can be removed here. Titles never go to the log.',
     'Spotify: öffne die Anmeldung im Browser …': 'Spotify: opening the login in the browser …',
+    'Spotify: Client-ID sieht falsch aus – erwartet werden 32 Zeichen aus 0–9 und a–f (Dashboard → deine App → Settings → Basic Information → Client ID).':
+        'Spotify: the Client ID looks wrong – expected are 32 characters of 0–9 and a–f (dashboard → your app → Settings → Basic Information → Client ID).',
     'ALS NÄCHSTES': 'UP NEXT',
     'Unter dem Lied': 'Below the song',
     'Rechts neben dem Lied': 'Right of the song',

@@ -62,8 +62,11 @@ class SpotifyUpNext:
         self.spotify.configure(on, cid, self.settings.get("spotify_token", ""))
 
     def _spotify_login(self):
-        self.sp_status_var.set(_("Spotify: öffne die Anmeldung im Browser …"))
         self._spotify_setting()
+        if not spotify.valid_client_id(self.sp_id_var.get()):        # 1.8.1: the user pasted a user id once
+            self.sp_status_var.set(spotify.BAD_ID_TEXT())
+            return
+        self.sp_status_var.set(_("Spotify: öffne die Anmeldung im Browser …"))
         self.spotify.login()
 
     def _spotify_logout(self):
@@ -89,7 +92,7 @@ class SpotifyUpNext:
             return None
         o = self.settings["overlay"]
         n = max(MEDIA_NEXT_N[0], min(MEDIA_NEXT_N[1], int(o.get("media_next_n", 3))))
-        up = self.spotify.upnext
+        up = spotify.advance(self.spotify.upnext, now.title, now.artist)   # 1.8.1: moved up at once on a new song
         if spotify.matches(up, now.title, now.artist):
             items = spotify.lines(up, n)
         elif sample:

@@ -413,7 +413,7 @@ def _chips_table(lines, u, acc) -> Image.Image:
 
 # ------------------------------------------------------------------ the music card
 def music(rows, cover, height: int, style: str, progress=None, look=(), accent=None,
-          layout: str = "compact", upnext=None, upnext_pos: str = "below") -> Image.Image:
+          layout: str = "compact", upnext=None, upnext_pos: str = "below", anim=None) -> Image.Image:
     """"Läuft gerade" in ``style``: ``rows`` as media.rows gives them ([[(title, white)], [(artist, dim)]]),
     ``progress`` = (elapsed, total) s or None, ``look`` as media.look (``remaining`` = time left on the right,
     ``accent`` = bar in the cover's colour – else the theme's accent). ``layout`` = overlay.media_style:
@@ -437,14 +437,16 @@ def music(rows, cover, height: int, style: str, progress=None, look=(), accent=N
     else:
         im = _music_glass(title, artist, cover, u, acc, progress, look)
     if upnext and upnext[1]:
-        block = upnext_panel(upnext[0], upnext[1], u, style)
+        block = upnext_panel(upnext[0], upnext[1], u, style, anim)
         im = _attach(im, block, upnext_pos, int(8 * u), centred=layout == "big" and cover is not None)
     return im
 
 
-def upnext_panel(label: str, items, u: float, style: str) -> Image.Image:
+def upnext_panel(label: str, items, u: float, style: str, anim=None) -> Image.Image:
     """"Als nächstes" (1.8) as a small panel in ``style``: a caps header, then number · title – artist per track,
-    each line fitted to the width of the chips' wrap (WRAP_SHARE)."""
+    each line fitted to the width of the chips' wrap (WRAP_SHARE). ``anim`` (1.8.1) = ((title, artist), shift):
+    the row that became the song fades out at the top while the rest slides up from a row below (shift 0 → 1);
+    the panel keeps its final size."""
     pad = int(12 * u)
     line = style == "line"
     max_w = int(WRAP_SHARE * 1440 * u) - 2 * pad
@@ -452,33 +454,47 @@ def upnext_panel(label: str, items, u: float, style: str) -> Image.Image:
     row_h = int(20 * u)
     nf = inter("Medium", int(12 * u))
     num_w = int(_width(nf, "9")) + int(8 * u)
-    fitted = []
-    for i, item in enumerate(items, 1):
+
+    def fit(num, item):
         title, artist = (tuple(item) + ("", ""))[:2]
         text = f"{title} – {artist}" if artist else title
         tf, text = _fit_text(text, "Regular" if line else "Medium", int(14 * u), max_w - num_w)
-        fitted.append((str(i), tf, text, len(title)))
+        return num, tf, text, len(title)
+
+    fitted = [fit(str(i), item) for i, item in enumerate(items, 1)]
     w = max((int(_width(tf, t)) for _n, tf, t, _k in fitted), default=0) + num_w + 2 * pad
     head_w = int(_width(inter("Medium", int(11 * u)), label.upper(), 3 * u)) + 2 * pad if label else 0
     w = max(w, head_w, int(120 * u))
-    h = pad + head_h + len(fitted) * row_h + pad - (int(4 * u) if fitted else 0)
+    rows_h = len(fitted) * row_h - (int(4 * u) if fitted else 0)
+    h = pad + head_h + rows_h + pad
     if line:
         im = _panel(w, h, int(10 * u), (0, 0, 0, 0), LINE_EDGE, max(1, int(u)))
     elif style == "chips":
         im = _panel(w, h, int(16 * u), CHIP_FILL, CHIP_EDGE)
     else:
         im = _panel(w, h, int(14 * u), GLASS_FILL, GLASS_EDGE)
-    y = pad
     if label:
-        _caps(im, pad, y, label, int(11 * u), GREY, u)
-        y += head_h
-    for num, tf, text, title_len in fitted:
-        _text(im, pad, y + int(2 * u), num, nf, DIMG)
+        _caps(im, pad, pad, label, int(11 * u), GREY, u)
+
+    def row(layer, y, entry, alpha=255):
+        num, tf, text, title_len = entry
+        white, grey, dim = WHITE[:3] + (alpha,), GREY[:3] + (alpha,), DIMG[:3] + (alpha,)
+        _text(layer, pad, y + int(2 * u), num, nf, dim)
         head, tail = text[:title_len], text[title_len:]      # title bright, artist grey (the fit may cut the tail)
-        x = _text(im, pad + num_w, y, head, tf, WHITE)
+        x = _text(layer, pad + num_w, y, head, tf, white)
         if tail:
-            _text(im, x, y, tail, tf, GREY)
-        y += row_h
+            _text(layer, x, y, tail, tf, grey)
+
+    inner = Image.new("RGBA", (w, max(1, rows_h)), (0, 0, 0, 0))   # rows on their own layer: clipped when sliding
+    off = 0
+    if anim and fitted:
+        leaving, shift = anim
+        shift = min(1.0, max(0.0, float(shift)))
+        off = int(round((1.0 - shift) * row_h))
+        row(inner, off - row_h, fit("", leaving), int(255 * (1.0 - shift)))
+    for i, entry in enumerate(fitted):
+        row(inner, off + i * row_h, entry)
+    im.alpha_composite(inner, (0, pad + head_h))
     return im if line else shadowed(im, u)
 
 
