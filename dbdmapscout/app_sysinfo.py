@@ -191,7 +191,7 @@ class SysInfo:
             w, h = self.hud.render(rows, hh2, look=look, **style)
         labels = tuple(r[0][0] for r in rows if r)
         self._hud_steady, sw = layout.steady_width(getattr(self, "_hud_steady", None), (side, hh, labels), w)
-        col = self._column_min_w("hud", w, avail_w)         # 1.8.29: as wide as the other cards in its bar
+        col = self._column_min_w("hud", sw, avail_w)        # 1.8.29: as wide as the other cards in its bar
         if max(sw, col) > w:
             w, h = self.hud.render(rows, hh2, look=look, min_w=int(max(sw, col)), **style)
             sw = max(sw, w)
@@ -299,8 +299,8 @@ class SysInfo:
             height = max(200, int(height * avail / w))
             w, h = win.render(rows, height, look=look, **style)
         labels = tuple(r[0][0] for r in rows if r)
-        sw = max(self._steady_width("today", (style["skin"], height, look, labels, int(avail), editing), w),
-                 self._column_min_w("today", w, avail))      # 1.8.29: and as wide as the other cards in its bar
+        sw = self._steady_width("today", (style["skin"], height, look, labels, int(avail), editing), w)
+        sw = max(sw, self._column_min_w("today", sw, avail))   # 1.8.29: and as wide as the other cards in its bar
         if sw > w:                                          # 1.8.28: as wide as it ever was with these rows
             w, h = win.render(rows, height, look=look, min_w=sw, **style)
         return (w, h)
@@ -319,8 +319,9 @@ class SysInfo:
     def _column_min_w(self, name, w: int, avail) -> int:
         """1.8.29 (user: "rechts sind die Felder nicht untereinander"): the width the other cards in the same
         black bar had last tick (layout.column_widths, computed in _el_resolve from the natural widths) – the
-        card is drawn at it, so System values, "today" and music make one column. ``w`` = this card's natural
-        width (remembered for the others); never wider than ``avail``."""
+        card is drawn at it, so System values, "today" and music make one column. ``w`` = this card's steady
+        width (1.8.30: not the momentary one – a song change must not shrink the column); never wider than
+        ``avail``."""
         nat = getattr(self, "_col_nat", None)
         if nat is None:
             nat = self._col_nat = {}
@@ -540,15 +541,21 @@ class SysInfo:
         """Draw the music card – during a song change (``_media_trans``) the cross-fade frame, else the card;
         never wider than ``avail`` and (1.8.28) never narrower than it was for the same layout: a shorter title
         or queue is drawn at the steady width, nothing moves."""
+        kw.pop("min_w", None), kw.pop("min_h", None)       # the natural size first
+        asked = kw.get("height")                            # (before the bar's fit: that depends on the title)
         w, h = self._media_draw(win, kw, avail)
-        up = kw.get("upnext")
-        key = (kw.get("skin"), kw.get("style"), kw.get("height"), kw.get("cover") is not None, kw.get("look"),
-               kw.get("upnext_pos"), len(up[1]) if up and up[1] else 0, int(avail), bool(win.editing))
-        sw = max(self._steady_width("music", key, w), self._column_min_w("music", w, avail))
-        if sw > w:
-            kw["min_w"] = sw
+        # 1.8.30 (user: "wenn Spotify den Song wechselt, werden die Felder kurz kleiner und wieder normal"): the key
+        # leaves out what comes and goes with a song change (cover, queue, title) – the card keeps its size and
+        # gets smaller only when the smaller content lasts (layout.steady_box)
+        key = (kw.get("skin"), kw.get("style"), asked, kw.get("look"), kw.get("upnext_pos"), int(avail),
+               bool(win.editing))
+        st = getattr(self, "_music_steady", None)
+        self._music_steady, sw, sh = layout.steady_box(st, key, w, h, time.monotonic())
+        sw = max(sw, self._column_min_w("music", sw, avail))
+        if sw > w or sh > h:
+            kw["min_w"], kw["min_h"] = sw, sh
             if self._media_trans is not None:
-                self._media_trans.old["min_w"] = sw
+                self._media_trans.old["min_w"], self._media_trans.old["min_h"] = sw, sh
             w, h = self._media_draw(win, kw, avail)
         return w, h
 

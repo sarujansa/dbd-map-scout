@@ -241,16 +241,18 @@ def test_the_floor_styles_put_a_floor_under_the_dark_drawing(tmp_path, style):
     assert np.array_equal(body_o[~shape][:, 3], body_d[~shape][:, 3])         # invisible pixels does not count)
     assert np.array_equal(body_o[vis], body_d[vis])
     floor = shape & (body_d[..., 3] == 0)                                    # where "dark" was see-through …
-    floor &= ~(cv2_erode_edge(shape, 12))                                     # (away from the edge)
+    floor &= ~(cv2_erode_edge(shape, 20))                                     # (away from the edge, 14 px)
     assert floor.sum() > 50000
     got = body_o[floor]
     assert (np.abs(got[:, :3] - np.array(fill)).max(axis=1) <= 2).mean() > 0.99   # … the floor's colour now
     assert (np.abs(got[:, 3] - alpha) <= 2).mean() > 0.99
-    solid = shape & (body_d[..., 3] == 255) & ~cv2_erode_edge(shape, 12)        # the opaque drawing stays
+    solid = shape & (body_d[..., 3] == 255) & ~cv2_erode_edge(shape, 20)        # the opaque drawing stays
     assert (np.abs(body_o[solid] - body_d[solid]).max(axis=1) <= 2).mean() > 0.99
     if edge is not None:                                                      # a light edge on the outline
         rim = shape & ~mapstyle.cv2.erode(shape.astype(np.uint8), mapstyle._disk(2)).astype(bool)
         assert (np.abs(body_o[rim][:, :3] - np.array(edge)).max(axis=1) <= 2).mean() > 0.9
+        wide = shape & ~mapstyle.cv2.erode(shape.astype(np.uint8), mapstyle._disk(8)).astype(bool)   # 1.8.29: ≥ 8 px
+        assert (np.abs(body_o[wide][:, :3] - np.array(edge)).max(axis=1) <= 2).mean() > 0.9
     if style == "grey":                                                       # Midwich: floors kept, in this style
         from dbdmapscout.overlay import load_frames
         gif = os.path.join(MAPS, "Other", "Midwich.gif")
@@ -275,3 +277,36 @@ def test_the_app_takes_the_picture_of_a_floor_style(tmp_path):
     from dbdmapscout.app_overlay import MAP_STYLES
     from dbdmapscout.qt_maps import STYLE_BUTTONS
     assert [k for k, _l in MAP_STYLES] == [k for k, _l, _t in STYLE_BUTTONS] == ["classic", *mapstyle.STYLES]
+
+
+@pytest.mark.parametrize("style", sorted(mapstyle.FLOORS))
+def test_maps_drawn_dark_already_get_the_floor_of_a_floor_style(tmp_path, style):
+    """1.8.29 (user: "ich seh die Umrandung der Map nicht" – Fallen Refuge in "Grau mit Rand"): Fallen Refuge and
+    Freddy Fazbear's Pizza come in the dark style (see-through floor, black ring), so the floor styles left them as
+    they were – a black ring on the black bar. Now they get the style's floor and edge like every converted map;
+    "dark" leaves them, Trickster's Delusion (opaque, its own kind) stays in every style."""
+    from dbdmapscout.mapimage import title_split
+    for rel in ("Withered Isle/Fallen Refuge.webp", "Withered Isle/Freddy Fazbears Pizza.webp"):
+        path = os.path.join(MAPS, rel)
+        assert mapstyle.styled_path(path, str(tmp_path)) == path                  # "dark": as it is
+        out_path = mapstyle.styled_path(path, str(tmp_path), style=style)
+        assert out_path != path, rel
+        src = np.asarray(Image.open(path).convert("RGBA")).astype(int)
+        out = np.asarray(Image.open(out_path).convert("RGBA")).astype(int)
+        top = title_split(Image.open(path))[2]
+        assert np.array_equal(out[:top], src[:top])                               # the name untouched
+        shape = mapstyle._outline(src[top:, :, 3].astype(np.uint8))
+        fill, edge, _ew, alpha = mapstyle.FLOORS[style]
+        floor = shape & (src[top:, :, 3] == 0) & ~cv2_erode_edge(shape, 40)
+        assert floor.sum() > 20000
+        got = out[top:][floor]
+        assert (np.abs(got[:, :3] - np.array(fill)).max(axis=1) <= 2).mean() > 0.99, rel
+        assert (np.abs(got[:, 3] - alpha) <= 2).mean() > 0.99
+        solid = shape & (src[top:, :, 3] == 255) & ~cv2_erode_edge(shape, 40)    # the drawing stays
+        assert (np.abs(out[top:][solid] - src[top:][solid]).max(axis=1) <= 2).mean() > 0.99
+        assert np.array_equal(out[top:][~shape][:, 3], src[top:][~shape][:, 3])  # outside: as it was
+        if edge is not None:                                                      # the light edge, wide enough
+            rim = shape & ~mapstyle.cv2.erode(shape.astype(np.uint8), mapstyle._disk(8)).astype(bool)
+            assert (np.abs(out[top:][rim][:, :3] - np.array(edge)).max(axis=1) <= 2).mean() > 0.9, rel
+    trick = os.path.join(MAPS, "Sleepless District", "Trickster's Delusion.webp")
+    assert mapstyle.styled_path(trick, str(tmp_path), style=style) == trick

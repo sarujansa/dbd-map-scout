@@ -223,3 +223,33 @@ def test_values_never_change_the_size_of_a_card():
     assert len({ow.progress_strip(300, el, 1000, 1440, remaining=True).size for el in (5, 900, 995)}) == 1
     assert ow.music_picture(MUSIC, 1440, cover, "compact", (10, 100), (), min_w=420).width == 420
     assert ow.music_picture(MUSIC, 1440, cover, "big", (10, 100), ("backdrop",), min_w=420).width >= 420
+
+
+def test_a_music_card_keeps_a_given_height_and_steady_box_holds_a_size():
+    """1.8.30: ``min_h`` makes the card (frame included) that tall in every style and in classic (the dark area
+    round it too); layout.steady_box keeps the largest size for a key and follows a smaller one only after it
+    lasted SHRINK_AFTER seconds."""
+    from dbdmapscout import layout
+    from dbdmapscout import overlay_win32 as ow
+    up = ("ALS NÄCHSTES", (("Save Your Tears", "The Weeknd"), ("Levitating", "Dua Lipa")))
+    for style in MODERN:
+        full = skin.music(MUSIC, sample_cover(), 1440, style, (10, 100), (), None, "big", up, "below")
+        bare = skin.music(MUSIC, None, 1440, style, (10, 100), (), None, "big", None, "below",
+                          min_w=full.width, min_h=full.height)
+        assert bare.size == full.size, style
+        frame = bare.getchannel("A").getbbox()
+        assert frame[3] - frame[1] > full.height * 0.8                      # the frame itself is that tall
+    for look in ((), ("backdrop",)):
+        full = ow.music_picture(MUSIC, 1440, sample_cover(), "big", (10, 100), look, upnext=up)
+        bare = ow.music_picture(MUSIC, 1440, None, "big", (10, 100), look, min_w=full.width, min_h=full.height)
+        assert bare.size == full.size, look
+    st, w, h = layout.steady_box(None, "k", 300, 400, 0.0)
+    st, w, h = layout.steady_box(st, "k", 260, 300, 1.0)
+    assert (w, h) == (300, 400)                                              # a moment smaller: held
+    st, w, h = layout.steady_box(st, "k", 300, 400, 2.0)
+    st, w, h = layout.steady_box(st, "k", 260, 300, 3.0)
+    st, w, h = layout.steady_box(st, "k", 260, 300, 3.0 + layout.SHRINK_AFTER - 0.1)
+    assert (w, h) == (300, 400)                                              # the clock starts anew
+    st, w, h = layout.steady_box(st, "k", 260, 300, 3.0 + layout.SHRINK_AFTER)
+    assert (w, h) == (260, 300)                                              # lasted: followed
+    assert layout.steady_box(st, "other", 200, 100, 99.0)[1:] == (200, 100)  # another key: anew

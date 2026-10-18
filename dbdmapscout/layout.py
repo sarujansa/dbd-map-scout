@@ -609,6 +609,28 @@ def steady_width(state, key, w: int):
 
 
 
+SHRINK_AFTER = 8.0           # s a card's smaller content must last before the card gets smaller (1.8.30)
+
+
+def steady_box(state, key, w: int, h: int, now: float, hold: float = SHRINK_AFTER):
+    """(new state, width, height) for a card whose content comes and goes for a moment (1.8.30, user: "wenn Spotify
+    den Song wechselt, werden die Felder kurz kleiner und wieder normal – die Felder sollen ihre fixe Grösse
+    behalten"): the largest size seen for the same ``key``; it only gets smaller once the smaller content has
+    lasted ``hold`` seconds (a song change without cover or queue for a second never shows). Another ``key``
+    (style, size, layout) starts anew."""
+    if state is None or state[0] != key:
+        return (key, int(w), int(h), None), int(w), int(h)
+    _k, sw, sh, since = state
+    if w >= sw and h >= sh:
+        return (key, int(w), int(h), None), int(w), int(h)
+    if since is None:
+        since = now
+    if now - since >= hold:                      # it stayed smaller: the card follows
+        return (key, int(w), int(h), None), int(w), int(h)
+    sw, sh = max(sw, int(w)), max(sh, int(h))
+    return (key, sw, sh, since), sw, sh
+
+
 # 1.8.24 (user: "Zeit etc. nicht mehr mit der Map verbunden – ich will ab und zu nur die Map-Grösse ändern"): the
 # map's lines (timer, record, server) as an element of their own: right below / above the map, at an own place, or
 # drawn into the map window as before ("inside")

@@ -335,13 +335,13 @@ class _DrawWin:
         self.editing = bool(on)
 
     def render(self, rows, height, cover=None, style=None, progress=None, look=(), skin="classic", accent=None,
-               title=None, upnext=None, upnext_pos="below", min_w=0):
+               title=None, upnext=None, upnext_pos="below", min_w=0, min_h=0):
         if not rows:
             self.size = (0, 0)
             return self.size
         if style is not None:
             pic = ow.music_picture(rows, height, cover, style, progress, look, skin, accent, upnext, upnext_pos,
-                                   None, self._bodies, min_w)
+                                   None, self._bodies, min_w, min_h)
         elif skin != "classic":
             from dbdmapscout import skin as skins
             pic = skins.card(rows, height, skin, accent, title, min_w=min_w)
@@ -488,5 +488,61 @@ def test_cards_in_the_same_bar_share_one_width_and_merge_into_a_column(tmp_path)
         assert ys == sorted(ys)                                                          # one column, top down
         app.undo_layout()                                                                # back to the own places
         assert o["today_pos"] == "custom" and o["media_pos"] == "custom" and not o["cards_same_width"]
+    finally:
+        app.quit()
+
+
+def test_a_song_change_never_shrinks_the_music_card_or_its_column(tmp_path):
+    """1.8.30 (user: "wenn Spotify den Song wechselt, werden die Felder kurz kleiner und wieder normal – sie sollen
+    ihre fixe Grösse behalten"): Windows shows the new title before Spotify's queue matches it and sometimes
+    without a cover – for a moment the card had neither and shrank, the column with it. Now the card keeps its
+    size (layout.steady_box) and the other cards keep the column's width; a smaller content that lasts
+    (SHRINK_AFTER) is followed."""
+    import json
+    import time
+    from dbdmapscout import media, sysinfo
+    from dbdmapscout.app import App
+    from dbdmapscout.preview import sample_cover
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for name in ("maps", "models", "maps.json"):
+        os.symlink(os.path.join(root, name), tmp_path / name)
+    (tmp_path / "sim").mkdir()
+    o = dict(USER_OVERLAY, fade=False, media_fade=False, today_pos="below", media_pos="under_today")
+    (tmp_path / "settings.json").write_text(json.dumps({"welcome_seen": True, "sysinfo": "custom",
+                                                        "sysinfo_pos": [0.984, 0.383], "overlay": o}),
+                                            encoding="utf-8")
+    app = App(str(tmp_path), simulate=str(tmp_path / "sim"))
+    try:
+        app.info_win, app.hud = _DrawWin("INFOS"), _DrawWin("SYSTEM")
+        app.today_win, app.media_win = _DrawWin("HEUTE"), _DrawWin("MUSIK")
+        app._game_rect = lambda: (0, 0, 3440, 1440)
+        app._force_until = time.time() + 30
+        app.sysmon.snapshot = sysinfo.Snapshot(t=time.time(), cpu_load=63, cpu_temp=75, gpu_temp=77, gpu_load=89,
+                                               vram_used=5.8, vram_total=12, ram_used=21.2, ram_total=32,
+                                               hwinfo=True)
+        queue = ("ALS NÄCHSTES", (("Te Amo", "Rihanna"), ("3 Gold Rings", "Shane Moyer"), ("Casino", "Ardian Bujupi")))
+        shown = {"up": queue}
+        app._upnext = lambda now, sample=False: shown["up"]
+        app.show_map("shattered-square", 1, "auto")
+
+        def song(title, cover):
+            app.media.now = media.NowPlaying(title, "Labrinth", True, time.time(), position=10.0, duration=200.0,
+                                             at=time.time(), cover=cover)
+            for _ in range(3):
+                app._place_overlay()
+            return {n: w.size for n, w in (("hud", app.hud), ("today", app.today_win), ("music", app.media_win))}
+
+        before = song("Beneath Your Beautiful (feat. Emeli Sandé)", sample_cover())
+        shown["up"] = None                                    # the next song: queue not matched yet, no cover yet
+        during = song("Te Amo", None)
+        assert during == before                               # nothing smaller, nothing moved
+        shown["up"] = queue[:1] + (queue[1][1:],)
+        assert song("Te Amo", sample_cover()) == before       # back: the same
+        shown["up"] = None                                    # the list stays away (another player) …
+        song("Other", None)
+        st = app._music_steady
+        app._music_steady = (st[0], st[1], st[2], st[3] - 60)  # … for longer than SHRINK_AFTER
+        after = song("Other", None)
+        assert after["music"][1] < before["music"][1]         # then the card follows
     finally:
         app.quit()
