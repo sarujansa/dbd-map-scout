@@ -93,6 +93,7 @@ class DetectionWorker(threading.Thread):
         self.hud_rect = None             # … and of the system values at the top of a bar
         self.media_rect = None           # … and of the music card ("Läuft gerade", 1.64)
         self.today_rect = None           # … and of "today" (its own card since 1.2.6)
+        self.info_rect = None            # … and of the map's lines when they are their own element (1.8.24)
         self.guide_rects = ()            # … and of the centre guide lines while moving (1.64.5)
         self.toast_rect = None           # … and of the notification window (1.8.13: F8 clip, lobby found)
         self.vbars = None                # (top, bottom, time, (w, h)): black bars above/below the picture
@@ -313,7 +314,7 @@ class DetectionWorker(threading.Thread):
                 if img is None:
                     sep = res = None                # covered by another window: nothing of DBD to read
                 else:
-                    if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect or self.today_rect or self.guide_rects or self.toast_rect):
+                    if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect or self.today_rect or self.info_rect or self.guide_rects or self.toast_rect):
                         self._mask_overlay(img, origin[0] + box[0], origin[1] + box[1])
                     sep, res = reader.read(img, fw, fh, letterboxed=self._letterboxed(fw, fh))
                 if sep is not None:
@@ -364,7 +365,7 @@ class DetectionWorker(threading.Thread):
                     cb = corner_box(fw, fh)
                     corner = grab(cb)
                     if corner is not None:
-                        if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect or self.today_rect or self.guide_rects or self.toast_rect):
+                        if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect or self.today_rect or self.info_rect or self.guide_rects or self.toast_rect):
                             self._mask_overlay(corner, origin[0] + cb[0], origin[1] + cb[1])
                         view = lobby_reader.read(corner, fw, fh)
                         if view.button is not None:
@@ -373,7 +374,7 @@ class DetectionWorker(threading.Thread):
                             xb = crossplay_box(fw, fh)
                             globe = grab(xb)
                             if globe is not None:
-                                if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect or self.today_rect or self.guide_rects or self.toast_rect):
+                                if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect or self.today_rect or self.info_rect or self.guide_rects or self.toast_rect):
                                     self._mask_overlay(globe, origin[0] + xb[0], origin[1] + xb[1])
                                 view.crossplay_off = crossplay_off(globe, fw, fh)
                                 if view.crossplay_off is None and tick - self._globe_saved > GLOBE_SAVE_EVERY:
@@ -400,7 +401,7 @@ class DetectionWorker(threading.Thread):
                 try:
                     look = grab((0, 0, fw, fh))
                     if look is not None:             # None: covered -> no look, nothing changes
-                        if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect or self.today_rect or self.guide_rects or self.toast_rect):
+                        if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect or self.today_rect or self.info_rect or self.guide_rects or self.toast_rect):
                             self._mask_overlay(look, origin[0], origin[1])
                         bar, dark = has_loading_bar(look), is_dark(look)
                         if bar and dark:
@@ -443,7 +444,7 @@ class DetectionWorker(threading.Thread):
                         full = look = grab((0, 0, fw, fh))
                         if look is not None:                 # None: covered -> no observation, nothing changes
                             ignore = None
-                            if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect or self.today_rect or self.guide_rects or self.toast_rect):
+                            if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect or self.today_rect or self.info_rect or self.guide_rects or self.toast_rect):
                                 ignore = self._mask_overlay(look, origin[0], origin[1])   # in place: no 14 MB copy
                             obs = out_of_match.observe(look, ignore)
                             self._note_vbars(look, fw, fh)
@@ -583,7 +584,11 @@ class DetectionWorker(threading.Thread):
         for r in (self.hud_rect, self.media_rect, self.today_rect, self.toast_rect, *self.guide_rects):
             if r:
                 self._black_out(img, r, left, top)
-        return self._black_out(img, self.overlay_rect, left, top)
+        lines = self._black_out(img, self.info_rect, left, top)      # 1.8.24: the map's lines apart – they
+        done = self._black_out(img, self.overlay_rect, left, top)     # count as the map (fills_bars' ignore)
+        if lines and done:
+            return (min(lines[0], done[0]), min(lines[1], done[1]), max(lines[2], done[2]), max(lines[3], done[3]))
+        return done or lines
 
     @staticmethod
     def _black_out(img, r, left, top):

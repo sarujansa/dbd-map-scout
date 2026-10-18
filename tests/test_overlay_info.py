@@ -138,9 +138,9 @@ def test_a_map_in_the_bar_is_put_on_screen_once_per_change_at_its_final_size():
             height = ov.fit_width(470, 518, 406)
             w, _h = ov.render(height)
             widths.add(w)
-    assert widths == {406}                        # never wider than the bar
-    assert len(pushes) == 10                      # once per timer text, never an in-between size
-    assert {w for w, _h in pushes} == {406}
+    assert len(widths) == 1 and max(widths) <= 406     # never wider than the bar (1.8.24: the map cut to what is
+    assert len(pushes) == 10                      # drawn – it may stay a few px narrower); once per timer text,
+    assert {w for w, _h in pushes} == widths      # never an in-between size
 
 
 def test_dark_area_behind_the_map_fits_the_bar_and_keeps_every_frame_the_same_size():

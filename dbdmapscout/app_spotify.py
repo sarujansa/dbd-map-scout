@@ -11,7 +11,9 @@ from .i18n import N_, _
 MEDIA_NEXT_SPOTS = [("below", N_("Unter dem Lied")), ("right", N_("Rechts neben dem Lied"))]
 MEDIA_NEXT_N = (1, 5)                      # tracks shown
 SAMPLE_UPNEXT = (("Save Your Tears", "The Weeknd"), ("Levitating", "Dua Lipa"), ("As It Was", "Harry Styles"),
-                 ("Bad Habits", "Ed Sheeran"), ("Flowers", "Miley Cyrus"))     # "Overlay testen" / preview
+                 ("Bad Habits", "Ed Sheeran"), ("Flowers", "Miley Cyrus"), ("Starboy", "The Weeknd"),
+                 ("Anti-Hero", "Taylor Swift"), ("Heat Waves", "Glass Animals"), ("Stay", "The Kid LAROI"),
+                 ("Shivers", "Ed Sheeran"))                                       # "Overlay testen" / preview
 
 
 class SpotifyUpNext:
@@ -92,6 +94,8 @@ class SpotifyUpNext:
             return None
         o = self.settings["overlay"]
         n = max(MEDIA_NEXT_N[0], min(MEDIA_NEXT_N[1], int(o.get("media_next_n", 3))))
+        if o.get("media_next_pos", "below") == "right":   # 1.8.24 (user: "rechts … verlängert, bis die Liste da voll
+            n = spotify.MAX_ITEMS                         # ist"): as many as fit beside the card – the drawing trims
         up = spotify.advance(self.spotify.upnext, now.title, now.artist)   # 1.8.1: moved up at once on a new song
         if spotify.matches(up, now.title, now.artist):
             items = spotify.lines(up, n)

@@ -635,8 +635,6 @@ EN = {
     "Verschieben aktiv – ziehen (rastet ein, Alt = frei), Pfeiltasten = fein, Ecke/Strg+Mausrad = Grösse":
         "Moving is on – drag (snaps, Alt = free), arrow keys = fine, corner/Ctrl+wheel = size",
     "Rückgängig": "Undo",
-    "Die Karte ist so breit wie der schwarze Balken – grösser geht so nicht. Grösser mit „Karte darf grösser als der Balken werden“ (ragt dann ins Spielbild).":
-        "The map is as wide as the black bar – it cannot get bigger like this. Bigger with “The map may grow bigger than the bar” (it then reaches into the game picture).",
     "Karte darf grösser als der Balken werden (ragt dann ins Spielbild)": "The map may grow bigger than the bar (it then reaches into the game picture)",
     "Erlaubt jede Kartengrösse: Ist die Karte breiter als der schwarze Balken, bleibt sie an dessen Aussenrand und ragt ins Spielbild. Aus: Die Karte wird nie breiter als der Balken (auf 3440×1440 etwa 31 % der Bildhöhe).":
         "Allows any map size: when the map is wider than the black bar it stays at the bar's outer edge and reaches into the game picture. Off: the map is never wider than the bar (about 31 % of the height on 3440×1440).",
@@ -1160,7 +1158,24 @@ EN = {
     'Klick auf Karte, Systemwerte oder Musik wählt das Element für den Regler „Grösse“. Mit „Mit der Maus verschieben“: Element ziehen = verschieben, an der Ecke ziehen oder Strg+Mausrad = Grösse, Klick auf eine freie Stelle setzt die Karte dorthin. Ende mit „Fertig“.':
         'A click on the map, the system values or the music picks the element for the “Size” slider. With “Move with the mouse”: drag an element = move it, drag its corner or Ctrl+mouse wheel = size, a click on an empty spot puts the map there. End with “Done”.',
     "Element": "Element",
-    "Schrift der Karte (Name, Timer, Infos)": "Map text (name, timer, info)",
+    "Infos und Schrift (Name, Timer, Bilanz, Server)": "Info and text (name, timer, record, server)",
+    # 1.8.24: the map's lines as an element of their own, the size slider marks where the bar stops it
+    "Eigenes Element unter der Karte": "Own element below the map",
+    "Eigenes Element über der Karte": "Own element above the map",
+    "Eigenes Element, eigene Position": "Own element, own position",
+    "Mit der Karte verbunden (wie früher)": "Joined to the map (as before)",
+    "Infos": "Info",
+    "INFOS": "INFO",
+    "Infos (Timer, Bilanz, Server)": "Info (timer, record, server)",
+    "Cover": "Cover",
+    "Wie der Stil": "Like the style",
+    "Rund": "Round",
+    "Eckig": "Square",
+    "{what} ist hier schon so gross wie möglich – ab {cap} % ändert der Regler nichts mehr "
+    "(der schwarze Balken ist voll).": "{what} is as big as it gets here – from {cap} % on the slider changes nothing "
+                                       "(the black bar is full).",
+    "Grösser mit „Karte darf grösser als der Balken werden“ (ragt dann ins Spielbild).":
+        "Bigger with “The map may grow bigger than the bar” (it then reaches into the game picture).",
     'Spielbild': 'Game picture',
     'Map-Name': 'Map name',
     # 1.62: colour themes
@@ -1292,7 +1307,6 @@ EN = {
         'To the Maps page: show a map by hand (double-click or "Show"). At the next match the automatic detection takes over again.',
     "Erscheint automatisch, sobald im Match das Map-Banner kommt – oder von Hand über „Map wählen“.":
         'Appears by itself as soon as the map banner comes in the match – or by hand with "Choose map".',
-    'Unter der Karte': 'Below the map',
     'Wann zeigen': 'When to show',
     'Alle Maps': 'All maps',
     'Zuletzt gespielt': 'Played last',
