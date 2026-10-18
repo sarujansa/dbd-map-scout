@@ -55,7 +55,7 @@ class LayoutMemory:
             self.bar_align_var.set(_(dict(BAR_ALIGNS).get(o.get("bar_align", "centre"), "")))
             self.gap_var.set(float(o.get("stack_gap", 8)))
             self.limits_var.set(bool(o.get("bar_limits_on", False)))         # 1.8.14
-            self.limits_same_var.set(bool(o.get("bar_limits_same", True)))
+            self.limits_same_var.set(bool(o.get("bar_limits_same", False)))
             self.sysinfo_var.set(_(dict(HUD_SIDES).get(self.settings.get("sysinfo", "off"), "")))
             self._pos_hint()
             self._show_map_size()

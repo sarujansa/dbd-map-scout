@@ -248,9 +248,22 @@ def test_old_settings_turn_the_pre_roll_and_the_joining_off(tmp_path):
     p = tmp_path / "settings.json"
     p.write_text(json.dumps({"settings_version": 6, "rec_pre": True, "rec_merge": True, "hotkeys": {}}))
     s = Settings(str(p))
-    assert s["rec_pre"] is False and s["rec_merge"] is False and s["settings_version"] == 7
+    assert s["rec_pre"] is False and s["rec_merge"] is False and s["settings_version"] == 8
     p.write_text(json.dumps({"settings_version": 7, "rec_pre": True, "rec_merge": True, "hotkeys": {}}))
     assert Settings(str(p))["rec_pre"] is True
+
+
+def test_the_limiter_lines_of_each_bar_are_its_own_after_the_update(tmp_path):
+    """1.8.17 (user: "nicht gleich auf beiden Seiten … links eigene und rechts eigene"): off by default and
+    switched off once for older settings; switched on again later it stays on."""
+    import json
+    from dbdmapscout.config import Settings, DEFAULTS
+    assert DEFAULTS["overlay"]["bar_limits_same"] is False
+    p = tmp_path / "settings.json"
+    p.write_text(json.dumps({"settings_version": 7, "overlay": {"bar_limits_same": True}, "hotkeys": {}}))
+    assert Settings(str(p))["overlay"]["bar_limits_same"] is False
+    p.write_text(json.dumps({"settings_version": 8, "overlay": {"bar_limits_same": True}, "hotkeys": {}}))
+    assert Settings(str(p))["overlay"]["bar_limits_same"] is True
 
 
 def test_alignment_in_the_bar_and_the_stack_gap():
