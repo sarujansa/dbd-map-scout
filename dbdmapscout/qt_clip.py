@@ -20,6 +20,7 @@ from .i18n import N_, _
 
 CENSOR_LABELS = {"pixel": N_("Verpixelt"), "blur": N_("Verwischt"), "black": N_("Schwarz"),
                  "retouch": N_("Retusche (aus der Umgebung übermalt)")}   # 1.7.2, retouch 1.7.3
+COMPACT_PREVIEW_H = 280                          # 1.8.8: picture height of the preview beside the recordings
 MIX_MAX = 150                                    # 1.8.6: a source may be raised to 150 %
 SOURCE_LABELS = {"dbd": N_("Spiel"), "discord": N_("Discord"), "mic": N_("Mikrofon")}
 SOURCE_TIPS = {"dbd": N_("Ton des Spiels (und übriger Desktop-Ton, falls aufgenommen) – OBS-Spur 2."),
@@ -481,8 +482,11 @@ class ClipWindow(QWidget):
     def __init__(self, path: str, marks: list, clips_dir: str, mode: str = "copy", sound: bool = True,
                  on_saved=None, on_setting=None, log=None, dark=True, qss: str = "", title: str = "",
                  target_mb: int = clipedit.DEFAULT_TARGET_MB, censor_on: bool = False, censor_style: str = "pixel",
-                 censor_boxes=(), mix_on=None, mix_vol=None):
-        super().__init__(None, Qt.Window)
+                 censor_boxes=(), mix_on=None, mix_vol=None, compact=False, parent=None, on_expand=None):
+        # 1.8.8: compact = the preview beside the recordings table (no window of its own, no censor card, sound
+        # sources only on/off, start/end in the clip card); "Grosser Editor" (on_expand) opens the full window
+        super().__init__(parent, Qt.Widget if compact else Qt.Window)
+        self.compact, self.on_expand = bool(compact), on_expand
         self.path, self.marks, self.clips_dir = path, sorted(float(m) for m in marks or ()), clips_dir
         self.on_saved, self.on_setting, self.log = on_saved, on_setting, (log or (lambda text, kind="System": None))
         self.dark = dark
@@ -509,8 +513,9 @@ class ClipWindow(QWidget):
         if qss:
             self.setStyleSheet(qss)
         self._build(mode, sound)
-        self.resize(1100, 780)
-        self.setMinimumSize(760, 600)
+        if not self.compact:
+            self.resize(1100, 780)
+            self.setMinimumSize(760, 600)
         self.setFocusPolicy(Qt.StrongFocus)
         self.loading = None                 # 1.8.3: LoadingScreen until picture + strip are there
         self._load_state = {"frame": False, "strip": False, "thumbs": 0}
@@ -539,6 +544,9 @@ class ClipWindow(QWidget):
         lay.setSpacing(10)
         self.preview = PreviewView(self.dark)
         self.preview.boxes_changed.connect(self._boxes_changed)
+        if self.compact:                                  # beside the table: the whole editor fits a screen
+            self.preview.setMinimumSize(320, 180)
+            self.preview.setMaximumHeight(COMPACT_PREVIEW_H)
         lay.addWidget(self.preview, 1)
         self.timeline = Timeline(self.dark)
         self.timeline.seek.connect(self.goto)
@@ -560,10 +568,12 @@ class ClipWindow(QWidget):
         self.b_fwd1 = self._btn(row, "+1 s", lambda: self.step(STEP_SMALL), _("1 Sekunde vor (→)"))
         self.b_fwd5 = self._btn(row, "+5 s", lambda: self.step(STEP_BIG), _("5 Sekunden vor (Shift+→)"))
         row.addStretch()
-        self._btn(row, _("Start setzen"), self.set_start, _("Der Clip beginnt am Abspielkopf (Taste I)."))
-        self._btn(row, _("Ende setzen"), self.set_end, _("Der Clip endet am Abspielkopf (Taste O)."))
-        self.mark_btn = self._btn(row, _("Zur Marke ▸"), self.next_mark, _("Springt zur nächsten F8-Marke (Taste M)."))
-        self.mark_btn.setEnabled(bool(self.marks))
+        if self.compact:                                  # narrow: ±1 s by keys only, start/end in the clip card
+            self.b_back1.hide()
+            self.b_fwd1.hide()
+            self.pos_label.setMinimumWidth(0)
+        else:
+            self._range_buttons(row)
         lay.addLayout(row)
 
         # two cards: the clip (range, size, "Clip ansehen") and the censor boxes (1.7.2)
@@ -581,6 +591,8 @@ class ClipWindow(QWidget):
         wr = QHBoxLayout()
         self.watch_btn = self._btn(wr, _("▶ Clip ansehen"), self.watch_clip,
                                    _("Spielt genau den Ausschnitt ab und springt danach an seinen Anfang zurück."))
+        if self.compact:
+            self._range_buttons(wr)
         wr.addStretch()
         cl.addLayout(wr)
         cards.addWidget(clip_card, 1)
@@ -622,6 +634,7 @@ class ClipWindow(QWidget):
         zl.addWidget(self.censor_hint)
         zl.addStretch()
         cards.addWidget(censor_card, 1)
+        censor_card.setVisible(not self.compact)          # censor boxes: in the full editor
         lay.addLayout(cards)
 
         # export: name, format, target size, sound; save / show / folder
@@ -630,8 +643,14 @@ class ClipWindow(QWidget):
         row2.addWidget(QLabel(_("Name")))
         self.name_edit = QLineEdit()
         row2.addWidget(self.name_edit, 1)
+        if self.compact:                                  # narrow: the format on a line of its own
+            el.addLayout(row2)
+            row2 = QHBoxLayout()
         row2.addWidget(QLabel(_("Format")))
         self.mode_box = QComboBox()
+        if self.compact:
+            self.mode_box.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+            self.mode_box.setMinimumContentsLength(18)
         for key in clipedit.MODES:
             self.mode_box.addItem(_(MODE_LABELS[key]), key)
         self.mode_box.setCurrentIndex(max(0, list(clipedit.MODES).index(mode) if mode in clipedit.MODES else 0))
@@ -649,6 +668,8 @@ class ClipWindow(QWidget):
         self.sound_box.setToolTip(_("Beim Abspielen den Ton der Aufnahme mitlaufen lassen (Windows)."))
         self.sound_box.toggled.connect(lambda v: self._setting("clip_sound", bool(v)))
         row2.addWidget(self.sound_box)
+        if self.compact:
+            row2.addStretch()
         el.addLayout(row2)
         el.addLayout(self._mix_row())                                               # 1.8.6: the sound mix
         row3 = QHBoxLayout()
@@ -657,6 +678,12 @@ class ClipWindow(QWidget):
         self.show_btn = self._btn(row3, _("Im Explorer zeigen"), self._show_saved, _("Zeigt den zuletzt gespeicherten Clip im Explorer."))
         self.show_btn.setEnabled(False)
         self.open_btn = self._btn(row3, _("Clips-Ordner öffnen"), self._open_clips, _("Öffnet den Ordner „Clips“ im Explorer."))
+        self.expand_btn = None
+        if self.compact:
+            self.open_btn.hide()
+            self.expand_btn = self._btn(row3, _("Grosser Editor …"), self._expand,
+                                        _("Öffnet den Clip im eigenen Fenster – mit Zensieren, Lautstärke je Tonquelle "
+                                          "und allen Tasten."))
         self.status = QLabel("")
         self.status.setProperty("class", "dim")
         self.status.setWordWrap(True)
@@ -667,10 +694,31 @@ class ClipWindow(QWidget):
         hint.setProperty("class", "dim")
         hint.setWordWrap(True)
         lay.addWidget(hint)
+        hint.setVisible(not self.compact)
         self.preview.set_boxes(self._censor_boxes)
         self.preview.set_look(self._censor_on, self.style_box.currentData() or "pixel")
         self._censor_hint()
         self._mode_changed(self.mode_box.currentIndex(), save=False)
+
+    def _range_buttons(self, row):
+        self._btn(row, _("Start setzen"), self.set_start, _("Der Clip beginnt am Abspielkopf (Taste I)."))
+        self._btn(row, _("Ende setzen"), self.set_end, _("Der Clip endet am Abspielkopf (Taste O)."))
+        self.mark_btn = self._btn(row, _("Zur Marke ▸"), self.next_mark, _("Springt zur nächsten F8-Marke (Taste M)."))
+        self.mark_btn.setEnabled(bool(self.marks))
+
+    def _expand(self):
+        """1.8.8: compact preview → the full editor (same range and position); this one stops playing."""
+        if self.playing:
+            self._play_to = None
+            self._stop_player()
+        if self.on_expand is not None:
+            self.on_expand(self.timeline.start, self.timeline.end, self.timeline.pos)
+
+    def stop(self):
+        """1.8.8: stop playback (the recordings tab was left)."""
+        if self.playing:
+            self._play_to = None
+            self._stop_player()
 
     @staticmethod
     def _card(title):
@@ -789,7 +837,7 @@ class ClipWindow(QWidget):
             box, sl, val = self.mix_boxes[key], self.mix_sliders[key], self.mix_values[key]
             have = key in self._sources
             for w in (box, sl, val):
-                w.setVisible(bool(self._sources))
+                w.setVisible(bool(self._sources) and (w is box or not self.compact))   # compact: on/off only
                 w.setEnabled(have)
             box.setChecked(have and self._mix_on[key])
             sl.setValue(self._mix_vol[key] if have else 100)
@@ -951,26 +999,25 @@ class ClipWindow(QWidget):
         """1.6.1: what the chosen format makes of the clip – for Discord the picture size and frame rate."""
         tl, mode = self.timeline, self.mode_box.currentData() if hasattr(self, "mode_box") else "copy"
         secs = max(0.0, tl.end - tl.start)
+        parts = []                                                 # 1.8.8: joined by " · ", no dot in front
         if mode == "discord":
             kbps, h, fps = clipedit.discord_plan(secs, self._target_mb, self.info)
-            self.size_label.setText(_("· wird {h}p {fps} fps, ≈ {kbps} kbit/s, unter {mb} MB",
-                                      h=h, fps=f"{fps:g}", kbps=kbps, mb=self._target_mb))
+            parts.append(_("wird {h}p {fps} fps, ≈ {kbps} kbit/s, unter {mb} MB",
+                           h=h, fps=f"{fps:g}", kbps=kbps, mb=self._target_mb))
         elif self.info.ok and getattr(self.info, "duration", 0):
             try:
                 size = os.path.getsize(self.path) * secs / self.info.duration
             except OSError:
                 size = 0
-            self.size_label.setText(_("· etwa {mb} MB", mb=f"{size / 1024 ** 2:.0f}") if size else "")
-        else:
-            self.size_label.setText("")
+            if size:
+                parts.append(_("etwa {mb} MB", mb=f"{max(1.0, size / 1024 ** 2):.0f}"))
         if self._censor_args() and mode == "copy":                 # 1.7.2: boxes need the picture re-encoded
-            self.size_label.setText((self.size_label.text() + " " if self.size_label.text() else "")
-                                    + _("· mit Zensur neu kodiert (wie „Genau“)"))
+            parts.append(_("mit Zensur neu kodiert (wie „Genau“)"))
         if mode == "copy" and hasattr(self, "mix_boxes"):          # 1.8.6: a mix re-encodes only the sound
             flt, amap = obsrec.audio_graph(self.info.audio_tracks, self.mix())
             if flt or amap is None:
-                self.size_label.setText((self.size_label.text() + " " if self.size_label.text() else "")
-                                        + (_("· ohne Ton") if amap is None else _("· Ton neu gemischt")))
+                parts.append(_("ohne Ton") if amap is None else _("Ton neu gemischt"))
+        self.size_label.setText(" · ".join(parts))
 
     def _mode_changed(self, _i, save=True):
         mode = self.mode_box.currentData()

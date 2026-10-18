@@ -51,7 +51,7 @@ TODAY_SPOTS = [("below", N_("Unter den Systemwerten")), ("under_music", N_("Unte
                ("bottom_right", N_("Rechts unten im Balken")), ("bottom_left", N_("Links unten im Balken")),
                ("custom", N_("Eigene Position (mit der Maus verschieben)"))]
 OPACITY_KEYS = {"hud": "hud_opacity", "today": "today_opacity", "music": "media_opacity"}   # 1.2.7; else "opacity"
-MEDIA_STYLES = [("big", N_("Groß – Cover oben, Titel darunter")), ("compact", N_("Kompakt – Cover links"))]
+MEDIA_STYLES = [("big", N_("Gross – Cover oben, Titel darunter")), ("compact", N_("Kompakt – Cover links"))]
 MEDIA_SCALE = (60, 200)                     # slider of the music card, percent
 HUD_SCALE = (60, 200)                       # size of the system values / "today", percent (1.64.9)
 MAP_SCALE = (15, 90)                        # size of the map, percent of the game height

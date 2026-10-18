@@ -6,6 +6,8 @@ The palette is the original one of the program (theme.DARK, user's wish 1.51: "F
 from __future__ import annotations
 
 import colorsys
+import os
+import tempfile
 from functools import lru_cache
 
 from .i18n import N_
@@ -159,6 +161,36 @@ def dot_colour(style: str) -> str:
     return DOT.get(style, DOT["idle"])
 
 
+ICON_DIR = os.path.join(tempfile.gettempdir(), "dbdmapscout-ui")
+
+
+@lru_cache(maxsize=32)
+def ui_icon(name: str, colour: str) -> str:
+    """1.8.8: a small picture for the style sheet (``check`` = tick of a ticked box, ``arrow`` = the chevron of a
+    choice box) in ``colour``, drawn with Pillow at 16 px and 32 px (Qt takes ``@2x`` on a high-DPI screen); the
+    path with forward slashes, "" when it cannot be written (Qt then draws nothing there)."""
+    try:
+        from PIL import Image, ImageDraw
+        os.makedirs(ICON_DIR, exist_ok=True)
+        base = os.path.join(ICON_DIR, f"{name}-{hex_colour(colour).lstrip('#')}")
+        rgb = tuple(int(hex_colour(colour).lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
+        for scale, suffix in ((1, ""), (2, "@2x")):
+            size, ss = 16 * scale, 8                           # drawn 8× larger, then scaled down: smooth edges
+            big = Image.new("RGBA", (size * ss, size * ss), (0, 0, 0, 0))
+            d = ImageDraw.Draw(big)
+            u = size * ss / 16
+            if name == "check":
+                d.line([(3.5 * u, 8.5 * u), (6.5 * u, 11.5 * u), (12.5 * u, 4.5 * u)], fill=rgb + (255,),
+                       width=round(2.2 * u), joint="curve")
+            else:                                              # arrow: a chevron pointing down
+                d.line([(4 * u, 6 * u), (8 * u, 10 * u), (12 * u, 6 * u)], fill=rgb + (255,), width=round(1.8 * u),
+                       joint="curve")
+            big.resize((size, size), Image.LANCZOS).save(base + suffix + ".png")
+        return (base + ".png").replace("\\", "/")
+    except Exception:
+        return ""
+
+
 def stylesheet(dark: bool, zoom: float = 1.0) -> str:
     """The whole window's QSS. Font sizes in px scale with the setting ui_zoom (Qt adds the screen scaling)."""
     c = colours(dark)
@@ -216,7 +248,7 @@ QPushButton {{ background: {c['btn']}; border: 1px solid {c['border']}; border-r
 QPushButton:hover {{ background: {c['btn_hover']}; }}
 QPushButton:pressed {{ background: {c['press']}; }}
 QPushButton:disabled {{ background: transparent; color: {c['fg_dis']}; border-color: {c['border']}; }}  /* keeps its shape */
-QPushButton#primary {{ background: {c['accent']}; color: {c['on_accent']}; border: none; font-weight: 700; }}
+QPushButton#primary {{ background: {c['accent']}; color: {c['on_accent']}; border: 1px solid {c['accent']}; font-weight: 700; }}
 QPushButton#primary:hover {{ background: {c['accent_hover']}; }}
 QPushButton[class="seg"]:checked {{ background: {c['accent']}; color: {c['on_accent']}; border-color: {c['accent']}; font-weight: 700; }}  /* 1.3.3 */
 QProgressBar {{ background: {c['bar']}; border: none; border-radius: 3px; max-height: 6px; min-height: 6px; }}
@@ -230,6 +262,23 @@ QHeaderView::section {{ padding: 3px 6px; }}
 QTreeWidget::item:selected {{ background: {c['select']}; color: #ffffff; }}
 QLineEdit {{ border: 1px solid {c['border']}; border-radius: 6px; padding: 5px 8px; }}
 QLineEdit:focus {{ border-color: {c['accent']}; }}
+QComboBox {{ background: {c['btn']}; border: 1px solid {c['border']}; border-radius: 6px; padding: 5px 28px 5px 10px; }}
+QComboBox:hover {{ background: {c['btn_hover']}; }}
+QComboBox:focus, QComboBox:on {{ border-color: {c['accent']}; }}
+QComboBox:disabled {{ background: transparent; color: {c['fg_dis']}; }}
+QComboBox:editable {{ background: {c['field']}; }}
+QComboBox::drop-down {{ subcontrol-origin: padding; subcontrol-position: center right; width: 24px; border: none; }}
+QComboBox::down-arrow {{ image: url("{ui_icon('arrow', c['dim'])}"); width: 12px; height: 12px; }}
+QComboBox QAbstractItemView {{ background: {c['panel']}; border: 1px solid {c['border']}; padding: 4px; outline: 0;
+    selection-background-color: {c['select']}; selection-color: #ffffff; }}
+QCheckBox {{ spacing: 8px; }}
+QCheckBox::indicator {{ width: 16px; height: 16px; border: 1px solid {c['dim']}; border-radius: 4px;
+    background: {c['field']}; }}
+QCheckBox::indicator:hover {{ border-color: {c['accent']}; }}
+QCheckBox::indicator:checked {{ background: {c['accent']}; border-color: {c['accent']};
+    image: url("{ui_icon('check', c['on_accent'])}"); }}
+QCheckBox::indicator:disabled {{ border-color: {c['fg_dis']}; background: transparent; }}
+QCheckBox::indicator:checked:disabled {{ background: {c['border']}; border-color: {c['border']}; }}
 QToolTip {{ background: {c['panel']}; color: {c['fg']}; border: 1px solid {c['border']}; padding: 4px; }}
 """
 

@@ -299,7 +299,7 @@ TIPS = {
     'Ton in OBS einstellen, sobald DBD startet:': 'Das Programm legt in der aktuellen OBS-Szene je eine Anwendungs-Audioaufnahme für DBD und Discord an (einmalig) und schaltet die Tonquellen wie gewählt stumm oder laut – beim Start von DBD und bei jeder Änderung hier, auch mitten in der Runde. Aufnehmen tut OBS, das Programm fasst DBD nicht an. Braucht OBS 28 oder neuer.',
     'DBD': 'Ton des Spiels in der Aufnahme.',
     'Discord': 'Ton von Discord (Sprachchat) in der Aufnahme bzw. im Sofort-Clip.',
-    'übriger Desktop-Ton': 'Alles andere, was am PC zu hören ist (Musik, Browser, Systemtöne) – die Quelle „Desktop-Audio“ in OBS.',
+    'Übriger Desktop-Ton': 'Alles andere, was am PC zu hören ist (Musik, Browser, Systemtöne) – die Quelle „Desktop-Audio“ in OBS.',
     'Mikrofon': 'Dein Mikrofon – die Quelle „Mikrofon/AUX“ in OBS bzw. seine Spur im Sofort-Clip.',
     'Jede Tonquelle auf eine eigene OBS-Tonspur legen (1 alles, 2 Spiel, 3 Discord, 4 Mikrofon) – zum Mischen im Clip-Editor': 'Wie bei Medal: Das Programm weist in OBS jede Tonquelle der Spur 1 (alles – spielt in jedem Player) und ihrer eigenen Spur zu: Spiel und übriger Desktop-Ton 2, Discord 3, Mikrofon 4. Im Clip-Editor schaltest du jede Quelle an oder aus und regelst ihre Lautstärke; beim Speichern mischt ffmpeg sie zusammen. OBS schreibt die Spuren nur im Ausgabemodus „Erweitert“ mit Audiospur 1 bis 4 angehakt (MKV oder MP4, nicht FLV); das Programm prüft das beim DBD-Start und meldet es, ändert aber nichts am OBS-Profil. Aus = Spuren bleiben, wie sie in OBS stehen.',
     'Spiel': 'Ton des Spiels (und übriger Desktop-Ton, falls aufgenommen) im Sofort-Clip.',
