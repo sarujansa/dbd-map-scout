@@ -52,6 +52,7 @@ DEFAULTS = {
         "media_style": "big",           # music card: big = cover on top (1.64.7) / compact = cover left (1.64)
         "media_scale": 1.0,             # size of the music card (slider 60–200 %)
         "media_cover": True,            # album cover left of title and artist
+        "media_videos": True,           # 1.8.4: a video (YouTube, Twitch …) shows too ("▶ Titel"); off = music only
         "media_next_pos": "below",      # 1.8: the Spotify queue below the song / right of it
         "media_next_n": 3,              # … how many coming tracks (1–5)
         "map_backdrop": False,          # dark area with rounded corners behind the map and its lines (1.2.4)

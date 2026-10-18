@@ -96,6 +96,10 @@ TIPS = {
     "Weich ein- und ausblenden (auch beim nächsten Lied)":
         "Die Musikkarte blendet in einer Drittelsekunde ein und aus, statt hart zu erscheinen – auch wenn ein "
         "neues Lied beginnt.",
+    "Auch Videos zeigen (YouTube, Twitch …) – aus: nur Musik":
+        "Die Mediensteuerung meldet auch Videos aus dem Browser. An: ein Video erscheint als „▶ Titel“ mit dem "
+        "Kanal darunter. Aus: die Karte zeigt nur Musik. Unterschieden wird am Album: Musikdienste melden eins, "
+        "ein Video nicht.",
     "Albumcover zeigen":
         "Das Bild zum Lied links neben Titel und Interpret – Windows liefert es mit; es bleibt nur im Speicher.",
     "OLED-Schwarz (echtes Schwarz statt Grau im Dark Mode)":

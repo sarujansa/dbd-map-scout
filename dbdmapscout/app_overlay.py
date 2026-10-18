@@ -280,6 +280,8 @@ class OverlayTab:
                   ).pack(anchor="w", pady=(2, 0))
         self._reg("ov.media_fade", look_check("media_fade", _("Weich ein- und ausblenden (auch beim nächsten Lied)"))
                   ).pack(anchor="w", pady=(2, 0))
+        self._reg("ov.media_videos", look_check("media_videos", _("Auch Videos zeigen (YouTube, Twitch …) – aus: nur Musik"))
+                  ).pack(anchor="w", pady=(2, 0))                   # 1.8.4
         nr = ui.Frame(mf)                                   # 1.8: the Spotify queue on the card
         nr.pack(fill="x", pady=(6, 0))
         self._reg("ov.media_next.label", ui.Label(nr, text=_("Als nächstes"), width=12)).pack(side="left")
