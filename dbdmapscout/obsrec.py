@@ -356,6 +356,38 @@ def save_index(folder: str, recs: list[Recording]):
     os.replace(tmp, path)
 
 
+FARMING_DAYS = (0, 3, 7, 14, 30)      # 1.8.23 (user's pick): farming recordings go after this many days (0 = never)
+DEFAULT_FARMING_DAYS = 7
+FARMING_CHECK_S = 3600.0              # how often the recorder thread looks for expired ones
+
+
+def expired_farming(recs: list[Recording], days: int, now: float) -> list[Recording]:
+    """1.8.23 (pure): farming recordings older than ``days`` – never kept ones, never ones with a mark (F8)."""
+    if not days or days <= 0:
+        return []
+    limit = now - days * 86400
+    return [r for r in recs if r.farming and not r.keep and not r.marks and r.t < limit]
+
+
+def prune_farming(folder: str, recs: list[Recording], days: int, now: float | None = None):
+    """Delete the expired farming recordings (``expired_farming``) – only files named in the index, only inside
+    ``folder``. Returns (entries left, files deleted)."""
+    gone = expired_farming(recs, days, time.time() if now is None else now)
+    deleted = []
+    for r in gone:
+        for n in (r.file, r.pre):
+            p = rel_path(folder, n) if n else None
+            if p and os.path.exists(p):
+                try:
+                    os.remove(p)
+                    deleted.append(n)
+                except OSError:
+                    pass
+    gone_ids = {id(r) for r in gone}
+    left = [r for r in recs if id(r) not in gone_ids or os.path.exists(rel_path(folder, r.file) or "")]
+    return left, deleted
+
+
 def prune_rank(r: Recording) -> int:
     """1.4.2: what goes first when room is needed – 0 farming rounds and rounds shorter than SHORT_ROUND_S,
     1 ordinary rounds, 2 rounds with a mark (F8); within a rank the oldest first. Kept ones never."""
@@ -749,6 +781,7 @@ class Config:
     audio_mic: bool = False          # OBS "Mic/Aux"
     tracks: bool = True              # 1.8.6: every source on its own OBS track (SOURCE_TRACKS), 1 = everything
     clip_sources: tuple = DEFAULT_CLIP_SOURCES   # 1.8.6: what the F8 clip keeps when the buffer file has the tracks
+    farming_days: int = DEFAULT_FARMING_DAYS     # 1.8.23: farming recordings go after this many days (0 = never)
 
     @property
     def wants_buffer(self) -> bool:
@@ -802,6 +835,8 @@ class Recorder(threading.Thread):
         self._buffer_ours = False    # we started OBS's replay buffer: we stop it with DBD
         self.space = Space()         # 1.4.2: the drive and the index, for the overview's tile
         self._space_t = 0.0
+        self._farming_t = 0.0        # 1.8.23: last look for expired farming recordings
+        self._routed = None          # 1.8.23: sources OBS had on their own track (None = unknown / not routed)
 
     @property
     def recording(self) -> bool:
@@ -876,6 +911,7 @@ class Recorder(threading.Thread):
                     self._due()
                     self._watchdog()
                     self._look_at_space()
+                    self._expire_farming()
                 except ObsError as e:
                     self._say(str(e), False)
                 continue
@@ -1057,6 +1093,23 @@ class Recorder(threading.Thread):
         self._space_t = time.time()
         self.space = space(self.folder()) if self.cfg.on else Space(t=self._space_t)
 
+    def _expire_farming(self, force=False):
+        """1.8.23: once an hour (and after each saved round) the farming recordings older than ``farming_days``
+        go – index entries and their files, nothing else."""
+        if not self.cfg.on or not self.cfg.farming_days or (not force and time.time() - self._farming_t < FARMING_CHECK_S):
+            return
+        self._farming_t = time.time()
+        folder = self.folder()
+        if folder is None:
+            return
+        recs = load_index(folder)
+        left, deleted = prune_farming(folder, recs, int(self.cfg.farming_days))
+        if len(left) != len(recs):
+            save_index(folder, left)
+        if deleted:
+            self._post("deleted", files=deleted, farming=True, days=int(self.cfg.farming_days))
+            self._look_at_space(force=True)
+
     def folder(self) -> str | None:
         return find_folder(self.cfg.volume, self.cfg.rel, self.cfg.folder)
 
@@ -1197,7 +1250,8 @@ class Recorder(threading.Thread):
             c.request("StartRecord")
         finally:
             c.close()
-        self.active = dict(meta, pre=pre, since=time.time(), marks=[])
+        self.active = dict(meta, pre=pre, since=time.time(), marks=[],
+                           sources=sorted(self._routed) if self._routed is not None else None)    # 1.8.23
         if meta.get("early"):
             self._say(_("Nimmt auf – seit dem Ende des Ladebildschirms, wartet auf das Map-Banner"), True)
             self._post("started", t=meta.get("t"), early=True)
@@ -1283,6 +1337,8 @@ class Recorder(threading.Thread):
                 extra["merge_failed"] = True
         if bad:
             extra["bad"] = bad
+        if rec.get("sources") is not None:             # 1.8.23: the sources OBS had (the clip editor tells "none")
+            extra["sources"] = list(rec["sources"])
         prefix = sub + "/" if sub else ""              # index names: "Farming/…" with "/" on every system
         if pre_name:
             pre_name = prefix + pre_name
@@ -1306,6 +1362,7 @@ class Recorder(threading.Thread):
         if deleted:
             self._post("deleted", files=deleted)
         self._look_at_space(force=True)
+        self._expire_farming(force=True)
 
     @staticmethod
     def _join(folder, pre_path, round_path):
@@ -1420,6 +1477,8 @@ class Recorder(threading.Thread):
                     c.request("SetInputMute", {"inputName": name, "inputMuted": not on})
                     others.append(("mic" if key.startswith("mic") else "desktop", name))
             hint = self._tracks(c, names, others) if self.cfg.tracks else ""
+            if not self.cfg.tracks:
+                self._routed = None
         except ObsError as e:
             log.info("OBS: Ton nicht eingestellt (%s)", e)
             text = _("Ton in OBS nicht eingestellt: {error}", error=e)
@@ -1487,10 +1546,11 @@ class Recorder(threading.Thread):
                 wanted.append((key, name))
         for key, name in wanted:
             c.request("SetInputAudioTracks", {"inputName": name, "inputAudioTracks": track_flags(SOURCE_TRACKS[key])})
-        moved = []
+        moved, background = [], False
         for name in sorted(n for n in names - {n for _k, n in wanted} if n):
             try:                                        # a source without sound (picture, scene) answers an error
                 tracks = c.request("GetInputAudioTracks", {"inputName": name}).get("inputAudioTracks") or {}
+                background = True
                 want = {"2": False, "3": False, "4": False, "5": True}
                 if any(bool(tracks.get(t)) != on for t, on in want.items()):
                     c.request("SetInputAudioTracks", {"inputName": name, "inputAudioTracks": want})
@@ -1500,6 +1560,14 @@ class Recorder(threading.Thread):
         if moved:
             log.info("OBS: %s", _("Auf Spur 5 (Hintergrund) statt bei Spiel/Discord/Mikrofon: {names}",
                                   names=", ".join(moved)))
+        # 1.8.23: what a recording from now on has on its own track and switched on – the clip editor tells
+        # "no source" apart from "recorded but silent"
+        routed = {key for key in ("dbd", "discord") if getattr(self.cfg, "audio_" + key)}
+        if self.cfg.audio_mic and any(k == "mic" for k, _n in others):
+            routed.add("mic")
+        if background:
+            routed.add("other")
+        self._routed = routed
         hint = profile_hint(self._profile(c, "Output", "Mode"), self._profile(c, "AdvOut", "RecTracks"))
         if hint:
             log.info("OBS: %s", hint)

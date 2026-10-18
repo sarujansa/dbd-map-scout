@@ -307,6 +307,16 @@ class SettingsTab:
         self.rec_farming_var = ui.BooleanVar(value=bool(self.settings.get("rec_farming_dir", True)))   # 1.5.3
         self._reg("st.more.rec_farming", ui.Checkbutton(rc, text=_("Farming-Runden im Unterordner „Farming“ ablegen"),
                                                          variable=self.rec_farming_var, command=self._rec_setting)).pack(anchor="w")
+        rf = ui.Frame(rc)                                                                           # 1.8.23
+        rf.pack(fill="x", pady=(2, 0))
+        self._reg("st.more.rec_farming_days.label", ui.Label(rf, text=_("Farming-Aufnahmen löschen nach"))).pack(side="left")
+        self._rec_farming_days = [(0, _("nie")), *[(d, _("{n} Tagen", n=d)) for d in obsrec.FARMING_DAYS if d]]
+        days = int(self.settings.get("rec_farming_days", obsrec.DEFAULT_FARMING_DAYS) or 0)
+        self.rec_farming_days_var = ui.StringVar(value=dict(self._rec_farming_days).get(days, _("nie")))
+        cb = self._reg("st.more.rec_farming_days", ui.Combobox(rf, textvariable=self.rec_farming_days_var, state="readonly",
+                                                                width=12, values=[lbl for _d, lbl in self._rec_farming_days]))
+        cb.pack(side="left", padx=6)
+        cb.bind("<<ComboboxSelected>>", lambda e: self._rec_setting())
         self.rec_ffmpeg_var = ui.StringVar(value="")
         self._reg("st.more.rec_ffmpeg", ui.Label(rc, textvariable=self.rec_ffmpeg_var, wraplength=420,
                                                   style="Dim.TLabel")).pack(anchor="w")
@@ -528,7 +538,9 @@ class SettingsTab:
                              audio_desktop=bool(self.rec_audio_vars["desktop"].get()),
                              audio_mic=bool(self.rec_audio_vars["mic"].get()),
                              tracks=bool(self.rec_tracks_var.get()),                       # 1.8.6
-                             clip_sources=tuple(k for k in obsrec.SOURCES if self.rec_clip_src_vars[k].get()))
+                             clip_sources=tuple(k for k in obsrec.SOURCES if self.rec_clip_src_vars[k].get()),
+                             farming_days=next((d for d, lbl in self._rec_farming_days
+                                                if lbl == self.rec_farming_days_var.get()), 0))
 
     def _rec_setting(self, save=True):
         cfg = self._rec_cfg()
@@ -542,6 +554,7 @@ class SettingsTab:
             self.settings.set("rec_buffer_auto", cfg.buffer_auto)
             self.settings.set("rec_merge", cfg.merge)
             self.settings.set("rec_farming_dir", cfg.farming_sub)
+            self.settings.set("rec_farming_days", int(cfg.farming_days))
             self.settings.set("rec_early", cfg.early)
             self.settings.set("rec_instant", cfg.instant)
             self.settings.set("rec_clip_s", int(cfg.clip_s))
@@ -610,6 +623,9 @@ class SettingsTab:
         elif kind == "deleted":
             if d.get("manual"):                 # 1.5: from the tab
                 self._log(_("Aufnahme gelöscht: {file}", file=(d.get("files") or [""])[0]), "System")
+            elif d.get("farming"):              # 1.8.23: farming recordings past their days
+                self._log(_("Alte Farming-Aufnahmen gelöscht (älter als {days} Tage): {n}", days=d.get("days", 0),
+                            n=len(d.get("files") or [])), "System")
             else:
                 self._log(_("Aufnahmen gelöscht (Platz): {n}", n=len(d.get("files") or [])), "System")
             self._rec_dirty = True

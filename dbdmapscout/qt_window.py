@@ -221,6 +221,8 @@ SPECS = {
                                           ("check", "st.more.rec_clip_discord"), ("check", "st.more.rec_clip_mic"),
                                           ("check", "st.more.rec_clip_other"), ("stretch",))),
                                  ("check", "st.more.rec_farming"),
+                                 ("row", (("label", "st.more.rec_farming_days.label"),           # 1.8.23
+                                          ("combo", "st.more.rec_farming_days"), ("stretch",))),
                                  ("hint", "st.more.rec_ffmpeg"),
                                  ("row", (("label", "st.more.rec_tail.label"), ("combo", "st.more.rec_tail"),
                                           ("stretch",))),

@@ -536,7 +536,8 @@ class RecordingsTab:
                          censor_style=str(self.settings.get("clip_censor_style", "pixel")),
                          censor_boxes=self.settings.get("clip_censor_boxes") or [],
                          mix_on=self.settings.get("clip_mix_on") or {},                           # 1.8.6
-                         mix_vol=self.settings.get("clip_mix_vol") or {}, **extra)
+                         mix_vol=self.settings.get("clip_mix_vol") or {},
+                         sources=(r.extra or {}).get("sources"), **extra)                   # 1.8.23
         win.on_saved = lambda out: self._clip_saved(r, out, win)              # 1.8.13: into the clips list
         return win
 
