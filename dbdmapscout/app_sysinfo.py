@@ -353,9 +353,12 @@ class SysInfo:
     def _limit_dragged(self, side, which, y):
         """1.8.14: a limiter line dragged in the preview (edit mode) to ``y`` (screen px from the top of the game)."""
         o = self.settings["overlay"]
-        if not o.get("bar_limits_on") or side not in layout.LIMIT_SIDES:
+        if side not in layout.LIMIT_SIDES:
             return
         self._layout_mark()
+        if not o.get("bar_limits_on"):                  # 1.8.15: dragging a faint line switches the limiter on
+            o["bar_limits_on"] = True
+            self.limits_var.set(True)
         _gx, _gy, _gw, gh = self._game_rect()
         f = y / max(1, gh)
         val = round(min(layout.LIMIT_MAX, max(0.0, f if which == "top" else 1 - f)), 4)
