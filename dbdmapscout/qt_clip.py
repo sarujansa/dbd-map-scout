@@ -13,13 +13,18 @@ import threading
 from PySide6.QtCore import QObject, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit, QProgressBar,
-                               QPushButton, QSizePolicy, QVBoxLayout, QWidget)
+                               QPushButton, QSizePolicy, QSlider, QVBoxLayout, QWidget)
 
-from . import clipedit, qt_theme
+from . import clipedit, obsrec, qt_theme
 from .i18n import N_, _
 
 CENSOR_LABELS = {"pixel": N_("Verpixelt"), "blur": N_("Verwischt"), "black": N_("Schwarz"),
                  "retouch": N_("Retusche (aus der Umgebung übermalt)")}   # 1.7.2, retouch 1.7.3
+MIX_MAX = 150                                    # 1.8.6: a source may be raised to 150 %
+SOURCE_LABELS = {"dbd": N_("Spiel"), "discord": N_("Discord"), "mic": N_("Mikrofon")}
+SOURCE_TIPS = {"dbd": N_("Ton des Spiels (und übriger Desktop-Ton, falls aufgenommen) – OBS-Spur 2."),
+               "discord": N_("Discord-Sprachchat – OBS-Spur 3. Aus = der Clip hat keinen Discord-Ton."),
+               "mic": N_("Dein Mikrofon – OBS-Spur 4 (nur, wenn es in OBS aufgenommen wird).")}
 MODE_LABELS = {"copy": N_("Schnell (an Schlüsselbildern, Anfang bis zu ein paar Sekunden früher)"),
                "exact": N_("Genau (Bild neu kodiert, dauert etwas)"),
                "discord": N_("Für Discord (passt unter die Zielgrösse)")}
@@ -476,7 +481,7 @@ class ClipWindow(QWidget):
     def __init__(self, path: str, marks: list, clips_dir: str, mode: str = "copy", sound: bool = True,
                  on_saved=None, on_setting=None, log=None, dark=True, qss: str = "", title: str = "",
                  target_mb: int = clipedit.DEFAULT_TARGET_MB, censor_on: bool = False, censor_style: str = "pixel",
-                 censor_boxes=(), no_discord: bool = True):
+                 censor_boxes=(), mix_on=None, mix_vol=None):
         super().__init__(None, Qt.Window)
         self.path, self.marks, self.clips_dir = path, sorted(float(m) for m in marks or ()), clips_dir
         self.on_saved, self.on_setting, self.log = on_saved, on_setting, (log or (lambda text, kind="System": None))
@@ -496,7 +501,9 @@ class ClipWindow(QWidget):
         self._play_to = None                # 1.6.1: "Clip ansehen" plays start..end, then back to the start
         self._censor_on, self._censor_style = bool(censor_on), censor_style        # 1.7.2: remembered boxes
         self._censor_boxes = [list(b) for b in (censor_boxes or ()) if len(b) == 4]
-        self._no_discord = bool(no_discord)                                        # 1.8.5: take OBS track 2
+        self._mix_on = {k: bool((mix_on or {}).get(k, True)) for k in obsrec.SOURCES}     # 1.8.6: sound mix
+        self._mix_vol = {k: int((mix_vol or {}).get(k, 100) or 0) for k in obsrec.SOURCES}
+        self._sources = obsrec.track_sources(self.info.audio_tracks)
         self.setObjectName("page")
         self.setWindowTitle(title or _("Clip bearbeiten – {name}", name=os.path.basename(path)))
         if qss:
@@ -642,18 +649,8 @@ class ClipWindow(QWidget):
         self.sound_box.setToolTip(_("Beim Abspielen den Ton der Aufnahme mitlaufen lassen (Windows)."))
         self.sound_box.toggled.connect(lambda v: self._setting("clip_sound", bool(v)))
         row2.addWidget(self.sound_box)
-        self.no_discord_box = QCheckBox(_("Ohne Discord-Ton"))                     # 1.8.5
-        two = self.info.audio_tracks >= 2
-        self.no_discord_box.setEnabled(two)
-        self.no_discord_box.setChecked(self._no_discord and two)
-        self.no_discord_box.setToolTip(
-            _("Nimmt Tonspur 2 der Aufnahme (alles ausser Discord). Dafür legt das Programm Discord in OBS nur auf Spur 1; "
-              "OBS muss mit Ausgabemodus „Erweitert“ und Audiospur 1 + 2 aufnehmen.") if two else
-            _("Diese Aufnahme hat nur eine Tonspur. Für Clips ohne Discord-Ton braucht OBS den Ausgabemodus „Erweitert“ "
-              "mit Audiospur 1 + 2 (Einstellungen → Mehr → Aufnahmen mit OBS)."))
-        self.no_discord_box.toggled.connect(self._no_discord_changed)
-        row2.addWidget(self.no_discord_box)
         el.addLayout(row2)
+        el.addLayout(self._mix_row())                                               # 1.8.6: the sound mix
         row3 = QHBoxLayout()
         self.save_btn = self._btn(row3, _("Clip speichern"), self.save, _("Schreibt den Ausschnitt als MP4 in den Ordner „Clips“ neben den Aufnahmen."))
         self.save_btn.setObjectName("primary")
@@ -751,13 +748,82 @@ class ClipWindow(QWidget):
         row.addWidget(b)
         return b
 
-    def audio_track(self) -> int | None:
-        """1.8.5: 1 (= OBS's track 2, the mix without Discord) when wanted and the file has it, else None."""
-        return 1 if self.no_discord_box.isEnabled() and self.no_discord_box.isChecked() else None
+    # ---- 1.8.6: the sound mix (like Medal – each source on its own OBS track, on/off and a level each)
+    def _mix_row(self):
+        row = QHBoxLayout()
+        self.mix_label = QLabel(_("Ton im Clip"))
+        row.addWidget(self.mix_label)
+        self.mix_boxes, self.mix_sliders, self.mix_values = {}, {}, {}
+        for key in obsrec.SOURCES:
+            box = QCheckBox(_(SOURCE_LABELS[key]))
+            box.setToolTip(_(SOURCE_TIPS[key]))
+            sl = QSlider(Qt.Horizontal)
+            sl.setRange(0, MIX_MAX)
+            sl.setFixedWidth(80)
+            sl.setToolTip(_("Lautstärke dieser Quelle im Clip (100 % = wie aufgenommen)."))
+            val = QLabel("")
+            val.setProperty("class", "dim")
+            val.setMinimumWidth(38)
+            self.mix_boxes[key], self.mix_sliders[key], self.mix_values[key] = box, sl, val
+            row.addWidget(box)
+            row.addWidget(sl)
+            row.addWidget(val)
+            row.addSpacing(8)
+        self.mix_hint = QLabel(_("Eine Tonspur – zum Mischen nimmt OBS mit Spur 1–4 auf (Einstellungen → Mehr → Aufnahmen mit OBS)."))
+        self.mix_hint.setProperty("class", "dim")
+        self.mix_hint.setWordWrap(True)
+        row.addWidget(self.mix_hint, 1)
+        row.addStretch()
+        self._mix_fill()
+        for key in obsrec.SOURCES:
+            self.mix_boxes[key].toggled.connect(self._mix_changed)
+            self.mix_sliders[key].valueChanged.connect(lambda v, k=key: self._mix_slid(k))
+            self.mix_sliders[key].sliderReleased.connect(self._mix_changed)
+        return row
 
-    def _no_discord_changed(self, on):
-        self._no_discord = bool(on)
-        self._setting("clip_no_discord", bool(on))
+    def _mix_fill(self):
+        """Controls for the sources the file has on their own tracks; none → only the hint."""
+        self.mix_hint.setVisible(not self._sources)
+        legacy = self._sources.get("discord") == obsrec.LEGACY
+        for key in obsrec.SOURCES:
+            box, sl, val = self.mix_boxes[key], self.mix_sliders[key], self.mix_values[key]
+            have = key in self._sources
+            for w in (box, sl, val):
+                w.setVisible(bool(self._sources))
+                w.setEnabled(have)
+            box.setChecked(have and self._mix_on[key])
+            sl.setValue(self._mix_vol[key] if have else 100)
+            if legacy and key == "discord":                       # 1.8.5 file: Discord only on or off
+                sl.setEnabled(False)
+            val.setText(f"{sl.value()} %" if have else "")
+
+    def _mix_slid(self, key):
+        self.mix_values[key].setText(f"{self.mix_sliders[key].value()} %")
+        if not self.mix_sliders[key].isSliderDown():              # keyboard / wheel: no release comes
+            self._mix_changed()
+
+    def mix(self):
+        """{source: volume} for cut()/sound_wav() – None when the recording has no tracks to pick from."""
+        if not self._sources:
+            return None
+        return {k: (self.mix_sliders[k].value() / 100.0 if self.mix_boxes[k].isChecked() else 0.0)
+                for k in obsrec.SOURCES if k in self._sources}
+
+    def _mix_changed(self, *_a):
+        if not self._sources:
+            return
+        for key in obsrec.SOURCES:
+            if key in self._sources:
+                self._mix_on[key] = self.mix_boxes[key].isChecked()
+                self._mix_vol[key] = self.mix_sliders[key].value()
+        self._setting("clip_mix_on", dict(self._mix_on))
+        self._setting("clip_mix_vol", dict(self._mix_vol))
+        self._show_size()
+        if self.playing and self.sound_box.isChecked() and os.name == "nt":   # hear the change at once
+            back = self._play_to
+            self._stop_player()
+            self._play_to = back
+            self.toggle_play()
 
     def _setting(self, key, value):
         if self.on_setting:
@@ -900,6 +966,11 @@ class ClipWindow(QWidget):
         if self._censor_args() and mode == "copy":                 # 1.7.2: boxes need the picture re-encoded
             self.size_label.setText((self.size_label.text() + " " if self.size_label.text() else "")
                                     + _("· mit Zensur neu kodiert (wie „Genau“)"))
+        if mode == "copy" and hasattr(self, "mix_boxes"):          # 1.8.6: a mix re-encodes only the sound
+            flt, amap = obsrec.audio_graph(self.info.audio_tracks, self.mix())
+            if flt or amap is None:
+                self.size_label.setText((self.size_label.text() + " " if self.size_label.text() else "")
+                                        + (_("· ohne Ton") if amap is None else _("· Ton neu gemischt")))
 
     def _mode_changed(self, _i, save=True):
         mode = self.mode_box.currentData()
@@ -945,9 +1016,9 @@ class ClipWindow(QWidget):
         self.playing = True
         self.play_btn.setText(_("⏸ Pause"))
         if self.sound_box.isChecked() and os.name == "nt":
-            track = self.audio_track()
+            mix, n = self.mix(), self.info.audio_tracks
             threading.Thread(target=lambda: self.bridge.sound.emit(
-                clipedit.sound_wav(self.path, start, end, self.ffmpeg, audio_track=track), start),
+                clipedit.sound_wav(self.path, start, end, self.ffmpeg, mix=mix, n_tracks=n), start),
                 name="clip-sound", daemon=True).start()
         else:
             self._run_player(start, end)
@@ -1016,14 +1087,14 @@ class ClipWindow(QWidget):
         self.status.setText(_("Schreibe {file} …", file=os.path.basename(out)))
         start, end = tl.start, tl.end
 
-        target, info, track = self._target_mb, self.info, self.audio_track()
+        target, info, mix = self._target_mb, self.info, self.mix()
         censor = self._censor_args()
         if mode != "copy" or censor:
             self.status.setText(_("Kodiere {file} … (dauert etwas)", file=os.path.basename(out)))
 
         def work():
             ok, why = clipedit.cut(self.path, start, end, out, mode, self.ffmpeg, target_mb=target, info=info,
-                                   audio_track=track, **censor)
+                                   mix=mix, **censor)
             self.bridge.saved.emit(ok, out, why)
         threading.Thread(target=work, name="clip-save", daemon=True).start()
 

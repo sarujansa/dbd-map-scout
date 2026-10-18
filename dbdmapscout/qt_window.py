@@ -211,8 +211,10 @@ SPECS = {
                                  ("row", (("check", "st.more.rec_audio_dbd"), ("check", "st.more.rec_audio_discord"),
                                           ("check", "st.more.rec_audio_desktop"), ("check", "st.more.rec_audio_mic"),
                                           ("stretch",))),
-                                 ("check", "st.more.rec_tracks"), ("hint", "st.more.rec_tracks_hint"),      # 1.8.5
-                                 ("check", "st.more.rec_clip_nodc"),
+                                 ("check", "st.more.rec_tracks"), ("hint", "st.more.rec_tracks_hint"),      # 1.8.6
+                                 ("row", (("label", "st.more.rec_clip_src.label"), ("check", "st.more.rec_clip_dbd"),
+                                          ("check", "st.more.rec_clip_discord"), ("check", "st.more.rec_clip_mic"),
+                                          ("stretch",))),
                                  ("check", "st.more.rec_farming"),
                                  ("hint", "st.more.rec_ffmpeg"),
                                  ("row", (("label", "st.more.rec_tail.label"), ("combo", "st.more.rec_tail"),
