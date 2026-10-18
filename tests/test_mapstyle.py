@@ -56,7 +56,7 @@ def test_pictures_of_another_style_and_animations_stay(tmp_path):
     assert not any(tmp_path.rglob("*.webp"))
 
 
-def test_the_dark_picture_is_made_once_and_then_taken_from_the_cache(tmp_path):
+def test_the_dark_picture_is_made_once_and_then_taken_from_the_cache(tmp_path, map_cache, dark_maps):
     path = os.path.join(MAPS, "McMillan", "Coal Tower.webp")
     assert mapstyle.styled_path(path, str(tmp_path), make=False) == path       # tiles of the maps page: no waiting
     assert not any(tmp_path.rglob("*.webp"))
@@ -66,7 +66,8 @@ def test_the_dark_picture_is_made_once_and_then_taken_from_the_cache(tmp_path):
     stamp = os.stat(first).st_mtime_ns
     assert mapstyle.styled_path(path, str(tmp_path)) == first and os.stat(first).st_mtime_ns == stamp
     assert not list(tmp_path.rglob("*.tmp"))
-    assert mapstyle.warm([path, os.path.join(MAPS, "Other", "Midwich.gif")], str(tmp_path)) == 2
+    # (warm counts the pictures ready in the dark style – made or found; Midwich from the shared cache, 1.8.31)
+    assert mapstyle.warm([path, os.path.join(MAPS, "Other", "Midwich.gif")], map_cache) == 2
 
 
 def _fake_app(appmod, cat, tmp_path, style):
@@ -103,11 +104,21 @@ def test_app_takes_the_dark_picture_only_when_chosen_and_never_for_own_pictures(
     assert appmod.App._map_file(fake, "coal", 1) == (path, 1)
 
 
+WORKERS = max(1, min(4, os.cpu_count() or 1))   # 1.8.31: numpy/OpenCV let threads run side by side (74 → 23 s)
+
+
 @pytest.fixture(scope="module")
-def dark_maps(tmp_path_factory):
-    """Every supplied map converted once (≈ 0.7 s each) – the tests below share them."""
-    cache = str(tmp_path_factory.mktemp("maps_dark"))
-    return {path: mapstyle.styled_path(path, cache) for path in _supplied()}
+def map_cache(tmp_path_factory):
+    return str(tmp_path_factory.mktemp("maps_dark"))
+
+
+@pytest.fixture(scope="module")
+def dark_maps(map_cache):
+    """Every supplied map converted once (≈ 0.7 s each, in WORKERS threads) – the tests below share them."""
+    from concurrent.futures import ThreadPoolExecutor
+    paths = _supplied()
+    with ThreadPoolExecutor(WORKERS) as ex:
+        return dict(zip(paths, ex.map(lambda p: mapstyle.styled_path(p, map_cache), paths)))
 
 
 def _supplied():
@@ -122,16 +133,16 @@ def test_every_map_stays_the_same_picture(dark_maps):
     was added (only the rounding of soft edges differs). Box colours never on what was floor."""
     other = {"Trickster's Delusion.webp", "Fallen Refuge.webp", "Freddy Fazbears Pizza.webp"}
     fill = mapstyle.FILL.astype(float)
-    styled = 0
-    for path, out in dark_maps.items():
+
+    def check(item):                                   # one map; run in WORKERS threads (1.8.31: 38 → ~12 s)
+        path, out = item
         name = os.path.basename(path)
         if name in other:
             assert out == path, name
-            continue
+            return 0
         assert out != path, name + ": not converted"
         if name == "Midwich.gif":
-            continue                                       # its own kind: test_midwich_keeps_its_floors
-        styled += 1
+            return 0                                       # its own kind: test_midwich_keeps_its_floors
         oi, di = Image.open(path).convert("RGBA"), Image.open(out).convert("RGBA")
         assert oi.size == di.size, name
         split = mapimage.title_split(oi)
@@ -154,6 +165,11 @@ def test_every_map_stays_the_same_picture(dark_maps):
         floor = _near(o, mapstyle.FILL) & (o[..., 3] == 255)
         box = _near(d, mapstyle.M_COLOUR) | _near(d, mapstyle.S_COLOUR) | _near(d, mapstyle.BOX_GREY)
         assert (box & floor).sum() <= 50, name + ": box colour on what was floor"
+        return 1
+
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(WORKERS) as ex:
+        styled = sum(ex.map(check, dark_maps.items()))
     assert styled == 52
 
 
@@ -163,13 +179,18 @@ def test_the_boxes_get_their_colours_on_every_map(dark_maps):
             "Rpd East Wing.webp", "Rpd West Wing.webp"}
     no_s = {"Midwich.gif", "Nostromo Wreckage.webp", "Haddonfield.webp", "Hawkins.webp", "Lerys.webp", "THE GAME.webp",
             "Rpd East Wing.webp", "Rpd West Wing.webp"}
-    for path, out in dark_maps.items():
+    def check(item):
+        path, out = item
         if out == path:
-            continue
+            return
         name = os.path.basename(path)
         d = np.asarray(Image.open(out).convert("RGBA"))
         assert (_near(d, mapstyle.M_COLOUR).sum() > 3000) == (name not in no_m), name + ": M box"
         assert (_near(d, mapstyle.S_COLOUR).sum() > 3000) == (name not in no_s), name + ": S box"
+
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(WORKERS) as ex:
+        list(ex.map(check, dark_maps.items()))
 
 
 def test_midwich_keeps_its_floors(dark_maps):

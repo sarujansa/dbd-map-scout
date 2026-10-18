@@ -968,6 +968,9 @@ class HudWindow:
     music card). In edit mode (the overlay's "Mit der Maus verschieben") it can be dragged like the map:
     ``on_moved(x, y)`` after the drop."""
 
+    MEMO_KEPT = 4    # 1.8.31: the last pictures by key – the App measures at the natural size and then draws at
+    #                  the steady one each tick; with one key only, both were drawn anew every tick
+
     def __init__(self, title: str = "DbD Map Scout Systemwerte"):
         ex = WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
         self._hwnd = _u.CreateWindowExW(ex, "Static", title, WS_POPUP, 0, 0, 16, 16,
@@ -979,6 +982,7 @@ class HudWindow:
         self._data = None
         self._pos = None
         self._bodies = {}                      # the music card's bodies (1.2.13), kept while a song plays
+        self._memo = {}                        # 1.8.31: {key: (data, size)} of the last MEMO_KEPT pictures
         self._shown = False
         self.size = (0, 0)
         self._raised = 0.0
@@ -1042,6 +1046,14 @@ class HudWindow:
                accent, title, upnext, upnext_pos, min_w, min_h)
         if key != self._key:
             self._key = key
+            memo = getattr(self, "_memo", None)
+            if memo is None:
+                memo = self._memo = {}
+            hit = memo.get(key) if rows else None
+            if hit is not None:                       # drawn a moment ago (natural size ↔ steady size)
+                self._data, self.size = hit
+                self._pos = None
+                return self.size
             if not rows:
                 self._data, self.size = None, (0, 0)
             elif style is not None:                   # the music card (1.2.13: body once per song, strip every second)
@@ -1059,6 +1071,9 @@ class HudWindow:
                     pic = add_border(pic, self.edit_label)
                 self._data, self.size = premultiplied_bgra(pic), pic.size
                 self._pos = None                      # push again
+                memo[key] = (self._data, self.size)
+                while len(memo) > self.MEMO_KEPT:
+                    memo.pop(next(iter(memo)))
         return self.size
 
     def render_blend(self, old: dict, new: dict, t: float):
