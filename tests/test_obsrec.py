@@ -18,6 +18,9 @@ from dbdmapscout import obsrec  # noqa: E402
 
 
 # ------------------------------------------------------------------ a fake obs-websocket 5 server
+ALL_TRACKS = {str(n): True for n in range(1, 7)}
+
+
 class FakeObs(threading.Thread):
     """Enough of obs-websocket 5 for the client: handshake, Hello/Identify (with or without a password),
     requests GetVersion / GetRecordStatus / StartRecord / StopRecord / replay buffer. Records what it was asked."""
@@ -38,7 +41,7 @@ class FakeObs(threading.Thread):
         self.files = 0
         self.stop_flag = False
         self.inputs = {"Desktop-Audio": {"muted": False}, "Mic/Aux": {"muted": False}}
-        self.profile = {("Output", "Mode"): "Advanced", ("AdvOut", "RecTracks"): "15"}  # 1.8.6: tracks 1–4 ticked
+        self.profile = {("Output", "Mode"): "Advanced", ("AdvOut", "RecTracks"): "31"}  # 1.8.19: tracks 1–5 ticked
         self.scenes = {}                            # 1.8.18: {scene: [scene items]}
 
     def run(self):
@@ -163,10 +166,16 @@ class FakeObs(threading.Thread):
                     self.inputs[data["inputName"]]["muted"] = data["inputMuted"]
             elif kind == "GetSpecialInputs":
                 out = {"desktop1": "Desktop-Audio", "desktop2": None, "mic1": "Mic/Aux"}
-            elif kind == "SetInputAudioTracks":        # 1.8.5
-                ok = data["inputName"] in self.inputs
+            elif kind == "SetInputAudioTracks":        # 1.8.5; 1.8.19: only the tracks named change
+                inp = self.inputs.get(data["inputName"])
+                ok = inp is not None and not inp.get("video")
                 if ok:
-                    self.inputs[data["inputName"]]["tracks"] = dict(data["inputAudioTracks"])
+                    inp["tracks"] = dict(inp.get("tracks") or ALL_TRACKS, **data["inputAudioTracks"])
+            elif kind == "GetInputAudioTracks":        # 1.8.19: a new OBS source sits on all six tracks
+                inp = self.inputs.get(data["inputName"])
+                ok = inp is not None and not inp.get("video")
+                if ok:
+                    out = {"inputAudioTracks": dict(inp.get("tracks") or ALL_TRACKS)}
             elif kind == "GetProfileParameter":
                 value = self.profile.get((data["parameterCategory"], data["parameterName"]))
                 out = {"parameterValue": value, "defaultParameterValue": None}
@@ -890,6 +899,37 @@ def test_the_sound_sources_are_created_once_and_switched(obs, tmp_path):
     assert not obs.requests
 
 
+def test_only_dbd_is_on_the_game_track_and_the_other_sources_on_the_background_track(obs, tmp_path):
+    """1.8.19 (user: "es soll wirklich nur DBD aufnehmen und Hintergrundprogramme separat"): OBS puts a new source
+    on all six tracks – Spotify, the browser or a source of the user's own landed on game, Discord and microphone.
+    They go to track 5 (background; tracks 1 and 6 stay), the desktop sound (it holds DBD and Discord too) to track
+    1 only; a source without sound is left alone; set once; switched off, nothing is touched."""
+    obs.inputs.update({"Spotify": {"muted": False},
+                       "Browser": {"muted": False, "tracks": dict(ALL_TRACKS, **{"1": False})},
+                       "Spielaufnahme": {"muted": False, "video": True}})
+    r, posted = _recorder(obs, str(tmp_path), pre=False)
+    c = r._client()
+    try:
+        r._audio(c)
+        bg = {"2": False, "3": False, "4": False, "5": True}
+        assert obs.inputs["Spotify"]["tracks"] == dict(ALL_TRACKS, **bg)
+        assert obs.inputs["Browser"]["tracks"] == dict(ALL_TRACKS, **bg, **{"1": False})        # its own 1 stays
+        assert "tracks" not in obs.inputs["Spielaufnahme"]
+        dbd = obs.inputs[obsrec.AUDIO_APPS["dbd"][0]]["tracks"]
+        assert [n for n in "12345" if dbd[n]] == ["1", "2"]                                      # the game: only DBD
+        assert [n for n in "12345" if obs.inputs["Desktop-Audio"]["tracks"][n]] == ["1"]
+        obs.requests.clear()
+        r._audio(c)
+        assert not [d for k, d in obs.requests if k == "SetInputAudioTracks"
+                    and d["inputName"] in ("Spotify", "Browser")]                                # set once
+        obs.inputs["Spotify"]["tracks"] = dict(ALL_TRACKS)
+        r.cfg.tracks = False
+        r._audio(c)
+        assert obs.inputs["Spotify"]["tracks"] == ALL_TRACKS                                     # off: left alone
+    finally:
+        c.close()
+
+
 def test_a_sound_source_missing_from_the_scene_on_air_is_put_back_into_it(obs, tmp_path):
     """1.8.18 (user: "Discord hört man gar nicht"): an application audio source is recorded only while it is in
     the scene on air – created once in another scene, its track stayed silent. A wanted one is added to the
@@ -917,26 +957,26 @@ def test_a_sound_source_missing_from_the_scene_on_air_is_put_back_into_it(obs, t
 def test_every_source_gets_its_own_track_and_the_profile_is_only_read(obs, tmp_path):
     """1.8.6: every source on track 1 (everything) and its own track – game + desktop 2, Discord 3, microphone 4;
     the profile is read, never written – a hint names what to tick when OBS is not in the advanced mode with
-    tracks 1 to 4."""
+    tracks 1 to 5 (1.8.19: the desktop sound on track 1 only)."""
     r, posted = _recorder(obs, str(tmp_path), pre=False)
     dbd, disc = obsrec.AUDIO_APPS["dbd"][0], obsrec.AUDIO_APPS["discord"][0]
     c = r._client()
     try:
         r._audio(c)
-        on = lambda *ns: {str(n): n in ns for n in range(1, 5)}                   # noqa: E731
-        assert obs.inputs[dbd]["tracks"] == obs.inputs["Desktop-Audio"]["tracks"] == on(1, 2)
+        on = lambda *ns: dict(ALL_TRACKS, **{str(n): n in ns for n in range(1, 6)})    # noqa: E731
+        assert obs.inputs[dbd]["tracks"] == on(1, 2) and obs.inputs["Desktop-Audio"]["tracks"] == on(1)
         assert obs.inputs[disc]["tracks"] == on(1, 3) and obs.inputs["Mic/Aux"]["tracks"] == on(1, 4)
         kinds = [k for k, _d in obs.requests]
         assert "GetProfileParameter" in kinds and not [k for k in kinds if "Profile" in k and k.startswith("Set")]
         assert "Erweitert" not in r.status                                       # profile fine: no hint
         obs.profile[("Output", "Mode")] = "Simple"
         r._audio(c)
-        assert "Ausgabemodus „Erweitert“" in r.status and "Audiospur 1 bis 4" in r.status
+        assert "Ausgabemodus „Erweitert“" in r.status and "Audiospur 1 bis 5" in r.status
         assert _drain(posted)[-1] == ("status", {"text": r.status, "ok": False})
         obs.profile[("Output", "Mode")], obs.profile[("AdvOut", "RecTracks")] = "Advanced", "3"
         r.status = ""
         r._audio(c)
-        assert "Audiospur 1 bis 4" in r.status                                   # advanced, but only tracks 1 + 2
+        assert "Audiospur 1 bis 5" in r.status                                   # advanced, but only tracks 1 + 2
         obs.requests.clear()
         r.cfg.tracks = False
         r._audio(c)
@@ -944,8 +984,8 @@ def test_every_source_gets_its_own_track_and_the_profile_is_only_read(obs, tmp_p
         assert "SetInputAudioTracks" not in kinds and "GetProfileParameter" not in kinds   # off: OBS left alone
     finally:
         c.close()
-    assert obsrec.profile_hint("Advanced", "15") == "" == obsrec.profile_hint("advanced", "63")
-    assert obsrec.profile_hint("Simple", "15") and obsrec.profile_hint("Advanced", "7") and obsrec.profile_hint("Advanced", "")
+    assert obsrec.profile_hint("Advanced", "31") == "" == obsrec.profile_hint("advanced", "63")
+    assert obsrec.profile_hint("Simple", "31") and obsrec.profile_hint("Advanced", "15") and obsrec.profile_hint("Advanced", "")
     assert obsrec.profile_hint("Advanced", "x") and obsrec.profile_hint("", "")
 
 
@@ -963,6 +1003,9 @@ def test_the_audio_graph_mixes_the_wanted_sources_from_the_tracks():
     assert amap == "[aout]" and flt == ("[0:a:1]volume=1.000[a0];[0:a:2]volume=0.800[a1];[0:a:3]volume=1.500[a2];"
                                         "[a0][a1][a2]amix=inputs=3:normalize=0[aout]")
     assert obsrec.track_sources(4) == {"dbd": 1, "discord": 2, "mic": 3} and obsrec.track_sources(3) == {"dbd": 1, "discord": 2}
+    assert obsrec.track_sources(5) == {"dbd": 1, "discord": 2, "mic": 3, "other": 4}             # 1.8.19: background
+    assert obsrec.audio_graph(5, {"dbd": 1.0, "discord": 0, "mic": 0, "other": 0}) == ("", "0:a:1")   # only DBD
+    assert obsrec.audio_graph(5, {"dbd": 0, "discord": 0, "mic": 0, "other": 1.0}) == ("", "0:a:4")
     assert obsrec.track_sources(2) == {"dbd": 1, "discord": obsrec.LEGACY} and obsrec.track_sources(1) == {}
     assert g(2, {"dbd": 1.0, "discord": 1.0}) == ("", "0:a:0") and g(2, {"dbd": 1.0, "discord": 0}) == ("", "0:a:1")
     assert g(2, {"dbd": 0, "discord": 0}) == ("", None) and g(2, {"dbd": 0.5, "discord": 0}) == ("[0:a:1]volume=0.500[aout]", "[aout]")
@@ -973,7 +1016,7 @@ def test_the_track_hint_stays_in_the_status_when_dbd_starts(obs, tmp_path):
     r, posted = _recorder(obs, str(tmp_path), pre=False)
     obs.profile[("Output", "Mode")] = "Simple"
     r._game_changed(True)
-    assert r.status.startswith("OBS bereit") and "Audiospur 1 bis 4" in r.status
+    assert r.status.startswith("OBS bereit") and "Audiospur 1 bis 5" in r.status
     assert _drain(posted)[-1] == ("status", {"text": r.status, "ok": False})
     obs.profile[("Output", "Mode")] = "Advanced"
     r._game_changed(True)
