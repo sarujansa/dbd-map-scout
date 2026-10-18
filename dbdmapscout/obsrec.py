@@ -96,7 +96,23 @@ FARMING_DIR = "Farming"         # 1.5.3 (user's wish): recordings of farming rou
 
 
 class ObsError(Exception):
-    pass
+    def __init__(self, text="", code=None):
+        super().__init__(text)
+        self.code = code                         # obs-websocket's request status code (None: not from a request)
+
+
+BUFFER_OFF_CODE = 604                            # InvalidResourceState: "Replay buffer is not available."
+
+
+def buffer_missing(e: Exception) -> bool:
+    """1.8.32: OBS answers this when its replay buffer is not enabled in the settings (it cannot be started)."""
+    return getattr(e, "code", None) == BUFFER_OFF_CODE or "not available" in str(e).lower()
+
+
+def BUFFER_HINT() -> str:
+    return _("In OBS ist der Wiederholungspuffer nicht aktiviert – OBS: Einstellungen → Ausgabe → "
+             "Wiederholungspuffer → „Wiederholungspuffer aktivieren“ und übernehmen. Ohne ihn gibt es keine "
+             "Sofort-Clips (F8) und keinen Vorlauf.")
 
 
 # ------------------------------------------------------------------ obs-websocket (v5) client
@@ -235,7 +251,7 @@ class ObsClient:
             if msg.get("op") == 7 and d.get("requestId") == rid:
                 st = d.get("requestStatus", {})
                 if not st.get("result"):
-                    raise ObsError(f"{kind}: {st.get('comment') or st.get('code')}")
+                    raise ObsError(f"{kind}: {st.get('comment') or st.get('code')}", st.get("code"))
                 return d.get("responseData") or {}
 
     def close(self):
@@ -957,6 +973,15 @@ class Recorder(threading.Thread):
         self.status = text
         self._post("status", text=text, ok=ok)
 
+    def _buffer_state(self, c):
+        """True/False = OBS's replay buffer runs or not; None = not enabled in OBS's settings (1.8.32)."""
+        try:
+            return bool(c.request("GetReplayBufferStatus").get("outputActive"))
+        except ObsError as e:
+            if buffer_missing(e):
+                return None
+            raise
+
     def _client(self) -> ObsClient:
         return ObsClient(self.cfg.port, self.cfg.password).connect()
 
@@ -1119,15 +1144,17 @@ class Recorder(threading.Thread):
             ver = c.request("GetVersion")
             rec = c.request("GetRecordStatus")
             try:
-                buf = c.request("GetReplayBufferStatus").get("outputActive")
+                buf = self._buffer_state(c)
             except ObsError:
-                buf = None
+                buf = False
         finally:
             c.close()
         folder = self.folder()
         bits = [_("OBS {version} verbunden", version=ver.get("obsVersion", "?"))]
         bits.append(_("nimmt gerade auf") if rec.get("outputActive") else _("bereit"))
-        if self.cfg.pre:
+        if buf is None and (self.cfg.pre or self.cfg.instant):
+            bits.append(_("Wiederholungspuffer in OBS nicht aktiviert (Einstellungen → Ausgabe → Wiederholungspuffer)"))
+        elif self.cfg.pre:
             bits.append(_("Wiederholungspuffer läuft") if buf else _("Wiederholungspuffer aus (kein Vorlauf)"))
         bits.append(_("Ordner: {folder}", folder=folder) if folder else _("Ordner/Laufwerk nicht gefunden"))
         self._say(" · ".join(bits), bool(folder))
@@ -1186,7 +1213,10 @@ class Recorder(threading.Thread):
             sound = self._audio(c) if self.cfg.audio else ""     # 1.8.7: a sound problem must stay in the status
             if self.cfg.wants_buffer and self.cfg.buffer_auto:
                 try:
-                    if not c.request("GetReplayBufferStatus").get("outputActive"):
+                    state = self._buffer_state(c)
+                    if state is None:                   # 1.8.32: not enabled in OBS – say how, once per start
+                        sound = " ".join(t for t in (sound, BUFFER_HINT()) if t)
+                    elif not state:
                         c.request("StartReplayBuffer")
                         self._buffer_ours = True
                 except ObsError as e:
@@ -1243,7 +1273,7 @@ class Recorder(threading.Thread):
             pre = ""
             if self.cfg.pre and pre_roll:
                 try:
-                    if c.request("GetReplayBufferStatus").get("outputActive"):
+                    if self._buffer_state(c):
                         pre = self._save_replay(c)
                 except ObsError as e:
                     log.info("OBS: kein Vorlauf (%s)", e)
@@ -1606,12 +1636,24 @@ class Recorder(threading.Thread):
         if folder is None:
             self._post("clip", ok=False, why=_("Aufnahme-Laufwerk nicht angeschlossen"))
             return
-        c = self._client()
         try:
-            if not c.request("GetReplayBufferStatus").get("outputActive"):
+            c = self._client()
+        except ObsError as e:                             # 1.8.32: F8 always gets an answer
+            self._post("clip", ok=False, why=str(e))
+            raise
+        try:
+            state = self._buffer_state(c)
+            if state is None:                             # 1.8.32 (user's log: "Replay buffer is not available")
+                self._post("clip", ok=False, why=BUFFER_HINT())
+                self._say(BUFFER_HINT(), False)
+                return
+            if not state:
                 self._post("clip", ok=False, why=_("Wiederholungspuffer in OBS läuft nicht"))
                 return
             src = self._save_replay(c)
+        except ObsError as e:
+            self._post("clip", ok=False, why=str(e))
+            raise
         finally:
             c.close()
         if not src or not os.path.exists(src):
