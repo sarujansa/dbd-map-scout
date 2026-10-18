@@ -140,6 +140,12 @@ def app_root(tmp_path):
     return tmp_path
 
 
+def _saved(events):
+    """The refresh tokens the thread asked to store, decrypted – DPAPI (Windows) encrypts the same text differently
+    every time, so the stored strings themselves cannot be compared."""
+    return [spotify.unprotect(d) for k, d in events if k == "token" and d]
+
+
 def _wait(cond, timeout=5.0):
     end = time.time() + timeout
     while time.time() < end:
@@ -324,7 +330,7 @@ def test_the_thread_logs_in_reads_the_queue_refreshes_and_forgets_a_dead_token(f
         with opener.open(f"http://127.0.0.1:{port}/callback?code=code-1&state={browser.state}", timeout=3) as r:
             assert r.status == 200
         assert _wait(lambda: link.state == "linked")
-        assert ("token", spotify.protect("ref1")) in events and link.linked
+        assert "ref1" in _saved(events) and link.linked
         assert fake.grants[0][0] == "authorization_code" and fake.grants[0][1]["code_verifier"] == fake.verifier_for["code-1"]
         # not active: nothing is read
         time.sleep(0.5)
@@ -343,7 +349,7 @@ def test_the_thread_logs_in_reads_the_queue_refreshes_and_forgets_a_dead_token(f
         fake.tokens.append("expired-now")          # the fake expects the newest token: ours is now wrong -> 401
         assert _wait(lambda: len(fake.tokens) > n_tok + 1 and link.state == "linked")
         assert fake.grants[-1][0] == "refresh_token"
-        assert events[-1] != ("token", "") and any(k == "token" and d == spotify.protect(fake.refreshes[-1]) for k, d in events)
+        assert events[-1] != ("token", "") and fake.refreshes[-1] in _saved(events)
         # too many requests: it waits and comes back
         fake.mode = "429"
         link.kick()
@@ -373,7 +379,7 @@ def test_a_stored_token_logs_in_without_the_browser_and_logout_forgets_it(fake):
         link.configure(True, CID, spotify.protect("ref-stored"))
         assert _wait(lambda: link.upnext.items != ())
         assert fake.grants[0] == ("refresh_token", fake.grants[0][1]) and fake.grants[0][1]["refresh_token"] == "ref-stored"
-        assert ("token", spotify.protect("ref1")) in events          # Spotify handed out a new refresh token
+        assert "ref1" in _saved(events)                               # Spotify handed out a new refresh token
         link.logout()
         assert _wait(lambda: link.state == "login_needed" and not link.linked)
         assert ("token", "") in events[-3:] and link.upnext.items == ()
