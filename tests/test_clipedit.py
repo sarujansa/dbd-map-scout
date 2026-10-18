@@ -501,6 +501,11 @@ def test_marking_a_recording_shows_the_compact_editor_beside_the_table(four_trac
         assert host is not None and host.content is None and not ui_shown(app.rec_host)
         app.rec_table.selection_set(repr(t1))
         app.rec_table.event_generate("<<TreeviewSelect>>")
+        assert host.content is None                                 # 1.8.11: built a moment later
+        deadline = time.time() + 3
+        while time.time() < deadline and host.content is None:
+            qapp.processEvents()
+            time.sleep(0.01)
         ed = host.content
         assert ed is not None and ed.compact and not ed.isWindow() and ui_shown(app.rec_host)
         assert ed.info.audio_tracks == 4 and ed.mix() == {"dbd": 1.0, "discord": 0.0, "mic": 1.0}

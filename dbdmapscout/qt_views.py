@@ -107,6 +107,7 @@ class Table(QTreeWidget):
         self.header().customContextMenuRequested.connect(self._column_menu)
         self.header().setToolTip(_("Klick: sortieren · Rechtsklick: Spalten ein-/ausblenden"))
         self._menu_on = False             # 1.8.10: the model has actions for a right click on a row
+        self._model_sel = set()
         self.viewport().setContextMenuPolicy(Qt.CustomContextMenu)
         self.viewport().customContextMenuRequested.connect(self._row_menu)
 
@@ -283,13 +284,22 @@ class Table(QTreeWidget):
         item = self.itemAt(pos)
         if not self._menu_on or item is None or self.selectionMode() == QTreeWidget.NoSelection:
             return
-        if not item.isSelected():
+        iid = item.data(0, Qt.UserRole)
+        # 1.8.11: compared with the App's marking, not Qt's – Qt marks the row on the right press already, so
+        # "is it selected?" said yes, the App never heard of it: the menu acted on the old row and the marking
+        # jumped back on the next refresh
+        if iid not in self._model_sel:
             if self._multi:
-                self.clearSelection()
-                item.setSelected(True)            # posts the selection (itemSelectionChanged)
+                if [i.data(0, Qt.UserRole) for i in self.selectedItems()] != [iid]:
+                    self.blockSignals(True)
+                    self.clearSelection()
+                    item.setSelected(True)
+                    self.blockSignals(False)
+                    self._post("act", (self._key, ("select", [iid])))
+                # else: Qt's right press marked it and itemSelectionChanged told the App already
             else:
                 self.setCurrentItem(item)
-                self._clicked(item, 0)
+                self._post("act", (self._key, ("click", iid)))
         gp = self.viewport().mapToGlobal(pos)
         self._post("act", (self._key, ("menu", (gp.x(), gp.y()))))
 
@@ -304,6 +314,7 @@ class Table(QTreeWidget):
     def _select(self, st):
         self._menu_on = bool(st.get("menu"))
         sel = set(st.get("selection", []))
+        self._model_sel = sel                     # 1.8.11: what the App has marked (right click compares)
         self._multi = bool(st.get("multi"))
         mode = (QTreeWidget.ExtendedSelection if self._multi else QTreeWidget.SingleSelection) if st.get("selectable") \
             else QTreeWidget.NoSelection
