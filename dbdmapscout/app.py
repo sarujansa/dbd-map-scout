@@ -136,6 +136,7 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         self._style_warm()
 
         self.worker = DetectionWorker(root_dir, self.settings, self.catalog, self.events, simulate=simulate)
+        self.toast.on_rect = lambda r: setattr(self.worker, "toast_rect", r)    # 1.8.13: never read as the game
         self.worker.start()
         self.hotkeys = self._start_hotkeys()
         self.root.after(50, self._poll)

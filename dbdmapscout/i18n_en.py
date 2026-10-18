@@ -1729,4 +1729,39 @@ EN = {
         'Opens the Spotify login in the browser. After you agree, the browser returns to 127.0.0.1 and the program keeps the consent (encrypted, on this PC only). For that it listens on this port once, only during the login.',
     'Vergisst die Spotify-Freigabe auf diesem PC; die Liste verschwindet. In Spotify selbst lässt sich die App unter Konto → Apps ebenfalls entfernen.':
         'Forgets the Spotify consent on this PC; the list goes away. In Spotify itself the app can be removed under Account → Apps as well.',
+    'Alle Arten': 'All kinds',
+    'Art': 'Kind',
+    'Clip abspielen': 'Play clip',
+    'Clip fehlt: {file}': 'Clip missing: {file}',
+    'Clip gelöscht: {file}': 'Clip deleted: {file}',
+    'Clip im Explorer zeigen': 'Show clip in Explorer',
+    'Clip löschen': 'Delete clip',
+    'Clip nicht gelöscht ({error}): {file}': 'Clip not deleted ({error}): {file}',
+    'Hier stehen die Clips aus dem Editor, die Sofort-Clips (F8) und die Standbilder – mit der Runde, aus der sie stammen. Gelöscht werden nur Dateien, die das Programm selbst angelegt hat.':
+        'Here are the clips from the editor, the instant clips (F8) and the stills – with the round each came from. Only files the program made itself are deleted.',
+    'Kein Aufnahmeordner – die Clips liegen in seinem Ordner „Clips“.':
+        'No recording folder – the clips are kept in its folder "Clips".',
+    'Länge': 'Length',
+    'Noch keine Clips – „Clip bearbeiten …“ bei einer Runde oder F8 im Spiel.':
+        'No clips yet – "Edit clip …" on a round, or F8 in the game.',
+    'Sofort-Clip': 'Instant clip',
+    'Sofort-Clips (F8)': 'Instant clips (F8)',
+    'Standbild': 'Still',
+    'Standbilder': 'Stills',
+    '{n} von {total} Clips': '{n} of {total} clips',
+    'Spielt den markierten Clip im Standard-Player von Windows ab.':
+        "Plays the marked clip in Windows' default player.",
+    'Öffnet den Explorer mit dem markierten Clip.': 'Opens Explorer with the marked clip.',
+    'Löscht den markierten Clip von der Platte – nach Rückfrage. Nur Dateien, die das Programm selbst angelegt hat.':
+        'Deletes the marked clip from the drive – after asking. Only files the program made itself.',
+    'Öffnet den Ordner „Clips“ neben den Aufnahmen im Explorer.': 'Opens the folder "Clips" beside the recordings in Explorer.',
+    'Clips': 'Clips',
+    'mit kurzer Meldung': 'with a short notification',
+    'Clip wird gespeichert …': 'Saving clip …',
+    'Die letzten {n} s aus dem Puffer von OBS': "The last {n} s from OBS's buffer",
+    'Clip gespeichert ✓': 'Clip saved ✓',
+    '{n} s · im Tab Aufnahmen → Clips': '{n} s · in the tab Recordings → Clips',
+    'Kein Clip': 'No clip',
+    'Zeigt beim Sofort-Clip (F8) unten rechts ein kleines Hinweisfenster – „Clip wird gespeichert …“ und danach „Clip gespeichert“ bzw. warum nicht. Auch im Spiel, ohne Ton; nimmt nie den Fokus.':
+        'Shows a small notification window bottom right for the instant clip (F8) – "Saving clip …" and then "Clip saved" or why not. Also in the game, without sound; never takes the focus.',
 }

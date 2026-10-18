@@ -969,9 +969,13 @@ def _instant(tmp_path, monkeypatch, ffmpeg, streams=1, **kw):
 def test_f8_cuts_the_last_seconds_of_the_buffer_into_the_clips_folder(tmp_path, monkeypatch):
     posted, calls = _instant(tmp_path, monkeypatch, "ffmpeg")
     kind, d = _drain(posted)[-1]
-    clips = os.listdir(os.path.join(str(tmp_path), obsrec.CLIPS_DIR))
-    assert kind == "clip" and d["ok"] and d["seconds"] == 45 and clips == [d["file"]]
+    cdir = os.path.join(str(tmp_path), obsrec.CLIPS_DIR)
+    clips = sorted(os.listdir(cdir))
+    assert kind == "clip" and d["ok"] and d["seconds"] == 45 and clips == [d["file"], obsrec.CLIPS_INDEX]
     assert d["file"].endswith("Coal Tower – Nurse (Sofort-Clip).mp4")
+    [c] = obsrec.load_clips(cdir)                                    # 1.8.13: in the clips list with its round
+    assert (c.file, c.kind, c.role, c.killer, c.label, c.seconds) == (d["file"], "instant", "killer", "Nurse",
+                                                                       "Coal Tower", 45.0)
     cut = calls[-1]
     assert cut[cut.index("-sseof") + 1] == "-45" and "copy" in cut
     assert cut[cut.index("-map"):][:2] == ["-map", "0"]                            # one track: as it is
@@ -1003,7 +1007,7 @@ def test_without_ffmpeg_the_whole_buffer_becomes_the_clip(tmp_path, monkeypatch)
     posted, calls = _instant(tmp_path, monkeypatch, None)
     kind, d = _drain(posted)[-1]
     assert d["ok"] and d["file"].endswith("(Sofort-Clip).mkv") and not calls
-    assert os.listdir(os.path.join(str(tmp_path), obsrec.CLIPS_DIR)) == [d["file"]]
+    assert sorted(os.listdir(os.path.join(str(tmp_path), obsrec.CLIPS_DIR))) == [d["file"], obsrec.CLIPS_INDEX]
 
 
 def test_no_instant_clip_without_the_replay_buffer(obs, tmp_path):
@@ -1011,3 +1015,75 @@ def test_no_instant_clip_without_the_replay_buffer(obs, tmp_path):
     r._instant_clip({})
     kind, d = _drain(posted)[-1]
     assert kind == "clip" and not d["ok"] and "Wiederholungspuffer" in d["why"]
+
+
+def test_the_clips_list_knows_the_programs_clips_and_their_rounds_and_filters_them(tmp_path):
+    """1.8.13 (user: clips list, "filtern nach Killer/Survivor"): the clips index plus the program's older clips,
+    told by their names (editor clip/still named after a recording, "(Sofort-Clip)"); someone else's file in the
+    folder is not listed."""
+    folder = str(tmp_path)
+    cdir = obsrec.clips_dir(folder)
+    os.makedirs(cdir)
+    recs = [obsrec.Recording(t=100.0, file="2026-10-17 21-40 Coal Tower – Nurse.mkv", label="Coal Tower",
+                             role="killer", killer="Nurse"),
+            obsrec.Recording(t=200.0, file="Farming/2026-10-17 22-10 Badham – Survivor.mkv", label="Badham",
+                             role="survivor", farming=True)]
+    names = {"new.mp4": b"x" * 10,
+             "2026-10-17 21-40 Coal Tower – Nurse – Clip 3m12s-3m40s.mp4": b"x" * 20,
+             "2026-10-17 22-10 Badham – Survivor – Bild 1-02.5.png": b"x",
+             "2026-10-18 20-05 Gas Heaven – Survivor (Sofort-Clip) (2).mp4": b"x",
+             "2026-10-18 20-30 Ormond – Huntress (Sofort-Clip).mkv": b"x",
+             "my own video.mp4": b"x", "notes.txt": b"x"}
+    for n, data in names.items():
+        with open(os.path.join(cdir, n), "wb") as f:
+            f.write(data)
+    obsrec.save_clips(cdir, [obsrec.Clip(file="new.mp4", t=500.0, kind="clip", source=100.0, label="Coal Tower",
+                                         role="killer", killer="Nurse", seconds=12.5),
+                             obsrec.Clip(file="gone.mp4", t=400.0)])               # its file was removed by hand
+    clips = obsrec.list_clips(cdir, recs)
+    by = {c.file: c for c in clips}
+    assert set(by) == set(names) - {"my own video.mp4", "notes.txt"}
+    assert (by["new.mp4"].size, by["new.mp4"].adopted, by["new.mp4"].seconds) == (10, False, 12.5)
+    editor = by["2026-10-17 21-40 Coal Tower – Nurse – Clip 3m12s-3m40s.mp4"]
+    assert (editor.kind, editor.source, editor.role, editor.killer, editor.adopted) == ("clip", 100.0, "killer",
+                                                                                         "Nurse", True)
+    still = by["2026-10-17 22-10 Badham – Survivor – Bild 1-02.5.png"]
+    assert (still.kind, still.role, still.farming, still.label) == ("still", "survivor", True, "Badham")
+    f8 = by["2026-10-18 20-05 Gas Heaven – Survivor (Sofort-Clip) (2).mp4"]
+    assert (f8.kind, f8.label, f8.role, f8.killer) == ("instant", "Gas Heaven", "survivor", "")
+    hunt = by["2026-10-18 20-30 Ormond – Huntress (Sofort-Clip).mkv"]
+    assert (hunt.role, hunt.killer, hunt.label) == ("killer", "Huntress", "Ormond")
+    assert [c.t for c in clips] == sorted((c.t for c in clips), reverse=True)    # newest first
+    pick = lambda **kw: {c.file for c in obsrec.select_clips(clips, **kw)}          # noqa: E731
+    assert pick(role="killer") == {"new.mp4", editor.file, hunt.file}
+    assert pick(role="survivor") == {f8.file}                                     # farming rounds apart
+    assert pick(role="farming") == {still.file}
+    assert pick(killer="Nurse") == {"new.mp4", editor.file}
+    assert pick(kind="still") == {still.file} and pick(kind="instant") == {f8.file, hunt.file}
+    assert pick(since=600.0) == {c.file for c in clips if c.adopted}             # adopted: the file's time (now)
+
+
+def test_only_the_programs_clips_are_deleted_and_saved_ones_join_the_list(tmp_path):
+    folder = str(tmp_path)
+    cdir = obsrec.clips_dir(folder)
+    os.makedirs(cdir)
+    for n in ("mine.mp4", "2026-10-18 20-05 Gas Heaven – Survivor (Sofort-Clip).mp4", "foreign.mp4"):
+        with open(os.path.join(cdir, n), "wb") as f:
+            f.write(b"x")
+    r = obsrec.Recorder(lambda kind, **d: posted.append((kind, d)))
+    posted = []
+    r.folder = lambda: folder
+    r._add_clip({"file": "mine.mp4", "kind": "clip", "role": "survivor", "label": "Badham", "seconds": 8.0,
+                 "size": 999, "evil": 1})
+    r._add_clip({"file": "not-there.mp4"})                                       # not in Clips/: not listed
+    [c] = obsrec.load_clips(cdir)
+    assert (c.file, c.role, c.label, c.seconds, c.size) == ("mine.mp4", "survivor", "Badham", 8.0, 1)
+    assert ("changed", {"what": "clip", "file": "mine.mp4"}) in posted
+    for n in ("foreign.mp4", "../" + "foreign.mp4", obsrec.CLIPS_INDEX):          # someone else's / outside: never
+        r._delete_clip(n)
+    assert os.path.exists(os.path.join(cdir, "foreign.mp4")) and os.path.exists(os.path.join(cdir, obsrec.CLIPS_INDEX))
+    r._delete_clip("2026-10-18 20-05 Gas Heaven – Survivor (Sofort-Clip).mp4")    # an older one of ours
+    r._delete_clip("mine.mp4")
+    assert sorted(os.listdir(cdir)) == [obsrec.CLIPS_INDEX, "foreign.mp4"] and obsrec.load_clips(cdir) == []
+    assert [d["file"] for k, d in posted if k == "changed" and d["what"] == "clip_delete"] == [
+        "2026-10-18 20-05 Gas Heaven – Survivor (Sofort-Clip).mp4", "mine.mp4"]

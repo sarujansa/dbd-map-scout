@@ -1461,3 +1461,19 @@ def test_a_right_click_on_a_row_marks_it_and_asks_for_the_menu(qapp, keep):
     acts[0].trigger()
     assert posted[-1] == ("menu_act", "x")
     menu.close()
+
+
+def test_the_notification_window_tells_where_it_is_so_the_detection_skips_it(qapp):
+    """1.8.13: the toast (F8 clip, lobby found) sits bottom right – where the lobby button is read; it reports its
+    place in screen pixels while shown and None once closed (worker.toast_rect, blacked out like the overlay)."""
+    from dbdmapscout.mainloop import MainLoop
+    from dbdmapscout.toast import Toast
+    rects = []
+    t = Toast(MainLoop(qapp))
+    t.on_rect = rects.append
+    t.show("Clip gespeichert ✓", "30 s", 5)
+    qapp.processEvents()
+    x, y, w, h = rects[-1]
+    assert w > 300 and h > 40
+    t.close()
+    assert rects[-1] is None and not t.shown

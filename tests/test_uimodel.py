@@ -576,6 +576,83 @@ def test_a_slider_rows_labels_are_not_drawn_twice():
     assert kinds == ["slider"]
 
 
+def test_the_clips_sub_tab_lists_filters_and_deletes_the_programs_clips(app_root):
+    """1.8.13 (user: clips list, "filtern nach Killer/Survivor"): the sub-tab "Clips" of the recordings tab –
+    the program's clips with their round, filters for role / killer / kind, a right-click menu, deleting through
+    the recorder; a clip the editor saves joins the list with the recording's round."""
+    import json
+    from dbdmapscout import obsrec
+    from dbdmapscout.app import App
+    folder = app_root / "rec"
+    cdir = folder / obsrec.CLIPS_DIR
+    cdir.mkdir(parents=True)
+    t1 = time.time() - 3600
+    (folder / "one.mkv").write_bytes(b"\0" * 2048)
+    obsrec.save_index(str(folder), [obsrec.Recording(t=t1, file="one.mkv", label="Coal Tower", role="killer",
+                                                     killer="Nurse", end=t1 + 600, size=2048)])
+    (cdir / "nurse.mp4").write_bytes(b"x" * 4096)
+    (cdir / "2026-10-18 20-05 Gas Heaven – Survivor (Sofort-Clip).mp4").write_bytes(b"x")
+    (cdir / "holiday.mp4").write_bytes(b"x")                                        # not ours
+    obsrec.save_clips(str(cdir), [obsrec.Clip(file="nurse.mp4", t=time.time() - 60, kind="clip", source=t1,
+                                              label="Coal Tower", role="killer", killer="Nurse", seconds=28.0)])
+    (app_root / "settings.json").write_text(json.dumps({"rec_on": True, "rec_folder": str(folder),
+                                                        "welcome_seen": True}), encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    shown = []
+    app.qt.popup_menu = lambda items, pos: shown.append(items)
+    try:
+        assert [app.rec_nb.tab(i, "text") for i in app.rec_nb.tabs()] == ["Runden", "Clips"]
+        app._rec_render()
+        t = app.clip_table
+
+        def rows():
+            return [t.item(i, "values") for i in t.get_children()]
+        assert [(r[1], r[2], r[3], r[4]) for r in rows()] == [("Gas Heaven", "Survivor", "Sofort-Clip", "–"),
+                                                               ("Coal Tower", "Nurse", "Clip", "00:28")]
+        assert "holiday.mp4" not in [r[6] for r in rows()] and "2 von 2 Clips" in app.clip_summary_var.get()
+        assert [lbl for _k, lbl in app._clip_killers] == ["Alle Killer", "Nurse"]
+        app.clip_role_var.set("Survivor")
+        app._clips_render()
+        assert [r[1] for r in rows()] == ["Gas Heaven"] and "1 von 2 Clips" in app.clip_summary_var.get()
+        app.clip_role_var.set("Alle Rollen")
+        app.clip_killer_var.set("Nurse")
+        app._clips_render()
+        assert [r[1] for r in rows()] == ["Coal Tower"]
+        app.clip_killer_var.set("Alle Killer")
+        app.clip_kind_var.set("Sofort-Clips (F8)")
+        app._clips_render()
+        assert [r[1] for r in rows()] == ["Gas Heaven"]
+        app.clip_kind_var.set("Alle Arten")
+        app._clips_render()
+        assert app.clip_delete_btn.cget("state") == "disabled"
+        t.selection_set("nurse.mp4")
+        t.event_generate("<<TreeviewSelect>>")
+        assert app.clip_delete_btn.cget("state") == "normal"
+        ui_act = __import__("dbdmapscout.app_qt", fromlist=["ui_act"]).ui_act
+        ui_act(t, ("menu", (1, 2)))
+        assert [i[0] for i in shown[-1] if i] == ["play", "explorer", "delete"]
+        app._confirmed = True
+        app._menu_act("delete")                                # → recorder thread
+        deadline = time.time() + 5
+        while time.time() < deadline and (cdir / "nurse.mp4").exists():
+            time.sleep(0.05)
+        assert not (cdir / "nurse.mp4").exists() and (cdir / "holiday.mp4").exists()
+        assert obsrec.load_clips(str(cdir)) == []
+
+        class Win:                                             # what the editor reports after saving
+            saved_seconds = {str(cdir / "cut.mp4"): 14.2}
+        (cdir / "cut.mp4").write_bytes(b"x" * 10)
+        app._clip_saved(obsrec.load_index(str(folder))[0], str(cdir / "cut.mp4"), Win())
+        deadline = time.time() + 5
+        while time.time() < deadline and not obsrec.load_clips(str(cdir)):
+            time.sleep(0.05)
+        [c] = obsrec.load_clips(str(cdir))
+        assert (c.file, c.kind, c.source, c.role, c.killer, c.seconds) == ("cut.mp4", "clip", t1, "killer", "Nurse",
+                                                                           14.2)
+    finally:
+        app.quit()
+
+
 def test_the_recordings_tab_lists_the_index_and_acts_on_the_marked_row(app_root):
     """1.5: the tab shows the OBS recording index with filters; play / Explorer / keep / delete work on the marked
     row through the recorder thread; the summary names room and folder."""
@@ -713,11 +790,28 @@ def test_the_match_start_and_f8_reach_the_recorder(app_root):
         app._queue = {"state": "lobby", "found": Found(time.time(), 12.0, "survivor", crossplay_off=True)}
         app._dispatch(Event("match_start", {"t": 123.0}))
         assert calls[0] == ("early", {"t": 123.0, "role": "survivor", "killer": "", "farming": True})
+        toasts = []
+        app.toast.show = lambda title, text, seconds=8.0: toasts.append((title, text, seconds))
+        app._hist = {"t": 99.0, "map": "Coal Tower", "map_id": "coal", "role": "killer", "killer": "Nurse",
+                     "farming": False}
         app.mark_clip()
-        assert calls[1][0] == "clip"
+        assert calls[1] == ("clip", {"label": "Coal Tower", "role": "killer", "killer": "Nurse", "map_id": "coal",
+                                     "farming": False, "source": 99.0})
+        # 1.8.13 (user: "eine kleine Benachrichtigung, wenn ich mit F8 einen Clip mache"): right away and after
+        assert toasts == [("Clip wird gespeichert …", "Die letzten 30 s aus dem Puffer von OBS", 6)]
+        app._rec_event("clip", {"ok": True, "file": "x.mp4", "seconds": 30})
+        app._rec_event("clip", {"ok": False, "why": "Wiederholungspuffer in OBS läuft nicht"})
+        assert toasts[1:] == [("Clip gespeichert ✓", "30 s · im Tab Aufnahmen → Clips", 3),
+                              ("Kein Clip", "Wiederholungspuffer in OBS läuft nicht", 5)]
+        app.rec_clip_notify_var.set(False)
+        app._rec_setting()
+        app.mark_clip()
+        app._rec_event("clip", {"ok": True, "file": "y.mp4", "seconds": 30})
+        assert len(toasts) == 3 and app.settings.get("rec_clip_notify") is False
+        app._hist = None
         app.rec_audio_vars["mic"].set(True)
         app._rec_audio_changed()
-        assert calls[2][0] == "audio" and app.settings.get("rec_audio_mic") is True
+        assert calls[-1][0] == "audio" and app.settings.get("rec_audio_mic") is True
         assert app._rec_cfg().audio_mic and app._rec_cfg().early and app._rec_cfg().clip_s == 30
         app.rec_early_var.set(False)
         app._rec_setting()
