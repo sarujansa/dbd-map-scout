@@ -3,7 +3,7 @@ a tab's structure (AutoPage), dialogs and the setup assistant.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QSize, Qt, QTimer
+from PySide6.QtCore import QEvent, QSize, Qt, QTimer
 from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import (QBoxLayout, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QProgressBar,
                                QPushButton, QRadioButton, QScrollArea, QSizePolicy, QSlider, QStackedWidget,
@@ -725,7 +725,28 @@ class FitTabs(QTabWidget):
 
     def __init__(self):
         super().__init__()
-        self.currentChanged.connect(lambda _i: self.updateGeometry())
+        self.currentChanged.connect(lambda _i: self._fit())
+
+    def addTab(self, page, label):
+        page.installEventFilter(self)            # 1.8.8: rows shown/hidden in a tab → its height again
+        return super().addTab(page, label)
+
+    def eventFilter(self, obj, e):
+        if e.type() == QEvent.LayoutRequest and obj is self.currentWidget():
+            QTimer.singleShot(0, self._fit)
+        return False
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self._fit()
+
+    def _fit(self):
+        """1.8.8: the parent kept the height of the tab shown before (an empty band below a short tab, e.g.
+        "Heute") – at most as tall as the open tab needs at this width."""
+        h = self.heightForWidth(max(1, self.width()))
+        if self.maximumHeight() != h:
+            self.setMaximumHeight(h)
+        self.updateGeometry()
 
     def _extra(self):
         return self.tabBar().sizeHint().height() + 2
@@ -779,8 +800,10 @@ class FormPage(QWidget, _Arranged):
                 cl.setSpacing(6)
                 head, hrow = _card_head(cl)
                 self.controls[item[1]] = ("title", head, None)
+                self._group = []
                 for row in item[2]:
                     self._add(row, cl)
+                self._align()
                 col.add(item[1], card, hrow)
             elif kind == "panel":
                 lay.addWidget(self._panel(item[1]))
@@ -799,8 +822,10 @@ class FormPage(QWidget, _Arranged):
                     bl = QVBoxLayout(body)
                     bl.setContentsMargins(14, 12, 14, 12)
                     bl.setSpacing(6)
+                    self._group = []
                     for row in rows:
                         self._add(row, bl)
+                    self._align()
                     bl.addStretch()
                     tabs.addTab(body, _(label).replace("&", "&&"))
                     self.controls[frame] = ("tab", tabs, body)
@@ -821,9 +846,37 @@ class FormPage(QWidget, _Arranged):
         card = _card()
         cl = QVBoxLayout(card)
         cl.setContentsMargins(14, 12, 14, 12)
+        self._group = []
         for row in rows:
             self._add(row, cl)
+        self._align()
         return card
+
+    def _align(self):
+        """1.8.8: in one card / tab the controls after a row's label start at the same x and choice boxes there
+        are equally wide (they were ragged: 'Preset' 140 px next to 'Map style' 300 px, each at its own x)."""
+        group, self._group = getattr(self, "_group", []), []
+        if len(group) > 1:
+            if not hasattr(self, "_groups"):
+                self._groups = {}
+            self._groups[id(group)] = [group, None]       # aligned once the texts are in (show_states)
+
+    def _align_group(self, entry):
+        group, done = entry
+        key = tuple((lbl.text(), w.count() if isinstance(w, QComboBox) else 0) for lbl, w in group)
+        if key == done:
+            return
+        entry[1] = key
+        labels = [lbl for lbl, _w in group]
+        if len(labels) > 1:
+            width = min(ALIGN_LABEL_MAX, max(_one_line_width(lbl) for lbl in labels))
+            for lbl in labels:
+                lbl.setMinimumWidth(width)
+        combos = [w for _l, w in group if isinstance(w, QComboBox)]
+        if len(combos) > 1:
+            width = min(ALIGN_COMBO_MAX, max(c.sizeHint().width() for c in combos))
+            for c in combos:
+                c.setMinimumWidth(width)
 
     def _add(self, item, lay):
         kind = item[0]
@@ -841,6 +894,9 @@ class FormPage(QWidget, _Arranged):
                 for c in kids:
                     if c[0] != "stretch":
                         self._add(c, row)
+            parts = [c for c in kids if c[0] != "stretch"]
+            if len(parts) >= 2 and parts[0][0] == "label" and hasattr(self, "_group"):
+                self._group.append((self.controls[parts[0][1]][1], self.controls[parts[1][1]][1]))
             lay.addLayout(row)
             return
         if kind == "grid":                          # ("grid", columns, rows): the rows side by side (hotkeys)
@@ -873,12 +929,16 @@ class FormPage(QWidget, _Arranged):
         else:
             lay.addWidget(w, 1 if kind == "hint" and isinstance(lay, QHBoxLayout) else 0)  # text beside: takes the room
         self.controls[item[1]] = (kind, w, extra)
+        if kind == "slider" and hasattr(self, "_group"):   # 1.8.8: its name lines up with the row labels
+            self._group.append((extra[0], extra[1]))
 
     def show_states(self, states):
         for key, (kind, w, extra) in self.controls.items():
             st = states.get(key)
             if st is not None:
                 show_control(kind, w, extra, st)
+        for entry in getattr(self, "_groups", {}).values():   # 1.8.8: after the texts are in
+            self._align_group(entry)
 
 
 class _GridCell(QWidget):
@@ -892,6 +952,15 @@ class _GridCell(QWidget):
     def sizeHint(self):
         s = super().sizeHint()
         return QSize(max(s.width(), GRID_CELL_W), s.height())
+
+
+ALIGN_LABEL_MAX = 220            # 1.8.8: a longer row label does not push the controls of its card further right
+ALIGN_COMBO_MAX = 320
+
+
+def _one_line_width(label) -> int:
+    fm = label.fontMetrics()
+    return max(fm.horizontalAdvance(t) for t in (label.text() or " ").split("\n")) + 4
 
 
 GRID_CELL_W = 520                # 1.8.8: a cell of a FormPage grid (hotkeys: name … key) is not wider

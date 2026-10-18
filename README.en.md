@@ -126,7 +126,7 @@ Hotkeys can be changed under **Settings → Hotkeys**: click the field and press
 
 **Game language:** English and German map names are recognised by default. If DBD runs in French, Spanish, Italian, Polish, Portuguese or Turkish, tick that language in the control window (Detection tab). This is independent of the language of the program itself.
 
-Since 1.8.8 choice boxes and tick boxes have their own style like buttons and fields (same height, a frame, the tick in an accent box), the overview tiles are aligned at the top, hotkey names stay next to their keys in a wide window, and the dialogs "Assign map" and "Add map picture" are tidied up.
+Since 1.8.8 choice boxes and tick boxes have their own style like buttons and fields (same height, a frame, the tick in an accent box), the overview tiles are aligned at the top, hotkey names stay next to their keys in a wide window, and the dialogs "Assign map" and "Add map picture" are tidied up. Since 1.8.9 the controls after the labels of a card or tab line up and choice boxes there are equally wide; the note of the moving mode in the overlay preview sits below the picture instead of on the music card; the "Today" tab has no empty band any more; tables in statistics sub-tabs no longer cut rows off (the card stayed as tall as the empty table).
 
 ## Choosing the server region (like "Make Your Choice")
 
