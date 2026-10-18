@@ -22,6 +22,7 @@ REC_ROLES = [("all", N_("Alle Rollen")), ("killer", N_("Killer")), ("survivor", 
 REC_ONLY = [("all", N_("Alle Aufnahmen")), ("marked", N_("Mit Marke")), ("kept", N_("Behalten")),
             ("bad", N_("Beschädigt"))]
 REC_REFRESH_S = 20            # the table re-reads the index this often while the tab is on display
+PREVIEW_DELAY_MS = 180               # 1.8.11: the clip preview is built once the marking stays
 
 
 def fmt_bytes(n: float) -> str:
@@ -342,10 +343,22 @@ class RecordingsTab:
         if t == self._rec_preview_t and (t is None or host.content is not None):
             return
         self._rec_preview_t = t
+        job = getattr(self, "_rec_preview_job", None)
+        if job is not None:
+            self.root.after_cancel(job)
+            self._rec_preview_job = None
         path = self._rec_editable(r, quiet=True) if r is not None else None
         if path is None:
             host.set_content(None)
             self.rec_host.pack_forget()
+            return
+        # 1.8.11: built a moment later – marking row after row (arrow keys, quick clicks) started ffmpeg for each
+        # one in the window's thread and the marking lagged; now only the row that stays marked is loaded
+        self._rec_preview_job = self.root.after(PREVIEW_DELAY_MS, lambda: self._rec_preview_build(host, r, path))
+
+    def _rec_preview_build(self, host, r, path):
+        self._rec_preview_job = None
+        if self._rec_preview_t != r.t:
             return
         win = self._clip_window(r, path, compact=True, parent=host,
                                 on_expand=lambda s, e, p: self._rec_clip(at=(s, e, p)))
