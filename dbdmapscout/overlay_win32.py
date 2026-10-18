@@ -1356,7 +1356,7 @@ class PictureOverlay:
         # gives it its own size (user: a bigger map, the same text)
         text_h = max(40, int(self.text_height) or height // self.stacked())
         modern = self._modern()
-        headed = modern and self.skin in ("glass", "line")       # the name goes into the card's header
+        headed = modern                   # 1.8.27: every modern style puts the name into the card's header
         base_key = (height, self._caption if self.show_caption and not headed else "", self.transparent,
                     self.show_map, text_h, self.skin if modern else "")
         new_base = base_key != self._base_key
