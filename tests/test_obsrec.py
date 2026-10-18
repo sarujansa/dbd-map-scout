@@ -43,6 +43,7 @@ class FakeObs(threading.Thread):
         self.inputs = {"Desktop-Audio": {"muted": False}, "Mic/Aux": {"muted": False}}
         self.profile = {("Output", "Mode"): "Advanced", ("AdvOut", "RecTracks"): "31"}  # 1.8.19: tracks 1–5 ticked
         self.scenes = {}                            # 1.8.18: {scene: [scene items]}
+        self.windows = []                           # 1.8.20: what OBS lists for an application audio capture
 
     def run(self):
         self.srv.settimeout(0.2)
@@ -149,6 +150,20 @@ class FakeObs(threading.Thread):
             elif kind == "CreateInput":
                 self.inputs[data["inputName"]] = dict(data, muted=False)
                 self._item(data["sceneName"], data["inputName"], data.get("sceneItemEnabled", True))
+            elif kind == "GetInputPropertiesListPropertyItems":     # 1.8.20: the windows OBS offers
+                ok = data["inputName"] in self.inputs and data["propertyName"] == "window"
+                if ok:
+                    out = {"propertyItems": [{"itemName": v, "itemValue": v, "itemEnabled": True}
+                                             for v in self.windows]}
+            elif kind == "GetInputSettings":
+                ok = data["inputName"] in self.inputs
+                if ok:
+                    out = {"inputSettings": dict(self.inputs[data["inputName"]].get("inputSettings") or {})}
+            elif kind == "SetInputSettings":
+                ok = data["inputName"] in self.inputs
+                if ok:
+                    inp = self.inputs[data["inputName"]]
+                    inp["inputSettings"] = dict(inp.get("inputSettings") or {}, **data["inputSettings"])
             elif kind == "GetSceneItemList":           # 1.8.18
                 out = {"sceneItems": [dict(i) for i in self.scenes.get(data["sceneName"], [])]}
             elif kind == "CreateSceneItem":
@@ -926,6 +941,32 @@ def test_only_dbd_is_on_the_game_track_and_the_other_sources_on_the_background_t
         r.cfg.tracks = False
         r._audio(c)
         assert obs.inputs["Spotify"]["tracks"] == ALL_TRACKS                                     # off: left alone
+    finally:
+        c.close()
+
+
+def test_the_game_source_follows_the_epic_or_steam_window_obs_offers(obs, tmp_path):
+    """1.8.20 (user plays on Epic: "Spiel – still"): the source was made for the Steam executable; OBS's own window
+    list says which one runs – the source follows it (once), Discord PTB too; nothing listed = left alone."""
+    r, posted = _recorder(obs, str(tmp_path), pre=False)
+    dbd, disc = obsrec.AUDIO_APPS["dbd"][0], obsrec.AUDIO_APPS["discord"][0]
+    c = r._client()
+    try:
+        r._audio(c)                                         # nothing running: the Steam default stays
+        assert obs.inputs[dbd]["inputSettings"]["window"].endswith(":DeadByDaylight-Win64-Shipping.exe")
+        obs.windows = ["Explorer:CabinetWClass:explorer.exe", "DeadByDaylight  :UnrealWindow:DeadByDaylight-EGS-Shipping.exe",
+                       "Discord:Chrome_WidgetWin_1:DiscordPTB.exe"]
+        r._audio(c)
+        assert obs.inputs[dbd]["inputSettings"]["window"] == obs.windows[1]
+        assert obs.inputs[disc]["inputSettings"]["window"] == obs.windows[2]
+        assert obs.inputs[dbd]["inputSettings"]["priority"] == obsrec.AUDIO_PRIORITY_EXE
+        obs.requests.clear()
+        r._audio(c)
+        assert "SetInputSettings" not in [k for k, _d in obs.requests]                   # already right: once
+        obs.windows = ["Launcher:Chrome_WidgetWin_1:DeadByDaylight.exe",
+                       "DeadByDaylight  :UnrealWindow:DeadByDaylight-WinGDK-Shipping.exe"]      # Microsoft Store
+        r._audio(c)
+        assert obs.inputs[dbd]["inputSettings"]["window"] == obs.windows[1]              # the game, not a launcher
     finally:
         c.close()
 
