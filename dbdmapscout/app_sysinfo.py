@@ -248,12 +248,14 @@ class SysInfo:
         self._today_box = placed.get("today")
         if "today" in placed:
             self._fade_show("today", bool(o.get("fade", True)) and not self.overlay.editing)
-            self.worker.today_rect = self._today_box = self._el_show("today", self.today_win, *placed["today"])
+            x, y, w, h = placed["today"]
+            self.worker.today_rect = self._today_box = self._el_show("today", self.today_win, x, y, (w, h))
         if "music" in placed:
             self._fade_show("music", bool(o.get("media_fade", True)) and not self.overlay.editing,
                             restart=getattr(self, "_media_restart", False))
             self._media_restart = False
-            self.worker.media_rect = self._media_box = self._el_show("music", self.media_win, *placed["music"])
+            x, y, w, h = placed["music"]
+            self.worker.media_rect = self._media_box = self._el_show("music", self.media_win, x, y, (w, h))
         else:
             self._media_box = None
 
@@ -288,8 +290,22 @@ class SysInfo:
         w, h = win.render(rows, height, look=look, **style)
         avail = layout.max_width(bar, margin) if bar >= layout.MIN_BAR and spot != "custom" else gw / 3
         if w > avail:                                       # never wider than the black bar
-            w, h = win.render(rows, max(200, int(height * avail / w)), look=look, **style)
+            height = max(200, int(height * avail / w))
+            w, h = win.render(rows, height, look=look, **style)
+        labels = tuple(r[0][0] for r in rows if r)
+        sw = self._steady_width("today", (style["skin"], height, look, labels, int(avail), editing), w)
+        if sw > w:                                          # 1.8.28: as wide as it ever was with these rows
+            w, h = win.render(rows, height, look=look, min_w=sw, **style)
         return (w, h)
+
+    def _steady_width(self, name, key, w: int) -> int:
+        """The widest width this element had for the same ``key`` (layout.steady_width; 1.8.28, user: nothing
+        may move when a value gets longer or shorter) – the card is drawn again at it when it came out narrower."""
+        steady = getattr(self, "_steady", None)
+        if steady is None:
+            steady = self._steady = {}
+        steady[name], sw = layout.steady_width(steady.get(name), key, int(w))
+        return sw
 
     def _today_dragged(self, x, y):
         """"Today" dropped somewhere (edit mode): from now on its own place there."""
@@ -499,7 +515,21 @@ class SysInfo:
 
     def _media_render(self, win, kw: dict, avail: float):
         """Draw the music card – during a song change (``_media_trans``) the cross-fade frame, else the card;
-        never wider than ``avail``."""
+        never wider than ``avail`` and (1.8.28) never narrower than it was for the same layout: a shorter title
+        or queue is drawn at the steady width, nothing moves."""
+        w, h = self._media_draw(win, kw, avail)
+        up = kw.get("upnext")
+        key = (kw.get("skin"), kw.get("style"), kw.get("height"), kw.get("cover") is not None, kw.get("look"),
+               kw.get("upnext_pos"), len(up[1]) if up and up[1] else 0, int(avail), bool(win.editing))
+        sw = self._steady_width("music", key, w)
+        if sw > w:
+            kw["min_w"] = sw
+            if self._media_trans is not None:
+                self._media_trans.old["min_w"] = sw
+            w, h = self._media_draw(win, kw, avail)
+        return w, h
+
+    def _media_draw(self, win, kw: dict, avail: float):
         trans = self._media_trans
         if trans is not None and not trans.done(time.monotonic()):
             w, h = self._media_frame(win, kw, trans)
@@ -627,7 +657,9 @@ class SysInfo:
 
     def _el_show(self, name, win, x, y, size):
         """Show an element where its placement put it, moved by what the last check gave it (no back and forth
-        between two places every tick); returns its box on screen."""
+        between two places every tick); returns its box on screen. (1.8.25–1.8.27 passed the cards' boxes as
+        four values here – a TypeError that hid the map, "today" and the music as soon as a card was placed;
+        only on Windows, where these windows exist. Test: test_every_element_is_placed_with_real_windows.)"""
         if not hasattr(self, "_el_orig"):
             self._el_orig, self._el_shift = {}, {}
         box = (int(x), int(y), int(size[0]), int(size[1]))
