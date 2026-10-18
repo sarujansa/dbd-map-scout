@@ -126,7 +126,7 @@ Hotkeys lassen sich unter **Einstellungen → Hotkeys** ändern: Feld anklicken 
 
 **Spielsprache:** Standardmässig werden englische und deutsche Map-Namen erkannt. Wenn DBD auf Französisch, Spanisch, Italienisch, Polnisch, Portugiesisch oder Türkisch läuft, die Sprache im Steuerfenster anhaken (Tab Erkennung). Das ist unabhängig von der Sprache des Programms selbst.
 
-Seit 1.8.8 haben Auswahllisten und Häkchen einen eigenen Stil wie Knöpfe und Felder (gleiche Höhe, Rahmen, Haken im Akzent-Kästchen), die Kacheln der Übersicht stehen oben bündig, Hotkey-Name und Taste bleiben im breiten Fenster nebeneinander, die Dialoge „Zuordnen“ und „Kartenbild hinzufügen“ sind aufgeräumt.
+Seit 1.8.8 haben Auswahllisten und Häkchen einen eigenen Stil wie Knöpfe und Felder (gleiche Höhe, Rahmen, Haken im Akzent-Kästchen), die Kacheln der Übersicht stehen oben bündig, Hotkey-Name und Taste bleiben im breiten Fenster nebeneinander, die Dialoge „Zuordnen“ und „Kartenbild hinzufügen“ sind aufgeräumt. Seit 1.8.9 stehen in jeder Karte und jedem Reiter die Bedienelemente nach den Beschriftungen bündig untereinander und Auswahllisten sind gleich breit; der Hinweis im Verschiebe-Modus der Overlay-Vorschau steht unter dem Bild statt auf der Musikkarte; der Reiter „Heute“ hat keinen leeren Streifen mehr; Tabellen in Statistik-Unter-Reitern schneiden keine Zeilen mehr ab (die Karte blieb so hoch wie die leere Tabelle).
 
 ## Serverregion wählen (wie „Make Your Choice“)
 

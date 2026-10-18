@@ -8,7 +8,7 @@ import sys
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import (QPlainTextEdit, QProgressBar, QPushButton, QSizePolicy, QTreeWidget, QTreeWidgetItem,
+from PySide6.QtWidgets import (QAbstractScrollArea, QPlainTextEdit, QProgressBar, QPushButton, QSizePolicy, QTreeWidget, QTreeWidgetItem,
                                QVBoxLayout, QWidget)
 
 from . import qt_theme
@@ -239,7 +239,18 @@ class Table(QTreeWidget):
             return
         n = sum(1 for _i in self._items())
         row = self.sizeHintForRow(0) if n else 0
-        self.setFixedHeight(self.header().sizeHint().height() + n * max(row, 1) + 2 * self.frameWidth() + 10)
+        h = self.header().sizeHint().height() + n * max(row, 1) + 2 * self.frameWidth() + 10
+        if h == self.height() == self.minimumHeight():
+            return
+        self.setFixedHeight(h)
+        # 1.8.8: the card around it kept the height of the empty table (rows came while the tab was hidden) and
+        # cut the last row off – tell every layout up to the scroll area
+        w = self.parentWidget()
+        while w is not None and not isinstance(w, QAbstractScrollArea):
+            if w.layout() is not None:
+                w.layout().invalidate()
+            w.updateGeometry()
+            w = w.parentWidget()
 
     def _items(self):
         it = self.invisibleRootItem()
