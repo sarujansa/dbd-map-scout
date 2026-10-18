@@ -287,10 +287,10 @@ class SettingsTab:
         self._reg("st.more.rec_audio_desktop", sound_box("desktop", _("Übriger Desktop-Ton"))).pack(side="left", padx=(0, 10))
         self._reg("st.more.rec_audio_mic", sound_box("mic", _("Mikrofon"))).pack(side="left")
         self.rec_tracks_var = ui.BooleanVar(value=bool(self.settings.get("rec_tracks", True)))      # 1.8.5
-        self._reg("st.more.rec_tracks", ui.Checkbutton(rc, text=_("Jede Tonquelle auf eine eigene OBS-Tonspur legen (1 alles, 2 Spiel, 3 Discord, 4 Mikrofon) – zum Mischen im Clip-Editor"),
+        self._reg("st.more.rec_tracks", ui.Checkbutton(rc, text=_("Jede Tonquelle auf eine eigene OBS-Tonspur legen (1 alles, 2 nur DBD, 3 Discord, 4 Mikrofon, 5 Hintergrund) – zum Mischen im Clip-Editor"),
                                                         variable=self.rec_tracks_var, command=self._rec_audio_changed)).pack(anchor="w", pady=(4, 0))
         self._reg("st.more.rec_tracks_hint", ui.Label(rc, text=_(
-            "Dafür in OBS: Einstellungen → Ausgabe → Ausgabemodus „Erweitert“ → Reiter Aufnahme → Audiospur 1 bis 4 anhaken. "
+            "Dafür in OBS: Einstellungen → Ausgabe → Ausgabemodus „Erweitert“ → Reiter Aufnahme → Audiospur 1 bis 5 anhaken. "
             "Das Programm prüft das beim DBD-Start und meldet es im Status unten; es ändert nichts am OBS-Profil."),
             wraplength=420, style="Dim.TLabel")).pack(anchor="w")
         rs = ui.Frame(rc)                                                                           # 1.8.6
@@ -302,7 +302,8 @@ class SettingsTab:
             return ui.Checkbutton(rs, text=text, variable=self.rec_clip_src_vars[key], command=self._rec_setting)
         self._reg("st.more.rec_clip_dbd", clip_box("dbd", _("Spiel"))).pack(side="left", padx=(0, 10))
         self._reg("st.more.rec_clip_discord", clip_box("discord", _("Discord"))).pack(side="left", padx=(0, 10))
-        self._reg("st.more.rec_clip_mic", clip_box("mic", _("Mikrofon"))).pack(side="left")
+        self._reg("st.more.rec_clip_mic", clip_box("mic", _("Mikrofon"))).pack(side="left", padx=(0, 10))
+        self._reg("st.more.rec_clip_other", clip_box("other", _("Hintergrund"))).pack(side="left")      # 1.8.19
         self.rec_farming_var = ui.BooleanVar(value=bool(self.settings.get("rec_farming_dir", True)))   # 1.5.3
         self._reg("st.more.rec_farming", ui.Checkbutton(rc, text=_("Farming-Runden im Unterordner „Farming“ ablegen"),
                                                          variable=self.rec_farming_var, command=self._rec_setting)).pack(anchor="w")

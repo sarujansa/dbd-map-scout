@@ -1095,3 +1095,38 @@ def test_right_click_menus_of_recordings_last_rounds_and_the_overlay_preview(app
         assert [i[0] for i in shown[-1][0] if i] == ["size", "dark", "hide"]
     finally:
         app.quit()
+
+
+def test_the_master_switch_hides_every_overlay_window_and_detection_goes_on(app_root):
+    """1.8.18 (user: "eine Einstellung, dass man das Overlay deaktiviert, evtl. im Overview"): a button on the
+    overview and a box on the overlay page – off hides the map and every card, the detection keeps watching the
+    map; "Overlay testen" shows it all the same; the switch is remembered."""
+    from dbdmapscout import overview
+    from dbdmapscout.app import App
+    from dbdmapscout.app_qt import ui_act
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        app.settings["overlay"]["fade"] = False
+        app.show_map(list(app.catalog.maps)[2], 1, "manual")
+        acts = overview.actions(app)
+        assert acts["power"] == (True, "Overlay ausschalten") and acts["toggle"] is not None
+        assert "Erkennung" in app._button_tip("power")
+        app._qt_event("power")                                              # the overview's button
+        assert app.settings["overlay_on"] is False and app.master_var.get() is False
+        acts = overview.actions(app)
+        assert acts["power"] == (True, "Overlay einschalten") and acts["toggle"] is None
+        app._place_overlay()
+        assert not app.overlay.shown and app.worker.overlay_rect is None and app.worker.map_on_screen
+        app.test_overlay()                                                  # the test shows it all the same
+        assert not app._overlay_off()
+        app._force_until = 0
+        assert app._overlay_off()
+        ui_act(app._qt_reg["ov.master"], True)                              # the box on the overlay page
+        assert app.settings["overlay_on"] is True and not app._overlay_off()
+        app.toggle_overlay_master()
+        app.settings.save()
+        import json
+        with open(app.settings.path, encoding="utf-8") as fh:
+            assert json.load(fh)["overlay_on"] is False
+    finally:
+        app.quit()

@@ -78,6 +78,9 @@ TIPS = {
     "Vorlage anwenden":
         "Setzt Karte, Systemwerte, „Heute“ und Musik auf einmal auf die gewählte Anordnung. „Rückgängig“ holt "
         "die vorherige zurück.",
+    "Overlay anzeigen (aus: nichts im Spiel, Erkennung läuft weiter)":
+        "Hauptschalter: aus = das Programm zeigt im Spiel nichts (Karte, Systemwerte, Heute, Musik). Erkennung, "
+        "Statistik und Aufnahmen laufen weiter. Auch als Knopf in der Übersicht.",
     "Weich ein- und ausblenden (Karte, Systemwerte, Heute)":
         "Karte, Systemwerte und „Heute“ blenden in einer Drittelsekunde ein und aus, statt hart zu erscheinen. "
         "Die Musik hat ihr eigenes Häkchen.",
@@ -315,8 +318,9 @@ TIPS = {
     'Discord': 'Ton von Discord (Sprachchat) in der Aufnahme bzw. im Sofort-Clip.',
     'Übriger Desktop-Ton': 'Alles andere, was am PC zu hören ist (Musik, Browser, Systemtöne) – die Quelle „Desktop-Audio“ in OBS.',
     'Mikrofon': 'Dein Mikrofon – die Quelle „Mikrofon/AUX“ in OBS bzw. seine Spur im Sofort-Clip.',
-    'Jede Tonquelle auf eine eigene OBS-Tonspur legen (1 alles, 2 Spiel, 3 Discord, 4 Mikrofon) – zum Mischen im Clip-Editor': 'Wie bei Medal: Das Programm weist in OBS jede Tonquelle der Spur 1 (alles – spielt in jedem Player) und ihrer eigenen Spur zu: Spiel und übriger Desktop-Ton 2, Discord 3, Mikrofon 4. Im Clip-Editor schaltest du jede Quelle an oder aus und regelst ihre Lautstärke; beim Speichern mischt ffmpeg sie zusammen. OBS schreibt die Spuren nur im Ausgabemodus „Erweitert“ mit Audiospur 1 bis 4 angehakt (MKV oder MP4, nicht FLV); das Programm prüft das beim DBD-Start und meldet es, ändert aber nichts am OBS-Profil. Aus = Spuren bleiben, wie sie in OBS stehen.',
-    'Spiel': 'Ton des Spiels (und übriger Desktop-Ton, falls aufgenommen) im Sofort-Clip.',
+    'Hintergrund': 'Andere Programme mit eigener Tonquelle in OBS (z. B. Spotify, Browser) im Sofort-Clip – OBS-Spur 5.',
+    'Jede Tonquelle auf eine eigene OBS-Tonspur legen (1 alles, 2 nur DBD, 3 Discord, 4 Mikrofon, 5 Hintergrund) – zum Mischen im Clip-Editor': 'Wie bei Medal: Das Programm weist in OBS jede Tonquelle der Spur 1 (alles – spielt in jedem Player) und ihrer eigenen Spur zu: nur DBD 2, Discord 3, Mikrofon 4, alle anderen Tonquellen in OBS (z. B. Spotify, Browser) 5 = Hintergrund. Der Desktop-Ton von Windows enthält auch DBD und Discord und liegt deshalb nur auf Spur 1. Im Clip-Editor schaltest du jede Quelle an oder aus und regelst ihre Lautstärke; beim Speichern mischt ffmpeg sie zusammen. OBS schreibt die Spuren nur im Ausgabemodus „Erweitert“ mit Audiospur 1 bis 5 angehakt (MKV oder MP4, nicht FLV); das Programm prüft das beim DBD-Start und meldet es, ändert aber nichts am OBS-Profil. Aus = Spuren bleiben, wie sie in OBS stehen.',
+    'Spiel': 'Nur der Ton von DBD im Sofort-Clip.',
     'Als Farming markieren': 'Markiert alle genannten Runden als Farming-Runden (und nicht mehr als Custom Game); ihre Aufnahmen wandern in den Ordner „Farming“. Einzeln zurück: „Farming an/aus“ unter „Letzte Runden“.',
     'Ignorieren': 'Diese Runden nicht mehr vorschlagen – sie bleiben, wie sie sind.',
 }
