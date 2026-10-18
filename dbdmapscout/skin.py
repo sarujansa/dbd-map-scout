@@ -745,9 +745,10 @@ def map_card(body, name: str, realm: str, timer: str, note: str, record: str, se
     """The map window in ``style``: ``body`` = the map picture without its drawn name (None: the lines alone –
     the info element – or the waiting card with ``status`` lines); ``name``/``realm`` for the header; ``timer``
     big, ``note`` (amber chip), ``record`` and ``server`` + ``ping`` as chips below a hairline; ``text_h`` sizes
-    the text. ``rec``: OBS records – True/False = on/off phase of the blinking red dot right of the timer, None =
-    no dot. One drawing for every modern style (1.8.27), the surface comes from SURFACES."""
-    from .overlay_win32 import INFO_WARN, ping_colour, rec_dot
+    the text. ``rec``: OBS records – True/False = on/off phase of the blinking "● REC" chip right of the server
+    (1.8.33, user: "das Rekord-Zeichen neben Global als REC blinkend"; before: a dot right of the timer), None =
+    no chip. One drawing for every modern style (1.8.27), the surface comes from SURFACES."""
+    from .overlay_win32 import INFO_WARN, REC_DOT, ping_colour
     u = max(0.25, text_h / MAP_U)
     acc = accent_rgba(accent)
     s = surface(style)
@@ -767,6 +768,11 @@ def map_card(body, name: str, realm: str, timer: str, note: str, record: str, se
         chips.append(chip(server + (f" · {ping:.0f} ms" if ping is not None else ""), u, cf, dot=dot,
                           edge=s["tile_edge"], pad=int(12 * u), h=int(30 * u), fill=s["tile"],
                           width_text=server + (" · 000 ms" if ping is not None else "")))
+    if rec is not None:                                  # 1.8.33: blinks – same size in both phases, nothing moves
+        chips.append(chip("REC", u, inter("SemiBold", int(14 * u)), colour=WHITE if rec else (255, 255, 255, 70),
+                          dot=REC_DOT if rec else REC_DOT[:3] + (55,),
+                          edge=REC_DOT[:3] + (200,) if rec else s["tile_edge"], pad=int(12 * u), h=int(30 * u),
+                          fill=s["tile"]))
     if record:
         chips.append(chip(record, u, cf, colour=GREY, edge=s["tile_edge"], pad=int(12 * u), h=int(30 * u),
                           fill=s["tile"]))
@@ -774,7 +780,7 @@ def map_card(body, name: str, realm: str, timer: str, note: str, record: str, se
              for i, t in enumerate(status)]
     row_pic = chip_rows(chips, max(body.width if body is not None else 0, wrap), gap) if chips else None
     timer_w = _width(tf, _widest(timer).rjust(5, "0")) if timer else 0   # at least "00:00": 9:59 → 10:00 stays
-    field_w = timer_w + (int(30 * u) if rec is not None else 0)
+    field_w = timer_w
     parts = [body.width if body is not None else 0, _header_w(realm, u) if realm else 0,
              _width(nf, name) if name else 0, field_w, row_pic.width if row_pic else 0] + \
         [_width(f, t) for f, t, _c in lines]
@@ -795,7 +801,6 @@ def map_card(body, name: str, realm: str, timer: str, note: str, record: str, se
         blocks.append(("chips", row_pic.height, int(16 * u) if (timer or lines) else int(10 * u) if body is not None else 0))
     h = pad + sum(bh + g for _k, bh, g in blocks) + pad
     im = _frame(w, h, style, u)
-    d = ImageDraw.Draw(im)
     y = pad
     for kind, bh, g in blocks:
         y += g
@@ -808,8 +813,6 @@ def map_card(body, name: str, realm: str, timer: str, note: str, record: str, se
         elif kind == "timer":
             x = (w - field_w) / 2 if body is not None else pad
             _text(im, x, y - int(6 * u), timer, tf, WHITE)
-            if rec:
-                rec_dot(d, x + timer_w + int(16 * u), y + int(22 * u), int(7 * u))
         elif kind.startswith("status"):
             f, t, c = lines[int(kind[6:])]
             _text(im, (w - _width(f, t)) / 2, y, t, f, c)
