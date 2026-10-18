@@ -52,6 +52,8 @@ LOGIN_WAIT_S = 180.0                  # the browser has this long to come back
 POLL_S = 30.0                         # the queue is read this often while the music card is active (1.8.36:
                                       # 10 → 30 s – a song change reads it at once anyway; Development Mode
                                       # quotas count per developer account since July 2026)
+REREAD_S = 5.0                        # 1.8.37: after a song change the queue is read at once and once more
+                                      # after this long – right after a skip Spotify still answers the old queue
 RATE_WAIT_S = (5.0, 300.0)            # 429 without Retry-After: wait from … doubling up to …
 QUOTA_WAIT_S = 900.0                  # 429 "QUOTA_EXCEEDED": at least this long before asking again
 RETRY_S = 30.0                        # after a network error
@@ -200,10 +202,22 @@ def _norm(s) -> str:
     return " ".join(str(s or "").casefold().split())
 
 
+_BRACKETS = re.compile(r"\s*[(\[][^)\]]*[)\]]")
+_FEAT = re.compile(r"\s+(?:feat\.?|ft\.|featuring)\s.*$")
+
+
+def _loose(s) -> str:
+    """The title without what players write differently (1.8.37): bracketed parts ("(feat. X)", "[Live]"),
+    a " - …" suffix ("- 2011 Remaster", "- Radio Edit") and a trailing "feat. X"."""
+    t = _BRACKETS.sub("", _norm(s))
+    t = re.split(r" [-–—] ", t)[0]
+    return _FEAT.sub("", t).strip()
+
+
 def matches(up: UpNext, title: str, artist: str = "") -> bool:
     """Spotify's current track is the one the Windows media controls show (pure) – else the music comes from
     another player and the list would be wrong. Same title; the artist, when both know one, must overlap."""
-    if not up.title or not title or _norm(up.title) != _norm(title):
+    if not up.title or not same_title(up.title, title):
         return False
     a, b = _norm(artist), _norm(up.artist)
     if not a or not b:
@@ -224,7 +238,13 @@ def lines(up: UpNext, n: int) -> tuple:
 
 
 def same_title(a: str, b: str) -> bool:
-    return bool(a) and _norm(a) == _norm(b)
+    """Same title, also when written differently (1.8.37: "Song - 2011 Remaster" vs "Song", "Song (feat. X)")."""
+    if not a or not b:
+        return False
+    if _norm(a) == _norm(b):
+        return True
+    la, lb = _loose(a), _loose(b)
+    return bool(la) and la == lb
 
 
 def advance(up: UpNext, title: str, artist: str = "") -> UpNext:
@@ -414,6 +434,7 @@ class SpotifyLink(threading.Thread):
         self._retry_at = 0.0
         self._rate_wait = 0.0             # the last wait after a 429 without Retry-After (doubles)
         self._kicked = False
+        self._song_kick = False           # 1.8.37: the kick came from a song change – read once more after REREAD_S
         self._refreshed_once = False
 
     # ---- UI thread
@@ -471,6 +492,7 @@ class SpotifyLink(threading.Thread):
             elif cmd == "kick":
                 if arg and arg[0]:
                     self.upnext = advance(self.upnext, arg[0], arg[1])
+                    self._song_kick = True
                 self._kicked = True
             try:
                 self._tick()
@@ -541,6 +563,9 @@ class SpotifyLink(threading.Thread):
         try:
             self._ensure_access(now)
             self.upnext = fetch_queue(self._token.access)
+            if self._song_kick:                           # 1.8.37: once more shortly after a song change
+                self._song_kick = False
+                self._next_fetch = now + REREAD_S
             self._refreshed_once = False
             self._rate_wait = 0.0
             self.state = "linked"

@@ -219,6 +219,46 @@ def test_the_list_moves_up_at_once_when_the_first_coming_track_starts():
     assert "32 Zeichen" in spotify.BAD_ID_TEXT()
 
 
+def test_titles_written_differently_still_match_and_move_the_list_up():
+    """1.8.37 (user: "Spotify Up Next stimmt nicht mehr"): Spotify and the Windows media controls write the same
+    song differently – then the list must still match and move up, else the playing song stays "next"."""
+    assert spotify.same_title("Blinding Lights - 2020 Remaster", "Blinding Lights")
+    assert spotify.same_title("Save Your Tears (with Ariana Grande)", "Save Your Tears")
+    assert spotify.same_title("Bad Habits feat. Someone", "Bad Habits [Live]")
+    assert spotify.same_title("As It Was – Acoustic", "As It Was")
+    assert not spotify.same_title("Blinding Lights", "Blinding")                  # a different title stays different
+    assert not spotify.same_title("(Intro)", "(Outro)")                          # nothing left after the brackets
+    up = spotify.parse_queue(QUEUE, wall=5.0)
+    assert spotify.matches(up, "Blinding Lights - 2020 Remaster", "The Weeknd")
+    assert not spotify.matches(up, "Blinding Lights - 2020 Remaster", "Dua Lipa")   # the artist still decides
+    moved = spotify.advance(up, "Save Your Tears (with Ariana Grande)", "The Weeknd")
+    assert moved.items == up.items[1:]
+
+
+def test_a_song_change_reads_the_queue_at_once_and_once_more_shortly_after(fake, monkeypatch):
+    """1.8.37: right after a skip Spotify still answers the old queue – one more reading REREAD_S later, not only
+    after POLL_S (30 s)."""
+    monkeypatch.setattr(spotify, "REREAD_S", 0.6)
+    monkeypatch.setattr(spotify, "POLL_S", 30.0)
+    link = spotify.SpotifyLink(lambda kind, data: None, opener=lambda url: False)
+    link.start()
+    try:
+        link.active = True
+        link.configure(True, CID, spotify.protect("ref-stored"))
+        assert _wait(lambda: link.upnext.items != ())
+        calls = fake.queue_calls
+        time.sleep(1.0)
+        assert fake.queue_calls == calls                                      # the poll waits POLL_S
+        link.kick("Save Your Tears", "The Weeknd")
+        assert _wait(lambda: fake.queue_calls == calls + 1)                   # at once …
+        assert _wait(lambda: fake.queue_calls == calls + 2, timeout=3)        # … and once more shortly after
+        time.sleep(1.0)
+        assert fake.queue_calls == calls + 2                                  # then back to POLL_S
+    finally:
+        link.quit()
+        link.join(timeout=3)
+
+
 def test_the_refresh_token_is_stored_protected_and_garbage_reads_as_nothing():
     stored = spotify.protect("ref-secret")
     assert stored.startswith("dpapi:" if sys.platform == "win32" else "plain:") and "ref-secret" not in stored
@@ -552,7 +592,7 @@ def test_the_preview_and_the_app_pass_the_list_to_the_music_card(tmp_path):
 def test_the_app_shows_the_list_only_when_spotify_plays_the_same_song(app_root):
     import json as _json
     from dbdmapscout.app import App
-    from dbdmapscout import media
+    from dbdmapscout import app_spotify, media
     (app_root / "settings.json").write_text(_json.dumps({"welcome_seen": True}), encoding="utf-8")
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
@@ -574,13 +614,26 @@ def test_the_app_shows_the_list_only_when_spotify_plays_the_same_song(app_root):
         # counts even when the titles are written differently; not when the reading is old, never for other players
         store = "SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify"
         odd = media.NowPlaying("Blinding Lights - 2020 Remaster", "The Weeknd", True, time.time(), app=store)
-        assert app._upnext(odd)[1][0][0] == "Save Your Tears"
+        assert app._upnext(odd)[1][0][0] == "Save Your Tears"                         # 1.8.37: the same title
         assert app._upnext(media.NowPlaying("Other Song", "Someone", True, time.time(), app="chrome")) is None
         fresh = app.spotify.upnext
-        app.spotify.upnext = spotify.parse_queue(QUEUE, wall=time.time() - 120)
+        nocur = {"queue": QUEUE["queue"]}                                           # Spotify names no current one
+        app._up_song, app._up_since = (odd.title, odd.artist), 0.0                 # the song played before the reading
+        app.spotify.upnext = spotify.parse_queue(nocur)
+        assert app._upnext(odd)[1][0][0] == "Save Your Tears"
+        assert app._upnext(media.NowPlaying("Other Song", "Someone", True, time.time(), app="chrome")) is None
+        app._up_song, app._up_since = (odd.title, odd.artist), 0.0
+        app.spotify.upnext = spotify.parse_queue(nocur, wall=time.time() - 120)
         assert app._upnext(odd) is None
+        # 1.8.37 (user: "Spotify Up Next stimmt nicht mehr"): a list read before the song started is the old one
+        # (this song is its first coming track) – not shown without the same title until it was read again
+        other = media.NowPlaying("Starboy (Live)", "The Weeknd", True, time.time(), app=store)
+        app.spotify.upnext = spotify.parse_queue(QUEUE, wall=time.time())
+        assert app._upnext(other) is None
+        app.spotify.upnext = spotify.parse_queue(QUEUE, wall=time.time() + app_spotify.SONG_LAG_S + 1)
+        assert app._upnext(other)[1][0][0] == "Save Your Tears"
         app.spotify.upnext = fresh
-        app.media.now = odd
+        app.media.now = media.NowPlaying("Starboy", "The Weeknd", True, time.time(), app=store)
         assert "gleich=False, Player=Spotify:True" in __import__("dbdmapscout.diagnose").diagnose.spotify_match(app)
         app._spotify_event("token", "plain:eC1yZWY=")
         assert app.settings.get("spotify_token") == "plain:eC1yZWY="
