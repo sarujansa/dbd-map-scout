@@ -1053,15 +1053,21 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         bar = layout.bar_width(gw, gh)          # black bar left/right of a 16:9 picture (ultrawide)
         drop = lift = 0                         # what stands at the top / bottom of the map's bar (1.2.11)
         span = layout.map_bar_range(a, o.get("pos_x", 0.0), gx, gw, bar)
-        if span and a != "custom" and not self.overlay.editing:
-            fixed = [self.worker.hud_rect if self.hud is not None and self.hud.shown else None]
-            if o.get("today_pos", "below") != "custom":
-                fixed.append(self.worker.today_rect)
-            if o.get("media_pos", "below") != "custom":
-                fixed.append(self.worker.media_rect)
-            drop, lift = layout.bar_stack(fixed, span[0], span[1], gy, gh, margin, layout.stack_gap(o, gh))
-            drop = drop + margin if drop else 0
-            lift = lift + margin if lift else 0
+        bands = layout.bar_bands(o, (gx, gy, gw, gh), margin)       # 1.8.14: the limiter lines of the bars
+        band = bands["left" if span[0] <= gx else "right"] if bands and span else None
+        if span and a != "custom":
+            fixed = []
+            if not self.overlay.editing:
+                fixed = [self.worker.hud_rect if self.hud is not None and self.hud.shown else None]
+                if o.get("today_pos", "below") != "custom":
+                    fixed.append(self.worker.today_rect)
+                if o.get("media_pos", "below") != "custom":
+                    fixed.append(self.worker.media_rect)
+            drop, lift = layout.bar_room(fixed, span[0], span[1], gy, gh, margin, layout.stack_gap(o, gh), band)
+            if band and self._hud_pending == "above" and self.hud is not None:     # values + cards above the map
+                drop += layout.follow_reserve(self.hud.size[1], getattr(self, "_card_sizes", None) or {},
+                                              {"today": o.get("today_pos", "below"),
+                                               "music": o.get("media_pos", "below")}, layout.stack_gap(o, gh))
         height = max(40, min(height, gh - drop - lift - 2 * margin))
         # window narrower than 16:9: the trial has bars above/below – the map goes there whatever the position
         # setting says (user: own position at 1440p, the bar in the small window); not while dragging it
@@ -1113,6 +1119,8 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         x, y = place(w, h)
         if a != "custom":
             y = max(gy, min(y, gy + gh - h))             # never off the screen
+        elif band and not self.overlay.dragging:         # an own place in a bar stays between its lines too
+            y = layout.clamp_box((x, y, w, h), (gx, gy, gw, gh), bands)[1]
         if side and side != "slot":
             x = layout.clamp_x(side, x, w, gx, gw, bar, margin - edge)
         self._fade_show("map", fade)
@@ -1275,7 +1283,9 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
                            for name, img, lx, ly in layers],
                 "pics": {name: img for name, img, _lx, _ly in layers}, "opacity": o["opacity"],
                 "opacities": {n: float(o.get(k, o["opacity"])) for n, k in OPACITY_KEYS.items()},
-                "editing": bool(self.overlay.editing), "selected": getattr(self, "_sel", "map")}
+                "editing": bool(self.overlay.editing), "selected": getattr(self, "_sel", "map"),
+                "limits": layout.bar_bands(o, (0, 0, gw, gh), int(gh * o["margin"])),      # 1.8.14
+                "limits_same": bool(o.get("bar_limits_same", True))}
 
     def _preview_sample(self):
         """A map picture for the preview while none is on display (the first one of the catalog), loaded once."""
@@ -1306,6 +1316,9 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
             return
         if value[0] == "resize":                  # corner of the picked element / wheel over it
             self._resize_to(value[1], value[2])
+            return
+        if value[0] == "limit":                   # 1.8.14: a limiter line of a black bar
+            self._limit_dragged(value[1], value[2], value[3])
             return
         if value[0] == "nudge":                   # arrow keys (1.65)
             self._nudge(value[1], value[2])

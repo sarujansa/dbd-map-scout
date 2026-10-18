@@ -71,6 +71,23 @@ class OverlayTab:
                                                      values=[_(t) for _k, t in BAR_ALIGNS]))
         acb.pack(side="left", padx=6)
         acb.bind("<<ComboboxSelected>>", lambda e: self._bar_align_changed())
+        # 1.8.14 (user: "Limiter … oben und unten, wo die GUI-Elemente nicht überschreiten dürfen"): lines in the bars
+        self.limits_var = ui.BooleanVar(value=bool(o.get("bar_limits_on", False)))
+        self._reg("ov.limits", ui.Checkbutton(pos, text=_("Grenzen oben und unten in den schwarzen Balken"),
+                                              variable=self.limits_var, command=self._limits_changed)
+                  ).pack(anchor="w", pady=(4, 0))
+        lr = ui.Frame(pos)
+        lr.pack(fill="x")
+        self.limits_same_var = ui.BooleanVar(value=bool(o.get("bar_limits_same", True)))
+        self._reg("ov.limits_same", ui.Checkbutton(lr, text=_("Links und rechts gleich"),
+                                                   variable=self.limits_same_var, command=self._limits_changed)
+                  ).pack(side="left")
+        self._reg("ov.limits_reset", ui.Button(lr, text=_("Grenzen zurücksetzen"), command=self._limits_reset)
+                  ).pack(side="left", padx=(6, 0))
+        self._reg("ov.limits_hint", ui.Label(pos, text=_("Die Linien in der Vorschau mit „Mit der Maus verschieben“ "
+                                                         "ziehen – Karte, Systemwerte, Heute und Musik bleiben im "
+                                                         "Balken dazwischen."),
+                                             style="Dim.TLabel", wraplength=520)).pack(anchor="w")
         pr = ui.Frame(pos)                              # 1.2.9: ready-made arrangements
         pr.pack(fill="x", pady=(4, 0))
         self._reg("ov.preset.label", ui.Label(pr, text=_("Vorlage"), width=12)).pack(side="left")

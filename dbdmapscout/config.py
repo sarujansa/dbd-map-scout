@@ -59,7 +59,10 @@ DEFAULTS = {
         "hud_backdrop": False,          # … behind the system values / "today"
         "hud_rows": {"cpu": True, "gpu": True, "spot": True, "vram": True, "ram": True},   # rows shown (1.2.8)
         "stack_gap": 8,                 # px at 1440p between stacked cards / above the map (1.2.8)
-        "bar_align": "centre",          # left / centre / right: cards and the map "auto" in the black bar (1.2.8)
+        "bar_align": "centre",
+        "bar_limits_on": False,         # 1.8.14: limiter lines at the top/bottom of the black bars
+        "bar_limits": [0.08, 0.08, 0.08, 0.08],   # left top, left bottom, right top, right bottom (share of the height)
+        "bar_limits_same": True,        # dragging one line moves the one in the other bar too          # left / centre / right: cards and the map "auto" in the black bar (1.2.8)
         "media_accent": True,           # music card: progress bar in the cover's main colour (1.2.4)
         "media_remaining": True,        # … time left ("−1:46") right of the bar instead of the length
         "media_backdrop": True,         # … on a dark half-transparent area
