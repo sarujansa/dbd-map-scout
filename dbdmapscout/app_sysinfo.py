@@ -337,7 +337,7 @@ class SysInfo:
         o["bar_limits_on"] = bool(self.limits_var.get())
         same = bool(self.limits_same_var.get())
         lim = [layout.limit_pair(o.get("bar_limits"), s)[i] for s in layout.LIMIT_SIDES for i in (0, 1)]
-        if same and not o.get("bar_limits_same", True):
+        if same and not o.get("bar_limits_same", False):
             lim[2:] = lim[:2]
         o["bar_limits"], o["bar_limits_same"] = lim, same
         self._save_soon()
@@ -365,7 +365,7 @@ class SysInfo:
         lim = [layout.limit_pair(o.get("bar_limits"), s)[i] for s in layout.LIMIT_SIDES for i in (0, 1)]
         i = (0 if side == "left" else 2) + (0 if which == "top" else 1)
         lim[i] = val
-        if o.get("bar_limits_same", True):
+        if o.get("bar_limits_same", False):
             lim[(i + 2) % 4] = val
         o["bar_limits"] = lim
         self._save_soon()

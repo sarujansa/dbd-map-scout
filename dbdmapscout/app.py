@@ -1290,7 +1290,7 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
                 "limits": layout.bar_bands(o if o.get("bar_limits_on") or not self.overlay.editing
                                            else dict(o, bar_limits_on=True), (0, 0, gw, gh), int(gh * o["margin"])),
                 "limits_on": bool(o.get("bar_limits_on")),
-                "limits_same": bool(o.get("bar_limits_same", True))}
+                "limits_same": bool(o.get("bar_limits_same", False))}
 
     def _preview_sample(self):
         """A map picture for the preview while none is on display (the first one of the catalog), loaded once."""

@@ -6,7 +6,7 @@ import json
 import os
 
 HUD_SHOWN = ("above", "left", "right", "custom")    # settings.sysinfo values that show the system values
-SETTINGS_VERSION = 7
+SETTINGS_VERSION = 8
 
 DEFAULTS = {
     "settings_version": SETTINGS_VERSION,
@@ -62,7 +62,7 @@ DEFAULTS = {
         "bar_align": "centre",
         "bar_limits_on": False,         # 1.8.14: limiter lines at the top/bottom of the black bars
         "bar_limits": [0.08, 0.08, 0.08, 0.08],   # left top, left bottom, right top, right bottom (share of the height)
-        "bar_limits_same": True,        # dragging one line moves the one in the other bar too          # left / centre / right: cards and the map "auto" in the black bar (1.2.8)
+        "bar_limits_same": False,       # 1.8.17: each bar has lines of its own (on: dragging one moves the other too)          # left / centre / right: cards and the map "auto" in the black bar (1.2.8)
         "media_accent": True,           # music card: progress bar in the cover's main colour (1.2.4)
         "media_remaining": True,        # … time left ("−1:46") right of the bar instead of the length
         "media_backdrop": True,         # … on a dark half-transparent area
@@ -255,6 +255,8 @@ class Settings:
                 if raw.get("settings_version", 1) < 7:                # 1.5.5 (user: "no lobby in the recording",
                     self.data["rec_pre"] = False                      # joined files played too fast in the round)
                     self.data["rec_merge"] = False
+                if raw.get("settings_version", 1) < 8:                # 1.8.17 (user: left and right lines of their own)
+                    ov["bar_limits_same"] = False
                 if self.data.get("color_theme") == "oled":            # 1.62.0: OLED was a theme of its own
                     self.data["color_theme"], self.data["oled_black"] = "gold", True
                 self.data["settings_version"] = SETTINGS_VERSION
