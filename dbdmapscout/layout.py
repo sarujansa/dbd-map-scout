@@ -475,3 +475,62 @@ def steady_width(state, key, w: int):
     width = max(state[1], w)
     return (key, width), width
 
+
+
+# 1.8.24 (user: "Zeit etc. nicht mehr mit der Map verbunden – ich will ab und zu nur die Map-Grösse ändern"): the
+# map's lines (timer, record, server) as an element of their own: right below / above the map, at an own place, or
+# drawn into the map window as before ("inside")
+INFO_SPOTS = ("below", "above", "custom", "inside")
+
+
+def info_apart(o: dict) -> bool:
+    """The lines are their own element (not with "nur Infos": then they are all there is)."""
+    return o.get("info_pos", "below") in ("below", "above", "custom") and bool(o.get("show_map", True))
+
+
+def info_reserve(o: dict, size, gap: int):
+    """(drop, lift) the lines take right above / below the map in its bar – the map makes room for them."""
+    if not size or not info_apart(o) or o.get("anchor") == "custom":
+        return 0, 0
+    spot = o.get("info_pos", "below")
+    return (size[1] + gap, 0) if spot == "above" else (0, size[1] + gap) if spot == "below" else (0, 0)
+
+
+def info_xy(spot: str, map_rect, size, game, gap: int, margin: int, own=None, align: str = "centre",
+            bands=None):
+    """Top-left corner of the lines: centred (or aligned like the bar) right below / above the map – the other
+    side when there is no room –, in the map's bar; ``custom``: their centre at ``own`` (shares of the window,
+    like the music card)."""
+    gx, gy, gw, gh = game
+    w, h = size
+    if spot == "custom" or not map_rect:
+        fx, fy = own or (0.5, 0.5)
+        x, y = gx + fx * gw - w / 2, gy + fy * gh - h / 2
+    else:
+        mx, my, mw, mh = map_rect
+        x = mx + (mw - w) / 2 if align == "centre" else (mx if align == "left" else mx + mw - w)
+        below, above = my + mh + gap, my - gap - h
+        y = above if spot == "above" else below
+        if spot == "above" and y < gy:
+            y = below
+        elif spot != "above" and y + h > gy + gh:
+            y = above
+        bar = bar_width(gw, gh)
+        if bar >= MIN_BAR and mx < gx + bar:
+            x = clamp_x("left", x, w, gx, gw, bar, margin)
+        elif bar >= MIN_BAR and mx + mw > gx + gw - bar:
+            x = clamp_x("right", x, w, gx, gw, bar, margin)
+    x = min(max(x, gx), gx + max(0, gw - w))
+    y = min(max(y, gy), gy + max(0, gh - h))
+    if spot == "custom" and bands:
+        y = clamp_box((x, y, w, h), game, bands)[1]
+    return int(x), int(y)
+
+
+def union(a, b):
+    """The box around two boxes (x, y, w, h); a missing one counts as nothing."""
+    if not a or not b:
+        return a or b
+    x0, y0 = min(a[0], b[0]), min(a[1], b[1])
+    x1, y1 = max(a[0] + a[2], b[0] + b[2]), max(a[1] + a[3], b[1] + b[3])
+    return (x0, y0, x1 - x0, y1 - y0)

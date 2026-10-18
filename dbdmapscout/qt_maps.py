@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (QApplication, QButtonGroup, QFrame, QHBoxLayout, 
 
 from .qt_layouts import FlowRow
 from .i18n import N_, _
-from .qt_common import pixmap_from_pil, _label, _tip, _card, _set, _scroll_page
+from .qt_common import pixmap_from_pil, steady_scroll, _label, _tip, _card, _set, _scroll_page
 
 
 TILE_W, TILE_H = 150, 190          # px (logical) of a map tile on the maps page (1.2.18: + info line)
@@ -179,6 +179,7 @@ class MapsPage(QWidget):
         grid_page = QScrollArea()
         grid_page.setWidgetResizable(True)
         grid_page.setFrameShape(QFrame.NoFrame)
+        steady_scroll(grid_page)
         inner = QWidget()
         inner.setObjectName("page")
         self.grid_lay = QVBoxLayout(inner)

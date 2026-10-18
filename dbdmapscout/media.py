@@ -132,8 +132,10 @@ def _accent(cover):
 
 def look(o: dict) -> tuple:
     """Options of the music card's look from the overlay settings (1.2.4, pure)."""
+    shape = o.get("media_cover_shape", "style")          # 1.8.24: round / square / the style's own
     return tuple(k for k, key in (("accent", "media_accent"), ("remaining", "media_remaining"),
-                                  ("backdrop", "media_backdrop")) if o.get(key, True))
+                                  ("backdrop", "media_backdrop")) if o.get(key, True)) + \
+        ((f"cover_{shape}",) if shape in ("round", "square") else ())
 
 
 class Fader:

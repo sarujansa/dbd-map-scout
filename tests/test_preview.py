@@ -15,7 +15,7 @@ INFO = {"timer": "3:27", "server": "", "ping": None, "record": "Bilanz: Ø 2,8 K
 
 
 def _o(**kw):
-    o = dict(DEFAULTS["overlay"])
+    o = dict(DEFAULTS["overlay"], info_pos="inside")      # the lines with the map (1.8.24: test_info_apart.py)
     o.update(kw)
     return o
 
@@ -65,7 +65,7 @@ def test_centre_guides_are_thin_lines_and_blacked_out_for_the_detection():
     assert v.size == (3, 1440) and h.size == (3440, 3)
     assert v.getpixel((1, 0))[:3] == (255, 255, 255) and v.getpixel((0, 0))[:3] == (0, 0, 0)
     w = DetectionWorker.__new__(DetectionWorker)
-    w.overlay_rect = w.hud_rect = w.media_rect = w.today_rect = w.toast_rect = None
+    w.overlay_rect = w.hud_rect = w.media_rect = w.today_rect = w.info_rect = w.toast_rect = None
     w.guide_rects = ((1719, 0, 3, 1440), (0, 719, 3440, 3))
     img = np.full((1440, 3440, 3), 200, np.uint8)
     w._mask_overlay(img, 0, 0)

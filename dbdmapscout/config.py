@@ -38,6 +38,8 @@ DEFAULTS = {
         "show_server": True,            # connected server region below the timer (needs the Server tab option)
         "transparent": True,            # transparent area around the map (off = dark rectangle)
         "keep_in_bar": True,
+        "info_pos": "below",            # 1.8.24: timer/record/server below / above the map, custom or "inside" it
+        "info_xy": None,                # … their own place (centre as shares of the window)
         "grow_past_bar": False,         # a map bigger than the bar may reach into the game picture (1.65.4)            # ultrawide: shrink/move the map so it stays inside the black bar
         "map_heights": {},              # map id -> own size (hotkeys / mouse wheel with that map on display)
         "map_rotations": {},            # map id -> map turned clockwise by 90/180/270° (button / hotkey)
@@ -49,6 +51,7 @@ DEFAULTS = {
         "media_xy": [1.0, 1.0],         # custom: share of the free room in the DBD window (dragged in edit mode)
         "media_progress": True,         # music card: how far the song is (bar + times, 1.64.7)
         "map_style": "classic",         # callout maps: classic = as supplied / dark = see-through floor (1.66)
+        "media_cover_shape": "style",   # 1.8.24: the cover round / square / like the style
         "media_style": "big",           # music card: big = cover on top (1.64.7) / compact = cover left (1.64)
         "media_scale": 1.0,             # size of the music card (slider 60–200 %)
         "media_cover": True,            # album cover left of title and artist
