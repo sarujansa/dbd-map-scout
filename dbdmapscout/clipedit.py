@@ -89,6 +89,27 @@ def scaled(info: Info, height: int) -> tuple[int, int]:
     return max(2, round(info.width * h / info.height / 2) * 2), h
 
 
+SILENT_DB = -60.0                # 1.8.18: a track whose loudest moment stays below this held nothing (silence ≈ -91)
+LEVEL_RE = re.compile(rb"\[volumedetect@t(\d+) @ [^\]]*\] max_volume: (-?[\d.]+|-inf) dB")
+
+
+def track_levels(path: str, n_tracks: int, ffmpeg: str | None = None, timeout: float = 180) -> dict:
+    """1.8.18 (user: Discord never heard in the clips): the loudest moment of each audio track in dB {index:
+    dB}, from one ffmpeg run over the sound only (seconds even for a long round) – which source OBS really
+    recorded. {} without ffmpeg, with fewer than two tracks or on failure."""
+    ffmpeg = ffmpeg or ffmpeg_exe()
+    if not ffmpeg or n_tracks < 2:
+        return {}
+    graph = ";".join(f"[0:a:{i}]volumedetect@t{i}" for i in range(n_tracks))
+    try:
+        p = subprocess.run([ffmpeg, "-hide_banner", "-nostats", "-i", path, "-vn", "-filter_complex", graph,
+                            "-f", "null", "-"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.PIPE, timeout=timeout, creationflags=_flags())
+    except (OSError, subprocess.TimeoutExpired):
+        return {}
+    return {int(i): float(db) for i, db in LEVEL_RE.findall(p.stderr or b"")}
+
+
 def frame_at(path: str, t: float, height: int = PREVIEW_H, info: Info | None = None, ffmpeg: str | None = None,
              keyframe: bool = False):
     """One picture at second ``t`` as PIL image (RGB), or None. Seeks to the key frame before ``t`` and decodes

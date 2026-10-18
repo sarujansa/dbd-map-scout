@@ -476,6 +476,7 @@ class QtShell:
             self._reveal_rec()
         else:
             {"scan": self.scan_now, "rotate": self.rotate_map, "toggle": self.toggle_overlay,
+             "power": self.toggle_overlay_master,
              "reject": self.reject_detection, "confirm": self._confirm_unsure, "layout": self.next_variant,
              "floor": self.next_floor}.get(action, lambda: None)()
         self._qt_refresh(force=True)

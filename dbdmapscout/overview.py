@@ -97,7 +97,11 @@ def actions(app) -> dict:
            "toggle": (True, _("Overlay ausblenden") if on else _("Overlay einblenden")) if has_map else None,
            "reject": (True, _("Falsch erkannt")) if app.current is not None and app.source == "auto"
            and not app.hidden_after_match else None,
-           "confirm": None, "layout": None, "floor": None}
+           "confirm": None, "layout": None, "floor": None,
+           # 1.8.18: the master switch, always there
+           "power": (True, _("Overlay ausschalten") if app.settings.get("overlay_on", True) else _("Overlay einschalten"))}
+    if not app.settings.get("overlay_on", True):
+        out["toggle"] = None                     # nothing to hide or show while the overlay is off
     u = app._unsure
     if u and u.get("shown"):
         out["confirm"] = (True, _("Stimmt"))

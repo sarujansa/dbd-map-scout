@@ -1190,6 +1190,20 @@ EN = {
         'Puts map, system values, "Today" and music into the chosen arrangement at once. "Undo" brings the '
         'previous one back.',
     'Weich ein- und ausblenden (Karte, Systemwerte, Heute)': 'Fade in and out smoothly (map, system values, Today)',
+    'Overlay anzeigen (aus: nichts im Spiel, Erkennung läuft weiter)': 'Show the overlay (off: nothing in the game, detection goes on)',
+    'Hauptschalter: aus = das Programm zeigt im Spiel nichts (Karte, Systemwerte, Heute, Musik). Erkennung, '
+    'Statistik und Aufnahmen laufen weiter. Auch als Knopf in der Übersicht.':
+        'Master switch: off = the program shows nothing in the game (map, system values, Today, music). Detection, '
+        'statistics and recordings go on. Also a button on the overview.',
+    'Overlay eingeschaltet.': 'Overlay switched on.',
+    'Overlay ausgeschaltet – die Erkennung läuft weiter.': 'Overlay switched off – detection goes on.',
+    'Overlay ausschalten': 'Switch overlay off',
+    'Overlay einschalten': 'Switch overlay on',
+    'Blendet alles aus, was das Programm im Spiel zeigt – Karte, Systemwerte, Heute, Musik. Die '
+    'Erkennung, Statistik und Aufnahmen laufen weiter.':
+        'Hides everything the program shows in the game – map, system values, Today, music. Detection, '
+        'statistics and recordings go on.',
+    'Zeigt das Overlay im Spiel wieder an.': 'Shows the overlay in the game again.',
     'Karte, Systemwerte und „Heute“ blenden in einer Drittelsekunde ein und aus, statt hart zu erscheinen. '
     'Die Musik hat ihr eigenes Häkchen.':
         'Map, system values and "Today" fade in and out within a third of a second instead of popping up. '
@@ -1530,7 +1544,6 @@ EN = {
     '{n} Runden löschen': 'Delete {n} rounds',
     'Grosser Editor …': 'Large editor …',
     'Öffnet den Clip im eigenen Fenster – mit Zensieren, Lautstärke je Tonquelle und allen Tasten.': 'Opens the clip in its own window – with censoring, a level per sound source and all keys.',
-    'Ton des Spiels (und übriger Desktop-Ton, falls aufgenommen) – OBS-Spur 2.': "The game's sound (and other desktop sound, if recorded) – OBS track 2.",
     'Discord-Sprachchat – OBS-Spur 3. Aus = der Clip hat keinen Discord-Ton.': 'Discord voice chat – OBS track 3. Off = the clip has no Discord sound.',
     'Dein Mikrofon – OBS-Spur 4 (nur, wenn es in OBS aufgenommen wird).': 'Your microphone – OBS track 4 (only when OBS records it).',
     'Lautstärke dieser Quelle im Clip (100 % = wie aufgenommen).': 'Level of this source in the clip (100 % = as recorded).',
@@ -1564,15 +1577,26 @@ EN = {
     'Ton in OBS einstellen, sobald DBD startet:': 'Set the sound in OBS as soon as DBD starts:',
     'Ton in OBS nicht eingestellt: {error}': 'Sound in OBS not set: {error}',
     'OBS bereit – Runden werden aufgenommen. {problem}': 'OBS ready – rounds are recorded. {problem}',
-    'Für die Tonmischung im Clip-Editor in OBS: Einstellungen → Ausgabe → Ausgabemodus „Erweitert“ → Reiter Aufnahme → Audiospur 1 bis 4 anhaken (1 alles, 2 Spiel, 3 Discord, 4 Mikrofon)': 'For the sound mix in the clip editor, in OBS: Settings → Output → Output mode "Advanced" → tab Recording → tick audio tracks 1 to 4 (1 everything, 2 game, 3 Discord, 4 microphone)',
-    'Jede Tonquelle auf eine eigene OBS-Tonspur legen (1 alles, 2 Spiel, 3 Discord, 4 Mikrofon) – zum Mischen im Clip-Editor': 'Put every sound source on its own OBS audio track (1 everything, 2 game, 3 Discord, 4 microphone) – for mixing in the clip editor',
-    'Dafür in OBS: Einstellungen → Ausgabe → Ausgabemodus „Erweitert“ → Reiter Aufnahme → Audiospur 1 bis 4 anhaken. Das Programm prüft das beim DBD-Start und meldet es im Status unten; es ändert nichts am OBS-Profil.': 'For this, in OBS: Settings → Output → Output mode "Advanced" → tab Recording → tick audio tracks 1 to 4. The program checks this when DBD starts and reports it in the status below; it changes nothing in the OBS profile.',
+    'Für die Tonmischung im Clip-Editor in OBS: Einstellungen → Ausgabe → Ausgabemodus „Erweitert“ → Reiter Aufnahme → Audiospur 1 bis 5 anhaken (1 alles, 2 Spiel, 3 Discord, 4 Mikrofon, 5 Hintergrund)': 'For the sound mix in the clip editor, in OBS: Settings → Output → Output mode "Advanced" → tab Recording → tick audio tracks 1 to 5 (1 everything, 2 game, 3 Discord, 4 microphone, 5 background)',
+    'Jede Tonquelle auf eine eigene OBS-Tonspur legen (1 alles, 2 nur DBD, 3 Discord, 4 Mikrofon, 5 Hintergrund) – zum Mischen im Clip-Editor': 'Put every sound source on its own OBS audio track (1 everything, 2 DBD only, 3 Discord, 4 microphone, 5 background) – for mixing in the clip editor',
+    'Dafür in OBS: Einstellungen → Ausgabe → Ausgabemodus „Erweitert“ → Reiter Aufnahme → Audiospur 1 bis 5 anhaken. Das Programm prüft das beim DBD-Start und meldet es im Status unten; es ändert nichts am OBS-Profil.': 'For this, in OBS: Settings → Output → Output mode "Advanced" → tab Recording → tick audio tracks 1 to 5. The program checks this when DBD starts and reports it in the status below; it changes nothing in the OBS profile.',
     'Sofort-Clip (F8) mit Ton von:': 'Instant clip (F8) with sound from:',
-    'Wie bei Medal: Das Programm weist in OBS jede Tonquelle der Spur 1 (alles – spielt in jedem Player) und ihrer eigenen Spur zu: Spiel und übriger Desktop-Ton 2, Discord 3, Mikrofon 4. Im Clip-Editor schaltest du jede Quelle an oder aus und regelst ihre Lautstärke; beim Speichern mischt ffmpeg sie zusammen. OBS schreibt die Spuren nur im Ausgabemodus „Erweitert“ mit Audiospur 1 bis 4 angehakt (MKV oder MP4, nicht FLV); das Programm prüft das beim DBD-Start und meldet es, ändert aber nichts am OBS-Profil. Aus = Spuren bleiben, wie sie in OBS stehen.': 'Like Medal: the program assigns every sound source in OBS to track 1 (everything – plays in any player) and to its own track: game and other desktop sound 2, Discord 3, microphone 4. In the clip editor you switch each source on or off and set its level; ffmpeg mixes them when saving. OBS writes the tracks only in the output mode "Advanced" with audio tracks 1 to 4 ticked (MKV or MP4, not FLV); the program checks this when DBD starts and reports it, but changes nothing in the OBS profile. Off = the tracks stay as set in OBS.',
-    'Ton des Spiels (und übriger Desktop-Ton, falls aufgenommen) im Sofort-Clip.': "The game's sound (and other desktop sound, if recorded) in the instant clip.",
+    'Wie bei Medal: Das Programm weist in OBS jede Tonquelle der Spur 1 (alles – spielt in jedem Player) und ihrer eigenen Spur zu: nur DBD 2, Discord 3, Mikrofon 4, alle anderen Tonquellen in OBS (z. B. Spotify, Browser) 5 = Hintergrund. Der Desktop-Ton von Windows enthält auch DBD und Discord und liegt deshalb nur auf Spur 1. Im Clip-Editor schaltest du jede Quelle an oder aus und regelst ihre Lautstärke; beim Speichern mischt ffmpeg sie zusammen. OBS schreibt die Spuren nur im Ausgabemodus „Erweitert“ mit Audiospur 1 bis 5 angehakt (MKV oder MP4, nicht FLV); das Programm prüft das beim DBD-Start und meldet es, ändert aber nichts am OBS-Profil. Aus = Spuren bleiben, wie sie in OBS stehen.': 'Like Medal: the program assigns every sound source in OBS to track 1 (everything – plays in any player) and to its own track: DBD only 2, Discord 3, microphone 4, every other sound source in OBS (e.g. Spotify, browser) 5 = background. Windows\' desktop sound holds DBD and Discord too and therefore sits on track 1 only. In the clip editor you switch each source on or off and set its level; ffmpeg mixes them when saving. OBS writes the tracks only in the output mode "Advanced" with audio tracks 1 to 5 ticked (MKV or MP4, not FLV); the program checks this when DBD starts and reports it, but changes nothing in the OBS profile. Off = the tracks stay as set in OBS.',
+    'Nur der Ton von DBD im Sofort-Clip.': 'Only the sound of DBD in the instant clip.',
     'Ton von Discord (Sprachchat) in der Aufnahme bzw. im Sofort-Clip.': 'Sound from Discord (voice chat) in the recording or the instant clip.',
     'Dein Mikrofon – die Quelle „Mikrofon/AUX“ in OBS bzw. seine Spur im Sofort-Clip.': 'Your microphone – the source "Mic/Aux" in OBS, or its track in the instant clip.',
+    'Hintergrund': 'Background',
+    'Andere Programme mit eigener Tonquelle in OBS (z. B. Spotify, Browser) – OBS-Spur 5. Der Desktop-Ton von Windows enthält auch DBD und Discord und liegt nur auf Spur 1.': "Other programs with a sound source of their own in OBS (e.g. Spotify, browser) – OBS track 5. Windows' desktop sound holds DBD and Discord too and sits on track 1 only.",
+    'Andere Programme mit eigener Tonquelle in OBS (z. B. Spotify, Browser) im Sofort-Clip – OBS-Spur 5.': 'Other programs with a sound source of their own in OBS (e.g. Spotify, browser) in the instant clip – OBS track 5.',
     'Tonquelle angelegt: {name}': 'Sound source created: {name}',
+    'Auf Spur 5 (Hintergrund) statt bei Spiel/Discord/Mikrofon: {names}': 'On track 5 (background) instead of with game/Discord/microphone: {names}',
+    'Auf Spur {n} ist in der ganzen Aufnahme nichts zu hören.': 'Nothing can be heard on track {n} in the whole recording.',
+    'Tonquelle zur Szene „{scene}“ hinzugefügt: {name}': 'Sound source added to the scene "{scene}": {name}',
+    'Tonquelle in der Szene „{scene}“ wieder eingeblendet: {name}': 'Sound source shown again in the scene "{scene}": {name}',
+    '{name} (Spur {n})': '{name} (track {n})',
+    'Still in dieser Aufnahme: {names} – OBS hat dort nichts aufgenommen. In OBS prüfen: Quelle in der Szene der Aufnahme, nicht stumm, Spur angehakt.': 'Silent in this recording: {names} – OBS recorded nothing there. Check in OBS: source in the scene being recorded, not muted, track ticked.',
+    '{name} – still': '{name} – silent',
+    'Nur der Ton von Dead by Daylight – OBS-Spur 2.': 'Only the sound of Dead by Daylight – OBS track 2.',
     'Unbekannte Map': 'Unknown map',
     'Wiederholungspuffer in OBS läuft nicht': "OBS's replay buffer is not running",
     'Übriger Desktop-Ton': 'Other desktop sound',
