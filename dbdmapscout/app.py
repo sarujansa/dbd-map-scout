@@ -658,22 +658,23 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         warm-up has not got there yet, ~0.5 s; ``make=False``: the original then); own pictures (user_maps/)
         always as they are."""
         path, shown = self.catalog.image_path(map_id, variant)
-        if path and self.settings["overlay"].get("map_style", "classic") == "dark" \
-                and not self.catalog.is_own(map_id, variant):
-            path = mapstyle.styled_path(path, os.path.join(self.root_dir, STYLE_CACHE), make)
+        style = self.settings["overlay"].get("map_style", "classic")
+        if path and style in mapstyle.STYLES and not self.catalog.is_own(map_id, variant):    # 1.8.16: + floors
+            path = mapstyle.styled_path(path, os.path.join(self.root_dir, STYLE_CACHE), make, style)
         return path, shown
 
     def _style_warm(self):
         """Dark style on: make all pictures ahead in a thread (~30 s once, then cached)."""
-        if self.settings["overlay"].get("map_style", "classic") != "dark":
+        style = self.settings["overlay"].get("map_style", "classic")
+        if style not in mapstyle.STYLES:
             return
         paths = sorted({p for m in self.catalog.maps.values() for v in m.variants
                         if not self.catalog.is_own(m.id, v) for p in [self.catalog.image_path(m.id, v)[0]] if p})
         cache = os.path.join(self.root_dir, STYLE_CACHE)
-        stop = lambda: self.settings["overlay"].get("map_style", "classic") != "dark"   # noqa: E731
+        stop = lambda: self.settings["overlay"].get("map_style", "classic") != style   # noqa: E731
 
         def run():
-            mapstyle.warm(paths, cache, stop)
+            mapstyle.warm(paths, cache, stop, style)
             self._qt_maps_rev = getattr(self, "_qt_maps_rev", 0) + 1     # the tiles of the maps page: dark now
         threading.Thread(target=run, daemon=True, name="mapstyle").start()
 

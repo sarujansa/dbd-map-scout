@@ -194,3 +194,64 @@ def test_frame_durations_of_an_animated_webp_are_read_right(tmp_path):
     frames = [Image.new("RGBA", (20, 20), (i * 60, 0, 0, 255)) for i in range(3)]
     frames[0].save(path, "WEBP", lossless=True, save_all=True, append_images=frames[1:], duration=[7000, 100, 200])
     assert [d for _f, d in load_frames(str(path))] == [7000, 100, 200]
+
+
+@pytest.mark.parametrize("style", sorted(mapstyle.FLOORS))
+def test_the_floor_styles_put_a_floor_under_the_dark_drawing(tmp_path, style):
+    """1.8.16 (user picked them from sample pictures, "zusätzlich", plain names): the dark conversion with a
+    floor under it – the drawing (digits, boxes) and the name stay as in "dark", the see-through floor of "dark"
+    gets the style's colour, outside the map stays see-through; each style has its own cache file; Midwich keeps
+    its floors."""
+    from dbdmapscout.mapimage import title_split
+    path = os.path.join(MAPS, "McMillan", "Coal Tower.webp")
+    dark_path = mapstyle.styled_path(path, str(tmp_path))
+    out_path = mapstyle.styled_path(path, str(tmp_path), style=style)
+    assert out_path not in (path, dark_path) and f"-{style}-v{mapstyle.STYLE_VERSION}." in out_path
+    assert mapstyle.styled_path(path, str(tmp_path), make=False, style=style) == out_path
+    assert mapstyle.styled_path(path, str(tmp_path), style="nonsense") == path
+    dark = np.asarray(Image.open(dark_path).convert("RGBA")).astype(int)
+    out = np.asarray(Image.open(out_path).convert("RGBA")).astype(int)
+    assert out.shape == dark.shape
+    top = title_split(Image.open(dark_path))[2]
+    assert np.array_equal(out[:top], dark[:top])                              # the name untouched
+    fill, edge, _ew, alpha = mapstyle.FLOORS[style]
+    shape = mapstyle._outline(dark[top:, :, 3].astype(np.uint8))
+    body_d, body_o = dark[top:], out[top:]
+    vis = ~shape & (body_d[..., 3] > 0)                                       # outside: as in "dark" (the colour of
+    assert np.array_equal(body_o[~shape][:, 3], body_d[~shape][:, 3])         # invisible pixels does not count)
+    assert np.array_equal(body_o[vis], body_d[vis])
+    floor = shape & (body_d[..., 3] == 0)                                    # where "dark" was see-through …
+    floor &= ~(cv2_erode_edge(shape, 12))                                     # (away from the edge)
+    assert floor.sum() > 50000
+    got = body_o[floor]
+    assert (np.abs(got[:, :3] - np.array(fill)).max(axis=1) <= 2).mean() > 0.99   # … the floor's colour now
+    assert (np.abs(got[:, 3] - alpha) <= 2).mean() > 0.99
+    solid = shape & (body_d[..., 3] == 255) & ~cv2_erode_edge(shape, 12)        # the opaque drawing stays
+    assert (np.abs(body_o[solid] - body_d[solid]).max(axis=1) <= 2).mean() > 0.99
+    if edge is not None:                                                      # a light edge on the outline
+        rim = shape & ~mapstyle.cv2.erode(shape.astype(np.uint8), mapstyle._disk(2)).astype(bool)
+        assert (np.abs(body_o[rim][:, :3] - np.array(edge)).max(axis=1) <= 2).mean() > 0.9
+    if style == "grey":                                                       # Midwich: floors kept, in this style
+        from dbdmapscout.overlay import load_frames
+        gif = os.path.join(MAPS, "Other", "Midwich.gif")
+        styled = mapstyle.styled_path(gif, str(tmp_path), style=style)
+        assert styled != gif and [d for _f, d in load_frames(styled)] == [d for _f, d in load_frames(gif)]
+
+
+def cv2_erode_edge(shape, px):
+    """The band of ``px`` along the outline (True there)."""
+    inner = mapstyle.cv2.erode(shape.astype(np.uint8), mapstyle._disk(px), borderType=mapstyle.cv2.BORDER_CONSTANT,
+                               borderValue=0).astype(bool)
+    return shape & ~inner
+
+
+def test_the_app_takes_the_picture_of_a_floor_style(tmp_path):
+    from dbdmapscout import app as appmod
+    path = os.path.join(MAPS, "McMillan", "Coal Tower.webp")
+    cat = types.SimpleNamespace(image_path=lambda mid, v=1: (path, v), is_own=lambda mid, v=1: False)
+    fake = types.SimpleNamespace(catalog=cat, root_dir=str(tmp_path), settings={"overlay": {"map_style": "lilac"}})
+    styled, _v = appmod.App._map_file(fake, "coal", 1)
+    assert styled.startswith(os.path.join(str(tmp_path), appmod.STYLE_CACHE)) and "-lilac-" in styled
+    from dbdmapscout.app_overlay import MAP_STYLES
+    from dbdmapscout.qt_maps import STYLE_BUTTONS
+    assert [k for k, _l in MAP_STYLES] == [k for k, _l, _t in STYLE_BUTTONS] == ["classic", *mapstyle.STYLES]

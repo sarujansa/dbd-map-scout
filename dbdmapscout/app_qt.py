@@ -585,7 +585,7 @@ class QtShell:
             path = out.get((mid, v))
             if path is None:
                 path = self._map_file(mid, v, make=False)[0]
-                if style != "dark" or path != self.catalog.image_path(mid, v)[0]:
+                if style == "classic" or path != self.catalog.image_path(mid, v)[0]:
                     out[(mid, v)] = path           # the original in the dark style: the warm-up may still make it
             paths[(mid, v)] = path
         return paths
