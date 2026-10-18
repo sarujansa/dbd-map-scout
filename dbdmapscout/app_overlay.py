@@ -126,6 +126,10 @@ class OverlayTab:
         self.undo_btn = self._reg("ov.undo", ui.Button(r2, text=_("Rückgängig"), command=self.undo_layout))
         self.undo_btn.pack(side="left", padx=(6, 0))
         self.undo_btn.state(["disabled"])
+        self.master_var = ui.BooleanVar(value=bool(self.settings.get("overlay_on", True)))     # 1.8.18
+        self._reg("ov.master", ui.Checkbutton(pos, text=_("Overlay anzeigen (aus: nichts im Spiel, Erkennung läuft weiter)"),
+                                              variable=self.master_var,
+                                              command=lambda: self.set_overlay_on(self.master_var.get())))
         self.per_size_var = ui.BooleanVar(value=self.settings.get("layout_per_size", True))
         self._reg("ov.per_size", ui.Checkbutton(pos, text=_("Position und Grösse je DBD-Fenstergrösse merken"),
                                                 variable=self.per_size_var, command=self._per_size_changed)

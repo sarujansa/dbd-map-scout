@@ -136,7 +136,7 @@ class OverviewPage(QWidget):
         info.addStretch()
         btns = FlowRow(spacing=6)                 # the buttons wrap instead of running out of the card
         self.buttons = {}
-        for key in ("scan", "choose", "rotate", "toggle", "reject", "confirm", "layout", "floor"):
+        for key in ("scan", "choose", "rotate", "toggle", "reject", "confirm", "layout", "floor", "power"):
             b = QPushButton()
             if key == "scan":
                 b.setObjectName("primary")

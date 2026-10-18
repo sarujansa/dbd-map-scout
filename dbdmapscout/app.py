@@ -423,6 +423,41 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         self._log(_("Overlay eingeblendet.") if self.user_visible else _("Overlay ausgeblendet."), "Overlay")
         self._tick_overlay(reschedule=False)
 
+    def set_overlay_on(self, on: bool):
+        """1.8.18 (user: "eine Einstellung, dass man das Overlay deaktiviert, evtl. im Overview"): the master switch.
+        Off hides every overlay window (map, system values, "today", music); detection, statistics and recordings
+        go on, so switching it on again shows the running round at once."""
+        on = bool(on)
+        if bool(self.settings.get("overlay_on", True)) == on:
+            return
+        self.settings.set("overlay_on", on)
+        if hasattr(self, "master_var"):
+            self.master_var.set(on)
+        self._log(_("Overlay eingeschaltet.") if on else _("Overlay ausgeschaltet – die Erkennung läuft weiter."),
+                  "Overlay")
+        self._save_soon()
+        self._tick_overlay(reschedule=False)
+
+    def toggle_overlay_master(self):
+        self.set_overlay_on(not self.settings.get("overlay_on", True))
+
+    def _overlay_off(self) -> bool:
+        """The master switch is off – "Overlay testen" and moving show it all the same."""
+        return (not self.settings.get("overlay_on", True) and not self.overlay.editing
+                and time.time() >= getattr(self, "_force_until", 0))
+
+    def _overlay_all_off(self):
+        o = self.settings["overlay"]
+        self.worker.map_on_screen = self.overlay.has_map() and not self.hidden_after_match
+        gx, gy, gw, gh = self._game_rect()
+        self._hud_place(gx, gy, gw, gh, show=False)        # hides the values, still feeds the round's record
+        self._fade_hide("map", bool(o.get("fade", True)))
+        self._fade_hide("today", bool(o.get("fade", True)))
+        self._fade_hide("music", bool(o.get("media_fade", True)))
+        self.worker.overlay_rect = self.worker.today_rect = self.worker.media_rect = None
+        self._vis_state = "aus"                     # set_overlay_on logged it already
+        self._guides_place()
+
     def _watch(self, source):
         """Tell the detector which map is on display (it watches for the end of the match)."""
         self._watch_gen += 1
@@ -467,6 +502,10 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
             on = self.user_visible and not self.hidden_after_match and not self.menu_paused
             return (_("Karte ausblenden (die automatische Erkennung läuft weiter).") if on else
                     _("Karte wieder einblenden.")) + self._hk_hint("toggle_overlay")
+        if key == "power":
+            return (_("Blendet alles aus, was das Programm im Spiel zeigt – Karte, Systemwerte, Heute, Musik. Die "
+                      "Erkennung, Statistik und Aufnahmen laufen weiter.") if self.settings.get("overlay_on", True)
+                    else _("Zeigt das Overlay im Spiel wieder an."))
         if key == "layout":
             return (_("Die Erkennung war beim Layout nicht sicher – stimmt es nicht, hier weiterschalten.")
                     + " " if self._layout_unsure else "") + \
@@ -984,6 +1023,9 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
             self._log(_("{text} – Details in dbdmapscout.log", text=f"{key}: {last}"), "Fehler")
 
     def _place_overlay(self):
+        if self._overlay_off():
+            self._overlay_all_off()
+            return
         try:
             self._place_overlay_map()
         finally:

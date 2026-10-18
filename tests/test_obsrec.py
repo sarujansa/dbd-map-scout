@@ -39,6 +39,7 @@ class FakeObs(threading.Thread):
         self.stop_flag = False
         self.inputs = {"Desktop-Audio": {"muted": False}, "Mic/Aux": {"muted": False}}
         self.profile = {("Output", "Mode"): "Advanced", ("AdvOut", "RecTracks"): "15"}  # 1.8.6: tracks 1–4 ticked
+        self.scenes = {}                            # 1.8.18: {scene: [scene items]}
 
     def run(self):
         self.srv.settimeout(0.2)
@@ -144,6 +145,18 @@ class FakeObs(threading.Thread):
                 out = {"currentProgramSceneName": "Szene", "sceneName": "Szene"}
             elif kind == "CreateInput":
                 self.inputs[data["inputName"]] = dict(data, muted=False)
+                self._item(data["sceneName"], data["inputName"], data.get("sceneItemEnabled", True))
+            elif kind == "GetSceneItemList":           # 1.8.18
+                out = {"sceneItems": [dict(i) for i in self.scenes.get(data["sceneName"], [])]}
+            elif kind == "CreateSceneItem":
+                ok = data["sourceName"] in self.inputs
+                if ok:
+                    self._item(data["sceneName"], data["sourceName"], data.get("sceneItemEnabled", True))
+            elif kind == "SetSceneItemEnabled":
+                hits = [i for i in self.scenes.get(data["sceneName"], []) if i["sceneItemId"] == data["sceneItemId"]]
+                ok = bool(hits)
+                for i in hits:
+                    i["sceneItemEnabled"] = data["sceneItemEnabled"]
             elif kind == "SetInputMute":
                 ok = data["inputName"] in self.inputs
                 if ok:
@@ -168,6 +181,10 @@ class FakeObs(threading.Thread):
             self._send(conn, {"op": 7, "d": {"requestType": kind, "requestId": rid,
                                              "requestStatus": {"result": ok, "code": 100 if ok else 204},
                                              "responseData": out}})
+
+    def _item(self, scene, source, enabled=True):
+        items = self.scenes.setdefault(scene, [])
+        items.append({"sourceName": source, "sceneItemId": len(items) + 1, "sceneItemEnabled": enabled})
 
     def _write_replay(self):
         path, self._pending = self._pending[0], None
@@ -865,11 +882,36 @@ def test_the_sound_sources_are_created_once_and_switched(obs, tmp_path):
         c.close()
     assert [k for k, _d in obs.requests].count("CreateInput") == 2           # not created again
     assert obs.inputs[disc]["muted"] and not obs.inputs["Mic/Aux"]["muted"]
+    assert "CreateSceneItem" not in [k for k, _d in obs.requests]           # in the scene already: left alone
     obs.requests.clear()
     r._game = True
     r.cfg.audio = False
     r._audio_now()                                                           # switched off: OBS is left alone
     assert not obs.requests
+
+
+def test_a_sound_source_missing_from_the_scene_on_air_is_put_back_into_it(obs, tmp_path):
+    """1.8.18 (user: "Discord hört man gar nicht"): an application audio source is recorded only while it is in
+    the scene on air – created once in another scene, its track stayed silent. A wanted one is added to the
+    program scene, a hidden one shown again; an unwanted one is left where it is."""
+    r, posted = _recorder(obs, str(tmp_path), pre=False)
+    dbd, disc = obsrec.AUDIO_APPS["dbd"][0], obsrec.AUDIO_APPS["discord"][0]
+    c = r._client()
+    try:
+        r._audio(c)
+        obs.scenes = {"Szene": [{"sourceName": dbd, "sceneItemId": 7, "sceneItemEnabled": False}]}
+        r._audio(c)                                         # Discord gone from the scene, DBD hidden
+        names = [(i["sourceName"], i["sceneItemEnabled"]) for i in obs.scenes["Szene"]]
+        assert (dbd, True) in names and (disc, True) in names and len(names) == 2
+        obs.requests.clear()
+        r._audio(c)
+        assert not {"CreateSceneItem", "SetSceneItemEnabled"} & {k for k, _d in obs.requests}   # in place now
+        obs.scenes = {"Szene": []}
+        r.cfg.audio_discord = False
+        r._audio(c)
+        assert [i["sourceName"] for i in obs.scenes["Szene"]] == [dbd]                   # Discord not wanted
+    finally:
+        c.close()
 
 
 def test_every_source_gets_its_own_track_and_the_profile_is_only_read(obs, tmp_path):
