@@ -117,7 +117,13 @@ class FakeObs(threading.Thread):
             d = msg["d"]
             kind, rid, data = d["requestType"], d["requestId"], d.get("requestData") or {}
             self.requests.append((kind, data))
-            ok, out = True, {}
+            ok, out, comment = True, {}, ""
+            if kind in ("GetReplayBufferStatus", "StartReplayBuffer", "StopReplayBuffer", "SaveReplayBuffer") \
+                    and self.replay is None:          # 1.8.32: the replay buffer is not enabled in OBS's settings
+                self._send(conn, {"op": 7, "d": {"requestType": kind, "requestId": rid,
+                                                 "requestStatus": {"result": False, "code": 604,
+                                                                   "comment": "Replay buffer is not available."}}})
+                continue
             if kind == "GetVersion":
                 out = {"obsVersion": "31.0.0"}
             elif kind == "GetRecordStatus":
@@ -203,7 +209,8 @@ class FakeObs(threading.Thread):
             else:
                 ok = False
             self._send(conn, {"op": 7, "d": {"requestType": kind, "requestId": rid,
-                                             "requestStatus": {"result": ok, "code": 100 if ok else 204},
+                                             "requestStatus": {"result": ok, "code": 100 if ok else 204,
+                                                               "comment": comment},
                                              "responseData": out}})
 
     def _item(self, scene, source, enabled=True):
@@ -1272,3 +1279,26 @@ def test_a_recording_notes_which_sources_obs_had_on_their_own_track(obs, tmp_pat
     r._begin({"t": 200.0, "label": "Coal Tower", "role": "killer"})
     r._finish({})
     assert obsrec.load_index(folder)[-1].extra["sources"] == ["dbd", "discord", "mic", "other"]
+
+
+def test_a_replay_buffer_not_enabled_in_obs_is_explained_and_f8_gets_an_answer(tmp_path):
+    """1.8.32 (user's log while clipping: "Recording: GetReplayBufferStatus: Replay buffer is not available."): OBS
+    answers 604 when its replay buffer is not enabled in the settings. F8 then gets "no clip" with how to enable
+    it (before: no answer, the raw OBS text as status), the start with DBD and the connection test say it too."""
+    obs = FakeObs(record_dir=str(tmp_path), replay=None)
+    obs.start()
+    try:
+        r, posted = _recorder(obs, str(tmp_path), pre=False, instant=True, buffer_auto=True)
+        r._instant_clip({"label": "Coal Tower"})
+        got = _drain(posted)
+        clip = [d for k, d in got if k == "clip"]
+        assert clip and not clip[-1]["ok"] and "Wiederholungspuffer aktivieren" in clip[-1]["why"]
+        assert "Wiederholungspuffer aktivieren" in r.status and "not available" not in r.status
+        r._game_changed(True)
+        assert r.status.startswith("OBS bereit") and "Wiederholungspuffer aktivieren" in r.status
+        assert not r._buffer_ours and ("StartReplayBuffer", {}) not in obs.requests
+        r._test()
+        assert "Wiederholungspuffer in OBS nicht aktiviert" in r.status
+        assert obsrec.buffer_missing(obsrec.ObsError("x", 604)) and not obsrec.buffer_missing(obsrec.ObsError("x", 204))
+    finally:
+        obs.stop()
