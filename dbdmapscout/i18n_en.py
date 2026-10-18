@@ -1551,6 +1551,7 @@ EN = {
     'Sofort-Clip gespeichert ({n} s): {file}': 'Instant clip saved ({n} s): {file}',
     'Ton in OBS einstellen, sobald DBD startet:': 'Set the sound in OBS as soon as DBD starts:',
     'Ton in OBS nicht eingestellt: {error}': 'Sound in OBS not set: {error}',
+    'OBS bereit – Runden werden aufgenommen. {problem}': 'OBS ready – rounds are recorded. {problem}',
     'Für die Tonmischung im Clip-Editor in OBS: Einstellungen → Ausgabe → Ausgabemodus „Erweitert“ → Reiter Aufnahme → Audiospur 1 bis 4 anhaken (1 alles, 2 Spiel, 3 Discord, 4 Mikrofon)': 'For the sound mix in the clip editor, in OBS: Settings → Output → Output mode "Advanced" → tab Recording → tick audio tracks 1 to 4 (1 everything, 2 game, 3 Discord, 4 microphone)',
     'Jede Tonquelle auf eine eigene OBS-Tonspur legen (1 alles, 2 Spiel, 3 Discord, 4 Mikrofon) – zum Mischen im Clip-Editor': 'Put every sound source on its own OBS audio track (1 everything, 2 game, 3 Discord, 4 microphone) – for mixing in the clip editor',
     'Dafür in OBS: Einstellungen → Ausgabe → Ausgabemodus „Erweitert“ → Reiter Aufnahme → Audiospur 1 bis 4 anhaken. Das Programm prüft das beim DBD-Start und meldet es im Status unten; es ändert nichts am OBS-Profil.': 'For this, in OBS: Settings → Output → Output mode "Advanced" → tab Recording → tick audio tracks 1 to 4. The program checks this when DBD starts and reports it in the status below; it changes nothing in the OBS profile.',

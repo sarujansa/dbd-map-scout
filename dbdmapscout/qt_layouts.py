@@ -11,6 +11,27 @@ def _height(item, width: int) -> int:
     return item.heightForWidth(width) if item.hasHeightForWidth() else item.sizeHint().height()
 
 
+def _one_line(label) -> int:
+    """Width of a label's text on one line (a word-wrapping QLabel reports a narrower size hint and wraps)."""
+    m = label.contentsMargins()
+    fm = label.fontMetrics()
+    lines = (label.text() or "").split("\n")
+    return max(fm.horizontalAdvance(t) for t in lines) + m.left() + m.right() + 2 * label.margin() + 2
+
+
+def _natural(item) -> int:
+    """1.8.7: the width an item wants in a row – a wrapping label or tick box only wraps when the row is too
+    narrow for its text on one line (before, "übriger Desktop-Ton" wrapped in a wide window and its tick sat
+    above the others)."""
+    w = item.widget()
+    if w is not None:
+        if isinstance(w, QLabel) and w.wordWrap():
+            return _one_line(w)
+        if hasattr(w, "natural_width"):
+            return w.natural_width()
+    return item.sizeHint().width()
+
+
 class _Layout(QLayout):
     def __init__(self, parent=None, spacing=8):
         super().__init__(parent)
@@ -67,14 +88,14 @@ class FlowRow(_Layout):
 
     def sizeHint(self):
         items = self._shown()
-        w = sum(it.sizeHint().width() for it in items) + self._gap * max(0, len(items) - 1)
+        w = sum(_natural(it) for it in items) + self._gap * max(0, len(items) - 1)
         return QSize(w, max((it.sizeHint().height() for it in items), default=0))
 
     def _place(self, rect, apply):
         items = self._shown()
         if not items:
             return 0
-        widths = [min(it.sizeHint().width(), rect.width()) for it in items]
+        widths = [min(_natural(it), rect.width()) for it in items]
         total = sum(widths) + self._gap * (len(items) - 1)
         lines, line, x = [], [], 0
         for it, w in zip(items, widths):
@@ -173,6 +194,10 @@ class WrapCheck(QWidget):
         lay.addWidget(self.box, 0, Qt.AlignTop)
         lay.addWidget(self.label, 1)
         self.box.clicked.connect(lambda _c=False: self.clicked.emit(self.box.isChecked()))
+
+    def natural_width(self) -> int:
+        """Box + text on one line (FlowRow): wraps only when the row is narrower."""
+        return self.box.sizeHint().width() + self.layout().spacing() + _one_line(self.label)
 
     def text(self) -> str:
         return self.label.text()
