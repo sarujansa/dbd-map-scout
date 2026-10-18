@@ -220,9 +220,13 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
         if over.width > avail + 2 * edge:               # still too wide: the map too
             g = (avail + 2 * edge) / over.width
             over = map_pic_at(max(80, int(mh * g)), max(40, int(th * g)))
-    over_h_room = gh - drop - lift - 2 * margin if o["anchor"] != "custom" else gh
-    if over.height > over_h_room and mh > 80:               # the lines below the map made it too tall: smaller
-        over = map_pic_at(max(80, mh - (over.height - over_h_room)), th)
+    over_h_room = gh - drop - lift - 2 * margin if o["anchor"] != "custom" else \
+        layout.own_room((x0, 0, over.width, over.height), game, bands)       # 1.8.22: between its bar's lines
+    for _try in range(3):                                   # the lines below the map made it too tall: smaller
+        if over.height <= over_h_room or mh <= 80:
+            break
+        mh = max(80, mh - (over.height - over_h_room))
+        over = map_pic_at(mh, th)
     mx, my = layout.preview_place(gw, gh, o["anchor"], o.get("pos_x", 0.0), o.get("pos_y", 0.0), margin,
                                   o.get("keep_in_bar", True), over.width, over.height, drop, align, lift)
     if in_bar and edge:                                 # the area's edge may stand in the margin (like the App)

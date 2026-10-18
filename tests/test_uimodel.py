@@ -1174,3 +1174,29 @@ def test_a_map_style_click_never_makes_a_picture_in_the_window_thread(app_root, 
         assert reloads and app._qt_preview_cache is None
     finally:
         app.quit()
+
+
+def test_both_midwich_floors_at_an_own_place_stay_between_the_limiter_lines(app_root):
+    """1.8.22 (user: "Midwich ignoriert die Regel"): at an own place the map was only moved to the top line, not
+    made smaller – both floors one below the other ran past the bottom line. The fixed positions already fitted."""
+    from dbdmapscout import layout
+    from dbdmapscout.app import App
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        app._game_rect = lambda: (0, 0, 3440, 1440)
+        o = app.settings["overlay"]
+        o.update(bar_limits_on=True, bar_limits=[0.35, 0.05, 0.08, 0.08], bar_limits_same=False, fade=False)
+        mid = next(m for m in app.catalog.maps if "midwich" in m.lower())
+        top, bottom = layout.bar_bands(o, (0, 0, 3440, 1440), int(1440 * o["margin"]))["left"]
+        for anchor in ("custom", "auto", "top-left", "bottom-left"):
+            o.update(anchor=anchor, pos_x=0.0, pos_y=0.6)
+            app._force_until = time.time() + 30
+            app.show_map(mid, 1, "manual")
+            app._place_overlay()
+            _x, y, _w, h = app._last_place
+            assert app.overlay.stacked() == 2 and top <= y and y + h <= bottom, (anchor, app._last_place)
+        assert layout.own_room((17, 0, 300, 900), (0, 0, 3440, 1440), {"left": (504, 1368), "right": (0, 1)}) == 864
+        assert layout.own_room((1500, 0, 300, 900), (0, 0, 3440, 1440), {"left": (504, 1368)}) == 1440   # over the game
+        assert layout.own_room((17, 0, 300, 900), (0, 0, 3440, 1440), None) == 1440
+    finally:
+        app.quit()
