@@ -16,7 +16,7 @@ import threading
 import time
 from dataclasses import dataclass
 
-from .obsrec import CLIPS_DIR as _CLIPS_DIR, NAME_CHARS, ffmpeg_exe
+from .obsrec import AUDIO_STREAM_RE, CLIPS_DIR as _CLIPS_DIR, NAME_CHARS, ffmpeg_exe
 
 PREVIEW_H = 540                  # px: frames for the preview picture
 THUMB_H = 54                     # px: pictures of the timeline strip
@@ -45,6 +45,7 @@ class Info:
     width: int = 0
     height: int = 0
     fps: float = 30.0
+    audio_tracks: int = 0           # 1.8.5: OBS writes track 2 (without Discord) when set up for it
 
     @property
     def ok(self) -> bool:
@@ -73,6 +74,7 @@ def probe(path: str, ffmpeg: str | None = None) -> Info:
     m = SIZE_RE.search(err)
     if m:
         info.width, info.height = int(m.group(1)), int(m.group(2))
+    info.audio_tracks = len(AUDIO_STREAM_RE.findall(err))
     m = FPS_RE.search(err)
     if m:
         info.fps = float(m.group(1)) or 30.0
@@ -174,13 +176,15 @@ def unique_path(folder: str, name: str, ext: str) -> str:
 
 def cut(path: str, start: float, end: float, out: str, mode: str = "copy", ffmpeg: str | None = None,
         run=None, target_mb: float = DEFAULT_TARGET_MB, info: Info | None = None,
-        retry: bool = True, censor=None, censor_style: str = "pixel") -> tuple[bool, str]:
+        retry: bool = True, censor=None, censor_style: str = "pixel",
+        audio_track: int | None = None) -> tuple[bool, str]:
     """Write the stretch ``start``..``end`` of ``path`` to ``out``. "copy" = stream copy (seconds of work; the
     cut lands on the key frame before ``start``, so the clip may begin up to a few seconds early), "exact" =
     frame exact, picture re-encoded (x264 veryfast, CRF 18; a 30-s clip takes some seconds), sound as AAC;
     "discord" (1.6.1) = re-encoded to stay under ``target_mb`` (discord_plan picks rate, size, frame rate).
     ``censor`` (1.7.2): boxes to hide (fractions of the picture, see censor_graph) – needs the picture re-encoded,
-    so "copy" becomes "exact". Returns (ok, ffmpeg's last words on failure)."""
+    so "copy" becomes "exact". ``audio_track`` (1.8.5): which audio track to keep (0 = first; None = ffmpeg's
+    default, the first); 1 = OBS's track 2 = the mix without Discord. Returns (ok, ffmpeg's last words on failure)."""
     ffmpeg = ffmpeg or ffmpeg_exe()
     if not ffmpeg:
         return False, "ffmpeg fehlt"
@@ -208,9 +212,12 @@ def cut(path: str, start: float, end: float, out: str, mode: str = "copy", ffmpe
         if info is None or not info.ok:
             info = probe(path, ffmpeg)
         args += ["-filter_complex", censor_graph(censor, censor_style, info.width, info.height, vf),
-                 "-map", "[vout]", "-map", "0:a?"]
-    elif vf:
-        args += ["-vf", vf]
+                 "-map", "[vout]", "-map", _audio_map(audio_track)]
+    else:
+        if vf:
+            args += ["-vf", vf]
+        if audio_track is not None:
+            args += ["-map", "0:v:0", "-map", _audio_map(audio_track)]
     args += ["-movflags", "+faststart", out] if out.lower().endswith(".mp4") else [out]
     if run is None:
         def run(a):
@@ -231,8 +238,13 @@ def cut(path: str, start: float, end: float, out: str, mode: str = "copy", ffmpe
     if mode == "discord" and retry and os.path.getsize(out) > target_mb * 1024 * 1024:
         # the rate control overshot (very busy pictures): once more with less, never a file over the limit
         return cut(path, start, end, out, mode, ffmpeg, run, target_mb * 0.8, info, retry=False, censor=censor,
-                   censor_style=censor_style)
+                   censor_style=censor_style, audio_track=audio_track)
     return True, ""
+
+
+def _audio_map(audio_track: int | None) -> str:
+    """The ``-map`` value for the wanted audio track ("?" = fine without sound)."""
+    return "0:a?" if audio_track is None else f"0:a:{int(audio_track)}?"
 
 
 def names_box(width: int, height: int) -> tuple:
@@ -307,16 +319,19 @@ def discord_plan(seconds: float, target_mb: float, info: Info | None = None) -> 
     return video, min(h, src_h), min(fps, src_fps)
 
 
-def sound_wav(path: str, start: float, end: float, ffmpeg: str | None = None) -> str | None:
-    """The sound of ``start``..``end`` as a temporary WAV (for winsound while the preview plays); None on failure."""
+def sound_wav(path: str, start: float, end: float, ffmpeg: str | None = None,
+              audio_track: int | None = None) -> str | None:
+    """The sound of ``start``..``end`` as a temporary WAV (for winsound while the preview plays); None on failure.
+    ``audio_track`` (1.8.5) as in cut()."""
     ffmpeg = ffmpeg or ffmpeg_exe()
     if not ffmpeg or end <= start:
         return None
     fd, tmp = tempfile.mkstemp(prefix="dbdms-clip-", suffix=".wav")
     os.close(fd)
+    pick = [] if audio_track is None else ["-map", f"0:a:{int(audio_track)}"]
     try:
         p = subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{start:.3f}", "-to",
-                            f"{end:.3f}", "-i", path, "-vn", "-ac", "2", "-ar", "44100", "-acodec", "pcm_s16le", tmp],
+                            f"{end:.3f}", "-i", path, *pick, "-vn", "-ac", "2", "-ar", "44100", "-acodec", "pcm_s16le", tmp],
                            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120,
                            creationflags=_flags())
         if p.returncode == 0 and os.path.getsize(tmp) > 44:

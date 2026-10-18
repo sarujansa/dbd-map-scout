@@ -70,6 +70,12 @@ SHORT_ROUND_S = 300             # 1.4.2: rounds shorter than this go first when 
 FFMPEG_TIMEOUT = 600            # s for joining the two files (stream copy: seconds, not minutes)
 SPACE_EVERY = 10.0              # s between two looks at the drive (Recorder.space)
 DURATION_RE = re.compile(rb"Duration: (\d+):(\d\d):(\d\d(?:\.\d+)?)")
+AUDIO_STREAM_RE = re.compile(rb"Stream #\d+:\d+[^\n]*?: Audio:")   # 1.8.5: one per audio track in ffmpeg -i
+# 1.8.5: Discord on its own OBS audio track – track 1 = everything (as before), track 2 = everything but Discord;
+# a clip "ohne Discord-Ton" takes track 2. OBS writes several tracks only in the advanced output mode with the
+# recording tracks 1 and 2 ticked ([Output] Mode=Advanced, [AdvOut] RecTracks bit 2) – we only read those values.
+TRACK_ALL, TRACK_NO_DISCORD = {"1": True, "2": True}, {"1": True, "2": False}
+REC_TRACKS_NEEDED = 0b11
 NAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 CLIPS_DIR = "Clips"              # 1.5.3: clips (editor, F8 instant clips) beside the recordings
 FARMING_DIR = "Farming"         # 1.5.3 (user's wish): recordings of farming rounds go into this subfolder
@@ -469,6 +475,15 @@ def media_duration(path: str, ffmpeg: str | None = None, run=None) -> float | No
     return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
 
 
+def audio_tracks(path: str, ffmpeg: str | None = None, run=None) -> int:
+    """1.8.5: how many audio streams a video has (``ffmpeg -i``); 0 without ffmpeg or on failure."""
+    ffmpeg = ffmpeg or ffmpeg_exe()
+    if not ffmpeg:
+        return 0
+    _rc, err = (run or _run)([ffmpeg, "-hide_banner", "-i", path], timeout=30)
+    return len(AUDIO_STREAM_RE.findall(err))
+
+
 def merge_files(parts: list[str], out: str, ffmpeg: str | None = None, run=None) -> bool:
     """Join video files of the same format into ``out`` without re-encoding (concat demuxer, stream copy):
     seconds of work, the picture stays as OBS wrote it. False when ffmpeg is missing or fails – the parts stay."""
@@ -520,10 +535,25 @@ class Config:
     audio_discord: bool = True
     audio_desktop: bool = False      # the rest of the desktop sound (OBS "Desktop Audio")
     audio_mic: bool = False          # OBS "Mic/Aux"
+    tracks: bool = True              # 1.8.5: Discord only on track 1, everything else on tracks 1 + 2
+    clip_no_discord: bool = True     # 1.8.5: the F8 clip takes track 2 (no Discord) when the file has it
 
     @property
     def wants_buffer(self) -> bool:
         return self.pre or self.instant
+
+
+def profile_hint(mode: str, rec_tracks: str) -> str:
+    """1.8.5 (pure): what the user has to tick in OBS for a second audio track, "" when the profile is fine.
+    ``mode`` = [Output] Mode ("Simple"/"Advanced"), ``rec_tracks`` = [AdvOut] RecTracks (bit mask, track 1 = 1)."""
+    try:
+        mask = int(str(rec_tracks).strip() or "1")
+    except ValueError:
+        mask = 1
+    if str(mode).strip().lower() == "advanced" and mask & REC_TRACKS_NEEDED == REC_TRACKS_NEEDED:
+        return ""
+    return _("Für Clips ohne Discord-Ton in OBS: Einstellungen → Ausgabe → Ausgabemodus „Erweitert“ → Reiter "
+             "Aufnahme → Audiospur 1 und 2 anhaken (Discord liegt dann nur auf Spur 1)")
 
 
 def check_file(path: str) -> str | None:
@@ -1104,18 +1134,46 @@ class Recorder(threading.Thread):
                     notes.append(_("Tonquelle angelegt: {name}", name=name))
                 c.request("SetInputMute", {"inputName": name, "inputMuted": not on})
             special = c.request("GetSpecialInputs")
+            others = []
             for key, on in (("desktop1", self.cfg.audio_desktop), ("desktop2", self.cfg.audio_desktop),
                             ("mic1", self.cfg.audio_mic), ("mic2", self.cfg.audio_mic),
                             ("mic3", self.cfg.audio_mic), ("mic4", self.cfg.audio_mic)):
                 name = special.get(key)
                 if name:
                     c.request("SetInputMute", {"inputName": name, "inputMuted": not on})
+                    others.append(name)
+            if self.cfg.tracks:
+                self._tracks(c, names, others)
         except ObsError as e:
             log.info("OBS: Ton nicht eingestellt (%s)", e)
             self._say(_("Ton in OBS nicht eingestellt: {error}", error=e), False)
             return
         for n in notes:
             log.info("OBS: %s", n)
+
+    def _tracks(self, c: ObsClient, names: set, others: list):
+        """1.8.5: Discord only on audio track 1, DBD and OBS's own sources on tracks 1 and 2 – track 2 is the mix
+        without Discord for clips. Only sources that exist are touched (nothing is created here). Then a look at the
+        profile: OBS writes several tracks only in the advanced output mode with recording tracks 1 and 2 ticked;
+        we never change the profile, the status line says what to tick."""
+        dbd, discord = AUDIO_APPS["dbd"][0], AUDIO_APPS["discord"][0]
+        both = list(others) + ([dbd] if dbd in names or self.cfg.audio_dbd else [])
+        for name in both:
+            c.request("SetInputAudioTracks", {"inputName": name, "inputAudioTracks": dict(TRACK_ALL)})
+        if discord in names or self.cfg.audio_discord:
+            c.request("SetInputAudioTracks", {"inputName": discord, "inputAudioTracks": dict(TRACK_NO_DISCORD)})
+        hint = profile_hint(self._profile(c, "Output", "Mode"), self._profile(c, "AdvOut", "RecTracks"))
+        if hint:
+            log.info("OBS: %s", hint)
+            self._say(hint, False)
+
+    @staticmethod
+    def _profile(c: ObsClient, category: str, name: str) -> str:
+        d = c.request("GetProfileParameter", {"parameterCategory": category, "parameterName": name})
+        value = d.get("parameterValue")
+        if value is None:
+            value = d.get("defaultParameterValue")
+        return "" if value is None else str(value)
 
     # ---- 1.6: F8 instant clip
     def _instant_clip(self, meta):
@@ -1147,8 +1205,11 @@ class Recorder(threading.Thread):
         out = None
         if ffmpeg:
             out = os.path.join(clips, self._unique(clips, name + ".mp4"))
+            maps = ["-map", "0"]
+            if self.cfg.clip_no_discord and audio_tracks(src, ffmpeg) >= 2:   # 1.8.5: track 2 = without Discord
+                maps = ["-map", "0:v", "-map", "0:a:1"]
             rc, err = _run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-sseof", f"-{int(self.cfg.clip_s)}",
-                            "-i", src, "-map", "0", "-c", "copy", "-avoid_negative_ts", "make_zero",
+                            "-i", src, *maps, "-c", "copy", "-avoid_negative_ts", "make_zero",
                             "-movflags", "+faststart", out])
             if rc != 0 or not os.path.exists(out) or os.path.getsize(out) == 0:
                 log.info("ffmpeg: Sofort-Clip nicht geschnitten (%s): %s", rc,
