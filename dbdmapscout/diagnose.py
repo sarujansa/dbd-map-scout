@@ -130,6 +130,11 @@ def collect(app) -> str:
         lines.append(f"Letzte Prüfungen ({len(hist)}):" if hist else "Letzte Prüfungen: keine")
         lines.extend("  " + h for h in hist[-40:])
     pres = getattr(app, "presence", None)
+    rec = getattr(app, "recorder", None)                 # 1.8.31: the REC dot shows only while this records
+    if rec is not None:
+        lines.append(f"OBS-Aufnahme: an={bool(app.settings.get('rec_on', False))} nimmt_auf={rec.recording} "
+                     f"REC-Punkt={getattr(getattr(app, 'overlay', None), '_rec', None)} "
+                     f"Status={getattr(rec, 'status', '') or '–'}")
     lines.append(f"Discord: {getattr(pres, 'status', '–')} (an={app.settings.get('discord_on')}, "
                  f"ID gesetzt={bool(app.settings.get('discord_client_id'))}, Zustand={getattr(pres, 'state', None)})")
     sp = getattr(app, "spotify", None)
@@ -150,6 +155,9 @@ def collect(app) -> str:
         lines.extend(app._official_diag())
     except Exception as e:
         lines.append(f"Offizielle Daten: {e}")
+    tt = getattr(app, "_ticktimes", None)                 # 1.8.31: where the overlay's tick spends its time
+    if tt is not None:
+        lines.append(tt.line())
     errs = getattr(app, "_errors_seen", set())
     lines.append(f"Fehler seit Start: {sorted(errs) if errs else 'keine'}")
     lines.extend(lag_lines(getattr(getattr(app, "root", None), "slow", ())))

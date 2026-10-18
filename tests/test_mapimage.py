@@ -234,3 +234,34 @@ def test_floor_view_leaves_other_maps_alone():
     rotated = mi.rotate_frames([(Image.new("RGBA", (4, 2)), 7000), (Image.new("RGBA", (4, 2)), 7000)], 90)
     view, n = mi.floor_view(rotated, None)
     assert n == 2 and view[0][0].size == (2, 8)                  # turned floors are stacked as turned
+
+
+def test_names_with_an_apostrophe_show_it_in_the_picture():
+    """1.8.31 (user: "beim Titel wird das Hochkomma nicht angezeigt"): Azarov's Resting Place, Wreckers' Yard and
+    Mother's Dwelling came with their name drawn without it (the source pictures); the name strips were drawn
+    anew. In every supplied picture whose English name has an apostrophe, the white name has a short mark in its
+    upper part – letters reach from the top to the bottom of the line."""
+    import json
+    import cv2
+    import numpy as np
+    with open(os.path.join(ROOT, "maps.json"), encoding="utf-8") as f:
+        maps = json.load(f)["maps"]
+    seen = 0
+    for m in maps:
+        if not any(c in m["names"]["en"] for c in "'’"):
+            continue
+        for rel in m["variants"].values():
+            if not rel.endswith(".webp"):
+                continue
+            im = Image.open(os.path.join(ROOT, "maps", rel)).convert("RGBA")
+            sp = mi.title_split(im)
+            a = np.asarray(im)[:sp[1]]
+            white = ((a[..., :3].min(axis=2) > 200) & (a[..., 3] > 200)).astype(np.uint8)
+            rows = np.flatnonzero(white.any(axis=1))
+            top, height = rows[0], rows[-1] - rows[0] + 1
+            n, _lab, stats, _c = cv2.connectedComponentsWithStats(white)
+            marks = [s for s in stats[1:] if s[cv2.CC_STAT_TOP] <= top + 0.2 * height
+                     and s[cv2.CC_STAT_HEIGHT] < 0.45 * height and s[cv2.CC_STAT_AREA] > 20]
+            assert marks, f"{rel}: no apostrophe in the drawn name"
+            seen += 1
+    assert seen >= 6

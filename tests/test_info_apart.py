@@ -546,3 +546,81 @@ def test_a_song_change_never_shrinks_the_music_card_or_its_column(tmp_path):
         assert after["music"][1] < before["music"][1]         # then the card follows
     finally:
         app.quit()
+
+
+def test_the_rec_dot_blinks_in_the_lines_and_shows_in_the_overlay_test(tmp_path, monkeypatch):
+    """1.8.31 (user: "das Rekord-Zeichen finde ich nicht mehr"): with the lines as their own element the red dot
+    sits right of the timer there, on in even seconds, off in odd ones; it shows only while OBS records – with
+    recordings switched on, "Overlay testen" shows it too; the diagnosis has a line for it."""
+    import json
+    import time
+    import numpy as np
+    from dbdmapscout import diagnose
+    from dbdmapscout.app import App
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for name in ("maps", "models", "maps.json"):
+        os.symlink(os.path.join(root, name), tmp_path / name)
+    (tmp_path / "sim").mkdir()
+    (tmp_path / "settings.json").write_text(json.dumps({"welcome_seen": True, "sysinfo": "off", "rec_on": True,
+                                                        "overlay": dict(USER_OVERLAY, fade=False)}), encoding="utf-8")
+
+    class InfoWin(_DrawWin):
+        def set_picture(self, pic, key):
+            self.pic, self.size = pic, pic.size
+            return self.size
+
+    def red(pic):
+        a = np.asarray(pic.convert("RGBA")).astype(int)
+        return int(((a[..., 0] > 200) & (a[..., 1] < 110) & (a[..., 2] < 110) & (a[..., 3] > 200)).sum())
+
+    app = App(str(tmp_path), simulate=str(tmp_path / "sim"))
+    try:
+        app.info_win = InfoWin("INFOS")
+        app._game_rect = lambda: (0, 0, 3440, 1440)
+        app._force_until = time.time() + 30
+        app.show_map("shattered-square", 1, "auto")
+        app._rec_tick()
+        app._place_overlay()                                         # "Overlay testen": the sample dot
+        assert app.overlay._rec and "REC-Punkt=True" in diagnose.collect(app)
+        app._force_until = 0
+        app._forced = False
+        app._rec_tick()
+        assert not app.overlay._rec                                  # not recording: no dot
+        monkeypatch.setattr(type(app.recorder), "recording", property(lambda self: True))
+        for phase, seen in ((True, True), (False, False)):
+            monkeypatch.setattr(ow, "rec_phase", lambda now=None, p=phase: p)
+            app._force_until = time.time() + 30
+            app._rec_tick()
+            app._place_overlay()
+            assert app.info_win.shown and (red(app.info_win.pic) > 50) == seen, phase
+    finally:
+        app.quit()
+
+
+def test_the_diagnosis_tells_where_the_overlay_tick_spends_its_time(tmp_path):
+    """1.8.31: every overlay tick is timed per step (map, system values, today, music, lines, moving aside) – the
+    diagnosis shows average and maximum."""
+    import json
+    import time
+    from dbdmapscout import diagnose
+    from dbdmapscout.app import App
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for name in ("maps", "models", "maps.json"):
+        os.symlink(os.path.join(root, name), tmp_path / name)
+    (tmp_path / "sim").mkdir()
+    (tmp_path / "settings.json").write_text(json.dumps({"welcome_seen": True, "overlay": dict(USER_OVERLAY)}),
+                                            encoding="utf-8")
+    app = App(str(tmp_path), simulate=str(tmp_path / "sim"))
+    try:
+        app.info_win, app.today_win, app.media_win = _DrawWin("INFOS"), _DrawWin("HEUTE"), _DrawWin("MUSIK")
+        app._game_rect = lambda: (0, 0, 3440, 1440)
+        app._force_until = time.time() + 30
+        app.show_map("shattered-square", 1, "auto")
+        for _ in range(3):
+            app._place_overlay()
+        tick = app._ticktimes.ticks[-1]
+        assert {"total", "map", "info", "today", "music", "resolve"} <= set(tick)
+        assert abs(sum(v for k, v in tick.items() if k != "total") - tick["total"]) < 0.01
+        assert "Overlay-Takt (" in diagnose.collect(app)
+    finally:
+        app.quit()
