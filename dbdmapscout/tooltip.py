@@ -185,6 +185,9 @@ TIPS = {
                                                        "dazwischen – z. B. frei für eine FPS-Anzeige oder "
                                                        "Benachrichtigungen. Die Karte wird bei Bedarf kleiner.",
     "Links und rechts gleich": "Eine Linie ziehen bewegt die gleiche Linie im anderen Balken mit.",
+    "Discord-Overlay freihalten (Sprach-Widget unten links, Benachrichtigungen oben rechts, Text-Chat rechts)":
+        "Karte, Infos, Systemwerte, Heute und Musik weichen den Stellen aus, an denen Discords Overlay seine Widgets "
+        "zeigt (in der Vorschau schraffiert). Das Programm liest nichts aus Discord – die Flächen sind fest.",
     "Grenzen zurücksetzen": "Setzt alle vier Linien auf 8 % vom Rand zurück.",
     "Clip abspielen": "Spielt den markierten Clip im Standard-Player von Windows ab.",
     "Clip im Explorer zeigen": "Öffnet den Explorer mit dem markierten Clip.",

@@ -1168,6 +1168,12 @@ EN = {
     "INFOS": "INFO",
     "Infos (Timer, Bilanz, Server)": "Info (timer, record, server)",
     "Cover": "Cover",
+    "Discord-Overlay freihalten (Sprach-Widget unten links, Benachrichtigungen oben rechts, Text-Chat rechts)":
+        "Keep Discord's overlay free (voice widget bottom left, notifications top right, text chat right)",
+    "Karte, Infos, Systemwerte, Heute und Musik weichen den Stellen aus, an denen Discords Overlay seine Widgets "
+    "zeigt (in der Vorschau schraffiert). Das Programm liest nichts aus Discord – die Flächen sind fest.":
+        "Map, info, system values, today and music stay clear of the places where Discord's overlay shows its widgets "
+        "(hatched in the preview). The program reads nothing from Discord – the areas are fixed.",
     "Wie der Stil": "Like the style",
     "Rund": "Round",
     "Eckig": "Square",

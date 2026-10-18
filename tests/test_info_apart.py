@@ -193,3 +193,62 @@ def test_the_queue_beside_the_card_fills_its_height():
     assert n_big > n_small >= 1 and n_big <= len(SAMPLE_UPNEXT)
     assert skin.upnext_fit("X", 10, 1000, 1.0) == 10 and skin.upnext_fit("X", 10, 120, 1.0) == 4     # 24 + 16 + 4 · 20 − 4 = 116 px
     assert skin.upnext_fit("X", 10, 10, 1.0) == 1
+
+
+def test_no_element_lies_on_another_on_the_map_or_on_discords_overlay():
+    """1.8.25 (user: "alle UI-Elemente beachten, damit es immer sauber aussieht" + screenshots with Discord's
+    overlay open): the areas of Discord's widgets keep the bars' lines away (voice bottom left, notifications top
+    right), and every element that would lie on another, on the map or on such an area moves up or down."""
+    from dbdmapscout import media, sysinfo
+    game = (0, 0, W, H)
+    o = _o(keep_out_on=True)
+    bands = layout.bar_bands(o, game, 17)
+    zones = layout.keep_out_boxes(o, game)
+    voice, top = zones[0], zones[1]
+    side = layout.resolve([("d", (3000, 900, 400, 1000))], [(2800, 800, 220, 400)], game, None, 8)   # no room above/below
+    assert side == {"d": (3028 - 3000, 0)}                                                         # → sideways in its bar
+    assert bands["left"][1] <= int(voice[1]) - 17 and bands["right"][0] >= int(top[1] + top[3]) + 17
+    assert layout.bar_bands(o, game, 17, zones=False) is None                 # the limiter itself stays off
+    assert layout.keep_out_boxes(_o(keep_out_on=False), game) == []
+    # the resolver: a box on the map moves below it, one with no free place stays
+    m = (17, 100, 400, 800)
+    shift = layout.resolve([("a", (20, 300, 380, 100)), ("b", (20, 300, 380, 100))], [m], game, None, 8)
+    assert shift["a"] == (0, 908 - 300) and shift["b"] == (0, 1016 - 300)
+    assert layout.resolve([("c", (20, 0, 380, 1440))], [m], game, None, 8) == {}
+    # the preview: every combination of places – nothing overlaps anything
+    rows = [[("CPU ", sysinfo.DIM), ("64°C", sysinfo.WHITE)], [("GPU ", sysinfo.DIM), ("71°C", sysinfo.WHITE)]]
+    today = [[("HEUTE ", sysinfo.DIM), ("3 RUNDEN · 1:12", sysinfo.WHITE)]]
+    music = preview.music_rows(media.NowPlaying(), 0.0)
+    pic = Image.open(COAL).convert("RGBA")
+    bad = []
+    for tpos in ("below", "bottom_left", "bottom_right", "under_music"):
+        for mpos in ("below", "bottom_left", "bottom_right", "under_today"):
+            for spot in ("below", "custom"):
+                o2 = _o(keep_out_on=True, today_pos=tpos, media_pos=mpos, info_pos=spot, info_xy=[0.06, 0.4])
+                layers, _r = preview.layers(W, H, o2, "right", rows, None, pic, "", INFO, 0.36, music, today)
+                boxes = [(n, (x, y, img.width, img.height)) for n, img, x, y in layers]
+                for i, (n, b) in enumerate(boxes):
+                    for n2, b2 in boxes[:i]:
+                        if layout.boxes_overlap(b, b2):
+                            bad.append((tpos, mpos, spot, n, n2))
+                    if n != "map" and any(layout.boxes_overlap(b, z) for z in zones):
+                        free = [z for z in zones if layout.boxes_overlap(b, z)]
+                        bad.append((tpos, mpos, spot, n, "zone", free))
+    assert not bad, bad[:6]
+
+
+def test_characters_a_font_lacks_come_from_a_fallback_font():
+    """1.8.25 (user: "andere Sprachen werden bei ‚Als nächstes' nicht korrekt angezeigt (russisch)"): the Inter
+    subset of the modern styles has no Cyrillic – those characters are drawn with a font that has them."""
+    from dbdmapscout import skin
+    inter = skin.inter("Medium", 40)
+    assert ow._has_glyph(inter, "a") and not ow._has_glyph(inter, "Ж")
+    fb = ow.font_for(inter, "Ж")
+    assert fb is not inter and ow._has_glyph(fb, "Ж")
+    assert ow.font_for(inter, "a") is inter
+    pic = Image.new("RGBA", (400, 80), (0, 0, 0, 0))
+    ow._draw_run(pic, 0, 0, "Кино", inter, (255, 255, 255, 255))
+    notdef = Image.new("RGBA", (400, 80), (0, 0, 0, 0))
+    ow._draw_run(notdef, 0, 0, "￿" * 4, inter, (255, 255, 255, 255))
+    assert pic.tobytes() != notdef.tobytes() and pic.getbbox() is not None
+    assert ow._run_len(inter, "Кино") == sum(fb.getlength(c) for c in "Кино")

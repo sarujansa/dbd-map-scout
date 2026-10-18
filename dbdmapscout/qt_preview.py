@@ -131,6 +131,7 @@ class PreviewView(QWidget):
             p.drawPixmap(round(ox + lx * s), round(oy + ly * s), pix)
         self._pix = fresh
         p.setOpacity(1.0)
+        self._paint_zones(p, ox, oy, s)
         self._paint_limits(p, ox, oy, s)
         if d.get("editing"):                       # moving is on: a frame round the screen and a note
             accent = QColor(qt_theme.colours(True)["accent"])
@@ -224,6 +225,20 @@ class PreviewView(QWidget):
                     y = self._limit_y              # with "both alike" the other bar's line moves along
                 out.append((side, which, x0, x1, y))
         return out
+
+    def _paint_zones(self, p, ox, oy, s):
+        """1.8.25: the keep-out areas (Discord's overlay widgets) – hatched, so it shows why nothing goes there."""
+        from PySide6.QtCore import QRectF
+        from PySide6.QtGui import QBrush, QPen
+        for x, y, w, h in self._data.get("zones") or ():
+            r = QRectF(ox + x * s, oy + y * s, w * s, h * s)
+            p.setPen(QPen(QColor(88, 101, 242, 200), 1, Qt.DashLine))          # Discord's blurple
+            p.setBrush(QBrush(QColor(88, 101, 242, 70), Qt.BDiagPattern))
+            p.drawRect(r)
+            if r.width() > 40 and r.height() > 14:
+                p.setPen(QColor(200, 205, 255, 220))
+                p.drawText(r.adjusted(3, 2, -2, -2), Qt.AlignLeft | Qt.AlignTop, "Discord")
+        p.setBrush(Qt.NoBrush)
 
     def _paint_limits(self, p, ox, oy, s):
         """The limiter lines: dashed in the accent colour, a small tab at the inner end; brighter while moving."""
