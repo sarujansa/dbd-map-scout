@@ -140,12 +140,15 @@ DEFAULTS = {
     "rec_audio_discord": True,
     "rec_audio_desktop": False,
     "rec_audio_mic": False,
+    "rec_tracks": True,                 # 1.8.5: Discord only on OBS audio track 1 – track 2 = the mix without Discord
+    "rec_clip_no_discord": True,        # 1.8.5: the F8 instant clip takes track 2 when the buffer file has it
     "clip_mode": "copy",                # 1.5.1: clip editor – "copy" (key frames, fast) / "exact" (re-encoded)
     "clip_sound": True,                 # 1.5.1: clip editor plays the sound while previewing (Windows)
     "clip_target_mb": 10,               # 1.6.1: clip editor "Für Discord" – stays under this many MB
     "clip_censor_on": False,            # 1.7.2: clip editor hides the censor boxes when saving
     "clip_censor_style": "pixel",       # pixel | blur | black
     "clip_censor_boxes": [],            # [[x, y, w, h] …] as fractions of the picture (the names stay put)
+    "clip_no_discord": True,            # 1.8.5: clip editor takes track 2 (without Discord) when the recording has it
     "discord_on": False,                # 1.7: Rich Presence over the local Discord client (user's pick)
     "discord_client_id": "",            # the Application-ID the user registered in Discord's developer portal
     "discord_killer": True,             # name the killer in the status
