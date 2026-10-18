@@ -143,6 +143,25 @@ class Fader:
         return f >= 1.0
 
 
+class Transition:
+    """A song change on the music card (1.8.1, user: "smoother … die Liste bleibt bestehen und rutscht hoch"):
+    for SWAP_S the old song's card cross-fades into the new one while the queue rows slide up a row – pure.
+    ``old`` = the render arguments of the card as it was, ``leaving`` = the queue row that became the song
+    (slides out at the top) or None (plain cross-fade)."""
+    SWAP_S = 0.35
+    STEP_MS = 40
+
+    def __init__(self, old: dict, leaving, now: float):
+        self.old, self.leaving, self.t0 = old, leaving, now
+
+    def progress(self, now: float) -> float:
+        f = min(1.0, max(0.0, (now - self.t0) / self.SWAP_S))
+        return f * f * (3 - 2 * f)
+
+    def done(self, now: float) -> bool:
+        return now - self.t0 >= self.SWAP_S
+
+
 def playing(now: NowPlaying, wall: float) -> bool:
     """Something plays and the reading is fresh (pure)."""
     return bool(now.playing and now.title and wall - now.t <= STALE_AFTER)

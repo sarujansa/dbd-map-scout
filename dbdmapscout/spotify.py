@@ -23,6 +23,7 @@ import hashlib
 import json
 import logging
 import queue
+import re
 import secrets
 import sys
 import threading
@@ -209,6 +210,35 @@ def lines(up: UpNext, n: int) -> tuple:
     return tuple(up.items[:max(0, int(n))])
 
 
+def same_title(a: str, b: str) -> bool:
+    return bool(a) and _norm(a) == _norm(b)
+
+
+def advance(up: UpNext, title: str, artist: str = "") -> UpNext:
+    """The list moved on with the song (1.8.1, pure): when the Windows media controls now show the first coming
+    track, it becomes the current one and the rest moves up – at once, before Spotify's next answer confirms it.
+    Unchanged when the song is still the current one or not in the list."""
+    if not up.items or not title or matches(up, title, artist):
+        return up
+    nt, na = (tuple(up.items[0]) + ("", ""))[:2]
+    if not same_title(nt, title):
+        return up
+    return UpNext(nt, na, tuple(up.items[1:]), up.t)
+
+
+CLIENT_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+
+
+def valid_client_id(client_id) -> bool:
+    """A Spotify Client-ID is 32 hex characters (the user pasted a user id once, 1.8.1)."""
+    return bool(CLIENT_ID_RE.match(str(client_id or "").strip().lower()))
+
+
+def BAD_ID_TEXT() -> str:
+    return _("Spotify: Client-ID sieht falsch aus – erwartet werden 32 Zeichen aus 0–9 und a–f (Dashboard → "
+             "deine App → Settings → Basic Information → Client ID).")
+
+
 # ------------------------------------------------------------------ keeping the refresh token
 def _dpapi(data: bytes, encrypt: bool) -> bytes:
     """Windows DPAPI: encrypt/decrypt for the current Windows account (no prompt)."""
@@ -382,9 +412,9 @@ class SpotifyLink(threading.Thread):
     def logout(self):
         self.cmds.put(("logout", None))
 
-    def kick(self):
-        """Read the queue now (the song changed)."""
-        self.cmds.put(("kick", None))
+    def kick(self, title: str = "", artist: str = ""):
+        """Read the queue now (the song changed); with the new song the list moves up at once (advance)."""
+        self.cmds.put(("kick", (str(title or ""), str(artist or ""))))
 
     def quit(self):
         self.cmds.put(("quit", None))
@@ -425,6 +455,8 @@ class SpotifyLink(threading.Thread):
                 self._drop_tokens(tell=True)
                 self.upnext = UpNext()
             elif cmd == "kick":
+                if arg and arg[0]:
+                    self.upnext = advance(self.upnext, arg[0], arg[1])
                 self._kicked = True
             try:
                 self._tick()
@@ -462,15 +494,18 @@ class SpotifyLink(threading.Thread):
 
     def _tick(self):
         now = time.time()
-        if not self.on or not self.client_id:
+        if not self.on or not valid_client_id(self.client_id):
             self._stop_login()
             self.upnext = UpNext()
             if not self.on:
                 self.state = "off"
                 self._say(_("Spotify: aus"), True)
-            else:
+            elif not self.client_id:
                 self.state = "no_id"
                 self._say(_("Spotify: Client-ID fehlt – im Developer-Dashboard anlegen und hier eintragen."), False)
+            else:                                         # 1.8.1: a user id or the like – nothing is tried with it
+                self.state = "no_id"
+                self._say(BAD_ID_TEXT(), False)
             return
         if self._login is not None:
             self._poll_login(now)
@@ -527,9 +562,14 @@ class SpotifyLink(threading.Thread):
 
     # ---- login
     def _start_login(self):
+        self.status = ""                                  # the login's messages always reach the card again
         if not self.client_id:
             self.state = "no_id"
             self._say(_("Spotify: Client-ID fehlt – im Developer-Dashboard anlegen und hier eintragen."), False)
+            return
+        if not valid_client_id(self.client_id):
+            self.state = "no_id"
+            self._say(BAD_ID_TEXT(), False)
             return
         self._stop_login()
         self._verifier, challenge = pkce_pair()

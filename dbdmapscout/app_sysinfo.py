@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 import time
 
-from . import history, layout, media, official, qt_theme, skin, sysinfo
+from . import history, layout, media, official, qt_theme, skin, spotify, sysinfo
 from .capture import IS_WIN
 from .i18n import N_, _
 from .textnorm import fmt_duration
@@ -114,6 +114,10 @@ class SysInfo:
         self._media_ctx = None             # (gx, gy, gw, gh, show) of the last placement
         self._fades = {}                   # name: [media.Fader, timer job] – 1.2.4 music, 1.2.9 every element
         self._media_song = None            # (title, artist) on the card – a new song fades in
+        self._media_prev = None            # render arguments of the card as drawn last (1.8.1: the old song of a change)
+        self._media_trans = None           # media.Transition while a song change cross-fades
+        self._media_anim_job = None        # timer of its frames
+        self._media_box = None             # (x, y, w, h) of the music card on screen
         self._hud_reserved = None          # (side, height) taken at the top of a bar, for the map below
         self._hud_pending = ""             # "above"/"beside": rendered, placed once the map's place is known
         self._sysrec = None                # readings of the open round (tab Statistik → System)
@@ -242,7 +246,9 @@ class SysInfo:
                             restart=getattr(self, "_media_restart", False))
             self._media_restart = False
             self.media_win.show_at(placed["music"][0], placed["music"][1])
-            self.worker.media_rect = placed["music"]
+            self.worker.media_rect = self._media_box = placed["music"]
+        else:
+            self._media_box = None
 
     def _today_card(self):
         """"Today" (1.2.6, user: "unter dem GPU/CPU-Zähler macht keinen Sinn"): a card of its own like the music.
@@ -406,7 +412,7 @@ class SysInfo:
         if not (ctx and rows and (show or editing) and (self.game is not None or editing or forced)
                 and (bar >= layout.MIN_BAR or spot == "custom" or editing)):
             self._fade_hide("music", fade)                  # hidden at the end of the fade
-            self._media_song = None
+            self._media_song = self._media_prev = self._media_trans = None
             self.worker.media_rect = None
             return None
         margin = int(gh * o["margin"])
@@ -417,19 +423,77 @@ class SysInfo:
         prog = media.progress(now, time.time()) if o.get("media_progress", True) and media.playing(now, time.time()) \
             else None
         look = media.look(o)
-        style = dict(skin=self._skin(), accent=self._skin_accent(),                        # 1.3
-                     upnext=self._upnext(now, sample=forced), upnext_pos=o.get("media_next_pos", "below"))   # 1.8
-        w, h = win.render(rows, height, cover, o.get("media_style", "big"), prog, look, **style)
-        avail = layout.max_width(bar, margin) if bar >= layout.MIN_BAR and spot != "custom" else gw / 3
-        if w > avail:                                       # never wider than the black bar
-            w, h = win.render(rows, max(200, int(height * avail / w)), cover, o.get("media_style", "big"), prog,
-                              look, **style)
+        up = self._upnext(now, sample=forced)                                              # 1.8
+        kw = dict(rows=rows, height=height, cover=cover, style=o.get("media_style", "big"), progress=prog,
+                  look=look, skin=self._skin(), accent=self._skin_accent(), upnext=up,
+                  upnext_pos=o.get("media_next_pos", "below"))
         song = (now.title, now.artist)
-        self._media_restart = song != self._media_song or not win.shown    # a new song / appears: from nothing
-        if song != self._media_song:
-            self.spotify.kick()                             # 1.8: the queue moved on with the song
+        changed = self._media_song is not None and song != self._media_song
+        if changed:
+            self.spotify.kick(now.title, now.artist)        # 1.8: the queue moved on with the song
+            prev_items = (self._media_prev or {}).get("upnext") or ("", ())
+            leaving = prev_items[1][0] if prev_items[1] and spotify.same_title(prev_items[1][0][0], now.title) \
+                else None
+            # 1.8.1 (user: "smoother … die Liste rutscht hoch"): the old card cross-fades into the new one and
+            # the queue rows slide up, instead of the whole card fading in from nothing
+            if fade and win.shown and self._media_prev is not None:
+                self._media_trans = media.Transition(dict(self._media_prev), leaving, time.monotonic())
+        self._media_restart = not win.shown or (changed and self._media_trans is None)
         self._media_song = song
+        avail = layout.max_width(bar, margin) if bar >= layout.MIN_BAR and spot != "custom" else gw / 3
+        w, h = self._media_render(win, kw, avail)
+        self._media_prev = kw
         return (w, h)
+
+    def _media_render(self, win, kw: dict, avail: float):
+        """Draw the music card – during a song change (``_media_trans``) the cross-fade frame, else the card;
+        never wider than ``avail``."""
+        trans = self._media_trans
+        if trans is not None and not trans.done(time.monotonic()):
+            w, h = self._media_frame(win, kw, trans)
+            if w > avail:                                   # both songs smaller, by the same factor
+                f = max(200, int(kw["height"] * avail / w)) / kw["height"]
+                kw["height"] = max(200, int(kw["height"] * f))
+                trans.old["height"] = max(200, int(trans.old["height"] * f))
+                w, h = self._media_frame(win, kw, trans)
+            if self._media_anim_job is None:
+                self._media_anim_job = self.root.after(media.Transition.STEP_MS, self._media_anim_tick)
+            return w, h
+        self._media_trans = None
+        w, h = win.render(**kw)
+        if w > avail:                                       # never wider than the black bar
+            kw["height"] = max(200, int(kw["height"] * avail / w))
+            w, h = win.render(**kw)
+        return w, h
+
+    def _media_frame(self, win, kw: dict, trans):
+        """One frame of the song change: the new card with the queue rows sliding (``anim``) blended over the old."""
+        t = trans.progress(time.monotonic())
+        new = dict(kw)
+        if trans.leaving and new.get("upnext"):
+            new["anim"] = (trans.leaving, t)
+        old = dict(trans.old, upnext=new.get("upnext"), upnext_pos=new.get("upnext_pos"), anim=new.get("anim"))
+        return win.render_blend(old, new, t)      # same list on both: only cover and text cross-fade
+
+    def _media_anim_tick(self):
+        """Frames of the song change between the 4-per-second ticks (STEP_MS); the last one draws the final card."""
+        self._media_anim_job = None
+        win, trans, kw, box = self.media_win, self._media_trans, self._media_prev, self._media_box
+        if win is None or trans is None or kw is None or not win.shown:
+            self._media_trans = None
+            return
+        try:
+            if trans.done(time.monotonic()):
+                self._media_trans = None
+                win.render(**kw)
+            else:
+                self._media_frame(win, kw, trans)
+                self._media_anim_job = self.root.after(media.Transition.STEP_MS, self._media_anim_tick)
+            if box:
+                win.show_at(box[0], box[1])
+        except Exception as e:                              # a drawing error must not kill the ticks
+            log.warning("Musikkarte: Übergang abgebrochen (%s)", e)
+            self._media_trans = None
 
     # ---- fading (1.2.4 the music card, 1.2.9 map, system values and "today" too): media.Fader per window
     def _fade_win(self, name):

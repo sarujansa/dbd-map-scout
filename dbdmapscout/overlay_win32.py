@@ -656,31 +656,105 @@ def render_music_compact(rows, cover, height: int) -> Image.Image:
 
 
 def render_music(rows, cover, height: int, style: str = "big", progress=None, look=(), upnext=None,
-                 upnext_pos: str = "below") -> Image.Image:
+                 upnext_pos: str = "below", anim=None) -> Image.Image:
     """"Läuft gerade": style "big" (1.64.7, user's choice "A") = the cover big on top, below it the title (a bit
     larger) and the artist, centred; "compact" = the card of 1.64 (cover left). Text like the system values, the
     cover slightly rounded with the same soft shadow. ``look`` (1.2.4): "accent" = bar in the cover's colour,
     "remaining" = time left, "backdrop" = on a dark area. ``upnext`` (1.8) = (label, ((title, artist), …)) of the
     Spotify queue, below the song or to its right (``upnext_pos``). = music_card(music_body(…)); HudWindow keeps
     the body (cover and text) and draws only the progress strip anew every second (1.2.13)."""
-    return music_card(music_body(rows, cover, height, style, look), height, style, progress, look, upnext, upnext_pos)
+    return music_card(music_body(rows, cover, height, style, look), height, style, progress, look, upnext, upnext_pos,
+                      anim)
+
+
+def music_picture(rows, height: int, cover=None, style="big", progress=None, look=(), skin="classic", accent=None,
+                  upnext=None, upnext_pos="below", anim=None, bodies: dict | None = None) -> Image.Image:
+    """The music card in any overlay style – what HudWindow.render draws for it (1.8.1, shared with the song
+    change's cross-fade). ``bodies``: a small cache {body key: (music_body, cover)} for the classic style, whose
+    cover + text part is costly (fit_lines) and does not change while a song plays."""
+    progress = (int(progress[0]), int(progress[1])) if progress else None
+    look = tuple(sorted(look))
+    if skin != "classic":
+        from . import skin as skins
+        return skins.music(rows, cover, height, skin, progress, look, accent, style, upnext, upnext_pos, anim)
+    key = (tuple(tuple(r) for r in rows), int(height), id(cover), style, "accent" in look)
+    if bodies is None:
+        bodies = {}
+    if key not in bodies:
+        if len(bodies) >= 2:                                 # old and new song of a cross-fade, no more
+            bodies.pop(next(iter(bodies)))
+        bodies[key] = (music_body(rows, cover, height, style, look), cover)   # cover kept: id stays
+    return music_card(bodies[key][0], height, style, progress, look, upnext, upnext_pos, anim)
 
 
 UPNEXT_SCALE = 0.8                  # the "up next" rows, a little smaller than the song's lines (1.8)
 
 
-def upnext_block(label: str, items, height: int) -> Image.Image:
+def upnext_block(label: str, items, height: int, anim=None) -> Image.Image:
     """"Als nächstes" (1.8): a grey header and one row per coming track – number, title, artist – set like the
-    system values (render_hud puts the titles in one column behind the numbers)."""
+    system values. ``anim`` (1.8.1) = ((title, artist), shift): the row that just became the song fades out at
+    the top while the others slide up from one row below (shift 0 → 1); the block keeps its final size."""
     from .media import MAX_CHARS, clip
-    rows = [[(label, DIM_LABEL)]] if label else []
-    for i, item in enumerate(items, 1):
+    h = max(1, int(height * UPNEXT_SCALE))
+    pad = 3 * max(2, h // 300)
+
+    def row_pic(num, item):
         title, artist = (tuple(item) + ("", ""))[:2]
-        row = [(f"{i}  ", DIM_LABEL), (clip(title, MAX_CHARS), (255, 255, 255, 255))]
+        row = [(f"{num}  " if num else "   ", DIM_LABEL), (clip(title, MAX_CHARS), (255, 255, 255, 255))]
         if artist:
             row.append((" – " + clip(artist, MAX_CHARS // 2 + 5), DIM_LABEL))
-        rows.append(row)
-    return render_hud(rows, max(1, int(height * UPNEXT_SCALE)))
+        return render_hud([row], h)
+
+    head = render_hud([[(label, DIM_LABEL)]], h) if label else None
+    pics = [row_pic(i, it) for i, it in enumerate(items, 1)]
+    if not anim or not pics:
+        return _stack(([head] if head else []) + pics, pad, False)
+    leaving, shift = anim
+    shift = min(1.0, max(0.0, float(shift)))
+    pitch = pics[0].height - pad
+    w = max([p.width for p in pics] + ([head.width] if head else []))
+    rows_h = sum(p.height - pad for p in pics) + pad
+    inner = Image.new("RGBA", (w, rows_h), (0, 0, 0, 0))
+    off = int(round((1.0 - shift) * pitch))
+    gone = row_pic(None, leaving)
+    gone.putalpha(gone.getchannel("A").point(lambda v: int(v * (1.0 - shift))))
+    _paste(inner, gone, 0, off - pitch)
+    y = off
+    for p in pics:
+        _paste(inner, p, 0, y)
+        y += p.height - pad
+    if head is None:
+        return inner
+    out = Image.new("RGBA", (w, head.height - pad + rows_h), (0, 0, 0, 0))
+    out.alpha_composite(head, (0, 0))
+    out.alpha_composite(inner, (0, head.height - pad))
+    return out
+
+
+def _paste(layer: Image.Image, pic: Image.Image, x: int, y: int):
+    """``pic`` onto ``layer`` at (x, y), cropped to the layer (alpha_composite refuses what sticks out)."""
+    sx, sy = max(0, -x), max(0, -y)
+    dx, dy = max(0, x), max(0, y)
+    cw, ch = min(pic.width - sx, layer.width - dx), min(pic.height - sy, layer.height - dy)
+    if cw <= 0 or ch <= 0:
+        return
+    layer.alpha_composite(pic, (dx, dy), (sx, sy, sx + cw, sy + ch))
+
+
+def blend_cards(old: Image.Image, new: Image.Image, t: float, centred: bool) -> Image.Image:
+    """Cross-fade between two card pictures (1.8.1): ``old`` at 1 − t, ``new`` at t, on a canvas of the larger
+    size, aligned at the top (centred horizontally for the big layout)."""
+    t = min(1.0, max(0.0, float(t)))
+    w, h = max(old.width, new.width), max(old.height, new.height)
+    out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    for pic, a in ((old, 1.0 - t), (new, t)):
+        if a <= 0.0:
+            continue
+        layer = pic if a >= 1.0 else pic.copy()
+        if a < 1.0:
+            layer.putalpha(layer.getchannel("A").point(lambda v, a=a: int(v * a)))
+        out.alpha_composite(layer, ((w - pic.width) // 2 if centred else 0, 0))
+    return out
 
 
 def _beside(pic: Image.Image, block: Image.Image, gap: int) -> Image.Image:
@@ -729,17 +803,18 @@ def music_body(rows, cover, height: int, style: str, look=()):
 
 
 def music_card(body, height: int, style: str, progress=None, look=(), upnext=None,
-               upnext_pos: str = "below") -> Image.Image:
+               upnext_pos: str = "below", anim=None) -> Image.Image:
     """The music card from its body (music_body): the progress strip below it (``progress`` = (elapsed, total)
-    seconds), then the Spotify queue ``upnext`` = (label, items) below or to the right (1.8), on the dark area if
-    "backdrop" is in ``look``. Cheap – drawn every second while a song plays."""
+    seconds), then the Spotify queue ``upnext`` = (label, items) below or to the right (1.8; ``anim`` = the
+    sliding rows of a song change, 1.8.1), on the dark area if "backdrop" is in ``look``. Cheap – drawn every
+    second while a song plays."""
     pic, strip_w, accent = body
     if progress:
         strip = progress_strip(strip_w, *progress, height, accent if "accent" in look else None,
                                "remaining" in look)
         pic = _below(pic, strip, style != "compact")
     if upnext and upnext[1]:
-        block = upnext_block(upnext[0], upnext[1], height)
+        block = upnext_block(upnext[0], upnext[1], height, anim)
         pic = _beside(pic, block, max(6, height // 120)) if upnext_pos == "right" else \
             _below(pic, block, style != "compact")
     return backdrop(pic, height) if "backdrop" in look else pic
@@ -775,8 +850,7 @@ class HudWindow:
         self._key = None
         self._data = None
         self._pos = None
-        self._body_key = None                  # the music card's body (1.2.13), kept while the song plays
-        self._body = None
+        self._bodies = {}                      # the music card's bodies (1.2.13), kept while a song plays
         self._shown = False
         self.size = (0, 0)
         self._raised = 0.0
@@ -840,25 +914,33 @@ class HudWindow:
             self._key = key
             if not rows:
                 self._data, self.size = None, (0, 0)
+            elif style is not None:                   # the music card (1.2.13: body once per song, strip every second)
+                pic = music_picture(rows, height, cover, style, progress, look, skin, accent, upnext, upnext_pos,
+                                    None, self._bodies)
             elif skin != "classic":
                 from . import skin as skins
-                pic = skins.music(rows, cover, height, skin, progress, look, accent, style, upnext, upnext_pos) \
-                    if style is not None else skins.card(rows, height, skin, accent, title)
-            elif style is None:
+                pic = skins.card(rows, height, skin, accent, title)
+            else:
                 pic = render_hud(rows, height)
                 if "backdrop" in look:
                     pic = backdrop(pic, height)
-            else:                                     # 1.2.13: the body (cover, text) once per song, the strip
-                body_key = (key[0], key[1], id(cover), style, "accent" in look)   # every second
-                if body_key != self._body_key:
-                    self._body_key = body_key
-                    self._body = (music_body(rows, cover, height, style, look), cover)   # cover kept: id stays
-                pic = music_card(self._body[0], height, style, progress, look, upnext, upnext_pos)
             if rows:
                 if self.editing:
                     pic = add_border(pic, self.edit_label)
                 self._data, self.size = premultiplied_bgra(pic), pic.size
                 self._pos = None                      # push again
+        return self.size
+
+    def render_blend(self, old: dict, new: dict, t: float):
+        """A song change (1.8.1): the card of the ``old`` song cross-faded into the ``new`` one at ``t`` (0 → 1) –
+        both dicts are keyword arguments of music_picture (``new`` may carry ``anim`` for the sliding queue rows).
+        Drawn anew every frame; the next ``render`` draws the final card again."""
+        a = music_picture(bodies=self._bodies, **old)
+        b = music_picture(bodies=self._bodies, **new)
+        pic = blend_cards(a, b, t, new.get("style", "big") == "big" and new.get("cover") is not None)
+        self._key = None
+        self._data, self.size = premultiplied_bgra(pic), pic.size
+        self._pos = None
         return self.size
 
     def show_at(self, x: int, y: int):
