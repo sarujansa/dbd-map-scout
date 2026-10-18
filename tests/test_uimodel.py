@@ -879,3 +879,64 @@ def test_the_statistics_tabs_are_short_and_the_last_rounds_come_second(app_root)
         assert "Spotify" in app.more_btn.cget("text") and "Discord" in app.more_btn.cget("text")
     finally:
         app.quit()
+
+
+def test_right_click_menus_of_recordings_last_rounds_and_the_overlay_preview(app_root):
+    """1.8.10 (user: "context actions"): a right click on a recording / a last round / an element of the overlay
+    preview opens a menu with the actions of the buttons nearby; a picked line does the same as the button."""
+    import json
+    from dbdmapscout import history, obsrec
+    from dbdmapscout.app import App
+    from dbdmapscout.app_qt import ui_act
+    folder = app_root / "rec"
+    folder.mkdir()
+    (folder / "one.mkv").write_bytes(b"\0" * 2048)
+    t1 = time.time() - 3600
+    obsrec.save_index(str(folder), [obsrec.Recording(t=t1, file="one.mkv", label="Coal Tower", end=t1 + 600,
+                                                     size=2048)])
+    t2 = time.time() - 7200
+    history.append(str(app_root / "rounds.jsonl"), history.Round(t2, 600, "coal_tower", "Coal Tower", role="survivor"))
+    (app_root / "settings.json").write_text(json.dumps({"rec_on": True, "rec_folder": str(folder),
+                                                        "welcome_seen": True}), encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    shown = []
+    app.qt.popup_menu = lambda items, pos: shown.append((items, pos))
+    try:
+        app._rec_render()
+        app.rec_table.selection_set(repr(t1))
+        app.rec_table.event_generate("<<TreeviewSelect>>")
+        ui_act(app.rec_table, ("menu", (5, 6)))
+        items, pos = shown[-1]
+        assert pos == (5, 6) and [i[0] for i in items if i] == ["play", "clip", "explorer", "keep", "delete"]
+        assert dict((i[0], i) for i in items if i)["keep"][3] is False          # a tick: not kept yet
+        app._menu_act("keep")                                                   # → recorder thread
+        deadline = time.time() + 5
+        while time.time() < deadline and not obsrec.load_index(str(folder))[0].keep:
+            time.sleep(0.05)
+        assert obsrec.load_index(str(folder))[0].keep
+
+        app.stats_nb.select(str(app.stats_last.master.master))   # the sub-tab "Letzte Runden" (only it is drawn)
+        app._stats_render()
+        app.stats_last.selection_set(repr(t2))
+        app.stats_last.event_generate("<<TreeviewSelect>>")
+        ui_act(app.stats_last, ("menu", (1, 2)))
+        items, _pos = shown[-1]
+        assert [i[0] for i in items if i] == ["killer", "survivor", "custom", "farming", "site", "delete"]
+        app._menu_act("killer")
+        assert history.load(str(app_root / "rounds.jsonl"))[0].role == "killer"
+
+        o = app.settings["overlay"]
+        o["hud_scale"] = 1.4
+        app._preview_pick(("menu", "hud", 3, 4))
+        items, _pos = shown[-1]
+        ids = [i[0] for i in items if i]
+        assert ids == ["size", "dark"] and app._sel == "hud"
+        app._menu_act("size")
+        assert abs(app.settings["overlay"]["hud_scale"] - 1.0) < 0.01
+        before = bool(o.get("hud_backdrop"))
+        app._menu_act("dark")
+        assert bool(app.settings["overlay"].get("hud_backdrop")) != before
+        app._preview_pick(("menu", "music", 3, 4))
+        assert [i[0] for i in shown[-1][0] if i] == ["size", "dark", "hide"]
+    finally:
+        app.quit()
