@@ -39,6 +39,9 @@ FAST_AFTER_LOADING = 90.0         # … and after a loading screen was seen (the
 START_LOOK_INTERVAL = 1.0         # 1.6: seconds between two looks for the end of the loading screen (armed only)
 LOBBY_INTERVAL = 1.0              # seconds between two looks at the lobby button (never during a match)
 LOBBY_RATE = 1.0                  # banner scans per second while the lobby button is on screen: the banner
+TICK_FAIL_LIMIT = 30               # 1.8.38: ticks in a row that raise before the detection counts as crashed
+TICK_FAIL_WAIT_S = 1.0            # … pause after one (no busy loop on a lasting fault)
+TICK_FAIL_LOG_S = 60.0            # … the same traceback goes to the log at most this often
 LOBBY_HOLD = 3.0                  # only comes after the loading screen; full rate again 3 s after the button went
 
 
@@ -107,6 +110,7 @@ class DetectionWorker(threading.Thread):
         self.banner_history = collections.deque(maxlen=20)  # every banner-like sighting and its outcome (diagnosis)
         self._scanner = None
         self._reported = set()
+        self._fail_text, self._fail_logged = "", 0.0     # 1.8.38: last tick error logged, when
         self._last_frame_save = 0.0
         self._last_sighting_save = 0.0
 
@@ -144,6 +148,19 @@ class DetectionWorker(threading.Thread):
             self._reported.add(key)
             last = text.strip().splitlines()[-1] if text.strip() else key
             self.post("warn", text=f"{key}: {last}")
+
+    def _tick_failed(self, text: str, fails: int) -> bool:
+        """1.8.38: a tick raised (OCR, capture, a tracker …). The full text goes to the log (a repeated one at most
+        every TICK_FAIL_LOG_S), the UI hears it once; the loop goes on with the next frame. False after
+        TICK_FAIL_LIMIT ticks in a row: the detection is broken for good – reported as a crash."""
+        now = time.time()
+        if text != self._fail_text or now - self._fail_logged >= TICK_FAIL_LOG_S:
+            self._fail_text, self._fail_logged = text, now
+            self._report("Erkennung", text)
+        if fails >= TICK_FAIL_LIMIT:
+            self.post("error", text=text)
+            return False
+        return True
 
     # ---------------------------------------------------------------- loop
     def run(self):
@@ -186,329 +203,340 @@ class DetectionWorker(threading.Thread):
         last_hist = 0.0
         last_status = None
         black_since = None
+        fails, failed = 0, False          # 1.8.38: ticks in a row that raised, did the last one
 
         while self.running:
-            tick = time.time()
-            # --------------------------------------------------- commands
             try:
-                while True:
-                    cmd = self.commands.get_nowait()
-                    if cmd[0] == "stop":
-                        return
-                    if cmd[0] == "catalog":
-                        self.catalog = cmd[1]
-                        reader = BannerReader(rec, self.catalog)
-                        acc.reset()
-                        if self._scanner:
-                            self._scanner = None
-                    if cmd[0] == "scan":
-                        self._manual_scan(rec, grabber, source, window, wcap)
-            except queue.Empty:
-                pass
+                fails, failed = (fails if failed else 0), False   # a tick that ends in "continue" counts as fine
+                tick = time.time()
+                # --------------------------------------------------- commands
+                try:
+                    while True:
+                        cmd = self.commands.get_nowait()
+                        if cmd[0] == "stop":
+                            self.running = False
+                            break
+                        if cmd[0] == "catalog":
+                            self.catalog = cmd[1]
+                            reader = BannerReader(rec, self.catalog)
+                            acc.reset()
+                            if self._scanner:
+                                self._scanner = None
+                        if cmd[0] == "scan":
+                            self._manual_scan(rec, grabber, source, window, wcap)
+                except queue.Empty:
+                    pass
+                if not self.running:
+                    break                        # 1.8.38: not return – the capture below is closed
 
-            # --------------------------------------------- where is DBD?
-            if source is None and tick - window_checked > 1.5:
-                window = find_game_window()
-                window_checked = tick
-            if source is not None:
-                frame = source.current()
-                if frame is None:
-                    time.sleep(0.5)
-                    continue
-                fh, fw = frame.shape[:2]
-                status = f"Simulation: {os.path.basename(self.simulate)}"
-                grab = lambda box: frame[box[1]:box[1] + box[3], box[0]:box[0] + box[2]]
-                origin = (0, 0)
-            else:
-                if window is not None and window.minimized:
-                    self._status(_("DBD ist minimiert"), last_status)
-                    last_status = _("DBD ist minimiert")
-                    time.sleep(0.5)
-                    continue
-                if window is not None and window.width > 100 and window.height > 100:
-                    origin = (window.left, window.top)
-                    fw, fh = window.width, window.height
-                    status = _("DBD gefunden ({w}×{h}) – warte auf Map-Banner", w=fw, h=fh)
+                # --------------------------------------------- where is DBD?
+                if source is None and tick - window_checked > 1.5:
+                    window = find_game_window()
+                    window_checked = tick
+                if source is not None:
+                    frame = source.current()
+                    if frame is None:
+                        time.sleep(0.5)
+                        continue
+                    fh, fw = frame.shape[:2]
+                    status = f"Simulation: {os.path.basename(self.simulate)}"
+                    grab = lambda box: frame[box[1]:box[1] + box[3], box[0]:box[0] + box[2]]
+                    origin = (0, 0)
                 else:
-                    # no DBD: no automatic detection – a DBD video or screenshot on the desktop must not open
-                    # the overlay over other work ("Scannen" still looks at the main screen)
-                    ml, mt, mw, mh = grabber.primary_monitor()
-                    origin, fw, fh = (ml, mt), mw, mh
-                    status = _("DBD nicht gefunden – Erkennung startet, sobald DBD läuft")
-                # ---- DBD in the background: take its picture from Windows instead of the screen
-                win_ok = source is None and window is not None and not window.minimized and window.width > 100
-                fg_now = win_ok and foreground_root() == window.hwnd
-                if policy.update(tick, IS_WIN and bool(self.settings.get("window_capture", True)), win_ok, fg_now):
-                    if wcap is not None and (wcap.hwnd != window.hwnd or wcap.closed):
-                        if wcap.closed and wcap.hwnd == window.hwnd:
-                            wcap_failed = window.hwnd           # ended by itself: do not restart every tick
+                    if window is not None and window.minimized:
+                        self._status(_("DBD ist minimiert"), last_status)
+                        last_status = _("DBD ist minimiert")
+                        time.sleep(0.5)
+                        continue
+                    if window is not None and window.width > 100 and window.height > 100:
+                        origin = (window.left, window.top)
+                        fw, fh = window.width, window.height
+                        status = _("DBD gefunden ({w}×{h}) – warte auf Map-Banner", w=fw, h=fh)
+                    else:
+                        # no DBD: no automatic detection – a DBD video or screenshot on the desktop must not open
+                        # the overlay over other work ("Scannen" still looks at the main screen)
+                        ml, mt, mw, mh = grabber.primary_monitor()
+                        origin, fw, fh = (ml, mt), mw, mh
+                        status = _("DBD nicht gefunden – Erkennung startet, sobald DBD läuft")
+                    # ---- DBD in the background: take its picture from Windows instead of the screen
+                    win_ok = source is None and window is not None and not window.minimized and window.width > 100
+                    fg_now = win_ok and foreground_root() == window.hwnd
+                    if policy.update(tick, IS_WIN and bool(self.settings.get("window_capture", True)), win_ok, fg_now):
+                        if wcap is not None and (wcap.hwnd != window.hwnd or wcap.closed):
+                            if wcap.closed and wcap.hwnd == window.hwnd:
+                                wcap_failed = window.hwnd           # ended by itself: do not restart every tick
+                            wcap.stop()
+                            wcap = None
+                        if wcap is None and wcap_failed != window.hwnd:
+                            wcap = WindowCapture(window.hwnd)
+                            if wcap.start():
+                                if not wcap_told:
+                                    wcap_told = True
+                                    self.post("watch_info", text=_("DBD im Hintergrund – Fensteraufnahme aktiv: die Map "
+                                                                   "wird auch erkannt, wenn andere Fenster darüber "
+                                                                   "liegen."))
+                            else:
+                                self.post("warn", text=_("Fensteraufnahme nicht möglich, nutze Bildschirmaufnahme "
+                                                         "({error})", error=wcap.error))
+                                wcap_failed, wcap = window.hwnd, None
+                    elif wcap is not None:
                         wcap.stop()
                         wcap = None
-                    if wcap is None and wcap_failed != window.hwnd:
-                        wcap = WindowCapture(window.hwnd)
-                        if wcap.start():
-                            if not wcap_told:
-                                wcap_told = True
-                                self.post("watch_info", text=_("DBD im Hintergrund – Fensteraufnahme aktiv: die Map "
-                                                               "wird auch erkannt, wenn andere Fenster darüber "
-                                                               "liegen."))
-                        else:
-                            self.post("warn", text=_("Fensteraufnahme nicht möglich, nutze Bildschirmaufnahme "
-                                                     "({error})", error=wcap.error))
-                            wcap_failed, wcap = window.hwnd, None
-                elif wcap is not None:
-                    wcap.stop()
-                    wcap = None
-                self.capture_info = describe(wcap, policy.active)
-                if wcap is not None and via["screen"]:
-                    self.capture_info += " · letztes Bild vom Bildschirm (Fensteraufnahme ohne Bild)"
-                if self.hidden_looks:
-                    self.capture_info += f" · {self.hidden_looks}× verdeckt, ausgelassen"
-                covers = []                       # windows over DBD (looked up once per tick, when needed)
+                    self.capture_info = describe(wcap, policy.active)
+                    if wcap is not None and via["screen"]:
+                        self.capture_info += " · letztes Bild vom Bildschirm (Fensteraufnahme ohne Bild)"
+                    if self.hidden_looks:
+                        self.capture_info += f" · {self.hidden_looks}× verdeckt, ausgelassen"
+                    covers = []                       # windows over DBD (looked up once per tick, when needed)
 
-                def grab(box, _o=origin, _cap=wcap, _win=window, _fg=fg_now, _covers=covers):
-                    """Part of the game picture, or None: DBD is in the background, the window capture had
-                    no picture and another window lies over that part of the screen (e.g. our own
-                    statistics) – then nothing is read rather than someone else's pixels."""
-                    if _cap is not None and _win is not None:
-                        img = _wgc_grab(_cap, _win, box)
-                        if img is not None:
-                            via["screen"] = False
-                            return img
-                    via["screen"] = True
-                    rect = (_o[0] + box[0], _o[1] + box[1], box[2], box[3])
-                    if _win is not None and not _fg:
-                        if not _covers:
-                            _covers.append(windows_above(_win.hwnd))
-                        if overlaps(rect, _covers[0]):
-                            self.hidden_looks += 1
-                            return None
-                    return grabber.grab(*rect)
+                    def grab(box, _o=origin, _cap=wcap, _win=window, _fg=fg_now, _covers=covers):
+                        """Part of the game picture, or None: DBD is in the background, the window capture had
+                        no picture and another window lies over that part of the screen (e.g. our own
+                        statistics) – then nothing is read rather than someone else's pixels."""
+                        if _cap is not None and _win is not None:
+                            img = _wgc_grab(_cap, _win, box)
+                            if img is not None:
+                                via["screen"] = False
+                                return img
+                        via["screen"] = True
+                        rect = (_o[0] + box[0], _o[1] + box[1], box[2], box[3])
+                        if _win is not None and not _fg:
+                            if not _covers:
+                                _covers.append(windows_above(_win.hwnd))
+                            if overlaps(rect, _covers[0]):
+                                self.hidden_looks += 1
+                                return None
+                        return grabber.grab(*rect)
 
-            if not self.settings.get("auto_detect", True):
-                status = _("Automatische Erkennung ist aus")
-            if status != last_status:
-                self._status(status, last_status)
-                last_status = status
-            sep = None
-            if self.settings.get("auto_detect", True) and (source is not None or window is not None):
-                # ------------------------------------------------ banner search
-                box = (int(ROI[0] * fw), int(ROI[1] * fh), int((ROI[2] - ROI[0]) * fw), int((ROI[3] - ROI[1]) * fh))
-                try:
-                    img = grab(box)
-                except Exception as e:           # e.g. window moved off-screen
-                    warn = _("Bildschirmaufnahme fehlgeschlagen: {error}", error=e)
-                    self._status(warn, last_status)
-                    last_status = warn
-                    time.sleep(1.0)
-                    continue
-                if img is not None and img.size and float(img.mean()) < 1.0 and window is not None:
-                    black_since = black_since or tick
-                    if tick - black_since > 8:
-                        warn = _("Aufnahme ist schwarz – DBD im Modus „Fenster-Vollbild“ betreiben")
+                if not self.settings.get("auto_detect", True):
+                    status = _("Automatische Erkennung ist aus")
+                if status != last_status:
+                    self._status(status, last_status)
+                    last_status = status
+                sep = None
+                if self.settings.get("auto_detect", True) and (source is not None or window is not None):
+                    # ------------------------------------------------ banner search
+                    box = (int(ROI[0] * fw), int(ROI[1] * fh), int((ROI[2] - ROI[0]) * fw), int((ROI[3] - ROI[1]) * fh))
+                    try:
+                        img = grab(box)
+                    except Exception as e:           # e.g. window moved off-screen
+                        warn = _("Bildschirmaufnahme fehlgeschlagen: {error}", error=e)
                         self._status(warn, last_status)
                         last_status = warn
-                else:
-                    black_since = None
+                        time.sleep(1.0)
+                        continue
+                    if img is not None and img.size and float(img.mean()) < 1.0 and window is not None:
+                        black_since = black_since or tick
+                        if tick - black_since > 8:
+                            warn = _("Aufnahme ist schwarz – DBD im Modus „Fenster-Vollbild“ betreiben")
+                            self._status(warn, last_status)
+                            last_status = warn
+                    else:
+                        black_since = None
 
-                if img is None:
-                    sep = res = None                # covered by another window: nothing of DBD to read
-                else:
-                    if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect or self.today_rect or self.info_rect or self.guide_rects or self.toast_rect):
-                        self._mask_overlay(img, origin[0] + box[0], origin[1] + box[1])
-                    sep, res = reader.read(img, fw, fh, letterboxed=self._letterboxed(fw, fh))
-                if sep is not None:
-                    if not session:
-                        session, session_frames, session_t, session_saved = True, [], tick, None
-                        # DBD shows the banner only at the start of a trial: well into a running round it is
-                        # something in the game world (neon strips, signs) – only a clean read may switch
-                        session_strict = (self.map_on_screen and tracker.in_trial
-                                          and tick - trial_since >= MID_MATCH_AFTER)
-                        acc.reset()
-                        if not session_strict:
-                            self.post("banner", t=tick)
-                    last_seen = tick
-                    if res is not None:
-                        session_frames.append((res.name_text, res.realm_text, res.name_fit))
-                        d = acc.add(res, strict=session_strict,
-                                    hold=session_strict and tick - session_t < MID_MATCH_SPAN)
-                        if session_strict and (d is not None or (session_saved is None
-                                                                 and tick - self._last_sighting_save >= 10)):
-                            # always kept (no debug switch needed): the only way to see what fooled the reader
-                            self._last_sighting_save = tick
-                            session_saved = self._save_sighting(img, res, sep, "umgeschaltet" if d else "gesehen")
-                        if d is not None:
-                            self.post("detected", map_id=d.map_id, variant=d.variant, probability=d.probability,
-                                      variant_probability=d.variant_probability, name_text=d.name_text,
-                                      realm_text=d.realm_text, frames=d.frames, name_fit=d.name_fit,
-                                      unsure=d.unsure)
-                        if self.settings.get("save_debug_images"):
-                            self._save_debug(img, res, sep)
-                elif session and tick - last_seen > 1.5:
-                    session = False
-                    self._banner_seen(session_t, session_strict, session_frames, acc, session_saved)
-                    if acc.decided is None and session_frames:
-                        best = max(session_frames, key=lambda f: f[2])
-                        if session_strict:            # mid-match: only a note in the log, no "unknown map" bar
-                            lead = acc.best()
-                            self.post("ignored", name_text=best[0], realm_text=best[1],
-                                      map_id=lead[0] if lead else None, name_fit=best[2], frames=acc.good_frames)
-                        else:
-                            self.post("unknown", name_text=best[0], realm_text=best[1])
-
-            # ------------------------------------- lobby: searching / found / role (never in a match)
-            if (self.settings.get("auto_detect", True) and sep is None and not session
-                    and tick - last_lobby >= LOBBY_INTERVAL and (source is not None or window is not None)
-                    and not (self.map_on_screen and tracker.in_trial)):
-                last_lobby = tick
-                try:
-                    cb = corner_box(fw, fh)
-                    corner = grab(cb)
-                    if corner is not None:
+                    if img is None:
+                        sep = res = None                # covered by another window: nothing of DBD to read
+                    else:
                         if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect or self.today_rect or self.info_rect or self.guide_rects or self.toast_rect):
-                            self._mask_overlay(corner, origin[0] + cb[0], origin[1] + cb[1])
-                        view = lobby_reader.read(corner, fw, fh)
-                        if view.button is not None:
-                            lobby_button_t = tick
-                            # 1.2.20: the cross-play globe above the button (farming rounds) – a second small grab
-                            xb = crossplay_box(fw, fh)
-                            globe = grab(xb)
-                            if globe is not None:
-                                if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect or self.today_rect or self.info_rect or self.guide_rects or self.toast_rect):
-                                    self._mask_overlay(globe, origin[0] + xb[0], origin[1] + xb[1])
-                                view.crossplay_off = crossplay_off(globe, fw, fh)
-                                if view.crossplay_off is None and tick - self._globe_saved > GLOBE_SAVE_EVERY:
-                                    self._globe_saved = tick    # 1.5.4 (user: farming not recognised): keep the
-                                    self._save_globe(globe, view.button)   # unreadable crop for a look
-                        fit = "–" if view.fit is None else f"{view.fit:.1f}"
-                        cross = {True: " · Crossplay aus", False: " · Crossplay an"}.get(view.crossplay_off, "")
-                        self.lobby_info = (f"{view.button or '–'} ({fit}) "
-                                           f"„{view.name}“ „{view.time_text}“ → {view.kind or '–'}{cross}")
-                        for ev in self.queue.update(view, tick):
-                            self._queue_event(ev, tick)
-                except Exception:
-                    self._report("Lobby-Erkennung", traceback.format_exc())
+                            self._mask_overlay(img, origin[0] + box[0], origin[1] + box[1])
+                        sep, res = reader.read(img, fw, fh, letterboxed=self._letterboxed(fw, fh))
+                    if sep is not None:
+                        if not session:
+                            session, session_frames, session_t, session_saved = True, [], tick, None
+                            # DBD shows the banner only at the start of a trial: well into a running round it is
+                            # something in the game world (neon strips, signs) – only a clean read may switch
+                            session_strict = (self.map_on_screen and tracker.in_trial
+                                              and tick - trial_since >= MID_MATCH_AFTER)
+                            acc.reset()
+                            if not session_strict:
+                                self.post("banner", t=tick)
+                        last_seen = tick
+                        if res is not None:
+                            session_frames.append((res.name_text, res.realm_text, res.name_fit))
+                            d = acc.add(res, strict=session_strict,
+                                        hold=session_strict and tick - session_t < MID_MATCH_SPAN)
+                            if session_strict and (d is not None or (session_saved is None
+                                                                     and tick - self._last_sighting_save >= 10)):
+                                # always kept (no debug switch needed): the only way to see what fooled the reader
+                                self._last_sighting_save = tick
+                                session_saved = self._save_sighting(img, res, sep, "umgeschaltet" if d else "gesehen")
+                            if d is not None:
+                                self.post("detected", map_id=d.map_id, variant=d.variant, probability=d.probability,
+                                          variant_probability=d.variant_probability, name_text=d.name_text,
+                                          realm_text=d.realm_text, frames=d.frames, name_fit=d.name_fit,
+                                          unsure=d.unsure)
+                            if self.settings.get("save_debug_images"):
+                                self._save_debug(img, res, sep)
+                    elif session and tick - last_seen > 1.5:
+                        session = False
+                        self._banner_seen(session_t, session_strict, session_frames, acc, session_saved)
+                        if acc.decided is None and session_frames:
+                            best = max(session_frames, key=lambda f: f[2])
+                            if session_strict:            # mid-match: only a note in the log, no "unknown map" bar
+                                lead = acc.best()
+                                self.post("ignored", name_text=best[0], realm_text=best[1],
+                                          map_id=lead[0] if lead else None, name_fit=best[2], frames=acc.good_frames)
+                            else:
+                                self.post("unknown", name_text=best[0], realm_text=best[1])
 
-            # ------------------------------------- 1.6: loading screen over -> the match begins (recording)
-            # 1.6.4: also unarmed – a loading screen tells the scan rate that a banner is coming
-            ms = self.match_start
-            if self.map_on_screen and ms.armed:
-                ms.disarm()                          # a banner came first: the recording starts there
-            elif (not self.map_on_screen and sep is None and not session
-                    and tick - last_start_look >= START_LOOK_INTERVAL
-                    and (source is not None or window is not None)):
-                last_start_look = tick
-                try:
-                    look = grab((0, 0, fw, fh))
-                    if look is not None:             # None: covered -> no look, nothing changes
-                        if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect or self.today_rect or self.info_rect or self.guide_rects or self.toast_rect):
-                            self._mask_overlay(look, origin[0], origin[1])
-                        bar, dark = has_loading_bar(look), is_dark(look)
-                        if bar and dark:
-                            last_loading = tick
-                        if ms.armed and ms.update(tick, bar, dark, tick - lobby_button_t < START_LOOK_INTERVAL * 1.5):
-                            log.info("Ladebildschirm vorbei – das Match beginnt")
-                            self.post("match_start", t=tick)
-                except Exception:
-                    self._report("Matchbeginn", traceback.format_exc())
-
-            # ------------------------------------- left the trial? -> hide map
-            gen = self.watch_gen
-            if gen != tracker_gen:
-                tracker.reset(gen[0] if gen else None, gen[1] if gen else None, tick)
-                tracker_gen = gen
-                trial_since = tick
-            use_end = bool(self.settings.get("hide_after_match", True))
-            use_menu = bool(self.settings.get("pause_in_menus", True))
-            watching = (self.map_on_screen and gen is not None and (use_end or use_menu)
-                        and tracker.active and not tracker.ended)
-            if watching:
-                tracker.use_end, tracker.use_cursor = use_end, use_menu
-                if source is not None:                       # simulation: no window, no pointer
-                    game, foreground, pointer = True, True, None
-                else:
-                    game = window is not None
-                    foreground = game and foreground_root() == window.hwnd
-                    pointer = None
-                    if foreground:
-                        cur = cursor_state()
-                        if cur is not None:
-                            vis, cx, cy = cur
-                            pointer = vis and (window.left <= cx < window.left + window.width
-                                               and window.top <= cy < window.top + window.height)
-                obs = full = look = None
-                interval = END_CHECK_INTERVAL if tracker.candidate else END_IDLE_INTERVAL
-                if sep is None and tick - last_end_check >= interval and (game or source is not None):
-                    last_end_check = tick
+                # ------------------------------------- lobby: searching / found / role (never in a match)
+                if (self.settings.get("auto_detect", True) and sep is None and not session
+                        and tick - last_lobby >= LOBBY_INTERVAL and (source is not None or window is not None)
+                        and not (self.map_on_screen and tracker.in_trial)):
+                    last_lobby = tick
                     try:
-                        full = look = grab((0, 0, fw, fh))
-                        if look is not None:                 # None: covered -> no observation, nothing changes
-                            ignore = None
+                        cb = corner_box(fw, fh)
+                        corner = grab(cb)
+                        if corner is not None:
                             if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect or self.today_rect or self.info_rect or self.guide_rects or self.toast_rect):
-                                ignore = self._mask_overlay(look, origin[0], origin[1])   # in place: no 14 MB copy
-                            obs = out_of_match.observe(look, ignore)
-                            self._note_vbars(look, fw, fh)
+                                self._mask_overlay(corner, origin[0] + cb[0], origin[1] + cb[1])
+                            view = lobby_reader.read(corner, fw, fh)
+                            if view.button is not None:
+                                lobby_button_t = tick
+                                # 1.2.20: the cross-play globe above the button (farming rounds) – a second small grab
+                                xb = crossplay_box(fw, fh)
+                                globe = grab(xb)
+                                if globe is not None:
+                                    if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect or self.today_rect or self.info_rect or self.guide_rects or self.toast_rect):
+                                        self._mask_overlay(globe, origin[0] + xb[0], origin[1] + xb[1])
+                                    view.crossplay_off = crossplay_off(globe, fw, fh)
+                                    if view.crossplay_off is None and tick - self._globe_saved > GLOBE_SAVE_EVERY:
+                                        self._globe_saved = tick    # 1.5.4 (user: farming not recognised): keep the
+                                        self._save_globe(globe, view.button)   # unreadable crop for a look
+                            fit = "–" if view.fit is None else f"{view.fit:.1f}"
+                            cross = {True: " · Crossplay aus", False: " · Crossplay an"}.get(view.crossplay_off, "")
+                            self.lobby_info = (f"{view.button or '–'} ({fit}) "
+                                               f"„{view.name}“ „{view.time_text}“ → {view.kind or '–'}{cross}")
+                            for ev in self.queue.update(view, tick):
+                                self._queue_event(ev, tick)
                     except Exception:
-                        self._report("Rundenende-Prüfung", traceback.format_exc())
-                events = tracker.update(Signals(t=tick, game=game, foreground=foreground, cursor=pointer,
-                                                banner=sep is not None, obs=obs))
-                self.watch_status = tracker.describe()
-                interesting = obs is not None and (obs.reason or obs.continue_fit is not None
-                                                   or obs.currency_groups or obs.loading)
-                if interesting or events or (obs is not None and tick - last_hist > 30):
-                    last_hist = tick
-                    ptr = "–" if pointer is None else ("sichtbar" if pointer else "verborgen")
-                    line = (f"{time.strftime('%H:%M:%S')} {obs.describe() if obs else '(kein Bild)'} · "
-                            f"Maus {ptr} · DBD aktiv {'ja' if foreground else 'nein'} · {tracker.describe()}")
-                    if events:
-                        line += " · " + ", ".join(e[0] + (f"={e[1]}" if len(e) > 1 else "") for e in events)
-                    self.end_history.append(line)
-                    if interesting or events:
-                        log.info("Rundenende: %s", line)
-                if full is not None and self.settings.get("save_debug_images"):
-                    tag = ("ende" if any(e[0] == "match_end" for e in events) else
-                           "menue" if events else "hinweis" if interesting else None)
-                    if tag or tick - self._last_frame_save > 5:
-                        self._save_frame(full, tag or "runde")
-                for ev in events:
-                    if ev[0] == "menu":
-                        self.post("menu", on=ev[1], gen=tracker.generation)
-                    elif ev[0] == "match_end":
-                        role = None
-                        if look is not None and ev[1] == "Ergebnisbildschirm":
-                            try:     # categories BRUTALITY … / OBJECTIVES … (our overlay blacked out: 2 of 4 words do)
-                                rx, ry, rw, rh = result_box(fw, fh)
-                                role = lobby_reader.result_role(look[ry:ry + rh, rx:rx + rw])
-                            except Exception:
-                                self._report("Rolle", traceback.format_exc())
-                        self.post("match_end", reason=ev[1], gen=tracker.generation, t=tracker.end_t, role=role)
-                    elif ev[0] == "armed" and tracker.source != "auto":
-                        self.post("watch_info", text=_("Rundenende-Erkennung für die gewählte Map ist jetzt aktiv."))
-                    elif ev[0] == "cursor_unreliable":
-                        self.post("watch_info", text=_("Mauszeiger war beim Map-Banner sichtbar – Menü-Erkennung "
-                                                       "per Mauszeiger ist für diese Runde aus."))
-            elif not (use_end or use_menu):
-                self.watch_status = _("aus (Einstellung)")
-            elif tracker.ended and self.map_on_screen:
-                self.watch_status = tracker.describe()
-            elif not self.map_on_screen:
-                self.watch_status = (_("Runde vorbei – wartet auf die nächste Map") if tracker.ended
-                                     else _("keine Map angezeigt"))
+                        self._report("Lobby-Erkennung", traceback.format_exc())
 
-            in_match = self.map_on_screen and tracker.in_trial
-            rate = scan_rate(float(self.settings.get("scans_per_second", 5)), in_match=in_match, session=session,
-                             since_button=tick - lobby_button_t, since_loading=tick - last_loading,
-                             live=source is None, lobby_visible=tick - lobby_button_t < LOBBY_HOLD)
-            if in_match and not session and watching and "Scan/s" not in self.watch_status:
-                self.watch_status += f" · {IN_MATCH_RATE:.0f} Scan/s"
-            if source is None and window is None:
-                rate = 1.0                               # no DBD: only looking for its window
-            self.scan_rate = rate                        # diagnosis
-            try:
-                cmd = self.commands.get(timeout=max(0.02, 1.0 / rate - (time.time() - tick)))
-                self.commands.put(cmd)          # handled at the top of the next loop
-            except queue.Empty:
-                pass
+                # ------------------------------------- 1.6: loading screen over -> the match begins (recording)
+                # 1.6.4: also unarmed – a loading screen tells the scan rate that a banner is coming
+                ms = self.match_start
+                if self.map_on_screen and ms.armed:
+                    ms.disarm()                          # a banner came first: the recording starts there
+                elif (not self.map_on_screen and sep is None and not session
+                        and tick - last_start_look >= START_LOOK_INTERVAL
+                        and (source is not None or window is not None)):
+                    last_start_look = tick
+                    try:
+                        look = grab((0, 0, fw, fh))
+                        if look is not None:             # None: covered -> no look, nothing changes
+                            if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect or self.today_rect or self.info_rect or self.guide_rects or self.toast_rect):
+                                self._mask_overlay(look, origin[0], origin[1])
+                            bar, dark = has_loading_bar(look), is_dark(look)
+                            if bar and dark:
+                                last_loading = tick
+                            if ms.armed and ms.update(tick, bar, dark, tick - lobby_button_t < START_LOOK_INTERVAL * 1.5):
+                                log.info("Ladebildschirm vorbei – das Match beginnt")
+                                self.post("match_start", t=tick)
+                    except Exception:
+                        self._report("Matchbeginn", traceback.format_exc())
+
+                # ------------------------------------- left the trial? -> hide map
+                gen = self.watch_gen
+                if gen != tracker_gen:
+                    tracker.reset(gen[0] if gen else None, gen[1] if gen else None, tick)
+                    tracker_gen = gen
+                    trial_since = tick
+                use_end = bool(self.settings.get("hide_after_match", True))
+                use_menu = bool(self.settings.get("pause_in_menus", True))
+                watching = (self.map_on_screen and gen is not None and (use_end or use_menu)
+                            and tracker.active and not tracker.ended)
+                if watching:
+                    tracker.use_end, tracker.use_cursor = use_end, use_menu
+                    if source is not None:                       # simulation: no window, no pointer
+                        game, foreground, pointer = True, True, None
+                    else:
+                        game = window is not None
+                        foreground = game and foreground_root() == window.hwnd
+                        pointer = None
+                        if foreground:
+                            cur = cursor_state()
+                            if cur is not None:
+                                vis, cx, cy = cur
+                                pointer = vis and (window.left <= cx < window.left + window.width
+                                                   and window.top <= cy < window.top + window.height)
+                    obs = full = look = None
+                    interval = END_CHECK_INTERVAL if tracker.candidate else END_IDLE_INTERVAL
+                    if sep is None and tick - last_end_check >= interval and (game or source is not None):
+                        last_end_check = tick
+                        try:
+                            full = look = grab((0, 0, fw, fh))
+                            if look is not None:                 # None: covered -> no observation, nothing changes
+                                ignore = None
+                                if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect or self.today_rect or self.info_rect or self.guide_rects or self.toast_rect):
+                                    ignore = self._mask_overlay(look, origin[0], origin[1])   # in place: no 14 MB copy
+                                obs = out_of_match.observe(look, ignore)
+                                self._note_vbars(look, fw, fh)
+                        except Exception:
+                            self._report("Rundenende-Prüfung", traceback.format_exc())
+                    events = tracker.update(Signals(t=tick, game=game, foreground=foreground, cursor=pointer,
+                                                    banner=sep is not None, obs=obs))
+                    self.watch_status = tracker.describe()
+                    interesting = obs is not None and (obs.reason or obs.continue_fit is not None
+                                                       or obs.currency_groups or obs.loading)
+                    if interesting or events or (obs is not None and tick - last_hist > 30):
+                        last_hist = tick
+                        ptr = "–" if pointer is None else ("sichtbar" if pointer else "verborgen")
+                        line = (f"{time.strftime('%H:%M:%S')} {obs.describe() if obs else '(kein Bild)'} · "
+                                f"Maus {ptr} · DBD aktiv {'ja' if foreground else 'nein'} · {tracker.describe()}")
+                        if events:
+                            line += " · " + ", ".join(e[0] + (f"={e[1]}" if len(e) > 1 else "") for e in events)
+                        self.end_history.append(line)
+                        if interesting or events:
+                            log.info("Rundenende: %s", line)
+                    if full is not None and self.settings.get("save_debug_images"):
+                        tag = ("ende" if any(e[0] == "match_end" for e in events) else
+                               "menue" if events else "hinweis" if interesting else None)
+                        if tag or tick - self._last_frame_save > 5:
+                            self._save_frame(full, tag or "runde")
+                    for ev in events:
+                        if ev[0] == "menu":
+                            self.post("menu", on=ev[1], gen=tracker.generation)
+                        elif ev[0] == "match_end":
+                            role = None
+                            if look is not None and ev[1] == "Ergebnisbildschirm":
+                                try:     # categories BRUTALITY … / OBJECTIVES … (our overlay blacked out: 2 of 4 words do)
+                                    rx, ry, rw, rh = result_box(fw, fh)
+                                    role = lobby_reader.result_role(look[ry:ry + rh, rx:rx + rw])
+                                except Exception:
+                                    self._report("Rolle", traceback.format_exc())
+                            self.post("match_end", reason=ev[1], gen=tracker.generation, t=tracker.end_t, role=role)
+                        elif ev[0] == "armed" and tracker.source != "auto":
+                            self.post("watch_info", text=_("Rundenende-Erkennung für die gewählte Map ist jetzt aktiv."))
+                        elif ev[0] == "cursor_unreliable":
+                            self.post("watch_info", text=_("Mauszeiger war beim Map-Banner sichtbar – Menü-Erkennung "
+                                                           "per Mauszeiger ist für diese Runde aus."))
+                elif not (use_end or use_menu):
+                    self.watch_status = _("aus (Einstellung)")
+                elif tracker.ended and self.map_on_screen:
+                    self.watch_status = tracker.describe()
+                elif not self.map_on_screen:
+                    self.watch_status = (_("Runde vorbei – wartet auf die nächste Map") if tracker.ended
+                                         else _("keine Map angezeigt"))
+
+                in_match = self.map_on_screen and tracker.in_trial
+                rate = scan_rate(float(self.settings.get("scans_per_second", 5)), in_match=in_match, session=session,
+                                 since_button=tick - lobby_button_t, since_loading=tick - last_loading,
+                                 live=source is None, lobby_visible=tick - lobby_button_t < LOBBY_HOLD)
+                if in_match and not session and watching and "Scan/s" not in self.watch_status:
+                    self.watch_status += f" · {IN_MATCH_RATE:.0f} Scan/s"
+                if source is None and window is None:
+                    rate = 1.0                               # no DBD: only looking for its window
+                self.scan_rate = rate                        # diagnosis
+                try:
+                    cmd = self.commands.get(timeout=max(0.02, 1.0 / rate - (time.time() - tick)))
+                    self.commands.put(cmd)          # handled at the top of the next loop
+                except queue.Empty:
+                    pass
+            except Exception:                    # 1.8.38: one bad frame must not end the detection for good
+                fails, failed = fails + 1, True
+                if not self._tick_failed(traceback.format_exc(), fails):
+                    break
+                time.sleep(TICK_FAIL_WAIT_S)
         if grabber:
             grabber.close()
         if wcap is not None:

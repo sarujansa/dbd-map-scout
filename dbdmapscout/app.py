@@ -45,6 +45,7 @@ LANGS = [("en", "EN"), ("de", "DE"), ("fr", "FR"), ("es", "ES"), ("es-MX", "ES-M
 REJECT_HOLD = 60.0        # s: a rejected map is not shown again by the same banner
 UNSURE_DELAY = 2.5        # s: a doubtful read is shown only if the banner did not read cleanly meanwhile
 QUIT_WATCHDOG_S = 15     # s: quitting takes longer than this -> the process ends anyway (1.65.1)
+QUIT_RECORDER_S = 8      # s: quitting waits this long for OBS to stop a round still running (1.8.38)
 STYLE_CACHE = os.path.join("cache", "maps_dark")      # below the program folder, made from maps/ (gitignored)
 CATS = [N_("Erkennung"), N_("Overlay"), N_("System"), N_("Fehler")]   # log categories (keys; shown translated)
 
@@ -887,7 +888,6 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
             if d.get("role"):
                 self._log(_("Ergebnisbildschirm: gespielt als {role}.", role=self._role_name(d["role"])), "Erkennung")
                 self._queue = dict(self._queue, role=d["role"])
-            self._hist_close(d.get("t") or time.time(), d.get("role"))
             if self.overlay.has_map() and not self.hidden_after_match:
                 was_visible = self.user_visible
                 self.hidden_after_match = True
@@ -896,6 +896,12 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
                 self._log(_("Runde vorbei ({reason}) – Overlay ausgeblendet.", reason=reason) if was_visible
                           else _("Runde vorbei ({reason}).", reason=reason), "Erkennung")
                 self._tick_overlay(reschedule=False)
+            # 1.8.38: the round is saved after the overlay is hidden – an error in the statistics (history file,
+            # stats page) must not keep the map up: the worker sends no second match_end
+            try:
+                self._hist_close(d.get("t") or time.time(), d.get("role"))
+            except Exception:
+                self._report_once("Rundenverlauf", traceback.format_exc())
         elif k == "menu":
             if d.get("on"):
                 if self.overlay.has_map() and not self.hidden_after_match and not self.menu_paused:
@@ -915,6 +921,8 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         elif k == "error":
             self._log(_("Die Erkennung ist abgestürzt – Details in dbdmapscout.log"), "Fehler")
             log.error(d["text"])
+            # 1.8.38: the status line and the tray dot say it too (the window is mostly hidden while playing)
+            self._worker_status = _("Die Erkennung ist abgestürzt – bitte DbD Map Scout neu starten.")
             self._inform("DbD Map Scout", _("Die Erkennung ist abgestürzt:") + "\n\n" + d["text"][-1500:])
 
     # ---------------------------------------------------------- round timer
@@ -1500,28 +1508,26 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
             t.daemon = True
             t.start()
         try:
-            self._qt_close()
-            self.settings.save()
-            self.tray.stop()
-            self.conn.stop()
-            self.sysmon.stop()
-            self.media.stop()
-            self.recorder.quit()
-            self.presence.quit()
-            self.spotify.quit()
-            self.worker.stop()
-            self.hotkeys.stop()
-            self.worker.join(timeout=4)      # let a running OCR call finish cleanly
+            # 1.8.38: every step on its own – one that raises must not skip saving or the other stops
+            wins = [w for w in (self.media_win, getattr(self, "today_win", None), getattr(self, "info_win", None))
+                    if w is not None]
+            steps = [self._qt_close, self.settings.save, self.tray.stop, self.conn.stop, self.sysmon.stop,
+                     self.media.stop, self.recorder.quit, self.presence.quit, self.spotify.quit, self.worker.stop,
+                     self.hotkeys.stop,
+                     lambda: self.worker.join(timeout=4),        # let a running OCR call finish cleanly
+                     # 1.8.38: OBS stops a round still running – else it records on and blocks the next start
+                     lambda: self.recorder.join(timeout=QUIT_RECORDER_S)]
             if hasattr(self.overlay, "destroy"):
-                self.overlay.destroy()
+                steps.append(self.overlay.destroy)
             if self.hud is not None:
-                self.hud.destroy()
-            for win in (self.media_win, getattr(self, "today_win", None), getattr(self, "info_win", None)):
-                if win is not None:
-                    win.destroy()
-            for g in getattr(self, "_guides", ()):
-                g.destroy()
-            self.toast.close()
+                steps.append(self.hud.destroy)
+            steps += [w.destroy for w in wins] + [g.destroy for g in getattr(self, "_guides", ())]
+            steps.append(self.toast.close)
+            for step in steps:
+                try:
+                    step()
+                except Exception:
+                    log.exception("Beenden")
         finally:
             self.root.quit()
 

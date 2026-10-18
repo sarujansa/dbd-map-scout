@@ -933,6 +933,13 @@ class Recorder(threading.Thread):
                 continue
             try:
                 if cmd == "quit":
+                    # 1.8.38: quitting mid-round (or in the tail) stops the recording and our replay buffer –
+                    # else OBS records on, the file is never filed and every later round finds "OBS nimmt schon
+                    # auf" and starts nothing
+                    try:
+                        self._game_changed(False)
+                    except Exception:
+                        log.exception("OBS-Aufnahme beim Beenden")
                     return
                 if cmd == "config":
                     self.cfg = arg

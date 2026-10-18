@@ -337,6 +337,32 @@ def test_nothing_is_recorded_without_the_drive_or_when_obs_records_by_hand(obs, 
     assert r.active is None
 
 
+def test_quitting_mid_round_stops_obs_and_files_the_recording(obs, tmp_path):
+    """1.8.38 (QA audit): quitting (or "Aktualisieren und neu starten") mid-round or in the tail returned at once –
+    OBS recorded on, the file was never filed, and every later start found "OBS nimmt schon auf"."""
+    r, posted = _recorder(obs, str(tmp_path), pre=False, tail_s=30)
+    r.start()
+    r.cmds.put(("start", {"t": time.time(), "label": "Coal Tower", "role": "killer", "killer": "Nurse"}))
+    end = time.time() + 5
+    while not obs.recording and time.time() < end:
+        time.sleep(0.02)
+    assert obs.recording
+    r.stop_round()                                            # the round ended: 30 s of tail …
+    r.quit()                                                  # … but the program quits now
+    r.join(timeout=5)
+    assert not r.is_alive() and not obs.recording
+    assert [k for k, _d in obs.requests].count("StopRecord") == 1
+    assert len(obsrec.load_index(str(tmp_path))) == 1         # filed under its own name, deletable later
+
+
+def test_quitting_without_a_round_does_not_call_obs(obs, tmp_path):
+    r, posted = _recorder(obs, str(tmp_path), pre=False)
+    r.start()
+    r.quit()
+    r.join(timeout=3)
+    assert not r.is_alive() and not obs.requests
+
+
 def test_prune_deletes_the_oldest_unkept_recordings_only_from_the_index(tmp_path):
     folder = str(tmp_path)
     recs = []
