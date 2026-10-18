@@ -784,6 +784,16 @@ def music_picture(rows, height: int, cover=None, style="big", progress=None, loo
     return music_card(bodies[key][0], height, style, progress, look, upnext, upnext_pos, anim, min_w, min_h)
 
 
+def lines_above(pic: Image.Image, lines: Image.Image, text_h: int) -> Image.Image:
+    """1.8.34: the classic lines block (add_info on an empty picture) above the map picture, both centred – the
+    map's drawn name stays on top of the map itself."""
+    gap = max(2, text_h // 60)
+    out = Image.new("RGBA", (max(pic.width, lines.width), lines.height + gap + pic.height), (0, 0, 0, 0))
+    out.alpha_composite(lines, ((out.width - lines.width) // 2, 0))
+    out.alpha_composite(pic, ((out.width - pic.width) // 2, lines.height + gap))
+    return out
+
+
 def pad_to(pic: Image.Image, min_w: int, centred: bool = False, min_h: int = 0) -> Image.Image:
     """``pic`` on a transparent canvas at least ``min_w`` wide and ``min_h`` tall (1.8.28/1.8.30: a classic card at
     its steady size – left-aligned, or centred for the big music layout; at the top)."""
@@ -1183,6 +1193,7 @@ class PictureOverlay:
         self.edit_label = ""            # name on the edit frame (1.64.7: "KARTE · Strg+Mausrad = Grösse")
         self.info_beside = False        # timer/server right of the map (low bar above/below the picture)
         self.info_apart = False         # 1.8.24: the lines are an element of their own (info_picture), not drawn here
+        self.lines_top = False          # 1.8.34: the lines drawn here go above the map (one block with it)
         self.text_height = 0            # px the timer/name/info are sized for (1.65: not the map's size); 0 = map
         self.backdrop = False           # dark area with rounded corners behind map and lines (1.2.4)
         self.skin = "classic"           # 1.3.1: overlay style of the map card (skin.map_card) – classic as before
@@ -1315,6 +1326,12 @@ class PictureOverlay:
     def has_info(self) -> bool:
         return bool(self._timer or self._server or self._note or self._record)
 
+    def set_lines_top(self, on: bool):
+        """1.8.34 (user: "mit der Map kombinieren, oben oder unten"): the lines drawn with the map go above it."""
+        if bool(on) != self.lines_top:
+            self.lines_top = bool(on)
+            self._key = self._fit = self._fit_room = None
+
     def set_info_apart(self, on: bool):
         """1.8.24: timer/record/server as their own element – the map window draws the map (+ name) alone."""
         if bool(on) != self.info_apart:
@@ -1414,8 +1431,9 @@ class PictureOverlay:
         rec = rec_phase() if self._rec and here else None     # 1.5.2: the dot blinks with the seconds
         timer, server, ping, note, record = (self._timer, self._server, self._ping, self._note, self._record) \
             if here else ("", "", None, "", "")
+        top = self.lines_top and not self.info_beside
         key = (base_key, self._editing, timer, server, ping, note, record,
-               self.info_beside, self.backdrop, self.skin, self.accent, self.realm, rec)
+               self.info_beside, self.backdrop, self.skin, self.accent, self.realm, rec, top)
         if key != self._key:
             self._prepared = []
             pics = []
@@ -1424,9 +1442,14 @@ class PictureOverlay:
                 for pic, dur in self._base:
                     pics.append(map_card(pic if self.show_map else None, self._caption, self.realm, timer,
                                          note, record, server, ping, (), text_h, self.skin,
-                                         self.accent, rec=rec))
+                                         self.accent, rec=rec, lines_top=top))
             for pic, dur in ([] if modern else self._base):
-                if here and self.has_info():
+                if here and self.has_info() and top and self.show_map:      # 1.8.34: the lines above the map
+                    pic = lines_above(pic, add_info(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), self._timer,
+                                                    self._server, text_h, backdrop=not self.transparent,
+                                                    ping=self._ping, note=self._note, record=self._record,
+                                                    rec=rec), text_h)
+                elif here and self.has_info():
                     pic = add_info(pic, self._timer, self._server, text_h, backdrop=not self.transparent,
                                    ping=self._ping, note=self._note, record=self._record,
                                    beside=self.info_beside and self.show_map, rec=rec)
@@ -1488,7 +1511,7 @@ class PictureOverlay:
     def _content_key(self) -> tuple:
         """What the overlay's size depends on besides the heights (the timer with its widest digits)."""
         return (re.sub(r"\d", "0", self._timer), self._server, self._ping, self._note, self._record, self.info_beside,
-                self.info_apart,
+                self.info_apart, self.lines_top,
                 self._editing, self.show_map, self.show_caption, self._caption, self.transparent, self.backdrop,
                 self._floor, id(self._frames[0][0]) if self._frames else None, self.skin, self.accent, self.realm,
                 self._rec)

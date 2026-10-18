@@ -624,3 +624,50 @@ def test_the_diagnosis_tells_where_the_overlay_tick_spends_its_time(tmp_path):
         assert "Overlay-Takt (" in diagnose.collect(app)
     finally:
         app.quit()
+
+
+def test_the_lines_can_be_joined_to_the_map_above_it(tmp_path):
+    """1.8.34 (user: "von mir aus kann man dies auch mit der Map kombinieren, oben oder unten, und gleich breit"):
+    "Mit der Karte verbunden, oben" – one block, timer and chips between the header and the map (modern) or the
+    lines above the map picture (classic); the same size as joined below, the map lower in the picture."""
+    import json
+    import time
+    import numpy as np
+    from dbdmapscout import preview, skin
+    from dbdmapscout.app import App
+    pic = Image.open(COAL).convert("RGBA")
+    body = ow.map_body(pic, 400, title_split(pic)[2])
+    for style in ("glass", "chips", "line"):
+        below = skin.map_card(body, "Coal Tower", "MacMillan Estate", "02:41", "", "", "Global", None, (), 518, style)
+        above = skin.map_card(body, "Coal Tower", "MacMillan Estate", "02:41", "", "", "Global", None, (), 518, style,
+                              lines_top=True)
+        assert above.size == below.size, style
+        assert not np.array_equal(np.asarray(above), np.asarray(below)), style
+        # the map's own pixels sit lower when the lines are on top: compare the row of the first map pixel
+        def first_map_row(card):
+            a = np.asarray(card).astype(int)
+            lilac = (np.abs(a[..., :3] - np.array([140, 148, 232])).sum(axis=2) < 40) & (a[..., 3] > 200)
+            return int(np.flatnonzero(lilac.any(axis=1))[0])
+        assert first_map_row(above) > first_map_row(below) + 40, style
+    for top in (False, True):                                    # classic: the lines above the map picture
+        got = preview.overlay_picture(pic, 400, "", True, "02:41", "Global", None, "", 518, lines_top=top)
+        a = np.asarray(got)[..., 3]
+        filled = np.flatnonzero((a > 0).any(axis=1))
+        assert got.height > 400 and len(filled)
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for name in ("maps", "models", "maps.json"):
+        os.symlink(os.path.join(root, name), tmp_path / name)
+    (tmp_path / "sim").mkdir()
+    (tmp_path / "settings.json").write_text(json.dumps({"welcome_seen": True, "overlay": dict(USER_OVERLAY,
+                                                        info_pos="inside_top")}), encoding="utf-8")
+    app = App(str(tmp_path), simulate=str(tmp_path / "sim"))
+    try:
+        app.info_win = _DrawWin("INFOS")
+        app._game_rect = lambda: (0, 0, 3440, 1440)
+        app._force_until = time.time() + 30
+        app.show_map("shattered-square", 1, "auto")
+        app._place_overlay()
+        assert app.overlay.lines_top and not app.overlay.info_apart and not app.info_win.shown
+        assert "Mit der Karte verbunden, oben" in app.info_pos_var.get()
+    finally:
+        app.quit()

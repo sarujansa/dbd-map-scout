@@ -634,7 +634,7 @@ def steady_box(state, key, w: int, h: int, now: float, hold: float = SHRINK_AFTE
 # 1.8.24 (user: "Zeit etc. nicht mehr mit der Map verbunden – ich will ab und zu nur die Map-Grösse ändern"): the
 # map's lines (timer, record, server) as an element of their own: right below / above the map, at an own place, or
 # drawn into the map window as before ("inside")
-INFO_SPOTS = ("below", "above", "custom", "inside")
+INFO_SPOTS = ("below", "above", "custom", "inside", "inside_top")      # 1.8.34: inside, lines above the map
 
 
 def info_apart(o: dict) -> bool:
