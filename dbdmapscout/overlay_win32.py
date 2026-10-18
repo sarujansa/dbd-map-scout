@@ -762,7 +762,7 @@ def render_music(rows, cover, height: int, style: str = "big", progress=None, lo
 
 def music_picture(rows, height: int, cover=None, style="big", progress=None, look=(), skin="classic", accent=None,
                   upnext=None, upnext_pos="below", anim=None, bodies: dict | None = None,
-                  min_w: int = 0) -> Image.Image:
+                  min_w: int = 0, min_h: int = 0) -> Image.Image:
     """The music card in any overlay style – what HudWindow.render draws for it (1.8.1, shared with the song
     change's cross-fade). ``bodies``: a small cache {body key: (music_body, cover)} for the classic style, whose
     cover + text part is costly (fit_lines) and does not change while a song plays. ``min_w`` (1.8.28): the
@@ -772,7 +772,7 @@ def music_picture(rows, height: int, cover=None, style="big", progress=None, loo
     if skin != "classic":
         from . import skin as skins
         return skins.music(rows, cover, height, skin, progress, look, accent, style, upnext, upnext_pos, anim,
-                           min_w=min_w)
+                           min_w=min_w, min_h=min_h)
     key = (tuple(tuple(r) for r in rows), int(height), id(cover), style, "accent" in look,
            tuple(k for k in look if k.startswith("cover_")))          # 1.8.24: the cover's shape
     if bodies is None:
@@ -781,15 +781,15 @@ def music_picture(rows, height: int, cover=None, style="big", progress=None, loo
         if len(bodies) >= 2:                                 # old and new song of a cross-fade, no more
             bodies.pop(next(iter(bodies)))
         bodies[key] = (music_body(rows, cover, height, style, look), cover)   # cover kept: id stays
-    return music_card(bodies[key][0], height, style, progress, look, upnext, upnext_pos, anim, min_w)
+    return music_card(bodies[key][0], height, style, progress, look, upnext, upnext_pos, anim, min_w, min_h)
 
 
-def pad_to(pic: Image.Image, min_w: int, centred: bool = False) -> Image.Image:
-    """``pic`` on a transparent canvas at least ``min_w`` wide (1.8.28: a classic card at its steady width –
-    left-aligned, or centred for the big music layout)."""
-    if pic.width >= min_w:
+def pad_to(pic: Image.Image, min_w: int, centred: bool = False, min_h: int = 0) -> Image.Image:
+    """``pic`` on a transparent canvas at least ``min_w`` wide and ``min_h`` tall (1.8.28/1.8.30: a classic card at
+    its steady size – left-aligned, or centred for the big music layout; at the top)."""
+    if pic.width >= min_w and pic.height >= min_h:
         return pic
-    out = Image.new("RGBA", (int(min_w), pic.height), (0, 0, 0, 0))
+    out = Image.new("RGBA", (max(pic.width, int(min_w)), max(pic.height, int(min_h))), (0, 0, 0, 0))
     out.alpha_composite(pic, ((out.width - pic.width) // 2 if centred else 0, 0))
     return out
 
@@ -924,7 +924,7 @@ def music_body(rows, cover, height: int, style: str, look=()):
 
 
 def music_card(body, height: int, style: str, progress=None, look=(), upnext=None,
-               upnext_pos: str = "below", anim=None, min_w: int = 0) -> Image.Image:
+               upnext_pos: str = "below", anim=None, min_w: int = 0, min_h: int = 0) -> Image.Image:
     """The music card from its body (music_body): the progress strip below it (``progress`` = (elapsed, total)
     seconds), then the Spotify queue ``upnext`` = (label, items) below or to the right (1.8; ``anim`` = the
     sliding rows of a song change, 1.8.1), on the dark area if "backdrop" is in ``look``. Cheap – drawn every
@@ -941,8 +941,11 @@ def music_card(body, height: int, style: str, progress=None, look=(), upnext=Non
         block = upnext_block(upnext[0], items, height, anim)
         pic = _beside(pic, block, max(6, height // 120)) if upnext_pos == "right" else \
             _below(pic, block, style != "compact")
-    pic = pad_to(pic, min_w, style != "compact")
-    return backdrop(pic, height) if "backdrop" in look else pic
+    if "backdrop" in look:                       # the dark area round the padded picture: the whole card keeps its size
+        pad2 = 2 * max(4, height // 160)          # (backdrop's own edge)
+        pic = pad_to(pic, min_w - pad2, style != "compact", min_h - pad2)
+        return backdrop(pic, height)
+    return pad_to(pic, min_w, style != "compact", min_h)
 
 
 def guide_line(length: int, vertical: bool, dash: int = 14) -> Image.Image:
@@ -1024,7 +1027,7 @@ class HudWindow:
         return self.size
 
     def render(self, rows, height: int, cover=None, style=None, progress=None, look=(), skin="classic",
-               accent=None, title=None, upnext=None, upnext_pos="below", min_w=0):
+               accent=None, title=None, upnext=None, upnext_pos="below", min_w=0, min_h=0):
         """Prepare the picture; returns its size (0, 0 without rows). ``cover``/``style``/``progress``/``look``: the
         music card (progress = (elapsed, total) seconds; redrawn once a second while a song plays). ``skin``
         (1.3): the overlay style – glass / chips / line draw the card in skin.py (``accent`` = the theme's colour,
@@ -1034,16 +1037,16 @@ class HudWindow:
         progress = (int(progress[0]), int(progress[1])) if progress else None
         look = tuple(sorted(look))
         upnext = (str(upnext[0]), tuple(tuple(i) for i in upnext[1])) if upnext and upnext[1] else None
-        min_w = int(min_w or 0)
+        min_w, min_h = int(min_w or 0), int(min_h or 0)
         key = (tuple(tuple(r) for r in rows), int(height), self.editing, id(cover), style, progress, look, skin,
-               accent, title, upnext, upnext_pos, min_w)
+               accent, title, upnext, upnext_pos, min_w, min_h)
         if key != self._key:
             self._key = key
             if not rows:
                 self._data, self.size = None, (0, 0)
             elif style is not None:                   # the music card (1.2.13: body once per song, strip every second)
                 pic = music_picture(rows, height, cover, style, progress, look, skin, accent, upnext, upnext_pos,
-                                    None, self._bodies, min_w)
+                                    None, self._bodies, min_w, min_h)
             elif skin != "classic":
                 from . import skin as skins
                 pic = skins.card(rows, height, skin, accent, title, min_w=min_w)
