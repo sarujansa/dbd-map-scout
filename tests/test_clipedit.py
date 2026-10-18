@@ -521,3 +521,42 @@ def test_marking_a_recording_shows_the_compact_editor_beside_the_table(four_trac
         assert host.content is None and not ui_shown(app.rec_host)
     finally:
         app.quit()
+
+
+def test_the_timeline_menu_sets_start_and_end_and_saves_a_still(clip, tmp_path):
+    """1.8.10: right click on the strip – the clip starts/ends there, the playhead goes there, a still picture of
+    that moment lands as PNG next to the clips."""
+    pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QContextMenuEvent
+    from PySide6.QtWidgets import QApplication
+    from PIL import Image
+    from dbdmapscout import qt_clip
+    app = QApplication.instance() or QApplication([])
+    clips = str(tmp_path / "Clips")
+    win = qt_clip.ClipWindow(clip, [], clips, sound=False)
+    try:
+        win.show()
+        tl = win.timeline
+        tl.contextMenuEvent(QContextMenuEvent(QContextMenuEvent.Mouse, QPoint(tl.width() // 2, 20),
+                                              tl.mapToGlobal(QPoint(tl.width() // 2, 20))))
+        labels = [a.text() for a in tl._menu.actions() if not a.isSeparator()]
+        assert len(labels) == 4 and labels[1].startswith("Clip beginnt hier  (0:0")
+        tl._menu.close()
+        tl.picked.emit("start", 2.0)
+        tl.picked.emit("end", 5.0)
+        assert (tl.start, tl.end) == (2.0, 5.0)
+        tl.picked.emit("end", 1.0)                                 # before the start: ignored
+        assert tl.end == 5.0
+        tl.picked.emit("still", 3.0)
+        deadline = time.time() + 10
+        while time.time() < deadline and "Standbild gespeichert" not in win.status.text():
+            app.processEvents()
+            time.sleep(0.02)
+        files = os.listdir(clips)
+        assert len(files) == 1 and files[0].endswith(".png") and "Bild 0-03.0" in files[0]
+        assert Image.open(os.path.join(clips, files[0])).size == (320, 180)       # full size of the recording
+        assert win.show_btn.isEnabled()
+    finally:
+        win.close()
+        app.processEvents()

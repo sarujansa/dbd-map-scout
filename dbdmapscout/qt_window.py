@@ -806,6 +806,28 @@ class MainWindow(QMainWindow):
         if row >= 0:
             self.nav.setCurrentRow(row)
 
+    def popup_menu(self, items, pos):
+        """1.8.10: a context menu at screen ``pos``; a picked line posts ("menu_act", id). Not modal (popup)."""
+        from PySide6.QtCore import QPoint
+        from PySide6.QtWidgets import QMenu
+        menu = QMenu(self)
+        if self._qss:
+            menu.setStyleSheet(self._qss)
+        for it in items:
+            if it is None:
+                menu.addSeparator()
+                continue
+            ident, label, enabled = it[:3]
+            a = menu.addAction(label)
+            a.setEnabled(bool(enabled))
+            if len(it) > 3 and it[3] is not None:
+                a.setCheckable(True)
+                a.setChecked(bool(it[3]))
+            a.triggered.connect(lambda _c=False, i=ident: self._post("menu_act", i))
+        self._menu = menu                                  # kept alive while open
+        menu.popup(QPoint(int(pos[0]), int(pos[1])))
+        return menu
+
     def host(self, key: str):
         """1.8.8: the HostView of a model Host (recordings tab: the clip preview), None if not built."""
         for page in self.findChildren(AutoPage):

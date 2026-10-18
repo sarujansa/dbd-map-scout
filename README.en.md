@@ -128,6 +128,8 @@ Hotkeys can be changed under **Settings → Hotkeys**: click the field and press
 
 Since 1.8.8 choice boxes and tick boxes have their own style like buttons and fields (same height, a frame, the tick in an accent box), the overview tiles are aligned at the top, hotkey names stay next to their keys in a wide window, and the dialogs "Assign map" and "Add map picture" are tidied up. Since 1.8.9 the controls after the labels of a card or tab line up and choice boxes there are equally wide; the note of the moving mode in the overlay preview sits below the picture instead of on the music card; the "Today" tab has no empty band any more; tables in statistics sub-tabs no longer cut rows off (the card stayed as tall as the empty table).
 
+**Right-click menus** (since 1.8.10, user's wish): on a recording (play, edit clip, show in Explorer, keep, delete), on a round under Statistics → Last rounds (as killer/survivor round/custom game, farming on/off, open stats page, delete – also for several marked ones), on an element of the overlay preview (reset size, dark area behind it, hide for "Today" and music) and on the timeline of the clip editor (playhead here, clip starts/ends here, **save a still picture here** as a full-size PNG into the folder "Clips"). The buttons stay, the menu is the shorter way.
+
 ## Choosing the server region (like "Make Your Choice")
 
 The **Server** tab lists all DBD server regions (AWS GameLift) with their current ping. Tick the regions you want to play on and press **Apply selection**. All other regions are blocked in the Windows **hosts file**: their server names then point to 0.0.0.0, DBD cannot reach them and only looks for matches in the allowed regions. **Allow all** removes the blocks again.
