@@ -37,7 +37,30 @@ class OverlayPlacement:
         self._vis_state = "aus"                     # set_overlay_on logged it already
         self._guides_place()
 
+    TIMED_STEPS = {"hud": "_hud_place", "today": "_today_card", "music": "_media_card", "info": "_info_card",
+                   "resolve": "_el_resolve", "guides": "_guides_place"}
+
+    def _tick_times(self):
+        """1.8.31: the tick's steps timed for the diagnosis (ticktime.TickTimes) – the methods wrapped once on
+        the instance; the map is the rest of the tick."""
+        tt = getattr(self, "_ticktimes", None)
+        if tt is None:
+            from .ticktime import TickTimes
+            tt = self._ticktimes = TickTimes()
+            for step, name in self.TIMED_STEPS.items():
+                setattr(self, name, tt.timed(step, getattr(self, name)))
+        return tt
+
     def _place_overlay(self):
+        tt = self._tick_times()
+        tt.start()
+        t0 = time.perf_counter()
+        try:
+            self._place_overlay_steps()
+        finally:
+            tt.end((time.perf_counter() - t0) * 1000)
+
+    def _place_overlay_steps(self):
         if self._overlay_off():
             self._overlay_all_off()
             return

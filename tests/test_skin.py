@@ -253,3 +253,39 @@ def test_a_music_card_keeps_a_given_height_and_steady_box_holds_a_size():
     st, w, h = layout.steady_box(st, "k", 260, 300, 3.0 + layout.SHRINK_AFTER)
     assert (w, h) == (260, 300)                                              # lasted: followed
     assert layout.steady_box(st, "other", 200, 100, 99.0)[1:] == (200, 100)  # another key: anew
+
+
+def test_a_cards_shadow_is_made_once_per_frame_and_looks_the_same():
+    """1.8.31: the soft shadow depends only on the card's frame – kept per size and style, a second card of the
+    same size reuses it; the result matches the shadow of the card itself (only under the text it may differ)."""
+    import numpy as np
+    skin._SHADOWS.clear()
+    a = skin.card(HUD, 1440, "glass", "#c9a227", "SYSTEM")
+    n = len(skin._SHADOWS)
+    hot = sysinfo.hud_rows(sysinfo.Snapshot(t=0, cpu_load=99, cpu_temp=95, gpu_temp=88, gpu_load=12, vram_used=1.1,
+                                            vram_total=12, ram_used=30.2, ram_total=32, gpu_hot=101))
+    b = skin.card(hot, 1440, "glass", "#c9a227", "SYSTEM")
+    assert a.size == b.size and len(skin._SHADOWS) == n == 1                 # the same frame: one shadow
+    inner = skin._frame(a.width - 4 * 8, a.height - 4 * 8, "glass", 1.0)
+    ref = skin.shadowed(inner, 1.0)                                           # without a key: as before
+    got = skin.shadowed(inner, 1.0, ("frame", "glass"), lambda: inner.getchannel("A"))
+    assert np.abs(np.asarray(got, int) - np.asarray(ref, int)).max() == 0
+    assert skin.card(HUD, 1440, "line", None, "SYSTEM").size and len(skin._SHADOWS) == 1   # line: no shadow
+
+
+def test_the_music_card_draws_only_its_progress_each_second():
+    """1.8.31: cover, text and list are drawn once per song and size; each second only the bar and the time –
+    the picture is exactly what drawing it whole gives."""
+    import numpy as np
+    up = ("ALS NÄCHSTES", (("Save Your Tears", "The Weeknd"), ("Levitating", "Dua Lipa")))
+    cover = sample_cover()
+    for style in MODERN:
+        skin._BODIES.clear()
+        first = skin.music(MUSIC, cover, 1440, style, (70, 200), ("accent", "remaining"), None, "big", up, "below")
+        n = len(skin._BODIES)
+        later = skin.music(MUSIC, cover, 1440, style, (71, 200), ("accent", "remaining"), None, "big", up, "below")
+        assert len(skin._BODIES) == n == 1 and later.size == first.size, style      # the body was reused
+        skin._BODIES.clear()
+        whole = skin.music(MUSIC, cover, 1440, style, (71, 200), ("accent", "remaining"), None, "big", up, "below")
+        assert np.array_equal(np.asarray(later), np.asarray(whole)), style         # the same picture
+        assert not np.array_equal(np.asarray(first), np.asarray(later))            # the bar and time moved

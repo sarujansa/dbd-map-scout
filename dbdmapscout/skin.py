@@ -138,13 +138,34 @@ def _panel(w: int, h: int, radius: int, fill, edge, width: int = 1) -> Image.Ima
     return im
 
 
-def shadowed(card: Image.Image, u: float) -> Image.Image:
-    """The card on its soft drop shadow (glass and chips); the margin belongs to the picture."""
+SHADOWS_KEPT = 48                 # 1.8.31: shadows by card frame – blurred once, not on every redraw
+_SHADOWS: dict = {}
+
+
+def shadowed(card: Image.Image, u: float, key=None, shape=None) -> Image.Image:
+    """The card on its soft drop shadow (glass and chips); the margin belongs to the picture. ``key`` (1.8.31): the
+    shadow depends only on the card's frame – with a key it is blurred once per (size, key) and kept, made from
+    ``shape()`` (the frame's alpha) instead of the card's own alpha (whose text changes every second)."""
     blur = max(2, int(8 * u))
     off = max(1, int(4 * u))
-    out = Image.new("RGBA", (card.width + 4 * blur, card.height + 4 * blur), (0, 0, 0, 0))
-    mask = Image.new("L", out.size, 0)
-    mask.paste(card.getchannel("A").point(lambda v: v * 120 // 255), (2 * blur, 2 * blur + off))
+    ck = (card.size, round(u, 4), key) if key is not None else None
+    sh = _SHADOWS.get(ck) if ck is not None else None
+    if sh is None:
+        sh = _shadow(card.size, shape() if shape is not None else card.getchannel("A"), blur, off)
+        if ck is not None:
+            _SHADOWS[ck] = sh
+            while len(_SHADOWS) > SHADOWS_KEPT:
+                _SHADOWS.pop(next(iter(_SHADOWS)))
+    out = sh.copy()
+    out.alpha_composite(card, (2 * blur, 2 * blur))
+    return out
+
+
+def _shadow(size, alpha, blur: int, off: int) -> Image.Image:
+    """The soft shadow alone, as an RGBA picture the size of the finished card."""
+    w, h = size
+    mask = Image.new("L", (w + 4 * blur, h + 4 * blur), 0)
+    mask.paste(alpha.point(lambda v: v * 120 // 255), (2 * blur, 2 * blur + off))
     # 1.3.5: a soft shadow is blurred on a picture SHADOW_STEP times smaller and scaled back (17 -> 6 ms; it is
     # drawn every second with the timer – at most 5 of 255 apart from the full-size blur)
     k = SHADOW_STEP if blur >= 2 * SHADOW_STEP else 1
@@ -153,11 +174,9 @@ def shadowed(card: Image.Image, u: float) -> Image.Image:
             .filter(ImageFilter.GaussianBlur(blur / k)).resize(mask.size, Image.BILINEAR)
     else:
         mask = mask.filter(ImageFilter.GaussianBlur(blur))
-    sh = Image.new("RGBA", out.size, (0, 0, 0, 0))
+    sh = Image.new("RGBA", mask.size, (0, 0, 0, 0))
     sh.putalpha(mask)
-    out.alpha_composite(sh)
-    out.alpha_composite(card, (2 * blur, 2 * blur))
-    return out
+    return sh
 
 
 def _text(im, x, y, text, font, fill, track: float = 0) -> float:
@@ -295,8 +314,10 @@ def _frame(w, h, style, u) -> Image.Image:
 
 
 def _finish(im, style, u) -> Image.Image:
-    """The card on its drop shadow where the style has one."""
-    return shadowed(im, u) if surface(style)["shadow"] else im
+    """The card on its drop shadow where the style has one – the shadow of its frame, kept per size (1.8.31)."""
+    if not surface(style)["shadow"]:
+        return im
+    return shadowed(im, u, ("frame", style), lambda: _frame(im.width, im.height, style, u).getchannel("A"))
 
 
 def _header_w(text, u, mark=True) -> float:
@@ -519,16 +540,47 @@ def music(rows, cover, height: int, style: str, progress=None, look=(), accent=N
     return im
 
 
+BODIES_KEPT = 6                         # 1.8.31: music cards without their progress, by song and size
+_BODIES: dict = {}
+
+
 def _music_body(title, artist, cover, u, acc, progress, look, style, big, inside, min_w=0, min_h=0) -> Image.Image:
     """The music card without its shadow: cover on top (``big``) or left, title, artist, progress with the time
-    left, and the queue (``inside`` = (label, items, anim)) below a hairline; at least ``min_w`` wide."""
-    pad = int(PAD * u)
-    line = style == "line"
+    left, and the queue (``inside`` = (label, items, anim)) below a hairline; at least ``min_w`` wide. 1.8.31: all
+    but the progress is drawn once per song and size (``_BODIES``) – each second only the bar and the time."""
     tail = _progress_text(progress, look)
     sf = inter("Medium", int(12 * u))
     # the field of the time is measured with the widest digits of the song's length: the bar's end never moves
     # while the seconds run or the minutes lose a digit (1.8.28)
     tail_w = int(_width(sf, _widest(_progress_text((progress[1], progress[1]), look)))) + int(8 * u) if tail else 0
+    anim = inside[2] if inside else None
+    key = (title, artist, id(cover), round(u, 4), acc, tuple(look), style, big,
+           (inside[0], tuple(tuple(i) for i in inside[1])) if inside else None, int(min_w), int(min_h),
+           bool(progress), tail_w)
+    hit = None if anim else _BODIES.get(key)
+    if hit is None:
+        hit = _music_base(title, artist, cover, u, progress, look, style, big, inside, min_w, min_h, tail_w) + \
+            (cover,)                                     # (the cover kept: its id stays unique while cached)
+        if not anim:
+            _BODIES[key] = hit
+            while len(_BODIES) > BODIES_KEPT:
+                _BODIES.pop(next(iter(_BODIES)))
+    base, bar_x, bar_y, _cover = hit
+    if not progress:
+        return base if anim else base.copy()
+    im = base.copy()
+    el, total = progress
+    w, pad = im.width, int(PAD * u)
+    _bar(ImageDraw.Draw(im), bar_x, bar_y, w - pad - bar_x - tail_w, min(1.0, el / max(1, total)), acc, u)
+    if tail:
+        _text(im, w - pad - tail_w + int(8 * u), bar_y - int(6 * u), tail, sf, GREY)
+    return im
+
+
+def _music_base(title, artist, cover, u, progress, look, style, big, inside, min_w, min_h, tail_w):
+    """(card without the progress, bar x, bar y) – the part of the music card that stays while a song plays."""
+    pad = int(PAD * u)
+    line = style == "line"
     if big:
         side = int(BIG_COVER * u)
         max_w = max(side, int(WRAP_SHARE * 1440 * u) - 2 * pad)
@@ -574,17 +626,11 @@ def _music_body(title, artist, cover, u, acc, progress, look, style, big, inside
         if artist:
             _text(im, text_x, pad + int(28 * u), artist, af, GREY)
         bar_x, bar_y = text_x, pad + int(58 * u)
-    if progress:
-        el, total = progress
-        frac = min(1.0, el / max(1, total))
-        _bar(d, bar_x, bar_y, w - pad - bar_x - tail_w, frac, acc, u)
-        if tail:
-            _text(im, w - pad - tail_w + int(8 * u), bar_y - int(6 * u), tail, sf, GREY)
     if queue:
         y = body_h + int(10 * u)
         _hairline(im, pad, w - pad, y)
         _upnext_draw(im, pad, y + int(10 * u), w - 2 * pad, queue, u, style, inside[2])
-    return im
+    return im, bar_x, bar_y
 
 
 def _clock(seconds: float) -> str:
