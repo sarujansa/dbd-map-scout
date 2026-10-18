@@ -72,13 +72,16 @@ SPACE_EVERY = 10.0              # s between two looks at the drive (Recorder.spa
 DURATION_RE = re.compile(rb"Duration: (\d+):(\d\d):(\d\d(?:\.\d+)?)")
 AUDIO_STREAM_RE = re.compile(rb"Stream #\d+:\d+[^\n]*?: Audio:")   # 1.8.5: one per audio track in ffmpeg -i
 # 1.8.6 (1.8.5 had only "with/without Discord"): every sound source on its own OBS audio track, like Medal –
-# track 1 = everything (plays anywhere), 2 = the game (+ other desktop sound), 3 = Discord, 4 = the microphone.
+# track 1 = everything (plays anywhere), 2 = the game, 3 = Discord, 4 = the microphone. 1.8.19 (user: "es soll
+# wirklich nur DBD aufnehmen und Hintergrundprogramme separat"): 5 = background – every other audio source of the
+# user's OBS (OBS puts a new source on all six tracks, so the game track carried Spotify, the browser …). Windows'
+# desktop sound holds DBD and Discord too (OBS has no "everything but"), so it goes on track 1 only.
 # The clip editor mixes them (audio_graph), F8 takes Config.clip_sources. OBS writes several tracks only in the
 # advanced output mode with the recording tracks ticked ([Output] Mode=Advanced, [AdvOut] RecTracks bit mask) –
 # we only read those values, never set them.
-SOURCES = ("dbd", "discord", "mic")                       # the mixable sources, in the order of tracks 2, 3, 4
-SOURCE_TRACKS = {"dbd": (1, 2), "desktop": (1, 2), "discord": (1, 3), "mic": (1, 4)}
-REC_TRACKS_NEEDED = 0b1111
+SOURCES = ("dbd", "discord", "mic", "other")              # the mixable sources, in the order of tracks 2, 3, 4, 5
+SOURCE_TRACKS = {"dbd": (1, 2), "desktop": (1,), "discord": (1, 3), "mic": (1, 4), "other": (1, 5)}
+REC_TRACKS_NEEDED = 0b11111
 DEFAULT_CLIP_SOURCES = ("dbd", "mic")                      # F8: the game and the own voice, no Discord
 LEGACY = -1                                                # 1.8.5 recordings: track 2 = everything but Discord
 NAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
@@ -631,18 +634,20 @@ def media_duration(path: str, ffmpeg: str | None = None, run=None) -> float | No
 
 
 def track_flags(tracks) -> dict:
-    """The ``inputAudioTracks`` value for SetInputAudioTracks: tracks 1–4 on or off (5 and 6 are left alone)."""
-    return {str(n): n in tracks for n in range(1, 5)}
+    """The ``inputAudioTracks`` value for SetInputAudioTracks: tracks 1–5 on or off (6 is left alone)."""
+    return {str(n): n in tracks for n in range(1, 6)}
 
 
 def track_sources(n_tracks: int) -> dict:
     """Which sources a recording with ``n_tracks`` audio tracks carries on their own track, as 0-based stream
-    indexes: 3 or more tracks = the 1.8.6 layout (dbd 1, discord 2, mic 3 when there), exactly 2 = the 1.8.5
-    layout (track 2 = everything but Discord, marked LEGACY), otherwise nothing to pick."""
+    indexes: 3 or more tracks = the 1.8.6 layout (dbd 1, discord 2, mic 3, 1.8.19 background 4 when there),
+    exactly 2 = the 1.8.5 layout (track 2 = everything but Discord, marked LEGACY), otherwise nothing to pick."""
     if n_tracks >= 3:
         d = {"dbd": 1, "discord": 2}
         if n_tracks >= 4:
             d["mic"] = 3
+        if n_tracks >= 5:
+            d["other"] = 4
         return d
     if n_tracks == 2:
         return {"dbd": 1, "discord": LEGACY}
@@ -754,7 +759,7 @@ def profile_hint(mode: str, rec_tracks: str) -> str:
     if str(mode).strip().lower() == "advanced" and mask & REC_TRACKS_NEEDED == REC_TRACKS_NEEDED:
         return ""
     return _("Für die Tonmischung im Clip-Editor in OBS: Einstellungen → Ausgabe → Ausgabemodus „Erweitert“ → Reiter "
-             "Aufnahme → Audiospur 1 bis 4 anhaken (1 alles, 2 Spiel, 3 Discord, 4 Mikrofon)")
+             "Aufnahme → Audiospur 1 bis 5 anhaken (1 alles, 2 Spiel, 3 Discord, 4 Mikrofon, 5 Hintergrund)")
 
 
 def check_file(path: str) -> str | None:
@@ -1437,10 +1442,13 @@ class Recorder(threading.Thread):
         return []
 
     def _tracks(self, c: ObsClient, names: set, others: list):
-        """1.8.6: every source on track 1 (everything) and its own track (SOURCE_TRACKS: game + desktop 2, Discord
-        3, microphone 4) – the clip editor mixes them like Medal. Only sources that exist are touched (nothing is
-        created here). Then a look at the profile: OBS writes several tracks only in the advanced output mode with
-        the recording tracks ticked; we never change the profile, the status line says what to tick."""
+        """1.8.6: every source on track 1 (everything) and its own track (SOURCE_TRACKS: game 2, Discord 3,
+        microphone 4) – the clip editor mixes them like Medal. Only sources that exist are touched (nothing is
+        created here). 1.8.19: every other audio source of the user's OBS goes from tracks 2–4 to track 5
+        (background; tracks 1 and 6 stay as they are, logged by name), the desktop sound to track 1 only – else
+        "game" held all of it. Then a look at the
+        profile: OBS writes several tracks only in the advanced output mode with the recording tracks ticked; we
+        never change the profile, the status line says what to tick."""
         wanted = list(others)
         for key in ("dbd", "discord"):
             name = AUDIO_APPS[key][0]
@@ -1448,6 +1456,19 @@ class Recorder(threading.Thread):
                 wanted.append((key, name))
         for key, name in wanted:
             c.request("SetInputAudioTracks", {"inputName": name, "inputAudioTracks": track_flags(SOURCE_TRACKS[key])})
+        moved = []
+        for name in sorted(n for n in names - {n for _k, n in wanted} if n):
+            try:                                        # a source without sound (picture, scene) answers an error
+                tracks = c.request("GetInputAudioTracks", {"inputName": name}).get("inputAudioTracks") or {}
+                want = {"2": False, "3": False, "4": False, "5": True}
+                if any(bool(tracks.get(t)) != on for t, on in want.items()):
+                    c.request("SetInputAudioTracks", {"inputName": name, "inputAudioTracks": want})
+                    moved.append(name)
+            except ObsError:
+                continue
+        if moved:
+            log.info("OBS: %s", _("Auf Spur 5 (Hintergrund) statt bei Spiel/Discord/Mikrofon: {names}",
+                                  names=", ".join(moved)))
         hint = profile_hint(self._profile(c, "Output", "Mode"), self._profile(c, "AdvOut", "RecTracks"))
         if hint:
             log.info("OBS: %s", hint)

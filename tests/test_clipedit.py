@@ -175,8 +175,8 @@ def test_the_clip_window_mixes_the_sound_only_with_the_tracks_for_it(clip, four_
         win.mix_boxes["discord"].setChecked(True)
         win.mix_sliders["mic"].setValue(0)
         assert win.mix() == {"dbd": 1.2, "discord": 1.0, "mic": 0.0}
-        assert settings["clip_mix_on"] == {"dbd": True, "discord": True, "mic": True}
-        assert settings["clip_mix_vol"] == {"dbd": 120, "discord": 100, "mic": 0}
+        assert settings["clip_mix_on"] == {"dbd": True, "discord": True, "mic": True, "other": True}
+        assert settings["clip_mix_vol"] == {"dbd": 120, "discord": 100, "mic": 0, "other": 100}
         assert "Ton neu gemischt" in win.size_label.text()
         win.mix_boxes["dbd"].setChecked(False)
         win.mix_boxes["discord"].setChecked(False)
