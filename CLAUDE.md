@@ -20,7 +20,7 @@ Das Programm muss „regelkonform“ zu Dead by Daylight bleiben. Konkret:
 
 ## Setup des Nutzers (wichtig für Tests und Schwellenwerte)
 
-- Monitor Samsung G5, **3440×1440**; DBD über den **Epic Games Store** (Stand 1.8.20; zwischendurch Steam – beides muss gehen: Exe `DeadByDaylight-EGS-Shipping.exe` bzw. `-Win64-Shipping.exe`) im Modus **Fenster-Vollbild**.
+- Monitor Samsung G5, **3440×1440**; DBD **meistens über Steam**, manchmal über Epic oder den Microsoft Store (Nutzer, 1.8.20 – alle drei müssen gehen: Exe `DeadByDaylight-Win64-Shipping.exe` / `-EGS-Shipping.exe` / `-WinGDK-Shipping.exe`) im Modus **Fenster-Vollbild**.
 - DBD rendert **16:9 = 2560×1440 zentriert**, schwarze Balken links/rechts je 440 px. Alle UI-Positionen daher relativ zum 16:9-Viewport rechnen (`detector.viewport()`), nie relativ zur vollen Fensterbreite.
 - Spielsprache Englisch (EN/DE sind standardmäßig aktiv). Spielt oft Killer, auch Custom Games mit Bots.
 - Overlay-Standardposition „automatisch“ = im linken schwarzen Balken.
