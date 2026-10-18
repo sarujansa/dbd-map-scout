@@ -631,8 +631,9 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         w, h = (self._last_place or (0, 0, 1, 1))[2:]
         o = self.settings["overlay"]
         o["anchor"] = "custom"
+        extra, shift = layout.own_block(o, self._info_size, layout.stack_gap(o, gh))     # 1.8.24: with its lines
         o["pos_x"] = min(1.0, max(0.0, (x - gx) / max(1, gw - w)))
-        o["pos_y"] = min(1.0, max(0.0, (y - gy) / max(1, gh - h)))
+        o["pos_y"] = min(1.0, max(0.0, (y - gy - shift) / max(1, gh - h - extra)))
         self.anchor_var.set(anchor_label("custom"))
         self._set_pos_sliders(o["pos_x"], o["pos_y"])
         self._pos_hint()
@@ -1053,12 +1054,16 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         if self._overlay_off():
             self._overlay_all_off()
             return
+        self._el_orig = {}
+        if not hasattr(self, "_el_shift"):
+            self._el_shift = {}
         try:
             self._place_overlay_map()
         finally:
             if not getattr(self, "_cards_done", False):
                 self._cards_place()                 # "today" and the music card, stacked (1.2.6 / 1.2.7)
             self._cards_done = False
+            self._el_resolve()                      # 1.8.25: nothing on top of anything else
             self._guides_place()                    # centre cross while moving (1.64.5)
 
     def _place_overlay_map(self):
@@ -1132,6 +1137,7 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         if not apart:
             self._info_hide(fade)
         idrop, ilift = layout.info_reserve(o, info, layout.stack_gap(o, gh))
+        extra, shift = layout.own_block(o, info, layout.stack_gap(o, gh))     # own place: map + lines one block
         drop = lift = 0                         # what stands at the top / bottom of the map's bar (1.2.11)
         span = layout.map_bar_range(a, o.get("pos_x", 0.0), gx, gw, bar)
         bands = layout.bar_bands(o, (gx, gy, gw, gh), margin)       # 1.8.14: the limiter lines of the bars
@@ -1169,7 +1175,8 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
                 ax = (bar - w) / 2 if align == "centre" else (bar - margin - w if align == "right" else margin)
                 return gx + max(margin, ax), gy + margin + drop
             if a == "custom":
-                return gx + o.get("pos_x", 0.0) * max(0, gw - w), gy + o.get("pos_y", 0.0) * max(0, gh - h)
+                return (gx + o.get("pos_x", 0.0) * max(0, gw - w),
+                        gy + o.get("pos_y", 0.0) * max(0, gh - h - extra) + shift)
             return (gx + margin if a.endswith("left") else gx + gw - w - margin,
                     gy + margin + drop if a.startswith("top") else gy + gh - h - margin - lift)
 
@@ -1195,8 +1202,7 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         if a == "custom":                                # 1.8.22: an own place – between the lines of its bar
             w, h = self.overlay.render(height, push=False)
             room = layout.own_room((place(w, h)[0], 0, w, h), (gx, gy, gw, gh), bands)
-            if info and o.get("info_pos", "below") in ("below", "above"):     # the lines right below/above it
-                room -= info[1] + layout.stack_gap(o, gh)
+            room -= extra                                # the lines right below/above it
         if not self.overlay.dragging:                    # the lines below made it too tall: smaller (1.2.11) –
             height = self.overlay.fit_room(height, room)     # measured off screen (1.8.23), shown once
         w, h = self.overlay.render(height)
@@ -1204,7 +1210,7 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         if a != "custom":
             y = max(gy, min(y, gy + gh - h))             # never off the screen
         elif band and not self.overlay.dragging:         # an own place in a bar stays between its lines too
-            y = layout.clamp_box((x, y, w, h), (gx, gy, gw, gh), bands)[1]
+            y = layout.clamp_box((x, y - shift, w, h + extra), (gx, gy, gw, gh), bands)[1] + shift
         if side and side != "slot":
             x = layout.clamp_x(side, x, w, gx, gw, bar, margin - edge)
         self._fade_show("map", fade)
@@ -1376,7 +1382,9 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
                 # 1.8.14; 1.8.15 (user: "ich sehe die Balken nicht beim Bearbeiten"): while moving the lines show
                 # even when the limiter is off – faint, dragging one switches it on
                 "limits": layout.bar_bands(o if o.get("bar_limits_on") or not self.overlay.editing
-                                           else dict(o, bar_limits_on=True), (0, 0, gw, gh), int(gh * o["margin"])),
+                                           else dict(o, bar_limits_on=True), (0, 0, gw, gh), int(gh * o["margin"]),
+                                           zones=False),
+                "zones": layout.keep_out_boxes(o, (0, 0, gw, gh)),        # 1.8.25: Discord's overlay
                 "limits_on": bool(o.get("bar_limits_on")),
                 "limits_same": bool(o.get("bar_limits_same", False))}
 
@@ -1463,6 +1471,11 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
                 return
             fx = round(min(1.0, max(0.0, x / max(1, gw - size[0]))), 4)
             fy = round(min(1.0, max(0.0, y / max(1, gh - size[1]))), 4)
+            if name == "map":                                        # 1.8.24: map + its lines one block
+                lines = {n: (w, h) for n, _x, _y, w, h in data["layers"]}.get("text")
+                extra, shift = layout.own_block(dict(self.settings["overlay"], anchor="custom"), lines,
+                                                layout.stack_gap(self.settings["overlay"], gh))
+                fy = round(min(1.0, max(0.0, (y - shift) / max(1, gh - size[1] - extra))), 4)
             if name in ("music", "today", "text"):
                 fx, fy = layout.media_own(gw, gh, size, x, y)       # by its centre (1.2.5)
             if name == "hud":

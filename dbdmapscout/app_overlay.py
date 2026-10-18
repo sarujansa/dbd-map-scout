@@ -95,6 +95,12 @@ class OverlayTab:
                                                          "ziehen – Karte, Systemwerte, Heute und Musik bleiben im "
                                                          "Balken dazwischen."),
                                              style="Dim.TLabel", wraplength=520)).pack(anchor="w")
+        # 1.8.25 (user's screenshots with Discord's overlay open): keep its widgets free
+        self.keep_out_var = ui.BooleanVar(value=bool(o.get("keep_out_on", True)))
+        self._reg("ov.keep_out", ui.Checkbutton(pos, text=_("Discord-Overlay freihalten (Sprach-Widget unten links, "
+                                                            "Benachrichtigungen oben rechts, Text-Chat rechts)"),
+                                                variable=self.keep_out_var, command=self._keep_out_changed)
+                  ).pack(anchor="w", pady=(4, 0))
         pr = ui.Frame(pos)                              # 1.2.9: ready-made arrangements
         pr.pack(fill="x", pady=(4, 0))
         self._reg("ov.preset.label", ui.Label(pr, text=_("Vorlage"), width=12)).pack(side="left")
@@ -572,7 +578,7 @@ class OverlayTab:
         if self.overlay.waiting() or not self.overlay.has_map():
             return None
         text_h = self._text_height(gh)
-        avail = layout.max_width(bar, margin) if bar >= layout.MIN_BAR and o.get("info_pos") != "custom" else None
+        avail = layout.max_width(bar, margin) if bar >= layout.MIN_BAR else None     # also at an own place
         placeholder = "0:00" if editing else ""             # something to drag while moving
         pic = self.overlay.info_picture(text_h, placeholder)
         for _try in range(3):                               # wider than the bar: smaller text, the map stays
@@ -599,8 +605,7 @@ class OverlayTab:
                               layout.stack_gap(o, gh), margin, o.get("info_xy"), o.get("bar_align", "centre"),
                               self._bands(gx, gy, gw, gh))
         self._fade_show("info", fade)
-        self.info_win.show_at(x, y)
-        self.worker.info_rect = (x, y) + tuple(self._info_size)
+        self.worker.info_rect = self._el_show("text", self.info_win, x, y, self._info_size)
         return self.worker.info_rect
 
     def _info_hide(self, fade):
@@ -628,5 +633,12 @@ class OverlayTab:
         """The music card's cover round / square / like its style (1.8.24)."""
         key = dict((_(label), k) for k, label in COVER_SHAPES).get(self.media_shape_var.get(), "style")
         self.settings["overlay"]["media_cover_shape"] = key
+        self._save_soon()
+        self._tick_overlay(reschedule=False)
+
+    def _keep_out_changed(self):
+        """1.8.25: Discord's overlay widgets kept free (hatched in the preview) – on/off."""
+        self._layout_mark()
+        self.settings["overlay"]["keep_out_on"] = bool(self.keep_out_var.get())
         self._save_soon()
         self._tick_overlay(reschedule=False)

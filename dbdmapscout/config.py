@@ -38,6 +38,8 @@ DEFAULTS = {
         "show_server": True,            # connected server region below the timer (needs the Server tab option)
         "transparent": True,            # transparent area around the map (off = dark rectangle)
         "keep_in_bar": True,
+        "keep_out_on": True,            # 1.8.25: keep out of Discord's overlay widgets (layout.DISCORD_ZONES)
+        "keep_out": None,               # … own areas [[x, y, w, h], …] as shares of the window; None = Discord's
         "info_pos": "below",            # 1.8.24: timer/record/server below / above the map, custom or "inside" it
         "info_xy": None,                # … their own place (centre as shares of the window)
         "grow_past_bar": False,         # a map bigger than the bar may reach into the game picture (1.65.4)            # ultrawide: shrink/move the map so it stays inside the black bar

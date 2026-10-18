@@ -303,8 +303,9 @@ def test_the_program_starts_shows_every_page_and_quits(app_root):
             assert app.settings["welcome_seen"] and any("Overlay" in e for e in app.qt._found)
             assert app.settings["overlay"]["anchor"] == "custom"
             assert app.settings["overlay"]["media_pos"] == "custom"       # dropped at (0, 0): its centre (1.2.5)
-            music = next(lay for lay in app._preview_data()["layers"] if lay[0] == "music")
-            assert music[1:3] == (0, 0)
+            lays = {lay[0]: lay[1:] for lay in app._preview_data()["layers"]}
+            # 1.8.25: dropped on the system values (also at (0, 0)) – it moves next to them, never on top
+            assert lays["music"][1] == 0 and lays["music"][0] >= lays["hud"][0] + lays["hud"][2]
             assert (app.settings["sysinfo"], app.settings["sysinfo_pos"]) == ("custom", [0.0, 0.0])
             o = app.settings["overlay"]
             assert (o["hud_scale"], o["media_scale"], o["height"]) == (1.5, 2.0, 0.36)
@@ -1296,5 +1297,83 @@ def test_the_maps_lines_are_their_own_window_and_only_the_map_follows_its_size(a
         app._force_until = 0
         app._place_overlay()
         assert not app.info_win.shown and app.worker.info_rect is None
+    finally:
+        app.quit()
+
+
+def test_the_maps_lines_never_sit_on_the_map_in_any_layout(app_root):
+    """1.8.24 (user screenshot: the lines sat on Midwich's top floor): at an own place the vertical slider spread
+    the map over the whole free height – a tall map left room neither below nor above for its lines. Map + lines
+    now go as one block; checked in the App and the preview over the combinations that matter."""
+    import itertools
+    from dbdmapscout import layout, preview
+    from dbdmapscout.app import App
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        app.info_win = _InfoWin()
+        app._game_rect = lambda: (0, 0, 3440, 1440)
+        o = app.settings["overlay"]
+        mid = next(m for m in app.catalog.maps if "midwich" in m.lower())
+        cases = itertools.product((("custom", 0.0), ("custom", 0.37), ("custom", 1.0), ("auto", 0.0),
+                                   ("bottom-left", 0.0)), ("below", "above"), (0.3, 0.6), (False, True),
+                                  (False, True))
+        bad = []
+        for (anchor, py), spot, height, limits, grow in cases:
+            o.update(anchor=anchor, pos_x=0.0, pos_y=py, info_pos=spot, height=height, fade=False,
+                     bar_limits_on=limits, bar_limits=[0.1, 0.05, 0.1, 0.05], grow_past_bar=grow)
+            app._force_until = time.time() + 30
+            app.show_map(mid, 1, "manual")
+            app.overlay.set_record("33% escaped · 3 rounds")
+            app._place_overlay()
+            x, y, w, h = app._last_place
+            ix, iy = app.info_win.at
+            iw, ih = app.info_win.size
+            if iy < y + h and iy + ih > y and ix < x + w and ix + iw > x:
+                bad.append(("app", anchor, py, spot, height, limits, grow))
+            layers, _r = preview.layers(3440, 1440, dict(o), "", [], None, app.overlay._frames[0][0], "",
+                                        {"timer": "3:27", "record": "Bilanz"}, height)
+            by = {n: (img.size, lx, ly) for n, img, lx, ly in layers}
+            (mw, mh), mx, my = by["map"]
+            (tw, th), tx, ty = by["text"]
+            if ty < my + mh and ty + th > my and tx < mx + mw and tx + tw > mx:
+                bad.append(("preview", anchor, py, spot, height, limits, grow))
+        assert not bad, bad
+        extra, shift = layout.own_block(dict(o, anchor="custom", info_pos="above"), (300, 90), 8)
+        assert (extra, shift) == (98, 98)
+        assert layout.own_block(dict(o, anchor="auto"), (300, 90), 8) == (0, 0)
+    finally:
+        app.quit()
+
+
+def test_an_element_dropped_on_the_map_moves_off_it_and_keeps_out_of_discords_widgets(app_root):
+    """1.8.25 (user screenshots: the lines dragged onto Midwich's top floor; Discord's overlay): an element at an
+    own place that lies on the map moves to the nearest free place – shown there at once and in later ticks
+    without going back and forth; the bars' lines keep out of Discord's voice widget / notifications."""
+    from dbdmapscout import layout
+    from dbdmapscout.app import App
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        app.info_win = _InfoWin()
+        app._game_rect = lambda: (0, 0, 3440, 1440)
+        o = app.settings["overlay"]
+        o.update(anchor="auto", info_pos="custom", fade=False, keep_out_on=True, bar_limits_on=False)
+        mid = next(m for m in app.catalog.maps if "midwich" in m.lower())
+        app._force_until = time.time() + 30
+        app.show_map(mid, 1, "manual")
+        app.overlay.set_record("33% escaped · 3 rounds")
+        app._place_overlay()
+        x, y, w, h = app._last_place
+        o["info_xy"] = [0.06, (y + h / 3) / 1440]                     # dropped onto the map's top floor
+        seen = set()
+        for _tick in range(4):
+            app._place_overlay()
+            ix, iy = app.info_win.at
+            iw, ih = app.info_win.size
+            seen.add((ix, iy))
+            assert not layout.boxes_overlap((ix, iy, iw, ih), app._last_place)
+            assert app.worker.info_rect == (ix, iy, iw, ih)
+        assert len(seen) == 1                                         # no back and forth between ticks
+        voice = layout.keep_out_boxes(o, (0, 0, 3440, 1440))[0]
+        assert app._last_place[1] + app._last_place[3] <= voice[1]   # the map stays above Discord's voice widget
     finally:
         app.quit()

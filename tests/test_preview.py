@@ -15,7 +15,7 @@ INFO = {"timer": "3:27", "server": "", "ping": None, "record": "Bilanz: Ø 2,8 K
 
 
 def _o(**kw):
-    o = dict(DEFAULTS["overlay"], info_pos="inside")      # the lines with the map (1.8.24: test_info_apart.py)
+    o = dict(DEFAULTS["overlay"], info_pos="inside", keep_out_on=False)  # lines with the map, no Discord areas (1.8.24/25)
     o.update(kw)
     return o
 

@@ -221,10 +221,11 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
         info_pic = fitted(lambda hh: info_card(timer, info.get("server", ""), info.get("ping"), "",
                                                info.get("record", ""), hh, style, accent,
                                                o.get("transparent", True), dark),
-                          text_h, avail if bar >= layout.MIN_BAR and ispot != "custom" else 0,
+                          text_h, avail if bar >= layout.MIN_BAR else 0,
                           ("text", repr(info), timer, style, accent, o.get("transparent", True), dark), fits)
         idrop, ilift = layout.info_reserve(o, info_pic.size, gap)
         drop, lift = drop + idrop, lift + ilift
+    own = layout.own_block(o, info_pic.size if info_pic is not None else None, gap)   # own place: one block
     aspect = extent(map_pic)[0] / map_pic.height if map_pic is not None else 0.8
     rows = sum(1 for k in ("timer", "server", "record") if lines.get(k))
     rows += 1 if lines.get("timer") else 0
@@ -259,8 +260,7 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
             over = map_pic_at(mh, th)
     over_h_room = gh - drop - lift - 2 * margin if o["anchor"] != "custom" else \
         layout.own_room((x0, 0, over.width, over.height), game, bands)       # 1.8.22: between its bar's lines
-    if info_pic is not None and o["anchor"] == "custom" and ispot in ("below", "above"):
-        over_h_room -= info_pic.height + gap
+    over_h_room -= own[0]
     for _try in range(3):                                   # the lines below the map made it too tall: smaller
         if over.height <= over_h_room or mh <= 80:
             break
@@ -271,11 +271,11 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
     if not apart:
         fits["text"] = th / max(1, text_h)
     mx, my = layout.preview_place(gw, gh, o["anchor"], o.get("pos_x", 0.0), o.get("pos_y", 0.0), margin,
-                                  o.get("keep_in_bar", True), over.width, over.height, drop, align, lift)
+                                  o.get("keep_in_bar", True), over.width, over.height, drop, align, lift, own)
     if in_bar and edge:                                 # the area's edge may stand in the margin (like the App)
         mx = int(layout.clamp_x(in_bar, mx, over.width, 0, gw, bar, margin - edge))
     if o["anchor"] == "custom" and band:                # an own place in a bar stays between its lines (1.8.14)
-        my = layout.clamp_box((mx, my, over.width, over.height), game, bands)[1]
+        my = layout.clamp_box((mx, my - own[1], over.width, over.height + own[0]), game, bands)[1] + own[1]
     map_rect = (mx, my, over.width, over.height)
     out.append(("map", over, mx, my))
     block = map_rect                                    # what hangs above/below the map goes around both
@@ -296,4 +296,13 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
         out.append(("hud", hud, hud_rect[0], hud_rect[1]))
     for name, (cx, cy, _w, _h) in placed.items():       # stacked in order (1.2.7), like the App
         out.append((name, cards[name][0], cx, cy))
+    # 1.8.25: like App._el_resolve – nothing on the map, on another element or on a keep-out area (Discord)
+    names = {n: i for i, (n, *_r) in enumerate(out)}
+    order = [n for n in ("hud", "text", "today", "music") if n in names]
+    boxes = [(n, (out[names[n]][2], out[names[n]][3], out[names[n]][1].width, out[names[n]][1].height))
+             for n in order]
+    shift = layout.resolve(boxes, [map_rect] + layout.keep_out_boxes(o, game), game, bands, gap)
+    for n, (dx, dy) in shift.items():
+        name, img, lx, ly = out[names[n]]
+        out[names[n]] = (name, img, lx + dx, ly + dy)
     return out, map_rect
