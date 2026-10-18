@@ -132,6 +132,7 @@ EN = {
     "Hinweis: Runden auf {region} zählen laut Einstellung weiter als Farming.":
         "Note: rounds on {region} still count as farming by the setting.",
     "Crossplay war aus – die Runde zählt als Farming-Runde.": "Cross-play was off – the round counts as a farming round.",
+    "Crossplay war aus, die Lobby sah aus wie ein Custom Game – die Runde zählt als Farming-Runde, sobald die Stats-Seite sie als öffentliches Match zeigt.": "Cross-play was off, the lobby looked like a custom game – the round counts as a farming round once the stats page shows it as a public match.",
     "{off} von {n} Blicken mit Kreuz": "{off} of {n} looks with the cross",
     "letzter Blick": "last look",
     "Crossplay ist aus ({looks}) – die nächste Runde zählt als Farming-Runde.":
@@ -1785,6 +1786,7 @@ EN = {
     'Spotify: kein Zugriff ({error}) – ist dein Spotify-Konto in der Developer-App unter „User Management“ eingetragen?':
         'Spotify: no access ({error}) – is your Spotify account listed in the developer app under "User Management"?',
     'Spotify: Fehler – {error}': 'Spotify: error – {error}',
+    'Spotify: Kontingent der Developer-App aufgebraucht – „Als nächstes“ pausiert bis {time}.': 'Spotify: the developer app\'s quota is used up – "Up next" paused until {time}.',
     'keine Antwort mit Token': 'no answer with a token',
     'Mit Spotify verbunden – du kannst dieses Fenster schliessen.': 'Connected to Spotify – you can close this window.',
     'Spotify hat die Anmeldung abgelehnt – du kannst dieses Fenster schliessen.':

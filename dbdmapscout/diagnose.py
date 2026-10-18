@@ -11,6 +11,18 @@ from . import __version__
 from .capture import IS_WIN, describe_window, find_game_window, foreground_root, is_above
 
 
+def spotify_match(app) -> str:
+    """1.8.36 (user: queue read, 10 titles, but not shown): whether Spotify's current track is the song Windows
+    shows – without any title: Spotify knows one / Windows knows one / they match / the player is Spotify."""
+    from . import spotify
+    sp, now = getattr(app, "spotify", None), getattr(getattr(app, "media", None), "now", None)
+    if sp is None or now is None:
+        return "Abgleich –"
+    up = sp.upnext
+    return (f"Abgleich: Spotify-Titel={'ja' if up.title else 'leer'}, Windows-Titel={'ja' if now.title else 'leer'}, "
+            f"gleich={spotify.matches(up, now.title, now.artist)}, Player=Spotify:{spotify.is_spotify(now.app)}")
+
+
 def _win_info(hwnd):
     if not IS_WIN or not hwnd:
         return "—"
@@ -140,7 +152,8 @@ def collect(app) -> str:
     sp = getattr(app, "spotify", None)
     if sp is not None:
         lines.append(sp.diag_line() + f" (Position={app.settings['overlay'].get('media_next_pos')}, "
-                     f"ID gesetzt={bool(app.settings.get('spotify_client_id'))})")
+                     f"ID gesetzt={bool(app.settings.get('spotify_client_id'))}, "
+                     f"{spotify_match(app)})")
     mon = getattr(app, "sysmon", None)
     if mon is not None:
         lines.append(mon.diag_line() + f" (Anzeige={app.settings.get('sysinfo')}, Rechteck="

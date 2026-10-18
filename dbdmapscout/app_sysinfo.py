@@ -30,7 +30,7 @@ def today_rows(j, now: float) -> list:
     """HUD rows of today (pure apart from the clock): [[(text, colour), ...], ...]."""
     d = history.today(j.rounds, now)
     day = history.period_start("day", now)
-    s = official.summary([j.off[id(r)] for r in j.rounds if r.t >= day and id(r) in j.off and not r.custom])
+    s = official.summary([j.off[id(r)] for r in j.rounds if r.t >= day and id(r) in j.off and history.normal(r)])   # 1.8.36: farming out too
     rows = [[(_("HEUTE "), sysinfo.DIM),
              (_("{n} RUNDEN · {time}", n=d["count"], time=fmt_duration(d["total"])), sysinfo.WHITE)]]
     res = []
