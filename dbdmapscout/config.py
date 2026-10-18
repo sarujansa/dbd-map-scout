@@ -41,7 +41,7 @@ DEFAULTS = {
         "keep_out_on": True,            # 1.8.25: keep out of Discord's overlay widgets (layout.DISCORD_ZONES)
         "cards_same_width": True,       # 1.8.29: system values / today / music in the same bar share one width
         "keep_out": None,               # … own areas [[x, y, w, h], …] as shares of the window; None = Discord's
-        "info_pos": "below",            # 1.8.24: timer/record/server below / above the map, custom or "inside" it
+        "info_pos": "below",            # 1.8.24: timer/record/server below / above the map, custom or "inside" it (1.8.34: "inside_top" = inside, above the map)
         "info_xy": None,                # … their own place (centre as shares of the window)
         "grow_past_bar": False,         # a map bigger than the bar may reach into the game picture (1.65.4)            # ultrawide: shrink/move the map so it stays inside the black bar
         "map_heights": {},              # map id -> own size (hotkeys / mouse wheel with that map on display)

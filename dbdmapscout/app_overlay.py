@@ -17,7 +17,8 @@ ANCHORS = [("auto", N_("automatisch")), ("top-left", N_("oben links")), ("top-ri
 
 # 1.8.24: where the map's lines (timer, record, server) go – an element of their own, or drawn with the map as before
 INFO_SPOTS = [("below", N_("Eigenes Element unter der Karte")), ("above", N_("Eigenes Element über der Karte")),
-              ("custom", N_("Eigenes Element, eigene Position")), ("inside", N_("Mit der Karte verbunden (wie früher)"))]
+              ("custom", N_("Eigenes Element, eigene Position")), ("inside", N_("Mit der Karte verbunden, unten")),
+              ("inside_top", N_("Mit der Karte verbunden, oben"))]     # 1.8.34
 # 1.8.24 (user: "zwischen runden und eckigen Bildern"): the shape of the music card's cover
 COVER_SHAPES = [("style", N_("Wie der Stil")), ("round", N_("Rund")), ("square", N_("Eckig"))]
 STYLE_DEFER_MS = 30                     # 1.3.4: the window repaints before the slow part of a map style change
