@@ -31,13 +31,15 @@ GOLD = (212, 166, 58, 255)              # accent when the window's theme is not 
 WHITE = (255, 255, 255, 255)
 GREY = (160, 166, 180, 255)             # secondary text
 DIMG = (120, 126, 140, 255)             # labels
-GLASS_FILL = (16, 17, 22, 205)
-GLASS_EDGE = (255, 255, 255, 40)
-LINE_EDGE = (255, 255, 255, 80)
+# 1.8.29 (user: "ich seh die Umrandung der Map nicht"): on the black bar a (16, 17, 22) card with a 1-px edge
+# at alpha 40 vanished – lighter fills, stronger and (at 1440p) 2-px edges
+GLASS_FILL = (24, 26, 33, 212)
+GLASS_EDGE = (255, 255, 255, 78)
+LINE_EDGE = (255, 255, 255, 90)
 HAIRLINE = (255, 255, 255, 28)
 TRACK = (255, 255, 255, 35)             # the empty part of a bar
-CHIP_FILL = (20, 21, 27, 215)
-CHIP_EDGE = (255, 255, 255, 50)
+CHIP_FILL = (28, 30, 38, 222)
+CHIP_EDGE = (255, 255, 255, 96)
 WRAP_SHARE = 0.28                       # chips wrap at this share of the game height (≈ the black bar at 1440p)
 ICONS = {"CPU": "cpu", "GPU": "gpu", "RAM": "ram", "VRAM": "ram", "HOTSPOT": "gpu", "MEM": "ram"}
 _PERCENT = re.compile(r"^\s*(\d+(?:[.,]\d+)?)\s*%\s*$")
@@ -284,9 +286,12 @@ def surface(style: str) -> dict:
     return SURFACES.get(style, SURFACES["glass"])
 
 
+EDGE_W = 1.5                            # px of a card's edge at 1440p (2 px there, 1 px on small pictures)
+
+
 def _frame(w, h, style, u) -> Image.Image:
     s = surface(style)
-    return _panel(int(w), int(h), int(s["radius"] * u), s["fill"], s["edge"], max(1, int(u)))
+    return _panel(int(w), int(h), int(s["radius"] * u), s["fill"], s["edge"], max(1, round(EDGE_W * u)))
 
 
 def _finish(im, style, u) -> Image.Image:

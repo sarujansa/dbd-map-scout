@@ -1167,6 +1167,17 @@ EN = {
     "Infos": "Info",
     "INFOS": "INFO",
     "Infos (Timer, Bilanz, Server)": "Info (timer, record, server)",
+    "Karten im selben Balken gleich breit (Systemwerte, Heute, Musik)":
+        "Cards in the same bar at one width (system values, today, music)",
+    "Zu einer Spalte zusammenführen": "Merge into one column",
+    "Die Karten, die im selben schwarzen Balken stehen, werden so breit gezeichnet wie die breiteste von ihnen – "
+    "untereinander ergeben sie eine Spalte mit bündigen Rändern.":
+        "The cards standing in the same black bar are drawn as wide as the widest of them – one below the other "
+        "they make a column with flush edges.",
+    "Heute unter die Systemwerte, die Musik unter Heute, alle gleich breit – eine Spalte im Balken der "
+    "Systemwerte. Rückgängig mit Strg+Z.":
+        "Today below the system values, the music below today, all at one width – one column in the bar of the "
+        "system values. Undo with Ctrl+Z.",
     "Cover": "Cover",
     "Discord-Overlay freihalten (Sprach-Widget unten links, Benachrichtigungen oben rechts, Text-Chat rechts)":
         "Keep Discord's overlay free (voice widget bottom left, notifications top right, text chat right)",

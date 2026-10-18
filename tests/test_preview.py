@@ -199,3 +199,54 @@ def test_the_name_strip_no_longer_widens_the_map():
     pic.paste((140, 147, 232, 255), (100, 200, 900, 1100))               # the map body
     out = compose(pic, 300, "", True, False, 600, 160)                   # body at 300 px, name at 600 px
     assert out.width == round(1000 * 300 / 1200) and out.height > 300    # the body's strip (250), not the name's (500)
+
+
+def test_the_preview_draws_the_cards_of_one_bar_at_one_width():
+    """1.8.29: like the App – system values, today and music standing in the same bar get the widest one's
+    width (two passes over layout.column_widths); off, each keeps its own."""
+    import copy
+    from dbdmapscout import preview, sysinfo
+    from dbdmapscout.config import DEFAULTS
+    o = copy.deepcopy(DEFAULTS["overlay"])
+    o.update(style="chips", today_pos="custom", today_xy=[0.94, 0.6], media_pos="custom", media_xy=[0.94, 0.87],
+             media_style="big", bar_limits_on=False, keep_out_on=False)
+    hud = sysinfo.hud_rows(sysinfo.Snapshot(t=0, cpu_load=38, cpu_temp=64, gpu_temp=71, gpu_load=92, vram_used=7.9,
+                                            vram_total=12, ram_used=18.2, ram_total=32))
+    today = [[("HEUTE ", sysinfo.DIM), ("4 RUNDEN · 1:12 h", sysinfo.WHITE)]]
+    music = ([[("Blinding Lights", sysinfo.WHITE)], [("The Weeknd", sysinfo.DIM)]], preview.sample_cover(), (70, 176))
+    pic = Image.new("RGBA", (300, 400), (120, 120, 200, 255))
+
+    def widths(o):
+        layers, _r = preview.layers(3440, 1440, o, "right", hud, None, pic, "", {"timer": "1:00"}, 0.36, music,
+                                    today, accent="#c9a227")
+        by = {n: (img.width, x) for n, img, x, y in layers}
+        assert all(by[n][1] >= 3440 - layout.bar_width(3440, 1440) for n in ("hud", "today", "music"))  # right bar
+        return {n: by[n][0] for n in ("hud", "today", "music")}
+    same = widths(o)
+    assert len(set(same.values())) == 1
+    o["cards_same_width"] = False
+    own = widths(o)
+    assert len(set(own.values())) > 1 and max(own.values()) == same["hud"]
+    assert layout.column_widths({"a": (3100, 100, 200, 50), "b": (3050, 400, 300, 50), "c": (100, 100, 150, 50),
+                                 "d": (1700, 100, 500, 50)}, (0, 0, 3440, 1440)) == {"a": 300}
+    # a long title makes the music card bar-wide, so every card of the column is – such a card reaches into
+    # Discord's pinned-chat zone at the bar's edge: the zone yields (soft), the cards never lie on each other
+    o["cards_same_width"], o["keep_out_on"] = True, True
+    o.update(bar_limits_on=True, bar_limits=[0.1521, 0.2381, 0.3014, 0.0], bar_limits_same=False)
+    long = ([[("Beneath Your Beautiful (feat. Emeli Sandé)", sysinfo.WHITE)], [("Labrinth", sysinfo.DIM)]],
+            preview.sample_cover(), (70, 196))
+    for merged in (False, True):
+        if merged:
+            o.update(today_pos="below", media_pos="under_today")
+        layers, _r = preview.layers(3440, 1440, o, "custom", hud, (0.984, 0.383), pic, "", {"timer": "1:00"}, 0.36,
+                                    long, today, accent="#c9a227")
+        boxes = {n: (x, y, img.width, img.height) for n, img, x, y in layers}
+        assert len({boxes[n][2] for n in ("hud", "today", "music")}) == 1
+        names = list(boxes)
+        for i, a in enumerate(names):
+            for b in names[i + 1:]:
+                assert not layout.boxes_overlap(boxes[a], boxes[b]), (merged, a, b, boxes[a], boxes[b])
+    # the keep-out areas still count when there is room: a card dropped on one moves off it
+    shift = layout.resolve([("today", (3000, 900, 200, 100))], [], (0, 0, 3440, 1440), None, 8,
+                           soft=[(2800, 806, 241, 339)])
+    assert shift == {"today": (0, 698 - 900)}                      # the nearest free place: right above it
