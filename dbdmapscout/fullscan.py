@@ -26,6 +26,7 @@ class TextDetector:
         so = ort.SessionOptions()
         so.intra_op_num_threads = max(1, int(threads))
         so.log_severity_level = 3
+        so.add_session_config_entry("session.intra_op.allow_spinning", "0")   # 1.8.38: no busy wait after a run
         self.session = ort.InferenceSession(model_path, so, providers=["CPUExecutionProvider"])
         self.input_name = self.session.get_inputs()[0].name
         self.max_side = max_side
