@@ -116,10 +116,14 @@ def test_the_clip_window_shows_frames_cuts_at_the_marks_and_saves(clip, tmp_path
         win.show()
         assert win.info.ok and win.timeline.marks == [8.0]
         assert (win.timeline.start, win.timeline.end) == (0.0, pytest.approx(min(win.info.duration, 18.0)))   # 20 s before … 10 s after
+        assert win.loading is not None and win.loading.isVisible() and not win.loading.finished   # 1.8.3: loading screen
+        assert win.loading.geometry() == win.rect() and win.loading.bar.maximum() == clipedit.THUMBS + 1
         deadline = time.time() + 15
-        while time.time() < deadline and (len(win.timeline.thumbs) < clipedit.THUMBS or win.preview.pixmap().isNull()):
+        while time.time() < deadline and not win.loading.finished:
             app.processEvents()
             time.sleep(0.02)
+        assert win.loading.finished and win.loading.isHidden()       # gone once picture and strip are in, not by timeout
+        assert win.loading.done_n == clipedit.THUMBS + 1 and "Bildern" in win.loading.detail.text()
         assert len(win.timeline.thumbs) == clipedit.THUMBS and not win.preview.pixmap().isNull()
         win.goto(3.0)
         win.set_start()
@@ -214,17 +218,24 @@ def test_the_clip_window_offers_discord_and_plays_just_the_clip(clip, tmp_path):
         app.processEvents()
 
 
-def test_the_whole_strip_comes_from_one_ffmpeg_run(clip):
-    """1.7.1 (user: the strip loaded slowly): thumb_strip streams every picture of the strip from a single
-    key-frame-only run, in order and at the strip size; a stop ends it early without a hanging process."""
+def test_the_strip_comes_from_parallel_key_frame_seeks(clip):
+    """1.8.3 (user: "das Laden optimieren"; 1.7.1 streamed one run over the whole file): thumb_strip fetches every
+    picture of the strip as a key frame, several at once, at the strip size; the order is the order of finishing;
+    a stop ends it early. frame_at(keyframe=True) gives the key frame at or before the moment."""
     info = clipedit.probe(clip, FF)
     times = clipedit.thumb_times(info.duration, clipedit.THUMBS)
     t0 = time.time()
     got = list(clipedit.thumb_strip(clip, times, 54, info, FF))
-    assert [i for i, _img in got] == list(range(clipedit.THUMBS))
+    assert sorted(i for i, _img in got) == list(range(clipedit.THUMBS))
     assert all(img.size == (96, 54) and img.mode == "RGB" for _i, img in got)
     assert time.time() - t0 < 10
-    assert got[0][1].tobytes() != got[-1][1].tobytes()            # key frames every second: the picture moves
+    by_index = dict(got)
+    assert by_index[0].tobytes() != by_index[clipedit.THUMBS - 1].tobytes()   # key frames every second: the picture moves
+    quick = clipedit.frame_at(clip, 7.5, 54, info, FF, keyframe=True)        # key frames at whole seconds (-g 30)
+    assert quick is not None and quick.size == (96, 54)
+    assert quick.tobytes() == clipedit.frame_at(clip, 7.0, 54, info, FF).tobytes()   # = the key frame at 7.0, not 7.5
+    last = clipedit.frame_at(clip, info.duration - 0.2, 54, info, FF, keyframe=True)   # past the last key frame: the
+    assert last is not None and last.tobytes() == clipedit.frame_at(clip, 11.0, 54, info, FF).tobytes()   # last one
     assert list(clipedit.thumb_strip(clip, times[:1], 54, info, FF)) == []       # one moment: nothing to space
     stopped = list(clipedit.thumb_strip(clip, times, 54, info, FF, stop=lambda: True))
     assert stopped == []
