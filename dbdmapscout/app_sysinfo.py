@@ -396,6 +396,8 @@ class SysInfo:
         editing = music and self.overlay.editing
         win.set_editing(editing)
         now = self.media.now
+        if now.kind == "video" and not o.get("media_videos", True):    # 1.8.4: "only music" – a video stays off
+            now = media.NowPlaying()
         rows = media.rows(now, time.time(), "", sysinfo.DIM, sysinfo.WHITE) if music else []
         forced = getattr(self, "_forced", False)
         if music and forced and not rows:                   # "Overlay testen" (1.2.8): a sample song

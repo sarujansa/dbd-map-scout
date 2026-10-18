@@ -365,3 +365,24 @@ def test_the_fast_premultiply_gives_the_same_bytes_and_the_cover_colour_is_worke
     a = skin._round_cover(cover, 120, 20)
     assert skin._round_cover(cover, 120, 20) is a and a.size == (120, 120)
     assert skin._round_cover(cover, 60, 20).size == (60, 60)
+
+
+def test_videos_are_told_from_music_and_marked():
+    """1.8.4 (user: YouTube Music and YouTube videos in the browser): PlaybackType VIDEO is a video; a browser
+    (which reports MUSIC for everything) is a video without an album and music with one; other players are
+    music. A video's title row starts with the mark, the channel stays the second row; the diagnosis names
+    kind and app, never the title."""
+    assert media.classify(media.VIDEO, "", "Microsoft.ZuneVideo_8wekyb3d8bbwe!Microsoft.ZuneVideo") == "video"
+    assert media.classify(media.MUSIC, "", "Chrome") == "video"                   # browsers say MUSIC for all
+    assert media.classify(media.MUSIC, "After Hours", "chrome") == "music"         # YouTube Music, Spotify Web
+    assert media.classify(0, "", "MSEdge") == "video" and media.classify(0, "", "firefox") == "video"
+    assert media.classify(media.MUSIC, "", "Spotify.exe") == "music" and media.classify(0, "", "") == "music"
+    video = media.NowPlaying("Hillbilly guide", "Otzdarva", True, 100.0, kind="video", app="chrome")
+    assert media.rows(video, 101, "", DIM, WHITE) == [[(media.VIDEO_MARK + "Hillbilly guide", WHITE)], [("Otzdarva", DIM)]]
+    song = media.NowPlaying("Blinding Lights", "The Weeknd", True, 100.0, kind="music", app="chrome")
+    assert media.rows(song, 101, "", DIM, WHITE)[0] == [("Blinding Lights", WHITE)]
+    w = media.MediaWatcher(reader=_Reader([video]))
+    w.active = True
+    w.look()
+    line = w.diag_line()
+    assert "Art=video" in line and "App=chrome" in line and "Hillbilly" not in line and "Otzdarva" not in line

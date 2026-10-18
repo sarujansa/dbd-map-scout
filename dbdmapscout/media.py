@@ -30,6 +30,9 @@ MAX_COVER_BYTES = 4_000_000     # a bigger "thumbnail" is not read
 ACCENT_SAT, ACCENT_VAL = 0.3, 0.25  # accent(): pixels at least this colourful / bright count
 ACCENT_SHARE = 0.03         # … and the main colour weighs at least this much (else the bar stays white)
 ACCENT_LIGHT = 0.62         # HLS lightness the accent is lifted to: readable on black
+VIDEO, MUSIC = 2, 1         # MediaPlaybackType.VIDEO / .MUSIC (0 = unknown)
+BROWSERS = ("chrome", "msedge", "firefox", "brave", "opera", "vivaldi", "chromium", "zen", "librewolf")
+VIDEO_MARK = "▶ "           # 1.8.4: a video's title starts with this on the card
 
 
 @dataclass(frozen=True)
@@ -42,6 +45,20 @@ class NowPlaying:
     position: float | None = None   # seconds into the song when Windows last reported it (1.64.7)
     duration: float | None = None   # length of the song in seconds
     at: float = 0.0                 # time.time() of that report – the position runs on from there while it plays
+    kind: str = ""                  # 1.8.4: "music" | "video" | "" (see classify) – a video shows as "▶ Titel / Kanal"
+    app: str = ""                   # the player's app id (chrome, Spotify.exe …) – diagnosis only, never a title
+
+
+def classify(playback_type: int, album: str, app: str) -> str:
+    """"video" or "music" (pure, 1.8.4 – user: YouTube Music and YouTube videos in the same browser). Windows'
+    PlaybackType is reliable from players (Movies & TV, VLC: VIDEO), but every browser reports MUSIC for all it
+    plays – there the album decides: YouTube Music, Spotify Web … fill it, a YouTube or Twitch video has none."""
+    if int(playback_type or 0) == VIDEO:
+        return "video"
+    low = (app or "").lower()
+    if any(b in low for b in BROWSERS):
+        return "music" if (album or "").strip() else "video"
+    return "music"
 
 
 def progress(now: NowPlaying, wall: float):
@@ -207,6 +224,8 @@ def rows(now: NowPlaying, wall: float, label: str, dim, white) -> list:
     if not playing(now, wall):
         return []
     title = clip(now.title, LONGEST)                # one row each: the card makes long ones smaller (fit_lines)
+    if now.kind == "video":                          # 1.8.4: a video is marked, its "artist" is the channel
+        title = VIDEO_MARK + title
     out = [[(label, dim), (title, white)] if label else [(title, white)]]
     if now.artist:
         out.append([(clip(now.artist, LONGEST), dim)])
@@ -230,6 +249,14 @@ class _Reader:
         if props is None:
             return NowPlaying(t=time.time())
         title, artist = str(props.title or ""), str(props.artist or "")
+        try:                                      # 1.8.4: music or video (kind), the player for the diagnosis
+            app = str(session.source_app_user_model_id or "")
+        except Exception:
+            app = ""
+        try:
+            kind = classify(int(props.playback_type or 0), str(props.album_title or ""), app)
+        except Exception:
+            kind = classify(0, "", app)
         cover = None
         if want_cover and title:
             key = (title, artist)
@@ -254,7 +281,7 @@ class _Reader:
         except Exception:
             pos = dur = None
         return NowPlaying(title=title, artist=artist, playing=int(status) == PLAYING, t=time.time(), cover=cover,
-                          position=pos, duration=dur, at=at)
+                          position=pos, duration=dur, at=at, kind=kind, app=app)
 
     @staticmethod
     def _cover_bytes(ref) -> bytes:
@@ -298,7 +325,8 @@ class MediaWatcher:
         """For "Diagnose kopieren": state and error only – never the title (what someone listens to is private)."""
         n = self.now
         seen = ("spielt" if n.playing else "pausiert/kein Titel") if n.t else "noch nicht gelesen"
-        return f"Musik: aktiv={self.active}, {seen}" + (f", Fehler: {self.error}" if self.error else "")
+        what = f", Art={n.kind or '?'}, App={n.app or '?'}" if n.title else ""      # 1.8.4: never the title
+        return f"Musik: aktiv={self.active}, {seen}{what}" + (f", Fehler: {self.error}" if self.error else "")
 
     def look(self):
         """One reading (the thread's step; tests call it directly)."""
