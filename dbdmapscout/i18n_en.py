@@ -1190,6 +1190,20 @@ EN = {
         'Puts map, system values, "Today" and music into the chosen arrangement at once. "Undo" brings the '
         'previous one back.',
     'Weich ein- und ausblenden (Karte, Systemwerte, Heute)': 'Fade in and out smoothly (map, system values, Today)',
+    'Overlay anzeigen (aus: nichts im Spiel, Erkennung läuft weiter)': 'Show the overlay (off: nothing in the game, detection goes on)',
+    'Hauptschalter: aus = das Programm zeigt im Spiel nichts (Karte, Systemwerte, Heute, Musik). Erkennung, '
+    'Statistik und Aufnahmen laufen weiter. Auch als Knopf in der Übersicht.':
+        'Master switch: off = the program shows nothing in the game (map, system values, Today, music). Detection, '
+        'statistics and recordings go on. Also a button on the overview.',
+    'Overlay eingeschaltet.': 'Overlay switched on.',
+    'Overlay ausgeschaltet – die Erkennung läuft weiter.': 'Overlay switched off – detection goes on.',
+    'Overlay ausschalten': 'Switch overlay off',
+    'Overlay einschalten': 'Switch overlay on',
+    'Blendet alles aus, was das Programm im Spiel zeigt – Karte, Systemwerte, Heute, Musik. Die '
+    'Erkennung, Statistik und Aufnahmen laufen weiter.':
+        'Hides everything the program shows in the game – map, system values, Today, music. Detection, '
+        'statistics and recordings go on.',
+    'Zeigt das Overlay im Spiel wieder an.': 'Shows the overlay in the game again.',
     'Karte, Systemwerte und „Heute“ blenden in einer Drittelsekunde ein und aus, statt hart zu erscheinen. '
     'Die Musik hat ihr eigenes Häkchen.':
         'Map, system values and "Today" fade in and out within a third of a second instead of popping up. '
@@ -1573,6 +1587,12 @@ EN = {
     'Ton von Discord (Sprachchat) in der Aufnahme bzw. im Sofort-Clip.': 'Sound from Discord (voice chat) in the recording or the instant clip.',
     'Dein Mikrofon – die Quelle „Mikrofon/AUX“ in OBS bzw. seine Spur im Sofort-Clip.': 'Your microphone – the source "Mic/Aux" in OBS, or its track in the instant clip.',
     'Tonquelle angelegt: {name}': 'Sound source created: {name}',
+    'Tonquelle zur Szene „{scene}“ hinzugefügt: {name}': 'Sound source added to the scene "{scene}": {name}',
+    'Tonquelle in der Szene „{scene}“ wieder eingeblendet: {name}': 'Sound source shown again in the scene "{scene}": {name}',
+    '{name} (Spur {n})': '{name} (track {n})',
+    'Still in dieser Aufnahme: {names} – OBS hat dort nichts aufgenommen. In OBS prüfen: Quelle in der Szene der Aufnahme, nicht stumm, Spur angehakt.': 'Silent in this recording: {names} – OBS recorded nothing there. Check in OBS: source in the scene being recorded, not muted, track ticked.',
+    '{name} – still': '{name} – silent',
+    'Auf Spur {n} ist in der ganzen Aufnahme nichts zu hören.': 'Nothing can be heard on track {n} in the whole recording.',
     'Unbekannte Map': 'Unknown map',
     'Wiederholungspuffer in OBS läuft nicht': "OBS's replay buffer is not running",
     'Übriger Desktop-Ton': 'Other desktop sound',

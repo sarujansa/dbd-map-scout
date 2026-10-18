@@ -78,6 +78,9 @@ TIPS = {
     "Vorlage anwenden":
         "Setzt Karte, Systemwerte, „Heute“ und Musik auf einmal auf die gewählte Anordnung. „Rückgängig“ holt "
         "die vorherige zurück.",
+    "Overlay anzeigen (aus: nichts im Spiel, Erkennung läuft weiter)":
+        "Hauptschalter: aus = das Programm zeigt im Spiel nichts (Karte, Systemwerte, Heute, Musik). Erkennung, "
+        "Statistik und Aufnahmen laufen weiter. Auch als Knopf in der Übersicht.",
     "Weich ein- und ausblenden (Karte, Systemwerte, Heute)":
         "Karte, Systemwerte und „Heute“ blenden in einer Drittelsekunde ein und aus, statt hart zu erscheinen. "
         "Die Musik hat ihr eigenes Häkchen.",

@@ -1391,6 +1391,11 @@ class Recorder(threading.Thread):
                                               "inputSettings": {"window": window, "priority": AUDIO_PRIORITY_EXE},
                                               "sceneItemEnabled": True})
                     notes.append(_("Tonquelle angelegt: {name}", name=name))
+                elif on:
+                    if scene is None:
+                        cur = c.request("GetCurrentProgramScene")
+                        scene = cur.get("currentProgramSceneName") or cur.get("sceneName") or ""
+                    notes += self._in_scene(c, scene, name)
                 c.request("SetInputMute", {"inputName": name, "inputMuted": not on})
             special = c.request("GetSpecialInputs")
             others = []
@@ -1410,6 +1415,26 @@ class Recorder(threading.Thread):
         for n in notes:
             log.info("OBS: %s", n)
         return hint
+
+    @staticmethod
+    def _in_scene(c: ObsClient, scene: str, name: str) -> list:
+        """1.8.18 (user: Discord never heard in the clips): an application audio source plays – and is recorded –
+        only while it is in the scene on air. Ours was created in the scene of that moment; recording in another
+        scene left its track silent. A wanted source missing from the program scene is added to it, a hidden one
+        is shown again (``sceneItemEnabled`` off mutes it too). Groups and nested scenes are not looked into – a
+        second scene item of the same source does not double its sound."""
+        if not scene:
+            return []
+        items = c.request("GetSceneItemList", {"sceneName": scene}).get("sceneItems", [])
+        mine = [i for i in items if i.get("sourceName") == name]
+        if not mine:
+            c.request("CreateSceneItem", {"sceneName": scene, "sourceName": name, "sceneItemEnabled": True})
+            return [_("Tonquelle zur Szene „{scene}“ hinzugefügt: {name}", scene=scene, name=name)]
+        if not any(i.get("sceneItemEnabled", True) for i in mine):
+            c.request("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": mine[0].get("sceneItemId"),
+                                              "sceneItemEnabled": True})
+            return [_("Tonquelle in der Szene „{scene}“ wieder eingeblendet: {name}", scene=scene, name=name)]
+        return []
 
     def _tracks(self, c: ObsClient, names: set, others: list):
         """1.8.6: every source on track 1 (everything) and its own track (SOURCE_TRACKS: game + desktop 2, Discord

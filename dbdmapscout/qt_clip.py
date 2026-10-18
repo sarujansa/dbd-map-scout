@@ -7,6 +7,7 @@ All ffmpeg work runs in threads (clipedit); results come back over Qt signals. T
 QWidget the App opens from the tab "Aufnahmen" (app_recordings._rec_clip)."""
 from __future__ import annotations
 
+import logging
 import os
 import threading
 
@@ -17,6 +18,8 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel
 
 from . import clipedit, obsrec, qt_theme
 from .i18n import N_, _
+
+log = logging.getLogger("dbdmapscout")
 
 CENSOR_LABELS = {"pixel": N_("Verpixelt"), "blur": N_("Verwischt"), "black": N_("Schwarz"),
                  "retouch": N_("Retusche (aus der Umgebung übermalt)")}   # 1.7.2, retouch 1.7.3
@@ -53,6 +56,7 @@ class _Bridge(QObject):
     sound = Signal(object, float)         # wav path (or None) ready for a playback from t
     strip_done = Signal()                 # 1.8.3: the thumbnail thread is through (all it could get)
     still = Signal(bool, str)             # 1.8.10: a still picture saved (ok, path)
+    levels = Signal(object)               # 1.8.18: {track index: loudest moment in dB}
 
 
 class Timeline(QWidget):
@@ -528,6 +532,7 @@ class ClipWindow(QWidget):
         self._mix_on = {k: bool((mix_on or {}).get(k, True)) for k in obsrec.SOURCES}     # 1.8.6: sound mix
         self._mix_vol = {k: int((mix_vol or {}).get(k, 100) or 0) for k in obsrec.SOURCES}
         self._sources = obsrec.track_sources(self.info.audio_tracks)
+        self._silent = set()                # 1.8.18: sources whose own track holds nothing in this recording
         self.setObjectName("page")
         self.setWindowTitle(title or _("Clip bearbeiten – {name}", name=os.path.basename(path)))
         if qss:
@@ -851,8 +856,15 @@ class ClipWindow(QWidget):
         return row
 
     def _mix_fill(self):
-        """Controls for the sources the file has on their own tracks; none → only the hint."""
-        self.mix_hint.setVisible(not self._sources)
+        """Controls for the sources the file has on their own tracks; none → only the hint. A source whose track
+        is silent in the whole recording says so (1.8.18) – OBS recorded nothing there."""
+        self.mix_hint.setVisible(not self._sources or bool(self._silent))
+        if self._silent:
+            names = ", ".join(_("{name} (Spur {n})", name=_(SOURCE_LABELS[k]), n=self._sources[k] + 1)
+                              for k in obsrec.SOURCES if k in self._silent)
+            self.mix_hint.setText(_("Still in dieser Aufnahme: {names} – OBS hat dort nichts aufgenommen. In OBS "
+                                    "prüfen: Quelle in der Szene der Aufnahme, nicht stumm, Spur angehakt.",
+                                    names=names))
         legacy = self._sources.get("discord") == obsrec.LEGACY
         for key in obsrec.SOURCES:
             box, sl, val = self.mix_boxes[key], self.mix_sliders[key], self.mix_values[key]
@@ -861,6 +873,10 @@ class ClipWindow(QWidget):
                 w.setVisible(bool(self._sources) and (w is box or not self.compact))   # compact: on/off only
                 w.setEnabled(have)
             box.setChecked(have and self._mix_on[key])
+            silent = key in self._silent
+            box.setText(_("{name} – still", name=_(SOURCE_LABELS[key])) if silent else _(SOURCE_LABELS[key]))
+            box.setToolTip(_("Auf Spur {n} ist in der ganzen Aufnahme nichts zu hören.", n=self._sources[key] + 1)
+                           if silent else _(SOURCE_TIPS[key]))
             sl.setValue(self._mix_vol[key] if have else 100)
             if legacy and key == "discord":                       # 1.8.5 file: Discord only on or off
                 sl.setEnabled(False)
@@ -910,7 +926,10 @@ class ClipWindow(QWidget):
         b.saved.connect(self._saved)
         b.still.connect(self._still_saved)
         b.sound.connect(self._sound_ready)
+        b.levels.connect(self._show_levels)
         threading.Thread(target=self._scrub_loop, name="clip-scrub", daemon=True).start()
+        if any(i >= 0 for i in self._sources.values()):
+            threading.Thread(target=self._level_loop, name="clip-levels", daemon=True).start()
         threading.Thread(target=self._thumb_loop, name="clip-thumbs", daemon=True).start()
 
     def _scrub_loop(self):
@@ -932,6 +951,19 @@ class ClipWindow(QWidget):
             img = clipedit.frame_at(self.path, t, clipedit.PREVIEW_H, self.info, self.ffmpeg)
             if img is not None and not self._closed:
                 self.bridge.frame.emit(t, img)
+
+    def _level_loop(self):
+        levels = clipedit.track_levels(self.path, self.info.audio_tracks, self.ffmpeg)
+        if levels and not self._closed:
+            self.bridge.levels.emit(levels)
+
+    def _show_levels(self, levels):
+        """1.8.18: mark the sources whose own track is silent (a 1.8.5 file's Discord has no track of its own)."""
+        self._silent = {k for k, i in self._sources.items()
+                        if i >= 0 and levels.get(i) is not None and levels[i] <= clipedit.SILENT_DB}
+        if self._silent:
+            log.info("Clip: stille Spuren in %s: %s", os.path.basename(self.path), ", ".join(sorted(self._silent)))
+        self._mix_fill()
 
     def _thumb_loop(self):
         times = clipedit.thumb_times(self.info.duration, self.timeline.n_thumbs)

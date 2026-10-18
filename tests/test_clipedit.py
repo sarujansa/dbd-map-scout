@@ -181,9 +181,19 @@ def test_the_clip_window_mixes_the_sound_only_with_the_tracks_for_it(clip, four_
         win.mix_boxes["dbd"].setChecked(False)
         win.mix_boxes["discord"].setChecked(False)
         assert "ohne Ton" in win.size_label.text()
+        # 1.8.18 (user: "Discord hört man gar nicht"): a source whose track is silent says so – here the microphone
+        assert clipedit.track_levels(four_track, 4, FF)[3] <= clipedit.SILENT_DB < clipedit.track_levels(four_track, 4, FF)[2]
+        deadline = time.monotonic() + 20
+        while not win._silent and time.monotonic() < deadline:
+            app.processEvents()
+            time.sleep(0.02)
+        assert win._silent == {"mic"} and "still" in win.mix_boxes["mic"].text()
+        assert "still" not in win.mix_boxes["discord"].text() and win.mix_boxes["mic"].isEnabled()
+        assert not win.mix_hint.isHidden() and "Mikrofon (Spur 4)" in win.mix_hint.text()
     finally:
         win.close()
         app.processEvents()
+    assert clipedit.track_levels(clip, 1, FF) == {}                                  # one track: nothing to tell
     win = qt_clip.ClipWindow(clip, [], str(tmp_path / "Clips"), sound=False)
     try:
         win.show()
