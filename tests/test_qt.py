@@ -1419,6 +1419,29 @@ def test_a_right_click_on_a_row_marks_it_and_asks_for_the_menu(qapp, keep):
     t.show_state({"columns": cols, "rows": rows, "colours": {}, "selection": [], "selectable": True})
     t._row_menu(pos)                                               # no actions: nothing
     assert posted == []
+    # 1.8.11: a real right click – Qt marks the row on the press already; the App must still hear of it (the
+    # menu acted on the old row and the marking jumped back)
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    for multi, told in ((False, ("click", "b")), (True, ("select", ["b"]))):
+        posted.clear()
+        t.show_state({"columns": cols, "rows": rows, "colours": {}, "selection": ["a"], "selectable": True,
+                      "menu": True, "multi": multi})
+        qapp.processEvents()
+        QTest.mousePress(t.viewport(), Qt.RightButton, Qt.NoModifier, pos)
+        QTest.mouseRelease(t.viewport(), Qt.RightButton, Qt.NoModifier, pos)
+        t._row_menu(pos)
+        acts = [p[1][1] for p in posted]
+        assert acts.count(told) == 1 and acts[-1][0] == "menu", (multi, acts)
+    posted.clear()
+    t.show_state({"columns": cols, "rows": rows, "colours": {}, "selection": ["a", "b"], "selectable": True,
+                  "menu": True, "multi": True})
+    qapp.processEvents()
+    top = t.visualItemRect(t.topLevelItem(0)).center()
+    QTest.mousePress(t.viewport(), Qt.RightButton, Qt.NoModifier, top)
+    QTest.mouseRelease(t.viewport(), Qt.RightButton, Qt.NoModifier, top)
+    t._row_menu(top)                                               # inside a marking of two: both stay
+    assert [p[1][1][0] for p in posted] == ["menu"]
     win = keep(qt_window.MainWindow(lambda a, arg=None: posted.append((a, arg))))
     menu = win.popup_menu([("x", "Eins", True), None, ("y", "Zwei", False, True)], (10, 10))
     acts = [a for a in menu.actions() if not a.isSeparator()]
