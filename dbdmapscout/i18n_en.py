@@ -1764,4 +1764,14 @@ EN = {
     'Kein Clip': 'No clip',
     'Zeigt beim Sofort-Clip (F8) unten rechts ein kleines Hinweisfenster – „Clip wird gespeichert …“ und danach „Clip gespeichert“ bzw. warum nicht. Auch im Spiel, ohne Ton; nimmt nie den Fokus.':
         'Shows a small notification window bottom right for the instant clip (F8) – "Saving clip …" and then "Clip saved" or why not. Also in the game, without sound; never takes the focus.',
+    'Die Linien in der Vorschau mit „Mit der Maus verschieben“ ziehen – Karte, Systemwerte, Heute und Musik bleiben im Balken dazwischen.':
+        'Drag the lines in the preview with "Move with the mouse" – map, system values, today and music stay in the bar between them.',
+    'Grenzen oben und unten in den schwarzen Balken': 'Limits at the top and bottom of the black bars',
+    'Grenzen zurücksetzen': 'Reset limits',
+    'Links und rechts gleich': 'Left and right alike',
+    'In jedem schwarzen Balken (links und rechts) eine Linie oben und eine unten: Karte, Systemwerte, Heute und Musik bleiben dazwischen – z. B. frei für eine FPS-Anzeige oder Benachrichtigungen. Die Karte wird bei Bedarf kleiner.':
+        'A line at the top and one at the bottom of each black bar (left and right): map, system values, today and music stay between them – e.g. to keep room for an FPS counter or notifications. The map gets smaller when needed.',
+    'Eine Linie ziehen bewegt die gleiche Linie im anderen Balken mit.':
+        'Dragging a line moves the same line in the other bar along.',
+    'Setzt alle vier Linien auf 8 % vom Rand zurück.': 'Puts all four lines back at 8 % from the edge.',
 }

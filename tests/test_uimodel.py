@@ -417,6 +417,46 @@ def test_moving_without_a_map_shows_a_test_map(app_root):
         app.quit()
 
 
+def test_limiter_lines_are_switched_on_dragged_alike_and_undone(app_root, monkeypatch):
+    """1.8.14 (user: "Limiter … oben und unten, wo die GUI-Elemente nicht überschreiten dürfen"): the switch,
+    dragging a line in the preview (both bars alike, or one alone), reset, undo, and the preview data."""
+    from dbdmapscout import app_layout
+    from dbdmapscout.app import App
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    clock = [100.0]
+    monkeypatch.setattr(app_layout.time, "monotonic", lambda: clock[0])
+    try:
+        o = app.settings["overlay"]
+        _gx, _gy, gw, gh = app._game_rect()
+        app._preview_pick(("limit", "left", "top", gh * 0.2))               # not moving: nothing
+        assert o["bar_limits"] == [0.08] * 4 and not o["bar_limits_on"]
+        app.toggle_edit()
+        app._preview_pick(("limit", "left", "top", gh * 0.2))               # switched off: nothing either
+        assert o["bar_limits"] == [0.08] * 4
+        app.limits_var.set(True)
+        app._limits_changed()
+        assert o["bar_limits_on"] and app._preview_data()["limits"] is not None or gw / gh < 2
+        app._preview_pick(("limit", "left", "top", gh * 0.2))
+        assert o["bar_limits"] == [0.2, 0.08, 0.2, 0.08]                     # both bars alike
+        app.limits_same_var.set(False)
+        app._limits_changed()
+        app._preview_pick(("limit", "right", "bottom", gh * 0.7))
+        assert o["bar_limits"] == [0.2, 0.08, 0.2, 0.3]
+        app._preview_pick(("limit", "right", "bottom", gh * 0.1))            # never further in than LIMIT_MAX
+        assert o["bar_limits"][3] == 0.45
+        app.limits_same_var.set(True)                                       # alike again: the right takes the left
+        app._limits_changed()
+        assert o["bar_limits"] == [0.2, 0.08, 0.2, 0.08]
+        clock[0] += 5                                                       # a step of its own for "undo"
+        app._limits_reset()
+        assert o["bar_limits"] == [0.08] * 4
+        app.undo_layout()
+        assert o["bar_limits"] == [0.2, 0.08, 0.2, 0.08] and app.limits_var.get()
+        app.toggle_edit()
+    finally:
+        app.quit()
+
+
 def test_undo_arrow_keys_and_a_layout_per_window_size(app_root, monkeypatch):
     """1.65 (user: fine-tune, undo, one layout per window size)."""
     from types import SimpleNamespace

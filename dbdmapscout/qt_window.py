@@ -161,6 +161,9 @@ SPECS = {
                 ("row", (("label", "ov.style.label"), ("combo", "ov.style"), ("stretch",))),     # 1.3
                 ("slider", "ov.gap"),
                 ("row", (("label", "ov.bar_align.label"), ("combo", "ov.bar_align"), ("stretch",))),
+                ("check", "ov.limits"),                                                          # 1.8.14
+                ("row", (("check", "ov.limits_same"), ("button", "ov.limits_reset"), ("stretch",))),
+                ("hint", "ov.limits_hint"),
                 ("row", (("label", "ov.preset.label"), ("combo", "ov.preset"), ("button", "ov.preset_apply"),
                          ("stretch",))),
                 ("check", "ov.fade"), ("check", "ov.per_size"), ("hint", "ov.per_size_hint"))))),

@@ -194,7 +194,7 @@ def preview_rect(gw: int, gh: int, anchor: str, pos_x: float, pos_y: float, heig
 
 
 def hud_preview_xy(side: str, gw: int, gh: int, margin: int, size, own=None, map_rect=None, align: str = "centre",
-                   gap=None):
+                   gap=None, top: int = 0):
     """Top-left corner of the system values on a full-screen DBD (App._hud_place / _hud_follow_map, 1.64)."""
     w, h = size
     if side == "custom":
@@ -210,7 +210,7 @@ def hud_preview_xy(side: str, gw: int, gh: int, margin: int, size, own=None, map
         elif bar >= MIN_BAR and x + mw > gw - bar:
             lo, hi = gw - bar + gap, gw - gap - w
         hx = min(max(x + (mw - w) / 2, lo), max(lo, hi))
-        hy = y - gap - h if y - gap - h >= 0 else y + mh + gap
+        hy = y - gap - h if y - gap - h >= top else y + mh + gap        # top = the bar's limiter line (1.8.14)
         return int(hx), int(hy)
     return int(hud_x("left" if side == "left" else "right", 0, gw, margin, w, bar_width(gw, gh), align)), margin
 
@@ -222,7 +222,7 @@ def pos_from_point(gw: int, gh: int, w: int, h: int, cx: float, cy: float):
     return min(1.0, max(0.0, fx)), min(1.0, max(0.0, fy))
 
 
-def media_xy(spot: str, game, size, margin: int, hud=None, own=None, align: str = "centre", gap=None):
+def media_xy(spot: str, game, size, margin: int, hud=None, own=None, align: str = "centre", gap=None, band=None):
     """Top-left corner of the music card (1.64): "below" the system values (centred under them; without them at
     the top of the right bar), "bottom_right" / "bottom_left" in the black bar (1.65.2: centred in it, on one
     line with the system values above), "custom" = ``own`` (share of the free room in the game window, like the
@@ -245,11 +245,12 @@ def media_xy(spot: str, game, size, margin: int, hud=None, own=None, align: str 
             x = min(max(hud[0], gx + margin), gx + gw - margin - w)
         elif align == "right":
             x = min(max(hud[0] + hud[2] - w, gx + margin), gx + gw - margin - w)
+        lo, hi = band or (gy + margin, gy + gh - margin)   # 1.8.14: the limiter lines of the bar
         y = hud[1] + hud[3] + gap
-        if y + h > gy + gh - margin:                     # no room below (the card above sits at the bottom, 1.2.11
+        if y + h > hi:                                   # no room below (the card above sits at the bottom, 1.2.11
             y = hud[1] - gap - h                         # sweep): above it instead, never off the screen
-            if y < gy + margin:
-                y = max(gy + margin, gy + gh - margin - h)
+            if y < lo:
+                y = max(lo, hi - h)
         return x, y
     return hud_x("right", gx, gw, margin, w, bar, align), gy + margin
 
@@ -292,7 +293,7 @@ def hangs_on_hud(name: str, spots: dict) -> bool:
 
 
 def place_cards(game, cards: dict, hud_box, margin: int, align: str = "centre", gap=None,
-                up: bool = False, below_box=None) -> dict:
+                up: bool = False, below_box=None, bands=None) -> dict:
     """Top-left corner and size of every card ("today", "music") in stacking order (1.2.11: the one place for
     App and preview). ``cards`` = {name: ((w, h) or None, position setting, own place)}; a card hangs below its
     anchor's box – below the system values when the anchor is not there – or stands in the bar / at its own
@@ -309,16 +310,20 @@ def place_cards(game, cards: dict, hud_box, margin: int, align: str = "centre", 
             boxes[name] = None
             continue
         under = (boxes.get(anchor) or boxes.get("hud")) if anchor else None
-        x, y = media_xy("below" if anchor else spot, game, size, margin, under, own, align, gap)
+        side = box_side(under, game) if bands and under else None
+        band = bands[side] if side else None
+        lo, hi = band or (gy + margin, gy + gh - margin)
+        x, y = media_xy("below" if anchor else spot, game, size, margin, under, own, align, gap, band)
         if anchor and under is not None and up:         # above the card / values it hangs on (the map is below)
             y = under[1] - g - size[1]
-            if y < gy + margin:                         # no room above: below the map (and what hangs there)
+            if y < lo:                                  # no room above: below the map (and what hangs there)
                 floor = below_box if below_box is not None else under
-                y = min(gy + gh - margin - size[1], floor[1] + floor[3] + g)
+                y = min(hi - size[1], floor[1] + floor[3] + g)
                 below_box = (floor[0], y, size[0], size[1])
         if spot in corners:                             # two cards in the same bottom corner: the second above
-            y = max(gy + margin, corners[spot][1] - g - size[1])
-        out[name] = boxes[name] = (int(x), int(y), int(size[0]), int(size[1]))
+            y = max(lo, corners[spot][1] - g - size[1])
+        # 1.8.14: between the limiter lines of its bar (a bottom corner from the bottom line up)
+        out[name] = boxes[name] = clamp_box((int(x), int(y), int(size[0]), int(size[1])), game, bands)
         if anchor:                                      # two cards below the same element: the second below the
             boxes[anchor] = out[name]                   # first (1.2.11 sweep: they sat on top of each other)
         elif spot in ("bottom_left", "bottom_right"):
@@ -346,6 +351,84 @@ def bar_stack(boxes, x0: float, x1: float, gy: float, gh: float, margin: int, ga
     if top < gy + gh - margin:
         lift = int(gy + gh - top)
     return drop, lift
+
+
+# 1.8.14 (user: "in beiden schwarzen Bereichen so einen Limiter … 2 Stück, wo die GUI-Elemente nicht überschreiten
+# dürfen, oben und unten"): per black bar a line at the top and one at the bottom; every element in that bar stays
+# between them. overlay.bar_limits = [left top, left bottom, right top, right bottom] as shares of the game height
+# (top from the top edge, bottom from the bottom edge) – a list, so the preview's cache key sees a change.
+LIMIT_DEFAULT = 0.08          # where the lines start when the limiter is switched on
+LIMIT_MAX = 0.45              # a line never further in than this
+LIMIT_MIN_ROOM = 0.15         # the lines keep at least this share of the height between them
+LIMIT_SIDES = ("left", "right")
+
+
+def limit_pair(limits, side: str) -> tuple:
+    """(top, bottom) shares of one bar from the setting – clamped, and never closer than LIMIT_MIN_ROOM."""
+    i = 0 if side == "left" else 2
+    try:
+        t, b = float(limits[i]), float(limits[i + 1])
+    except (TypeError, ValueError, IndexError):
+        t = b = 0.0
+    t, b = min(LIMIT_MAX, max(0.0, t)), min(LIMIT_MAX, max(0.0, b))
+    over = t + b - (1 - LIMIT_MIN_ROOM)
+    if over > 0:
+        t, b = t - over / 2, b - over / 2
+    return t, b
+
+
+def bar_bands(o: dict, game, margin: int):
+    """{"left": (top y, bottom y), "right": (…)} – the room between the lines of each black bar (absolute screen
+    y; at least ``margin`` from the edges), or None when the limiter is off or the window has no side bars."""
+    gx, gy, gw, gh = game
+    if not o.get("bar_limits_on") or gh <= 0 or bar_width(gw, gh) < MIN_BAR:
+        return None
+    out = {}
+    for side in LIMIT_SIDES:
+        t, b = limit_pair(o.get("bar_limits"), side)
+        out[side] = (int(gy + max(margin, round(t * gh))), int(gy + gh - max(margin, round(b * gh))))
+    return out
+
+
+def box_side(box, game):
+    """"left" / "right": the black bar the box's centre is in, None over the game picture (or no bars)."""
+    if not box:
+        return None
+    gx, _gy, gw, gh = game
+    bar = bar_width(gw, gh)
+    if bar < MIN_BAR:
+        return None
+    cx = box[0] + box[2] / 2
+    return "left" if cx < gx + bar else "right" if cx > gx + gw - bar else None
+
+
+def clamp_box(box, game, bands):
+    """The box moved up/down so it stays between the lines of its bar (taller than the room: at the top line)."""
+    side = box_side(box, game) if bands else None
+    if side is None:
+        return box
+    top, bottom = bands[side]
+    x, y, w, h = box
+    return (x, int(max(top, min(y, bottom - h))), w, h)
+
+
+def follow_reserve(hud_h: int, card_sizes: dict, spots: dict, gap: int) -> int:
+    """Room above the map for the system values "right above the map" and the cards hanging on them (1.8.14):
+    between limiter lines the map makes room for them, so the chain fits above it instead of spilling over."""
+    if not hud_h:
+        return 0
+    return int(hud_h + gap + sum(size[1] + gap for name, size in card_sizes.items()
+                                 if size and hangs_on_hud(name, spots)))
+
+
+def bar_room(boxes, x0: float, x1: float, gy: float, gh: float, margin: int, gap: int, band=None):
+    """(drop, lift) for the map in the bar [x0, x1] as App and preview use them (y = gy + margin + drop, bottom =
+    gy + gh - margin - lift): what stands at the top / bottom of the bar (bar_stack, + a margin), measured from
+    the limiter lines ``band`` = (top y, bottom y) when there are some (1.8.14) – the map then starts at the line."""
+    top, bottom = band or (gy + margin, gy + gh - margin)
+    d, li = bar_stack(boxes, x0, x1, top - margin, bottom - top + 2 * margin, margin, gap)
+    return ((d + margin if d else 0) + int(top - margin - gy),
+            (li + margin if li else 0) + int(gy + gh - margin - bottom))
 
 
 def map_bar_range(anchor: str, pos_x: float, gx: float, gw: float, bar: float):
