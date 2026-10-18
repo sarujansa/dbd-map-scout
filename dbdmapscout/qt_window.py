@@ -8,17 +8,18 @@ event loop inside a click.
 from __future__ import annotations
 
 import base64
+import collections
 import html
 import sys
 
-from PySide6.QtCore import QByteArray, QEvent, QObject, QSize, Qt, QTimer
-from PySide6.QtGui import QColor, QFontDatabase, QIcon, QPalette, QPixmap
+from PySide6.QtCore import QByteArray, QEvent, QModelIndex, QObject, QSize, Qt, QTimer
+from PySide6.QtGui import QColor, QFontDatabase, QIcon, QPalette, QPixmap, QStandardItem
 from PySide6.QtWidgets import (QAbstractItemView, QAbstractScrollArea, QAbstractSlider, QAbstractSpinBox, QApplication,
-                               QComboBox,
+                               QComboBox, QCompleter,
                                QFrame, QHBoxLayout, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QPushButton,
                                QScrollArea, QStackedWidget, QTabWidget, QVBoxLayout, QWidget)
 
-from . import qt_theme
+from . import i18n, qt_theme
 from .i18n import N_, _
 from .mapimage import FONT as FIRA
 from .qt_common import (SLIDER_MAX, pixmap_from_pil, _label, _tip, _card, _set, _scroll_page)
@@ -394,7 +395,35 @@ def nav_icon(key: str, colour: str, ratio: float = 1.0, alert: bool = False) -> 
     return pm
 
 
-SEARCH_KINDS = ("check", "radio", "button", "title", "label", "slider")   # what the search finds on a page
+SEARCH_KINDS = ("check", "radio", "button", "title", "label", "slider", "tab")   # what the search finds on a page
+# 1.8.38 (QA audit: "autostart", "Tastenkürzel", "Backup" … found nothing): words people search with that the
+# labels do not use – a label (either language, folded) containing the key is also found by the words
+SEARCH_ALSO = {"tast": "hotkey shortcut tastenkürzel", "hotkey": "taste tastenkürzel shortcut",
+               "mit windows starten": "autostart", "start with windows": "autostart",
+               "farb": "color colour theme", "colour": "color farbe theme", "theme": "farbe color",
+               "sicherung": "backup", "backup": "sicherung", "deckkraft": "opacity transparenz transparency",
+               "opacity": "deckkraft transparenz transparency", "grösse": "size zoom", "size": "grösse zoom",
+               "cross-play": "crossplay", "crossplay": "cross-play", "aufnahme": "obs recording",
+               "recording": "obs aufnahme", "einrichtung": "setup assistent wizard",
+               "setup": "einrichtung assistent wizard", "aktualis": "update", "update": "aktualisieren"}
+HAYSTACK_ROLE = Qt.UserRole + 1           # what a search hit is matched against (the list shows the entry)
+POPUP_W = (320, 720)                      # 1.8.38: the hit list as wide as its longest entry within these
+
+
+def _haystack(*texts) -> str:
+    """Folded label, its other-language name, its tooltip and SEARCH_ALSO words – with ß/ss both ways, so
+    "Größe" finds "Grösse"."""
+    base = " ".join(" ".join(t.split()) for t in texts if t).casefold()
+    base = " ".join([base] + [v for k, v in SEARCH_ALSO.items() if k in base])
+    return " | ".join(dict.fromkeys((base, base.replace("ß", "ss"), base.replace("ss", "ß"))))
+
+
+class _SearchCompleter(QCompleter):
+    """Matches the hidden haystack, shows the entry; the field keeps what was typed while moving in the list."""
+
+    def pathFromIndex(self, index):
+        w = self.widget()
+        return w.text() if w is not None else ""
 MORE_BUTTON, MORE_PREFIX = "st.more_btn", "st.more."   # the settings' fold "Mehr" and the keys of what it holds
 
 
@@ -501,14 +530,14 @@ class MainWindow(QMainWindow):
         sl.addWidget(self.search_btn)
         sl.addWidget(self.nav, 1)
         self._found = {}                  # completer text -> (page key, widget)
-        from PySide6.QtCore import QStringListModel
-        from PySide6.QtWidgets import QCompleter
-        self._search_model = QStringListModel()
-        self.completer = QCompleter(self._search_model, self)
+        from PySide6.QtGui import QStandardItemModel
+        self._search_model = QStandardItemModel(self)
+        self.completer = _SearchCompleter(self._search_model, self)
+        self.completer.setCompletionRole(HAYSTACK_ROLE)
         self.completer.setCaseSensitivity(Qt.CaseInsensitive)
         self.completer.setFilterMode(Qt.MatchContains)
         self.completer.setMaxVisibleItems(12)
-        self.completer.activated.connect(self.go_to_found)
+        self.completer.activated[QModelIndex].connect(lambda i: self.go_to_found(i.data(Qt.DisplayRole)))
         self.search.setCompleter(self.completer)
         self.search.installEventFilter(self)
         self.search.returnPressed.connect(self._search_first)
@@ -625,9 +654,14 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------- search over the settings
     def search_index(self) -> dict:
-        """{shown text: (page key, widget)} – every tick box, button, slider, card title and label the pages show
-        now (folded parts like "Mehr" only once they are open)."""
-        out = {}
+        """{shown text: (page key, widget, folded)} – every tick box, button, slider, card title, label and tab the
+        pages show now (folded parts like "Mehr" only once they are open). 1.8.38: a label shown more than once on
+        a page carries its tab ("Position (Musik)") – before, only the first of them could be found."""
+        return {entry: hit[:3] for entry, hit in self._search_hits().items()}
+
+    def _search_hits(self) -> dict:
+        """{entry: (page key, widget, folded, haystack)}."""
+        found = []
         labels = dict(PAGES)
         for key, page in self.forms.items():
             # 1.8.2: while "Mehr" is shut, what lies under it is found too (and unfolded on the way there)
@@ -636,15 +670,30 @@ class MainWindow(QMainWindow):
             for ckey, (kind, w, extra) in page.controls.items():
                 if kind not in SEARCH_KINDS:
                     continue
-                target = extra[0] if kind == "slider" else w
-                text = " ".join(target.text().split())
+                if kind == "tab":                         # a tab: its name, going there opens it
+                    tw, w = w, extra
+                    text = tw.tabText(tw.indexOf(w)).replace("&&", "&")
+                    folded = not (tw.isTabVisible(tw.indexOf(w)) and _reachable(tw, page))
+                else:
+                    target = extra[0] if kind == "slider" else w
+                    text = target.text()
+                    folded = not _reachable(w, page)
+                text = " ".join(text.split())
                 if len(text) < 3 or text.startswith("▸"):
                     continue
-                folded = not _reachable(w, page)
                 if folded and not (shut and ckey.startswith(MORE_PREFIX)):
                     continue
-                entry = f"{text}  ·  {_(labels[key])}"
-                out.setdefault(entry, (key, w, folded))
+                found.append((text, key, w, folded, _haystack(text, i18n.other(text))))
+        count = collections.Counter((text, key) for text, key, *_rest in found)
+        out = {}
+        for text, key, w, folded, hay in found:
+            where = ""
+            if count[(text, key)] > 1:
+                tabs = _tab_of(w)
+                if tabs:
+                    tw, body = tabs[0]
+                    where = " (" + tw.tabText(tw.indexOf(body)).replace("&&", "&") + ")"
+            out.setdefault(f"{text}{where}  ·  {_(labels[key])}", (key, w, folded, hay))
         return out
 
     def eventFilter(self, obj, e):
@@ -654,8 +703,17 @@ class MainWindow(QMainWindow):
 
     def update_search_index(self):
         """After the App filled the pages: what the search offers (open parts, the language now …)."""
-        self._found = self.search_index()
-        self._search_model.setStringList(sorted(self._found, key=str.lower))
+        hits = self._search_hits()
+        self._found = {entry: hit[:3] for entry, hit in hits.items()}
+        self._search_model.clear()
+        for entry in sorted(hits, key=str.lower):
+            item = QStandardItem(entry)
+            item.setData(hits[entry][3], HAYSTACK_ROLE)
+            item.setEditable(False)
+            self._search_model.appendRow(item)
+        fm = self.completer.popup().fontMetrics()                  # 1.8.38: 190 px cut ⅔ of the entries off
+        widest = max((fm.horizontalAdvance(e) for e in hits), default=0) + 48
+        self.completer.popup().setMinimumWidth(max(POPUP_W[0], min(POPUP_W[1], widest)))
 
     def focus_search(self):
         if self._nav_compact:
@@ -665,7 +723,12 @@ class MainWindow(QMainWindow):
 
     def _search_first(self):
         if self.completer.completionCount():
-            self.go_to_found(self.completer.currentCompletion())
+            self.completer.setCurrentRow(0)
+            self.go_to_found(self.completer.currentIndex().data(Qt.DisplayRole))
+        elif self.search.text().strip():                           # 1.8.38: say so instead of doing nothing
+            from PySide6.QtWidgets import QToolTip
+            QToolTip.showText(self.search.mapToGlobal(self.search.rect().bottomLeft()), _("Nichts gefunden"),
+                              self.search)
 
     def go_to_found(self, entry: str):
         """Open the page of a search hit, scroll to it and light up its card for a moment."""
@@ -680,7 +743,7 @@ class MainWindow(QMainWindow):
             self._nav_kept = False
             self._compact_nav(self.width() < NAV_COMPACT_BELOW)
         if folded:                                        # under "Mehr": the App unfolds it, then we scroll there
-            self._post("act", (MORE_BUTTON, None))
+            self._post("more_open")                       # 1.8.38: opens only (the button toggled a stale fold shut)
         self._reveal_widget(w, delay=150 if folded else 0)
 
     def reveal(self, page: str, key: str):
