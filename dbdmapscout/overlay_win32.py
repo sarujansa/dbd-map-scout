@@ -1050,6 +1050,7 @@ class PictureOverlay:
         self._key = None
         self._pushed_key = None         # _key of the picture last put on the screen
         self._fit = None                # fit_width(): (content key, text height, map height)
+        self._fit_room = None           # fit_room(): (content key, map height) – 1.8.23
         self._frame_i = 0
         self._anim_job = None
         self._floor = None              # frame index of the floor on display; None = all floors one below the other
@@ -1077,7 +1078,7 @@ class PictureOverlay:
         style = style if style in ("classic", "glass", "chips", "line") else "classic"
         if (style, accent) != (self.skin, self.accent):
             self.skin, self.accent = style, accent
-            self._base_key = self._key = self._fit = None
+            self._base_key = self._key = self._fit = self._fit_room = None
 
     def set_timer(self, text: str):
         """Round timer shown below the map; only re-renders when the text changes."""
@@ -1255,10 +1256,7 @@ class PictureOverlay:
         below the map get smaller text first, the map only when that is not enough. Measured without putting
         anything on the screen, with the widest digits in the timer, and kept until the content changes – before,
         the App rendered big, showed it, then smaller: the map grew and shrank on every tick."""
-        key = (height, text_h, avail, re.sub(r"\d", "0", self._timer), self._server, self._ping, self._note,
-               self._record, self.info_beside, self._editing, self.show_map, self.show_caption, self._caption,
-               self.transparent, self.backdrop, self._floor, id(self._frames[0][0]) if self._frames else None,
-               self.skin, self.accent, self.realm, self._rec)
+        key = (height, text_h, avail) + self._content_key()
         if self._fit is None or self._fit[0] != key:
             timer, self._timer = self._timer, key[3]
             try:
@@ -1286,6 +1284,32 @@ class PictureOverlay:
             self._fit = (key, self.text_height, height)
         self.text_height = self._fit[1]
         return self._fit[2]
+
+    def _content_key(self) -> tuple:
+        """What the overlay's size depends on besides the heights (the timer with its widest digits)."""
+        return (re.sub(r"\d", "0", self._timer), self._server, self._ping, self._note, self._record, self.info_beside,
+                self._editing, self.show_map, self.show_caption, self._caption, self.transparent, self.backdrop,
+                self._floor, id(self._frames[0][0]) if self._frames else None, self.skin, self.accent, self.realm,
+                self._rec)
+
+    def fit_room(self, height: int, room: int) -> int:
+        """1.8.23 (user: right after 1.8.22 "the map got bigger and smaller all the time"): the map height at which
+        the overlay is at most ``room`` tall – measured without putting anything on the screen and kept until
+        the content changes. 1.8.22 rendered (and showed) the full size, then the smaller one, on every tick."""
+        key = (height, room, self.text_height) + self._content_key()
+        if self._fit_room is None or self._fit_room[0] != key:
+            timer, self._timer = self._timer, key[3]
+            try:
+                _w, h = self.render(height, push=False)
+                for _try in range(4):
+                    if h <= room or height <= 80:
+                        break
+                    height = max(80, height - max(2, h - room))
+                    _w, h = self.render(height, push=False)
+            finally:
+                self._timer = timer
+            self._fit_room = (key, height)
+        return self._fit_room[1]
 
     def _render_waiting(self, height: int):
         key = ("waiting", height, self.transparent, self._editing, self._waiting, self._server, self._ping,

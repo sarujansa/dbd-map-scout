@@ -135,6 +135,7 @@ DEFAULTS = {
     "rec_tail_s": 5,                    # 1.4.1: seconds recorded after the detected end (result screen)
     "rec_buffer_auto": True,            # 1.4.1: start/stop OBS's replay buffer with DBD
     "rec_merge": False,                 # 1.4.2: pre-roll + round → one file (1.5.5: off – played too fast at the user's PC)
+    "rec_farming_days": 7,              # 1.8.23: farming recordings go after this many days (0 = never)
     "rec_farming_dir": True,            # 1.5.3: recordings of farming rounds go into the subfolder "Farming"
     "rec_early": True,                  # 1.6: start at the end of the loading screen (spawn), the banner names it
     "rec_instant": True,                # 1.6: F8 also saves the last seconds of the replay buffer as a clip

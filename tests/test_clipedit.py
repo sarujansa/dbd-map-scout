@@ -575,3 +575,26 @@ def test_the_timeline_menu_sets_start_and_end_and_saves_a_still(clip, tmp_path):
     finally:
         win.close()
         app.processEvents()
+
+
+def test_a_source_obs_did_not_have_says_so_instead_of_silent(four_track, tmp_path):
+    """1.8.23 (user's pick 3): the recording's index entry names the sources OBS had – a silent track of a source
+    that was not there (microphone off, no background source) is not reported as "OBS recorded nothing"."""
+    pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
+    from PySide6.QtWidgets import QApplication
+    from dbdmapscout import qt_clip
+    app = QApplication.instance() or QApplication([])
+    win = qt_clip.ClipWindow(four_track, [], str(tmp_path / "Clips"), sound=False, sources=["dbd", "discord"])
+    try:
+        win.show()
+        deadline = time.monotonic() + 20
+        while not win._absent and time.monotonic() < deadline:
+            app.processEvents()
+            time.sleep(0.02)
+        assert win._absent == {"mic"} and not win._silent
+        assert "in OBS aus" in win.mix_boxes["mic"].text() and "still" not in win.mix_boxes["mic"].text()
+        assert win.mix_hint.isHidden()                       # nothing is wrong with OBS here
+        assert win.mix_boxes["mic"].isEnabled()
+    finally:
+        win.close()
+        app.processEvents()
