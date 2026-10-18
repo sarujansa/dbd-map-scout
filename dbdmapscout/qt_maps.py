@@ -101,8 +101,14 @@ class RealmDelegate(QStyledItemDelegate):
 
 
 STYLE_BUTTONS = (("classic", N_("Original"), N_("Die Karten mit lila Boden, wie sie mitgeliefert werden – gilt auch im Spiel.")),
-                 ("dark", N_("Dunkel"), N_("Die Karten im Stil von Fallen Refuge (durchsichtiger Boden, dunkler Rand) – "
-                                           "gilt auch im Spiel.")))
+                 ("dark", N_("Dunkel"), N_("Durchsichtiger Boden mit dunklem Rand – gilt auch im Spiel.")),
+                 # 1.8.16 (user: "zusätzlich", plain names): the dark conversion with a floor
+                 ("grey", N_("Grau"), N_("Dunkelgrauer Boden – die Form der Map bleibt auf dem schwarzen Balken "
+                                         "sichtbar. Gilt auch im Spiel.")),
+                 ("grey_edge", N_("Grau mit Rand"), N_("Dunkelgrauer Boden mit hellem Rand – gilt auch im Spiel.")),
+                 ("lilac", N_("Lila dunkel"), N_("Dunkles Lila mit lila Rand, erinnert an die Originalfarbe – gilt "
+                                                 "auch im Spiel.")),
+                 ("lilac_glass", N_("Lila transparent"), N_("Lila Boden, halb durchsichtig – gilt auch im Spiel.")))
 
 
 class MapsPage(QWidget):
@@ -140,6 +146,11 @@ class MapsPage(QWidget):
         # the same setting as Overlay → Karte → Kartenstil, so the tiles and the game switch together
         self._style = None
         self.style_btns = {}
+        style_row = QWidget()
+        styles = FlowRow(style_row, spacing=6)
+        style_label = QLabel(_("Kartenstil"))
+        style_label.setProperty("class", "dim")
+        styles.addWidget(style_label)
         self._style_group = QButtonGroup(self)          # 1.3.4: exclusive – the click shows at once, not on the
         self._style_group.setExclusive(True)            # next refresh (user: "Farbe wechselt erst nach 1 s")
         for key, label, tip in STYLE_BUTTONS:
@@ -150,9 +161,10 @@ class MapsPage(QWidget):
             b.setToolTip(_(tip))
             b.clicked.connect(lambda _c=False, k=key: self._post("map_style", k))
             self._style_group.addButton(b)
-            row.addWidget(b)
+            styles.addWidget(b)
             self.style_btns[key] = b
         lay.addLayout(row)
+        lay.addWidget(style_row)                        # 1.8.16: six styles – a row of their own, wraps when narrow
         body = QHBoxLayout()
         body.setSpacing(16)
         self.realms = QListWidget()

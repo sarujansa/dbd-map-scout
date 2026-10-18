@@ -103,8 +103,38 @@ def unblend(rgb, fill=None):
     return g, a, misfit
 
 
-def restyle(img: Image.Image, fill=None) -> Image.Image:
-    """The picture in the dark style; unchanged if it is not one of the lilac callout maps."""
+# 1.8.16 (user picked them from sample pictures, "zusätzlich", plain names): the dark conversion with a floor under
+# the drawing – on the black bar the transparent floor of "dark" leaves little more than digits on black.
+# style: (floor RGB, edge RGB or None, edge px at 1280 px height, floor alpha)
+FLOORS = {"grey": ((38, 40, 46), None, 0, 255),
+          "grey_edge": ((34, 36, 42), (120, 124, 136), 4, 255),
+          "lilac": ((40, 42, 72), (110, 118, 200), 4, 255),
+          "lilac_glass": ((140, 148, 232), None, 0, 70)}
+STYLES = ("dark",) + tuple(FLOORS)        # every style made from the dark conversion ("classic" = the original)
+
+
+def add_floor(img: Image.Image, top: int, style: str) -> Image.Image:
+    """A dark-styled map with the floor of ``style`` under its drawing (and an edge on its outline)."""
+    fill, edge, ew, alpha = FLOORS[style]
+    a = np.asarray(img.convert("RGBA")).copy()
+    body = a[top:]
+    shape = _outline(body[..., 3])
+    base = np.zeros_like(body)
+    base[shape] = (*fill, alpha)
+    under = Image.fromarray(base)
+    under.alpha_composite(Image.fromarray(body))
+    out = np.asarray(under).copy()
+    if edge is not None:
+        w = max(2, round(ew * a.shape[0] / 1280))
+        inner = cv2.erode(shape.astype(np.uint8), _disk(w), borderType=cv2.BORDER_CONSTANT, borderValue=0)
+        out[shape & ~inner.astype(bool)] = (*edge, 255)
+    a[top:] = out
+    return Image.fromarray(a)
+
+
+def restyle(img: Image.Image, fill=None, style: str = "dark") -> Image.Image:
+    """The picture in the dark style (``style`` = one of STYLES: with that floor under it); unchanged if it is not
+    one of the lilac callout maps."""
     a = np.asarray(img.convert("RGBA")).copy()
     split = title_split(img)
     top = split[2] if split else 0
@@ -196,7 +226,8 @@ def restyle(img: Image.Image, fill=None) -> Image.Image:
     out[backed, 0] = out[backed, 1] = out[backed, 2] = on_black[backed]
     out[backed, 3] = 255
     a[top:] = out
-    return Image.fromarray(a)
+    res = Image.fromarray(a)
+    return add_floor(res, top, style) if style in FLOORS else res
 
 
 # ------------------------------------------------------------------ Midwich (1.66.2, user: "kann ebenfalls geändert werden")
@@ -258,7 +289,7 @@ def framed_floor(img: Image.Image):
     return Image.fromarray(out), tuple(int(v) for v in fill), hole
 
 
-def restyle_floors(frames):
+def restyle_floors(frames, style: str = "dark"):
     """[(image, duration)] of an animated map with floors in the dark style, or None if it is not that kind.
     The floors (shown ≥ 1 s) are converted, the fading frames between them made anew from those."""
     from .mapimage import FLOOR_MIN_MS, REF_MAP_H, add_title
@@ -274,7 +305,7 @@ def restyle_floors(frames):
         size = (round(body.width * REF_MAP_H / body.height), REF_MAP_H)
         body = body.resize(size, Image.LANCZOS)
         titled = add_title(body, FLOOR_TITLES[n])
-        styled = restyle(titled, fill)
+        styled = restyle(titled, fill, style)
         if styled is titled:
             return None
         # the holes, dark grey on top (where the conversion made floor of them)
@@ -303,7 +334,7 @@ def restyle_floors(frames):
     return out
 
 
-def styled_path(path: str, cache_dir: str, make: bool = True) -> str:
+def styled_path(path: str, cache_dir: str, make: bool = True, style: str = "dark") -> str:
     """The dark version of a map picture (made once, kept in ``cache_dir``); the original when the picture is
     cannot be read or is of another style (an animation: Midwich's kind only). ``make=False``: only an existing
     one (thumbnails of the maps page must not wait ~0.5 s per map), else the original."""
@@ -313,7 +344,10 @@ def styled_path(path: str, cache_dir: str, make: bool = True) -> str:
         st = os.stat(path)
     except OSError:
         return path
-    name = f"{os.path.splitext(os.path.basename(path))[0]}-{int(st.st_mtime)}-{st.st_size}-v{STYLE_VERSION}.webp"
+    if style not in STYLES:
+        return path
+    tag = "" if style == "dark" else f"-{style}"            # "dark" keeps its old names (cache made before 1.8.16)
+    name = f"{os.path.splitext(os.path.basename(path))[0]}-{int(st.st_mtime)}-{st.st_size}{tag}-v{STYLE_VERSION}.webp"
     sub = os.path.basename(os.path.dirname(path))
     target = os.path.join(cache_dir, sub, name)
     if os.path.exists(target):
@@ -327,13 +361,13 @@ def styled_path(path: str, cache_dir: str, make: bool = True) -> str:
                 for fr in ImageSequence.Iterator(im):
                     pic = fr.convert("RGBA")
                     frames.append((pic, int(fr.info.get("duration", 100) or 100)))
-                dark = restyle_floors(frames)
+                dark = restyle_floors(frames, style)
                 if dark is None:
                     return path                                # an animation of another kind: as it is
             else:
                 im.load()
                 src = im.convert("RGBA")
-                dark = restyle(src)
+                dark = restyle(src, None, style)
                 if dark is src:
                     return path
                 dark = [(dark, 0)]
@@ -349,12 +383,12 @@ def styled_path(path: str, cache_dir: str, make: bool = True) -> str:
         return path
 
 
-def warm(paths, cache_dir: str, stop=lambda: False) -> int:
+def warm(paths, cache_dir: str, stop=lambda: False, style: str = "dark") -> int:
     """Make the dark pictures ahead (thread at start / when the style is switched on), so that showing a map at the
     start of a match does not wait for it. Returns how many pictures are in the dark style."""
     n = 0
     for path in paths:
         if stop():
             break
-        n += styled_path(path, cache_dir) != path
+        n += styled_path(path, cache_dir, style=style) != path
     return n
