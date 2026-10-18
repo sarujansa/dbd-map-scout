@@ -101,6 +101,16 @@ class OverlayTab:
                                                             "Benachrichtigungen oben rechts, Text-Chat rechts)"),
                                                 variable=self.keep_out_var, command=self._keep_out_changed)
                   ).pack(anchor="w", pady=(4, 0))
+        # 1.8.29 (user: "rechts sind die Felder nicht untereinander … zusammenführen"): one column per bar
+        cw = ui.Frame(pos)
+        cw.pack(fill="x", pady=(4, 0))
+        self.same_width_var = ui.BooleanVar(value=bool(o.get("cards_same_width", True)))
+        self._reg("ov.same_width", ui.Checkbutton(cw, text=_("Karten im selben Balken gleich breit (Systemwerte, "
+                                                              "Heute, Musik)"),
+                                                  variable=self.same_width_var, command=self._same_width_changed)
+                  ).pack(side="left")
+        self._reg("ov.merge_column", ui.Button(cw, text=_("Zu einer Spalte zusammenführen"),
+                                               command=self._merge_column)).pack(side="left", padx=(8, 0))
         pr = ui.Frame(pos)                              # 1.2.9: ready-made arrangements
         pr.pack(fill="x", pady=(4, 0))
         self._reg("ov.preset.label", ui.Label(pr, text=_("Vorlage"), width=12)).pack(side="left")
@@ -635,6 +645,23 @@ class OverlayTab:
         self.settings["overlay"]["media_cover_shape"] = key
         self._save_soon()
         self._tick_overlay(reschedule=False)
+
+    def _same_width_changed(self):
+        """1.8.29: the cards in one bar drawn at the widest one's width – on/off."""
+        self._layout_mark()
+        self.settings["overlay"]["cards_same_width"] = bool(self.same_width_var.get())
+        self._save_soon()
+        self._tick_overlay(reschedule=False)
+
+    def _merge_column(self):
+        """1.8.29 (user: "rechts sind die Felder nicht untereinander, evtl. zusammenführen"): one column in the
+        bar of the system values – "today" right below them, the music below "today", all at one width (an
+        undo step like a preset)."""
+        from . import layoutmem
+        self._layout_mark()
+        snap = layoutmem.snapshot(self.settings.data)
+        snap["overlay"].update(today_pos="below", media_pos="under_today", cards_same_width=True)
+        self._layout_apply(snap)
 
     def _keep_out_changed(self):
         """1.8.25: Discord's overlay widgets kept free (hatched in the preview) – on/off."""

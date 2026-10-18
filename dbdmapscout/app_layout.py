@@ -56,6 +56,8 @@ class LayoutMemory:
             self.today_pos_var.set(_(dict(TODAY_SPOTS).get(o.get("today_pos", "below"), "")))
             if hasattr(self, "keep_out_var"):                                # 1.8.25
                 self.keep_out_var.set(bool(o.get("keep_out_on", True)))
+            if hasattr(self, "same_width_var"):                              # 1.8.29
+                self.same_width_var.set(bool(o.get("cards_same_width", True)))
             if hasattr(self, "info_pos_var"):                                # 1.8.24
                 from .app_overlay import INFO_SPOTS
                 self.info_pos_var.set(_(dict(INFO_SPOTS).get(o.get("info_pos", "below"), "")))

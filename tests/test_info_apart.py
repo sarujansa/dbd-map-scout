@@ -430,3 +430,63 @@ def test_every_element_is_placed_with_real_windows(tmp_path):
                 assert not layout.boxes_overlap(boxes[a], boxes[b]), (a, b, boxes[a], boxes[b])
     finally:
         app.quit()
+
+
+def test_cards_in_the_same_bar_share_one_width_and_merge_into_a_column(tmp_path):
+    """1.8.29 (user's screenshot: system values, today and music in the right bar at three widths – "nicht
+    untereinander … zusammenführen"): the cards in one bar are drawn at the widest one's width; the button
+    "Zu einer Spalte zusammenführen" hangs today below the system values and the music below today – one
+    column with flush edges; switched off, every card keeps its natural width; undo restores the own places."""
+    import json
+    import time
+    from dbdmapscout import media, sysinfo
+    from dbdmapscout.app import App
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for name in ("maps", "models", "maps.json"):
+        os.symlink(os.path.join(root, name), tmp_path / name)
+    (tmp_path / "sim").mkdir()
+    (tmp_path / "settings.json").write_text(json.dumps({"welcome_seen": True, "sysinfo": "custom",
+                                                        "sysinfo_pos": [0.984, 0.383],
+                                                        "overlay": dict(USER_OVERLAY, fade=False)}), encoding="utf-8")
+    app = App(str(tmp_path), simulate=str(tmp_path / "sim"))
+    try:
+        app.info_win, app.hud = _DrawWin("INFOS"), _DrawWin("SYSTEM")
+        app.today_win, app.media_win = _DrawWin("HEUTE"), _DrawWin("MUSIK")
+        app._game_rect = lambda: (0, 0, 3440, 1440)
+        app._force_until = time.time() + 30
+        app._forced = True
+        app.sysmon.snapshot = sysinfo.Snapshot(t=time.time(), cpu_load=63, cpu_temp=75, gpu_temp=77, gpu_load=89,
+                                               vram_used=5.8, vram_total=12, ram_used=21.2, ram_total=32,
+                                               gpu_hot=97.9, gpu_mem=78, hwinfo=True)
+        app.media.now = media.NowPlaying("Blinding Lights", "The Weeknd", True, time.time(), position=70.0,
+                                         duration=176.0, at=time.time())
+        app.show_map("shattered-square", 1, "auto")
+        wins = {"hud": app.hud, "today": app.today_win, "music": app.media_win}
+
+        def widths(ticks=3):
+            for _ in range(ticks):
+                app._place_overlay()
+            return {n: w.size[0] for n, w in wins.items()}
+
+        same = widths()
+        natural = dict(app._col_nat)
+        assert len(set(same.values())) == 1 and same["hud"] == max(natural.values())    # all as wide as the widest
+        assert len(set(natural.values())) > 1                                            # (they differ by nature)
+        app.same_width_var.set(False)
+        app._same_width_changed()
+        assert widths() == natural                                                       # off: natural widths
+        time.sleep(0.9)                                     # > GESTURE_GAP: the button is an undo step of its own
+        app._merge_column()                                                              # the button
+        o = app.settings["overlay"]
+        assert o["today_pos"] == "below" and o["media_pos"] == "under_today" and o["cards_same_width"]
+        assert app.same_width_var.get()
+        merged = widths()
+        assert len(set(merged.values())) == 1
+        xs = {n: w.at[0] for n, w in wins.items()}
+        assert len(set(xs.values())) == 1, xs                                            # flush left edges
+        ys = [wins["hud"].at[1], wins["today"].at[1], wins["music"].at[1]]
+        assert ys == sorted(ys)                                                          # one column, top down
+        app.undo_layout()                                                                # back to the own places
+        assert o["today_pos"] == "custom" and o["media_pos"] == "custom" and not o["cards_same_width"]
+    finally:
+        app.quit()
