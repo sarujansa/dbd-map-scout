@@ -201,9 +201,8 @@ class SysInfo:
         if not vb:                                          # 1.8.14: between the limiter lines of its bar
             y = layout.clamp_box((x, y, sw, h), (gx, gy, gw, gh), self._bands(gx, gy, gw, gh))[1]
         self._fade_show("hud", fade)
-        self.hud.show_at(int(x), int(y))
-        self.worker.hud_rect = (int(x), int(y), w, h)
-        self._hud_box = (int(x), int(y), sw, h)             # steady box: the music card centres below it
+        self.worker.hud_rect = self._el_show("hud", self.hud, x, y, (w, h))
+        self._hud_box = (int(x), self.worker.hud_rect[1], sw, h)    # steady box: the music card centres below it
         return None if vb or own else (side, h)   # only at the top of a side bar does the map move below it
 
     def _today_rows(self, now: float) -> list:
@@ -249,14 +248,12 @@ class SysInfo:
         self._today_box = placed.get("today")
         if "today" in placed:
             self._fade_show("today", bool(o.get("fade", True)) and not self.overlay.editing)
-            self.today_win.show_at(placed["today"][0], placed["today"][1])
-            self.worker.today_rect = placed["today"]
+            self.worker.today_rect = self._today_box = self._el_show("today", self.today_win, *placed["today"])
         if "music" in placed:
             self._fade_show("music", bool(o.get("media_fade", True)) and not self.overlay.editing,
                             restart=getattr(self, "_media_restart", False))
             self._media_restart = False
-            self.media_win.show_at(placed["music"][0], placed["music"][1])
-            self.worker.media_rect = self._media_box = placed["music"]
+            self.worker.media_rect = self._media_box = self._el_show("music", self.media_win, *placed["music"])
         else:
             self._media_box = None
 
@@ -406,8 +403,7 @@ class SysInfo:
         if mode == "beside":
             hx, hy = min(x + w + 3 * gap, gx + gw - gap - hw), y + max(0, (h - hh) // 2)
             self._fade_show("hud", fade)
-            self.hud.show_at(int(hx), int(hy))
-            self.worker.hud_rect = (int(hx), int(hy), hw, hh)
+            self.worker.hud_rect = self._el_show("hud", self.hud, hx, hy, (hw, hh))
             return
         hx = x + (w - hw) / 2
         bar = layout.bar_width(gw, gh)
@@ -423,8 +419,7 @@ class SysInfo:
         hy = y - gap - hh if y - gap - hh >= top else y + h + gap
         hy = layout.clamp_box((hx, hy, hw, hh), (gx, gy, gw, gh), bands)[1]
         self._fade_show("hud", fade)
-        self.hud.show_at(int(hx), int(hy))
-        self.worker.hud_rect = (int(hx), int(hy), hw, hh)
+        self.worker.hud_rect = self._el_show("hud", self.hud, hx, hy, (hw, hh))
 
     def _hud_dragged(self, x, y):
         """System values dropped somewhere: remember the place relative to the DBD window (like the map)."""
@@ -624,6 +619,52 @@ class SysInfo:
         """1.8.14: the room between the limiter lines of each black bar, or None (off / no side bars)."""
         o = self.settings["overlay"]
         return layout.bar_bands(o, (gx, gy, gw, gh), int(gh * o.get("margin", 0.012))) if gh else None
+
+    # ---- 1.8.25 (user: "alle UI-Elemente beachten, damit es immer sauber aussieht" + Discord's overlay): no element
+    # lies on another, on the map or on a keep-out area – placed as usual, then moved up/down where they collide
+    ELEMENT_WINDOWS = (("hud", "hud", "hud_rect"), ("text", "info_win", "info_rect"),
+                       ("today", "today_win", "today_rect"), ("music", "media_win", "media_rect"))
+
+    def _el_show(self, name, win, x, y, size):
+        """Show an element where its placement put it, moved by what the last check gave it (no back and forth
+        between two places every tick); returns its box on screen."""
+        if not hasattr(self, "_el_orig"):
+            self._el_orig, self._el_shift = {}, {}
+        box = (int(x), int(y), int(size[0]), int(size[1]))
+        self._el_orig[name] = box
+        dx, dy = self._el_shift.get(name, (0, 0))
+        win.show_at(box[0] + dx, box[1] + dy)
+        return (box[0] + dx, box[1] + dy, box[2], box[3])
+
+    def _el_resolve(self):
+        """After every element was placed: who collides moves to the nearest free place (layout.resolve, the
+        same as the preview); a changed move is applied at once, otherwise it is kept for the next ticks."""
+        orig = getattr(self, "_el_orig", None)
+        if orig is None:
+            return
+        o = self.settings["overlay"]
+        gx, gy, gw, gh = game = self._game_rect()
+        boxes = []
+        for name, attr, _rect in self.ELEMENT_WINDOWS:
+            win = getattr(self, attr, None)
+            if win is not None and win.shown and name in orig:
+                boxes.append((name, orig[name]))
+        shift = layout.resolve(boxes, [self.worker.overlay_rect] + layout.keep_out_boxes(o, game), game,
+                               self._bands(gx, gy, gw, gh), layout.stack_gap(o, gh)) if gh else {}
+        if shift != self._el_shift:
+            self._el_shift = shift
+            for name, attr, rect in self.ELEMENT_WINDOWS:
+                if name in orig and dict(boxes).get(name):
+                    x, y, w, h = orig[name]
+                    dx, dy = shift.get(name, (0, 0))
+                    box = (x + dx, y + dy, w, h)
+                    getattr(self, attr).show_at(box[0], box[1])
+                    setattr(self.worker, rect, box)
+                    if name == "music":
+                        self._media_box = box
+                    elif name == "today":
+                        self._today_box = box
+        self._el_orig = {}
 
     def _guides_place(self):
         """Centre cross over the DBD window while moving (1.64.5): two thin click-through windows, hidden
