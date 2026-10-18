@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtGui import QPalette
-from PySide6.QtWidgets import (QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QProgressBar,
+from PySide6.QtWidgets import (QBoxLayout, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QProgressBar,
                                QPushButton, QRadioButton, QScrollArea, QSizePolicy, QSlider, QStackedWidget,
                                QTabWidget, QVBoxLayout, QWidget)
 
@@ -46,6 +46,7 @@ SETUP = (
         ("slider", "ov.size"),
         ("row", (("button", "ov.test"), ("button", "ov.edit"), ("stretch",))),
         ("note", N_("„Overlay testen“ zeigt die Karte sofort, „Mit der Maus verschieben“ lässt sie dich hinziehen.")),
+        ("sub", N_("Systemwerte")),              # 1.8.2: "Position" alone did not say what it places
         ("row", (("label", "ov.sysinfo.label"), ("combo", "ov.sysinfo"), ("stretch",))),
         ("check", "ov.today"), ("check", "ov.media"))),
     (N_("Tasten und Start"), (
@@ -661,6 +662,36 @@ class _Arranged:
                 self._applying = False
 
 
+class SideBySide(QWidget):
+    """1.8.2: two cards next to each other while the page is wide enough (the overlay preview and the tools of the
+    picked element), one below the other on a narrow page. The first card takes the larger share."""
+
+    BESIDE_FROM = 820                 # px (logical): from this width the cards sit side by side
+
+    def __init__(self):
+        super().__init__()
+        self.box = QBoxLayout(QBoxLayout.TopToBottom, self)
+        self.box.setContentsMargins(0, 0, 0, 0)
+        self.box.setSpacing(10)
+        self.cards = []
+
+    def add(self, card):
+        self.cards.append(card)
+        self.box.addWidget(card, 3 if len(self.cards) == 1 else 2)
+
+    def beside(self) -> bool:
+        return self.box.direction() == QBoxLayout.LeftToRight
+
+    def resizeEvent(self, e):
+        want = QBoxLayout.LeftToRight if self.width() >= self.BESIDE_FROM else QBoxLayout.TopToBottom
+        if self.box.direction() != want:
+            self.box.setDirection(want)
+            for i, card in enumerate(self.cards):       # beside: the short card hangs at the top, not stretched
+                self.box.setAlignment(card, Qt.AlignTop if want == QBoxLayout.LeftToRight and i else Qt.Alignment())
+            self.updateGeometry()
+        super().resizeEvent(e)
+
+
 class FitTabs(QTabWidget):
     """Tabs as tall as the open tab, not the tallest one (QStackedLayout asks every page): no empty room below
     a short tab."""
@@ -725,12 +756,12 @@ class FormPage(QWidget, _Arranged):
                     self._add(row, cl)
                 col.add(item[1], card, hrow)
             elif kind == "panel":
-                card = _card()
-                cl = QVBoxLayout(card)
-                cl.setContentsMargins(14, 12, 14, 12)
-                for row in item[1]:
-                    self._add(row, cl)
-                lay.addWidget(card)
+                lay.addWidget(self._panel(item[1]))
+            elif kind == "side":
+                side = SideBySide()
+                for panel in item[1]:
+                    side.add(self._panel(panel[1]))
+                lay.addWidget(side)
             elif kind == "tabs":
                 tabs = FitTabs()
                 tabs.setObjectName("formtabs")
@@ -758,6 +789,14 @@ class FormPage(QWidget, _Arranged):
             else:
                 self._add(item, lay)
         lay.addStretch()
+
+    def _panel(self, rows):
+        card = _card()
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(14, 12, 14, 12)
+        for row in rows:
+            self._add(row, cl)
+        return card
 
     def _add(self, item, lay):
         kind = item[0]
