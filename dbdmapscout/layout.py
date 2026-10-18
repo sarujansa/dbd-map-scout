@@ -412,6 +412,16 @@ def clamp_box(box, game, bands):
     return (x, int(max(top, min(y, bottom - h))), w, h)
 
 
+def own_room(box, game, bands) -> int:
+    """1.8.22 (user: "Midwich ignoriert die Regel" – both floors at an own place ran past the bottom line): how tall
+    a box at an own place may be – the room between the lines of its bar, else the game's height."""
+    side = box_side(box, game) if bands else None
+    if side is None:
+        return game[3]
+    top, bottom = bands[side]
+    return max(0, bottom - top)
+
+
 def follow_reserve(hud_h: int, card_sizes: dict, spots: dict, gap: int) -> int:
     """Room above the map for the system values "right above the map" and the cards hanging on them (1.8.14):
     between limiter lines the map makes room for them, so the chain fits above it instead of spilling over."""
