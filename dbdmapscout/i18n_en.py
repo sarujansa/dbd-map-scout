@@ -110,8 +110,6 @@ EN = {
     "Dunkel": "Dark",
     "Die Karten mit lila Boden, wie sie mitgeliefert werden – gilt auch im Spiel.":
         "The maps with the purple floor, as they come – applies in the game too.",
-    "Die Karten im Stil von Fallen Refuge (durchsichtiger Boden, dunkler Rand) – gilt auch im Spiel.":
-        "The maps in the style of Fallen Refuge (see-through floor, dark edge) – applies in the game too.",
     "Klassisch": "Classic",
     "Glas-Karten": "Glass cards",
     "Chips & Icons": "Chips & icons",
@@ -1273,8 +1271,6 @@ EN = {
     'Systemwerte': 'System values',
     'Ziehst: {name}': 'Dragging: {name}',
     'Unter der Maus: {name}': 'Under the mouse: {name}',
-    'Original (lila Boden)': 'Original (lilac floor)',
-    'Dunkel – wie Fallen Refuge (durchsichtiger Boden)': 'Dark – like Fallen Refuge (see-through floor)',
     'Kartenstil': 'Map style',
     'Kartenstil: {style}.': 'Map style: {style}.',
     'Map wählen …': 'Choose map …',
@@ -1775,4 +1771,15 @@ EN = {
     'Eine Linie ziehen bewegt die gleiche Linie im anderen Balken mit.':
         'Dragging a line moves the same line in the other bar along.',
     'Setzt alle vier Linien auf 8 % vom Rand zurück.': 'Puts all four lines back at 8 % from the edge.',
+    'Dunkelgrauer Boden mit hellem Rand – gilt auch im Spiel.': 'Dark grey floor with a light edge – in the game too.',
+    'Dunkelgrauer Boden – die Form der Map bleibt auf dem schwarzen Balken sichtbar. Gilt auch im Spiel.':
+        "Dark grey floor – the map's shape stays visible on the black bar. In the game too.",
+    'Dunkles Lila mit lila Rand, erinnert an die Originalfarbe – gilt auch im Spiel.':
+        'Dark lilac with a lilac edge, close to the original colour – in the game too.',
+    'Durchsichtiger Boden mit dunklem Rand – gilt auch im Spiel.': 'See-through floor with a dark edge – in the game too.',
+    'Grau': 'Grey',
+    'Grau mit Rand': 'Grey with edge',
+    'Lila dunkel': 'Dark lilac',
+    'Lila transparent': 'Lilac see-through',
+    'Lila Boden, halb durchsichtig – gilt auch im Spiel.': 'Lilac floor, half see-through – in the game too.',
 }
