@@ -375,10 +375,12 @@ def tile_model(label, values, frac, dim) -> dict:
 
 
 # ------------------------------------------------------------------ the cards (system values, today)
-def card(rows, height: int, style: str, accent=None, title=None, dim=None) -> Image.Image:
+def card(rows, height: int, style: str, accent=None, title=None, dim=None, min_w: int = 0) -> Image.Image:
     """System values / "today" in ``style`` (glass | chips | line) from the classic rows of sysinfo.hud_rows /
     today_rows: a header and one stat tile per value in two columns (1.8.27, the user's pick: "the dashboards
-    of GPU / CPU"); ``title`` for the header ("SYSTEM" for the values; None = the first row's label, "today")."""
+    of GPU / CPU"); ``title`` for the header ("SYSTEM" for the values; None = the first row's label, "today").
+    The card is ``CARD_MIN_W`` wide whatever the values say (1.8.28, user: nothing may move when a value gets
+    longer or shorter) – texts are fitted into their tiles; ``min_w`` widens it (the App's steady width)."""
     from .sysinfo import DIM
     dim = dim or DIM
     u = max(0.25, height / 1440)
@@ -387,18 +389,16 @@ def card(rows, height: int, style: str, accent=None, title=None, dim=None) -> Im
     if not lines:
         return Image.new("RGBA", (1, 1), (0, 0, 0, 0))
     tiles = [tile_model(lab, vals, fr, dim) for lab, vals, fr in lines]
-    return _finish(_tiles_card(head, tiles, u, acc, style), style, u)
+    return _finish(_tiles_card(head, tiles, u, acc, style, min_w), style, u)
 
 
-def _tiles_card(head, tiles, u, acc, style) -> Image.Image:
+def _tiles_card(head, tiles, u, acc, style, min_w=0) -> Image.Image:
     pad, gap = int(PAD * u), int(TILE_GAP * u)
     icons = surface(style)["icons"]
     th = int((64 if any(t["frac"] is not None for t in tiles) else 56) * u)
-    vf, lf = inter("SemiBold", int(24 * u)), inter("Medium", int(10 * u))
-    need = max(max(_width(vf, t["value"]), _width(lf, t["label"].upper(), 2 * u)) + int(24 * u)
-               + (int(26 * u) if icons and t["label"] and t["label"].upper().split()[0] in ICONS else 0) for t in tiles)
     head_w = _header_w(head, u) if head else 0
-    w = int(max(CARD_MIN_W * u, min(CARD_MAX_W * u, max(2 * need + gap, head_w) + 2 * pad)))
+    shadow = 4 * max(2, int(8 * u)) if surface(style)["shadow"] else 0      # min_w counts the finished picture
+    w = int(max(CARD_MIN_W * u, min(CARD_MAX_W * u, head_w + 2 * pad), min_w - shadow))
     tw = (w - 2 * pad - gap) // 2
     rows, pair = [], []                              # a warning spans the card, the rest go in pairs
     for t in tiles:
@@ -479,13 +479,16 @@ SMALL_COVER = 64                        # cover of the compact card
 
 
 def music(rows, cover, height: int, style: str, progress=None, look=(), accent=None,
-          layout: str = "compact", upnext=None, upnext_pos: str = "below", anim=None) -> Image.Image:
+          layout: str = "compact", upnext=None, upnext_pos: str = "below", anim=None,
+          min_w: int = 0) -> Image.Image:
     """"Läuft gerade" in ``style``: ``rows`` as media.rows gives them ([[(title, white)], [(artist, dim)]]),
     ``progress`` = (elapsed, total) s or None, ``look`` as media.look (``remaining`` = time left on the right,
     ``accent`` = bar in the cover's colour – else the theme's accent). ``layout`` = overlay.media_style:
     "big" (1.3.2, user: the big cover stayed small in the new styles) = cover large on top, text centred below;
     "compact" = cover left. ``upnext`` (1.8) = (label, ((title, artist), …)) of the Spotify queue: below the
-    progress inside the card (1.8.27) or as a second panel to its right (``upnext_pos``)."""
+    progress inside the card (1.8.27) or as a second panel to its right (``upnext_pos``). ``min_w`` (1.8.28):
+    the finished picture is at least this wide – the card (or, with the list on the right, the list's panel)
+    fills the width, so a shorter title or queue never moves anything."""
     u = max(0.25, height / 1440)
     acc = accent_rgba(accent)
     if "accent" in look and cover is not None:
@@ -498,21 +501,28 @@ def music(rows, cover, height: int, style: str, progress=None, look=(), accent=N
     items = list(upnext[1]) if upnext and upnext[1] else []
     label = upnext[0] if items else ""
     inside = (label, items, anim) if items and upnext_pos != "right" else None
-    im = _finish(_music_body(title, artist, cover, u, acc, progress, look, style, big, inside), style, u)
-    if items and upnext_pos == "right":              # 1.8.24: as many rows as fit beside the card
+    right = bool(items and upnext_pos == "right")
+    shadow = 4 * max(2, int(8 * u)) if surface(style)["shadow"] else 0
+    im = _finish(_music_body(title, artist, cover, u, acc, progress, look, style, big, inside,
+                             0 if right else min_w - shadow), style, u)
+    if right:                                        # 1.8.24: as many rows as fit beside the card
         items = items[:upnext_fit(label, len(items), im.height, u)]
-        im = _attach(im, upnext_panel(label, items, u, style, anim), "right", int(8 * u), centred=big)
+        gap = int(8 * u)
+        panel = upnext_panel(label, items, u, style, anim, min_w - im.width - gap - shadow)
+        im = _attach(im, panel, "right", gap, centred=big)
     return im
 
 
-def _music_body(title, artist, cover, u, acc, progress, look, style, big, inside) -> Image.Image:
+def _music_body(title, artist, cover, u, acc, progress, look, style, big, inside, min_w=0) -> Image.Image:
     """The music card without its shadow: cover on top (``big``) or left, title, artist, progress with the time
-    left, and the queue (``inside`` = (label, items, anim)) below a hairline."""
+    left, and the queue (``inside`` = (label, items, anim)) below a hairline; at least ``min_w`` wide."""
     pad = int(PAD * u)
     line = style == "line"
     tail = _progress_text(progress, look)
     sf = inter("Medium", int(12 * u))
-    tail_w = int(_width(sf, tail)) + int(8 * u) if tail else 0
+    # the field of the time is measured with the widest digits of the song's length: the bar's end never moves
+    # while the seconds run or the minutes lose a digit (1.8.28)
+    tail_w = int(_width(sf, _widest(_progress_text((progress[1], progress[1]), look)))) + int(8 * u) if tail else 0
     if big:
         side = int(BIG_COVER * u)
         max_w = max(side, int(WRAP_SHARE * 1440 * u) - 2 * pad)
@@ -535,6 +545,7 @@ def _music_body(title, artist, cover, u, acc, progress, look, style, big, inside
         list_h = int(20 * u) + queue["head_h"] + queue["rows_h"]
     else:
         list_h = 0
+    w = max(w, int(min_w))
     h = body_h + list_h + pad
     im = _frame(w, h, style, u)
     d = ImageDraw.Draw(im)
@@ -639,12 +650,13 @@ def _upnext_draw(im, x, y, w, q, u, style, anim=None):
     im.alpha_composite(inner, (int(x), int(y) + q["head_h"]))
 
 
-def upnext_panel(label: str, items, u: float, style: str, anim=None) -> Image.Image:
+def upnext_panel(label: str, items, u: float, style: str, anim=None, min_w: int = 0) -> Image.Image:
     """"Als nächstes" (1.8) as a small panel of its own in ``style`` (right of the music card): a caps header,
-    then number · title – artist per track, each line fitted to the width of the bar (WRAP_SHARE)."""
+    then number · title – artist per track, each line fitted to the width of the bar (WRAP_SHARE); at least
+    ``min_w`` wide (1.8.28: the steady width of the whole music picture)."""
     pad = int(12 * u)
     q = _upnext_fitted(label, items, u, style, int(WRAP_SHARE * 1440 * u) - 2 * pad)
-    w = max(q["w"] + 2 * pad, int(120 * u))
+    w = max(q["w"] + 2 * pad, int(120 * u), int(min_w))
     h = pad + q["head_h"] + q["rows_h"] + pad
     im = _frame(w, h, style, u)
     _upnext_draw(im, pad, pad, w - 2 * pad, q, u, style, anim)
@@ -699,15 +711,17 @@ def map_card(body, name: str, realm: str, timer: str, note: str, record: str, se
                           fill=s["tile"]))
     if server:
         dot = accent_rgba(ping_colour(ping)) if ping is not None else GREEN
+        # 1.8.28: the pill is sized for a three-digit ping – "28 ms" → "128 ms" moves nothing
         chips.append(chip(server + (f" · {ping:.0f} ms" if ping is not None else ""), u, cf, dot=dot,
-                          edge=s["tile_edge"], pad=int(12 * u), h=int(30 * u), fill=s["tile"]))
+                          edge=s["tile_edge"], pad=int(12 * u), h=int(30 * u), fill=s["tile"],
+                          width_text=server + (" · 000 ms" if ping is not None else "")))
     if record:
         chips.append(chip(record, u, cf, colour=GREY, edge=s["tile_edge"], pad=int(12 * u), h=int(30 * u),
                           fill=s["tile"]))
     lines = [(inter("SemiBold" if i == 0 else "Medium", int((20 if i == 0 else 16) * u)), t, WHITE if i == 0 else GREY)
              for i, t in enumerate(status)]
     row_pic = chip_rows(chips, max(body.width if body is not None else 0, wrap), gap) if chips else None
-    timer_w = _width(tf, _widest(timer)) if timer else 0
+    timer_w = _width(tf, _widest(timer).rjust(5, "0")) if timer else 0   # at least "00:00": 9:59 → 10:00 stays
     field_w = timer_w + (int(30 * u) if rec is not None else 0)
     parts = [body.width if body is not None else 0, _header_w(realm, u) if realm else 0,
              _width(nf, name) if name else 0, field_w, row_pic.width if row_pic else 0] + \
