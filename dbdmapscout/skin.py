@@ -485,7 +485,7 @@ SMALL_COVER = 64                        # cover of the compact card
 
 def music(rows, cover, height: int, style: str, progress=None, look=(), accent=None,
           layout: str = "compact", upnext=None, upnext_pos: str = "below", anim=None,
-          min_w: int = 0) -> Image.Image:
+          min_w: int = 0, min_h: int = 0) -> Image.Image:
     """"Läuft gerade" in ``style``: ``rows`` as media.rows gives them ([[(title, white)], [(artist, dim)]]),
     ``progress`` = (elapsed, total) s or None, ``look`` as media.look (``remaining`` = time left on the right,
     ``accent`` = bar in the cover's colour – else the theme's accent). ``layout`` = overlay.media_style:
@@ -493,7 +493,8 @@ def music(rows, cover, height: int, style: str, progress=None, look=(), accent=N
     "compact" = cover left. ``upnext`` (1.8) = (label, ((title, artist), …)) of the Spotify queue: below the
     progress inside the card (1.8.27) or as a second panel to its right (``upnext_pos``). ``min_w`` (1.8.28):
     the finished picture is at least this wide – the card (or, with the list on the right, the list's panel)
-    fills the width, so a shorter title or queue never moves anything."""
+    fills the width, so a shorter title or queue never moves anything; ``min_h`` (1.8.30) the same for the
+    height – a song change without cover or list for a moment keeps the card's size."""
     u = max(0.25, height / 1440)
     acc = accent_rgba(accent)
     if "accent" in look and cover is not None:
@@ -509,7 +510,7 @@ def music(rows, cover, height: int, style: str, progress=None, look=(), accent=N
     right = bool(items and upnext_pos == "right")
     shadow = 4 * max(2, int(8 * u)) if surface(style)["shadow"] else 0
     im = _finish(_music_body(title, artist, cover, u, acc, progress, look, style, big, inside,
-                             0 if right else min_w - shadow), style, u)
+                             0 if right else min_w - shadow, min_h - shadow), style, u)
     if right:                                        # 1.8.24: as many rows as fit beside the card
         items = items[:upnext_fit(label, len(items), im.height, u)]
         gap = int(8 * u)
@@ -518,7 +519,7 @@ def music(rows, cover, height: int, style: str, progress=None, look=(), accent=N
     return im
 
 
-def _music_body(title, artist, cover, u, acc, progress, look, style, big, inside, min_w=0) -> Image.Image:
+def _music_body(title, artist, cover, u, acc, progress, look, style, big, inside, min_w=0, min_h=0) -> Image.Image:
     """The music card without its shadow: cover on top (``big``) or left, title, artist, progress with the time
     left, and the queue (``inside`` = (label, items, anim)) below a hairline; at least ``min_w`` wide."""
     pad = int(PAD * u)
@@ -551,7 +552,7 @@ def _music_body(title, artist, cover, u, acc, progress, look, style, big, inside
     else:
         list_h = 0
     w = max(w, int(min_w))
-    h = body_h + list_h + pad
+    h = max(body_h + list_h + pad, int(min_h))
     im = _frame(w, h, style, u)
     d = ImageDraw.Draw(im)
     if cover is not None:
