@@ -267,7 +267,8 @@ def test_the_floor_styles_put_a_floor_under_the_dark_drawing(tmp_path, style):
     got = body_o[floor]
     assert (np.abs(got[:, :3] - np.array(fill)).max(axis=1) <= 2).mean() > 0.99   # … the floor's colour now
     assert (np.abs(got[:, 3] - alpha) <= 2).mean() > 0.99
-    solid = shape & (body_d[..., 3] == 255) & ~cv2_erode_edge(shape, 20)        # the opaque drawing stays
+    # the opaque drawing stays – away from the outline: there "dark" has its black ring, a floor style not (1.8.35)
+    solid = shape & (body_d[..., 3] == 255) & ~cv2_erode_edge(shape, 40)
     assert (np.abs(body_o[solid] - body_d[solid]).max(axis=1) <= 2).mean() > 0.99
     if edge is not None:                                                      # a light edge on the outline
         rim = shape & ~mapstyle.cv2.erode(shape.astype(np.uint8), mapstyle._disk(2)).astype(bool)
@@ -279,6 +280,46 @@ def test_the_floor_styles_put_a_floor_under_the_dark_drawing(tmp_path, style):
         gif = os.path.join(MAPS, "Other", "Midwich.gif")
         styled = mapstyle.styled_path(gif, str(tmp_path), style=style)
         assert styled != gif and [d for _f, d in load_frames(styled)] == [d for _f, d in load_frames(gif)]
+
+
+def test_no_map_keeps_the_black_ring_in_a_floor_style(map_cache):
+    """1.8.35 (user: "bei den Maps gibt es immer noch einen schwarzen Rand", "bitte bei jedem Map durchgehen"): the
+    dark style lays the drawing over a black ring along the outline (24 px at 1280 px) – a floor style has its floor
+    there. Every supplied map, the ones drawn dark already (Fallen Refuge, Freddy) too: in the band 16–24 px inside
+    the outline hardly any black ("dark": 75–100 %, left now: the black edges of digits and walls, RPD ≤ 16 %);
+    the light edge leaves light text on the outline readable (RPD West "BACK DOOR")."""
+    import cv2
+    from concurrent.futures import ThreadPoolExecutor
+    from dbdmapscout.mapimage import title_split
+
+    def check(path):
+        name = os.path.basename(path)
+        out = mapstyle.styled_path(path, map_cache, style="grey")
+        if name in ("Trickster's Delusion.webp", "Midwich.gif"):     # its own kind / its own test
+            return None
+        assert out != path, name
+        src = Image.open(path).convert("RGBA")
+        top = title_split(src)[2]
+        o = np.asarray(Image.open(out).convert("RGBA"))[top:]
+        shape = mapstyle._outline(np.asarray(src)[top:, :, 3])
+        k = o.shape[0] / 1280
+        pad = cv2.copyMakeBorder(shape.astype(np.uint8), 1, 1, 1, 1, cv2.BORDER_CONSTANT, value=0)
+        dist = cv2.distanceTransform(pad, cv2.DIST_L2, 3)[1:-1, 1:-1]
+        band = shape & (dist >= 16 * k) & (dist <= 24 * k)
+        black = (o[..., :3].max(axis=2) < 25) & (o[..., 3] > 200) & band
+        share = black.sum() / band.sum()
+        assert share < 0.25, f"{name}: {share:.0%} of the outline band black"
+        return share
+
+    with ThreadPoolExecutor(WORKERS) as ex:
+        shares = [s for s in ex.map(check, _supplied()) if s is not None]
+    assert len(shares) == 54 and sorted(shares)[len(shares) // 2] < 0.05
+    src = _pic("Raccoon City/Rpd West Wing.webp")                  # the text on the outline stays white
+    top = title_split(src)[2]
+    rim = cv2_erode_edge(mapstyle._outline(np.asarray(src)[top:, :, 3]), 14)
+    white = [((a[top:, :, :3].min(axis=2) > 230) & (a[top:, :, 3] > 200) & rim).sum()
+             for a in (np.asarray(mapstyle.restyle(src, style=st)) for st in ("dark", "grey_edge"))]
+    assert white[0] > 300 and white[1] >= 0.95 * white[0], white
 
 
 def cv2_erode_edge(shape, px):

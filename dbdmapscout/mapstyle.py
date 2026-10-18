@@ -24,7 +24,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageSequence
 
 from .mapimage import FONT, title_split
 
-STYLE_VERSION = 8                     # raise when the conversion changes: the cache is made anew
+STYLE_VERSION = 9                     # raise when the conversion changes: the cache is made anew
 FILL = np.array([140, 148, 232])      # the lilac floor of the supplied maps
 FILL_SHARE = 0.3                      # at least this share of the outline must be lilac, else: another style
 M_COLOUR, S_COLOUR = (100, 48, 48), (100, 100, 48)    # as on Fallen Refuge
@@ -117,12 +117,13 @@ DARK_SEE_THROUGH = 0.3       # a picture already drawn in the dark style: this s
 STYLES = ("dark",) + tuple(FLOORS)        # every style made from the dark conversion ("classic" = the original)
 
 
-def add_floor(img: Image.Image, top: int, style: str) -> Image.Image:
-    """A dark-styled map with the floor of ``style`` under its drawing (and an edge on its outline)."""
+def add_floor(img: Image.Image, top: int, style: str, shape=None) -> Image.Image:
+    """A dark-styled map with the floor of ``style`` under its drawing (and an edge on its outline). ``shape``: the
+    map's outline when the picture's own alpha no longer shows it (1.8.35: its black ring taken out)."""
     fill, edge, ew, alpha = FLOORS[style]
     a = np.asarray(img.convert("RGBA")).copy()
     body = a[top:]
-    shape = _outline(body[..., 3])
+    shape = _outline(body[..., 3]) if shape is None else shape
     base = np.zeros_like(body)
     base[shape] = (*fill, alpha)
     under = Image.fromarray(base)
@@ -131,8 +132,30 @@ def add_floor(img: Image.Image, top: int, style: str) -> Image.Image:
     if edge is not None:
         w = max(2, round(ew * a.shape[0] / 1280))
         inner = cv2.erode(shape.astype(np.uint8), _disk(w), borderType=cv2.BORDER_CONSTANT, borderValue=0)
-        out[shape & ~inner.astype(bool)] = (*edge, 255)
+        # light text on the outline (RPD "BACK DOOR") stays over the edge (1.8.35)
+        text = (body[..., :3].min(axis=2) > 150) & (body[..., 3] > 128)
+        text = cv2.dilate(text.astype(np.uint8), _disk(max(1, round(2 * a.shape[0] / 1280)))).astype(bool)
+        out[shape & ~inner.astype(bool) & ~text] = (*edge, 255)
     a[top:] = out
+    return Image.fromarray(a)
+
+
+def _without_ring(img: Image.Image, top: int, shape) -> Image.Image:
+    """A picture drawn in the dark style with its black ring along the outline see-through (1.8.35): the dark pixels
+    near the outline (≤ RING + 16 at 1280 px: inner corners reach 38) that hang together with the outline itself – soft inner rim included;
+    digits and boxes further in keep their dark edges. The floor style's floor and edge take the ring's place."""
+    a = np.asarray(img.convert("RGBA")).copy()
+    body = a[top:]
+    k = a.shape[0] / 1280
+    padded = cv2.copyMakeBorder(shape.astype(np.uint8), 1, 1, 1, 1, cv2.BORDER_CONSTANT, value=0)
+    dist = cv2.distanceTransform(padded, cv2.DIST_L2, 3)[1:-1, 1:-1]    # the picture's edge counts as outline
+    dark = (body[..., :3].max(axis=2) < 40) & (body[..., 3] > 0) & shape & (dist <= (RING + 16) * k)
+    n, lab, _st, _c = cv2.connectedComponentsWithStats(dark.astype(np.uint8))
+    ring = np.zeros(n, bool)
+    ring[np.unique(lab[dark & (dist <= 3 * k + 1)])] = True        # the parts that touch the outline
+    ring[0] = False
+    body[ring[lab], 3] = 0
+    a[top:] = body
     return Image.fromarray(a)
 
 
@@ -152,7 +175,7 @@ def restyle(img: Image.Image, fill=None, style: str = "dark") -> Image.Image:
         # 1.8.29: Fallen Refuge and Freddy Fazbear's Pizza are drawn in the dark style already (see-through floor,
         # black ring) – a floor style puts its floor under them like under every converted map; "dark" leaves them
         if style in FLOORS and shape.any() and (body[..., 3][shape] < 20).mean() >= DARK_SEE_THROUGH:
-            return add_floor(img, top, style)
+            return add_floor(_without_ring(img, top, shape), top, style, shape)
         return img                                             # another style: leave it
     grey, cover, misfit = unblend(rgb, fill)
     if ((misfit >= MISFIT) & (rgb.max(axis=2) > 80))[shape].mean() > MISFIT_SHARE:   # (blue-black line rims: no colour)
@@ -230,13 +253,16 @@ def restyle(img: Image.Image, fill=None, style: str = "dark") -> Image.Image:
     big[0] = False
     walls = big[lab]
     out[walls, 0] = out[walls, 1] = out[walls, 2] = WALL
-    backed = rest & (halo | ~inner) & ~walls
+    # 1.8.35 (user: "bei den Maps gibt es immer noch einen schwarzen Rand"): the black ring along the outline is the
+    # dark style's own edge – a floor style has its floor (and light edge) there instead, so only the text's halo
+    # stays backed; the drawing in the ring lies over the floor
+    backed = rest & (halo if style in FLOORS else (halo | ~inner)) & ~walls
     on_black = np.rint(grey * cover).astype(np.uint8)
     out[backed, 0] = out[backed, 1] = out[backed, 2] = on_black[backed]
     out[backed, 3] = 255
     a[top:] = out
     res = Image.fromarray(a)
-    return add_floor(res, top, style) if style in FLOORS else res
+    return add_floor(res, top, style, shape) if style in FLOORS else res     # the outline as it was (1.8.35)
 
 
 # ------------------------------------------------------------------ Midwich (1.66.2, user: "kann ebenfalls geändert werden")
