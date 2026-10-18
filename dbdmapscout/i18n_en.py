@@ -682,6 +682,7 @@ EN = {
     "Zurück im Spiel – Overlay wieder sichtbar.": "Back in the game – overlay visible again.",
     "Die Erkennung ist abgestürzt – Details in dbdmapscout.log": "The detection crashed – details in dbdmapscout.log",
     "Die Erkennung ist abgestürzt:": "The detection crashed:",
+    "Die Erkennung ist abgestürzt – bitte DbD Map Scout neu starten.": "The detection crashed – please restart DbD Map Scout.",
     "Scan fehlgeschlagen: {error}": "Scan failed: {error}",
     "per Scan gefunden: „{text}“": "found by scan: “{text}”",
     "Scan ({s} s): {map}": "Scan ({s} s): {map}",
