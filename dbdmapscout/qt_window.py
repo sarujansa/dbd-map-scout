@@ -154,6 +154,7 @@ SPECS = {
                 ("row", (("label", "ov.media_style.label"), ("combo", "ov.media_style"), ("stretch",))),
                 ("check", "ov.media_cover"), ("check", "ov.media_progress"), ("check", "ov.media_accent"),
                 ("check", "ov.media_remaining"), ("check", "ov.media_backdrop"), ("check", "ov.media_fade"),
+                ("check", "ov.media_videos"),
                 ("row", (("label", "ov.media_next.label"), ("combo", "ov.media_next"), ("stretch",))),   # 1.8
                 ("slider", "ov.media_next_n"), ("hint", "ov.media_next_hint"))),
             ("ov.pos", N_("Allgemein"), (
