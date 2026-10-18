@@ -26,7 +26,7 @@ def test_pack_order_and_hiding():
     b.pack(side="left", after=a)
     assert f._packed == [a, b, c] and b.pack_info()["side"] == "left"
     c.grid(row=1, column=2)
-    assert c.winfo_manager() == "grid" and c.grid_info() == {"row": 1, "column": 2} and c not in f._packed
+    assert c.winfo_manager() == "grid" and c.grid_info() == {"row": 1, "column": 2, "columnspan": 1, "sticky": ""} and c not in f._packed
     with pytest.raises(ui.UIError):
         c.pack_info()
     assert str(a).startswith(str(f) + ".") and root.nametowidget(str(a)) is a

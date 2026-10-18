@@ -339,6 +339,8 @@ def make_control(kind, key, post):
         w = PreviewView(key, post)
     elif kind == "swatches":
         w = SwatchView(key, post)
+    elif kind == "host":
+        w = HostView()
     elif kind == "log":
         w = LogView()
     elif kind == "radio":
@@ -434,7 +436,7 @@ def show_control(kind, w, extra, st):
             s.setRange(round(st.get("lo", 0)), round(st.get("hi", 100)))
             s.setValue(round(st.get("value", 0)))
             s.blockSignals(False)
-    elif kind in ("table", "chart", "log", "dashboard", "tiles", "preview", "swatches"):
+    elif kind in ("table", "chart", "log", "dashboard", "tiles", "preview", "swatches", "host"):
         w.show_state(st)
     elif kind == "hotkey":
         w.show_text(st.get("text", ""))
@@ -662,14 +664,39 @@ class _Arranged:
                 self._applying = False
 
 
+class HostView(QWidget):
+    """1.8.8: holds one widget the App puts in (``set_content``); the old one is closed and deleted."""
+
+    def __init__(self):
+        super().__init__()
+        self.box = QVBoxLayout(self)
+        self.box.setContentsMargins(0, 0, 0, 0)
+        self.content = None
+
+    def set_content(self, w):
+        old, self.content = self.content, w
+        if old is not None:
+            self.box.removeWidget(old)
+            old.close()
+            old.deleteLater()
+        if w is not None:
+            self.box.addWidget(w)
+            w.show()
+
+    def show_state(self, st):
+        pass
+
+
 class SideBySide(QWidget):
     """1.8.2: two cards next to each other while the page is wide enough (the overlay preview and the tools of the
     picked element), one below the other on a narrow page. The first card takes the larger share."""
 
     BESIDE_FROM = 820                 # px (logical): from this width the cards sit side by side
 
-    def __init__(self):
+    def __init__(self, beside_from=None):
         super().__init__()
+        if beside_from:
+            self.BESIDE_FROM = beside_from
         self.box = QBoxLayout(QBoxLayout.TopToBottom, self)
         self.box.setContentsMargins(0, 0, 0, 0)
         self.box.setSpacing(10)
@@ -823,11 +850,12 @@ class FormPage(QWidget, _Arranged):
             cols = item[1]
             per = -(-len(item[2]) // cols)            # down the first column, then the next
             for i, c in enumerate(item[2]):
-                cell = QVBoxLayout()
+                box = _GridCell()                     # 1.8.8: GRID_CELL_W wide at most – a hotkey stays by its name
+                cell = QVBoxLayout(box)
+                cell.setContentsMargins(0, 0, 0, 0)
                 self._add(c, cell)
-                g.addLayout(cell, i % per, i // per)
-            for c in range(cols):
-                g.setColumnStretch(c, 1)
+                g.addWidget(box, i % per, i // per)
+            g.setColumnStretch(cols, 1)               # the free room goes to the right, not between name and key
             lay.addLayout(g)
             return
         if kind == "stretch":
@@ -852,6 +880,22 @@ class FormPage(QWidget, _Arranged):
             if st is not None:
                 show_control(kind, w, extra, st)
 
+
+class _GridCell(QWidget):
+    """A cell of a FormPage grid: wants GRID_CELL_W (a wide window does not pull name and key apart), shrinks in a
+    narrow one."""
+
+    def __init__(self):
+        super().__init__()
+        self.setMaximumWidth(GRID_CELL_W)
+
+    def sizeHint(self):
+        s = super().sizeHint()
+        return QSize(max(s.width(), GRID_CELL_W), s.height())
+
+
+GRID_CELL_W = 520                # 1.8.8: a cell of a FormPage grid (hotkeys: name … key) is not wider
+HOST_BESIDE_FROM = 1000          # 1.8.8: table + clip preview side by side from this page width
 
 FLOW_KINDS = ("button", "combo", "check", "radio", "label", "entry", "value", "big")   # rows of these may wrap
 
@@ -905,16 +949,48 @@ class AutoPage(QWidget, _Arranged):
             if n.get("grid"):                         # e.g. the game languages
                 g = QGridLayout()
                 g.setHorizontalSpacing(14)
+                wide = set()
                 for c in kids:
                     cell = QVBoxLayout()
                     self._build(c, cell, keys)
-                    g.addLayout(cell, *c.get("cell", (0, 0)))
-                g.setColumnStretch(g.columnCount(), 1)
+                    r, col = c.get("cell", (0, 0))
+                    g.addLayout(cell, r, col, 1, int(c.get("span", 1)))
+                    if c.get("wide"):                  # 1.8.8: an entry/choice stretched to the right edge
+                        wide.add(col)
+                        for i in range(cell.count()):
+                            w = cell.itemAt(i).widget()
+                            if w is not None:
+                                w.setSizePolicy(QSizePolicy.Expanding, w.sizePolicy().verticalPolicy())
+                                cell.setAlignment(w, Qt.Alignment())     # a choice box sits left otherwise
+                for col in wide:
+                    g.setColumnStretch(col, 1)
+                if not wide:
+                    g.setColumnStretch(g.columnCount(), 1)
                 v.addLayout(g)
                 if column is not None:
                     column[0].add(column[1], holder, hrow)
                 else:
                     lay.addWidget(holder, 1 if top and _grows(n) else 0)
+                self.controls[key] = (kind, holder, None)
+                return
+            if n.get("row") and any(c["kind"] == "host" for c in kids):
+                # 1.8.8: a table with a host beside it (recordings + clip preview): side by side on a wide page,
+                # below each other on a narrow one; the host is hidden until the App fills it
+                sb = SideBySide(HOST_BESIDE_FROM)
+                for c in kids:
+                    if c["kind"] == "host":
+                        hw, _x = make_control("host", c["key"], self._post)
+                        self.controls[c["key"]] = ("host", hw, None)
+                        keys.append(c["key"])
+                        sb.add(hw)
+                        continue
+                    wrap = QWidget()
+                    wl = QVBoxLayout(wrap)
+                    wl.setContentsMargins(0, 0, 0, 0)
+                    self._build(c, wl, keys, top=True)
+                    sb.add(wrap)
+                v.addWidget(sb, 1)
+                lay.addWidget(holder, 1 if top else 0)
                 self.controls[key] = (kind, holder, None)
                 return
             first = [c for c in kids if c.get("side") != "right"]
@@ -1045,7 +1121,8 @@ class DialogWindow(QDialog):
         lay.setContentsMargins(0, 0, 0, 0)
         self.page = AutoPage(post, title, node)
         lay.addWidget(self.page)
-        self.resize(640, 560)
+        # 1.8.8: as tall as its content (the "Zuordnen" dialog was mostly empty at a fixed 560 px)
+        self.resize(640, max(220, min(560, self.page.sizeHint().height() + 24)))
 
     def done(self, r):                            # Esc / X: the model's dialog goes too
         if not self.closing_from_app:
@@ -1085,6 +1162,7 @@ class SetupPage(QWidget):
         foot.addWidget(self.where)
         foot.addSpacing(12)
         foot.addWidget(self.back)
+        foot.addSpacing(8)                                # 1.8.8: the two did touch
         foot.addWidget(self.next)
         lay.addLayout(foot)
         self.go(0)

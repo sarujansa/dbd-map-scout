@@ -806,6 +806,14 @@ class MainWindow(QMainWindow):
         if row >= 0:
             self.nav.setCurrentRow(row)
 
+    def host(self, key: str):
+        """1.8.8: the HostView of a model Host (recordings tab: the clip preview), None if not built."""
+        for page in self.findChildren(AutoPage):
+            ctl = page.controls.get(key)
+            if ctl is not None and ctl[0] == "host":
+                return ctl[1]
+        return None
+
     def open_tab(self, page: str, frame: str):
         """1.2.12 (analysis point 10): open the tab of a hand-made page that holds ``frame`` (an element picked in
         the overlay preview opens its settings)."""

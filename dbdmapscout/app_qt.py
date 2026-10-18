@@ -47,7 +47,7 @@ def _side(w) -> str:
 KINDS = ((ui.Treeview, "table"), (ui.Checkbutton, "check"), (ui.Button, "button"), (ui.Combobox, "combo"),
          (ui.Scale, "slider"), (ui.Entry, "entry"), (ui.Radiobutton, "radio"), (ui.Log, "log"),
          (ui.Chart, "chart"), (ui.Dashboard, "dashboard"), (ui.Tiles, "tiles"),
-         (ui.Preview, "preview"), (ui.Swatches, "swatches"))
+         (ui.Preview, "preview"), (ui.Swatches, "swatches"), (ui.Host, "host"))
 
 
 def ui_layout(w, reg: dict):
@@ -88,6 +88,9 @@ def ui_layout(w, reg: dict):
             if c.winfo_manager() == "grid":         # e.g. the game languages: a grid of check boxes
                 info = c.grid_info()
                 n["cell"] = (int(info.get("row", 0)), int(info.get("column", 0)))
+                n["span"] = max(1, int(info.get("columnspan", 1) or 1))          # 1.8.8: a hint below two cells
+                sticky = str(info.get("sticky", ""))
+                n["wide"] = "w" in sticky and "e" in sticky                       # stretched across its column
                 grid = True
             nodes.append(n)
     if not nodes:
@@ -108,6 +111,8 @@ def ui_state(w) -> dict:
         return st
     if isinstance(w, ui.Preview):
         st.update(data=w.source())
+        return st
+    if isinstance(w, ui.Host):
         return st
     if isinstance(w, ui.Swatches):
         st.update(values=[tuple(v) for v in w.values], current=w.current, dark=w.dark)

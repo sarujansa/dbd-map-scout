@@ -108,6 +108,10 @@ class RecordingsTab:
             self.rec_table.column(key, width=width, anchor=anchor, stretch=key == "file")
         self.rec_table.pack(side="left", fill="both", expand=True)
         self.rec_table.bind("<<TreeviewSelect>>", lambda e: self._rec_buttons())
+        # 1.8.8 (user: "click on it and a preview comes where I can play it and quickly edit, sound tracks on/off"):
+        # the compact clip editor beside the table, shown once a recording is marked
+        self.rec_host = ui.Host(tf)
+        self._rec_preview_t = None
         self.rec_marks_var = ui.StringVar(value="")
         ui.Label(f, textvariable=self.rec_marks_var, style="Dim.TLabel", wraplength=560).pack(anchor="w", pady=(6, 0))
         ui.Label(f, text=_("OBS nimmt jede Runde auf (Einstellungen → Mehr → Aufnahmen mit OBS). F8 setzt während "
@@ -204,6 +208,7 @@ class RecordingsTab:
         for b in (self.rec_play_btn, self.rec_show_btn, self.rec_keep_btn, self.rec_delete_btn, self.rec_clip_btn):
             b.configure(state=state)
         self.rec_keep_btn.configure(text=_("Nicht mehr behalten") if r is not None and r.keep else _("Behalten"))
+        self._rec_preview_follow(r)
         if r is None:
             self.rec_marks_var.set("")
         elif r.marks:
@@ -259,36 +264,82 @@ class RecordingsTab:
             return
         self.recorder.delete(r.t)
 
-    def _rec_clip(self):
-        """1.5.1: the clip editor for the marked recording (its own top-level window; several may be open)."""
+    def _rec_clip(self, at=None):
+        """1.5.1: the clip editor for the marked recording (its own top-level window; several may be open).
+        ``at`` (1.8.8) = (start, end, position) taken over from the compact preview."""
         r = self._rec_selected()
-        path = self._rec_path(r) if r is not None else None
+        path = self._rec_editable(r)
         if path is None:
             return
-        if not os.path.exists(path):
-            self._log(_("Aufnahme fehlt: {file}", file=r.file), "Fehler")
-            return
-        if obsrec.ffmpeg_exe() is None:
-            self._log(_("ffmpeg fehlt (Paket imageio-ffmpeg) – start.bat installiert es beim nächsten Start; "
-                        "bis dahin bleibt der Vorlauf eine eigene Datei."), "Fehler")
-            return
-        from .clipedit import CLIPS_DIR
-        from .qt_clip import ClipWindow
-        win = ClipWindow(path, r.marks, os.path.join(self.recorder.folder(), CLIPS_DIR),   # one "Clips" for all
-                         mode=str(self.settings.get("clip_mode", "copy")), sound=bool(self.settings.get("clip_sound", True)),
-                         on_saved=lambda out: self._rec_dirty_set(), on_setting=self.settings.set, log=self._log,
-                         dark=bool(self.settings.get("dark_mode", True)),
-                         qss=getattr(self.qt, "_qss", "") if self.qt is not None else "",
-                         target_mb=int(self.settings.get("clip_target_mb", 10) or 10),
-                         censor_on=bool(self.settings.get("clip_censor_on", False)),          # 1.7.2
-                         censor_style=str(self.settings.get("clip_censor_style", "pixel")),
-                         censor_boxes=self.settings.get("clip_censor_boxes") or [],
-                         mix_on=self.settings.get("clip_mix_on") or {},                           # 1.8.6
-                         mix_vol=self.settings.get("clip_mix_vol") or {})
+        win = self._clip_window(r, path)
+        if at is not None and win.info.ok:
+            start, end, pos = at
+            win.timeline.set_range(start, end)
+            win._show_range()
+            win.goto(pos)
         self._clip_windows = [w for w in self._clip_windows if w.isVisible()] + [win]
         win.show()
         win.raise_()
         win.activateWindow()
+
+    def _rec_editable(self, r, quiet=False):
+        """The path of recording ``r`` if a clip can be made of it, else None (logged unless ``quiet``)."""
+        path = self._rec_path(r) if r is not None else None
+        if path is None:
+            return None
+        if not os.path.exists(path):
+            if not quiet:
+                self._log(_("Aufnahme fehlt: {file}", file=r.file), "Fehler")
+            return None
+        if obsrec.ffmpeg_exe() is None:
+            if not quiet:
+                self._log(_("ffmpeg fehlt (Paket imageio-ffmpeg) – start.bat installiert es beim nächsten Start; "
+                            "bis dahin bleibt der Vorlauf eine eigene Datei."), "Fehler")
+            return None
+        return path
+
+    def _clip_window(self, r, path, **extra):
+        from .clipedit import CLIPS_DIR
+        from .qt_clip import ClipWindow
+        return ClipWindow(path, r.marks, os.path.join(self.recorder.folder(), CLIPS_DIR),   # one "Clips" for all
+                          mode=str(self.settings.get("clip_mode", "copy")), sound=bool(self.settings.get("clip_sound", True)),
+                          on_saved=lambda out: self._rec_dirty_set(), on_setting=self.settings.set, log=self._log,
+                          dark=bool(self.settings.get("dark_mode", True)),
+                          qss=getattr(self.qt, "_qss", "") if self.qt is not None else "",
+                          target_mb=int(self.settings.get("clip_target_mb", 10) or 10),
+                          censor_on=bool(self.settings.get("clip_censor_on", False)),          # 1.7.2
+                          censor_style=str(self.settings.get("clip_censor_style", "pixel")),
+                          censor_boxes=self.settings.get("clip_censor_boxes") or [],
+                          mix_on=self.settings.get("clip_mix_on") or {},                           # 1.8.6
+                          mix_vol=self.settings.get("clip_mix_vol") or {}, **extra)
+
+    def _rec_preview_follow(self, r):
+        """1.8.8: the compact editor beside the table follows the marked recording – a new one for another
+        recording, hidden without one (or when the file is missing / ffmpeg is not there)."""
+        if self.qt is None:
+            return
+        host = self.qt.host(str(self.rec_host))
+        if host is None:
+            return
+        t = r.t if r is not None else None
+        if t == self._rec_preview_t and (t is None or host.content is not None):
+            return
+        self._rec_preview_t = t
+        path = self._rec_editable(r, quiet=True) if r is not None else None
+        if path is None:
+            host.set_content(None)
+            self.rec_host.pack_forget()
+            return
+        win = self._clip_window(r, path, compact=True, parent=host,
+                                on_expand=lambda s, e, p: self._rec_clip(at=(s, e, p)))
+        host.set_content(win)
+        self.rec_host.pack(side="left", fill="both")
+
+    def _rec_preview_stop(self):
+        """1.8.8: the recordings tab was left – the preview stops playing."""
+        host = self.qt.host(str(self.rec_host)) if self.qt is not None and hasattr(self, "rec_host") else None
+        if host is not None and host.content is not None:
+            host.content.stop()
 
     def _rec_dirty_set(self):
         self._rec_dirty = True

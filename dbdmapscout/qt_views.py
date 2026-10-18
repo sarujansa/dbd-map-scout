@@ -46,6 +46,7 @@ class FactBox(QWidget):
         self.link.clicked.connect(lambda _c=False: self._post and self._action and self._post(self._action))
         self.link.hide()
         lay.addWidget(self.link, 0, Qt.AlignLeft)
+        lay.addStretch(1)                        # 1.8.8: top-aligned – tiles of one row keep their titles level
         self._colour = None
 
     def show_fact(self, f):

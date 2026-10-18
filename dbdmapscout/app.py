@@ -1595,6 +1595,8 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         self.log_text._dbdms_rev = getattr(self.log_text, "_dbdms_rev", 0) + 1
 
     def _tab_changed(self):
+        if self.nb.select() != str(self.tab_recordings):
+            self._rec_preview_stop()                   # 1.8.8: the clip preview does not play on in the background
         if self.nb.select() == str(self.tab_stats):
             self._stats_render()
         if self.nb.select() == str(self.tab_detect):
