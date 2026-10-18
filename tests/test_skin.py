@@ -114,8 +114,7 @@ def test_the_map_card_carries_map_timer_and_lines(style):
     waiting = skin.map_card(None, "", "", "", "", "", "Frankfurt", 28, ("Warte auf Map", "Suche läuft: 1:23"), 518,
                             style, None)
     assert 100 < waiting.width < 400 and 60 < waiting.height < 300
-    assert skin.frame_pad(style, 518) == (0 if style == "chips" else skin.frame_pad(style, 518))
-    assert skin.frame_pad("chips", 518) == 0 and skin.frame_pad("glass", 518) > 0 and skin.frame_pad("line", 518) > 0
+    assert skin.frame_pad(style, 518) > 0 and skin.frame_pad("classic", 518) == 0   # 1.8.27: every style frames the map
 
 
 def test_the_overlay_draws_the_map_card_in_the_style_and_fits_the_bar():
@@ -152,11 +151,6 @@ def test_the_overlay_draws_the_map_card_in_the_style_and_fits_the_bar():
         w, hh = ov.render(h)
         assert w <= 406 + 2 * edge and hh > h, style
         seen[style] = ov._prepared[0][0]
-        if style == "chips":
-            pic = Image.frombytes("RGBA", (w, hh), seen[style])
-            # no dark box behind the map: transparent stays (1.8.24: the map is cut to what is drawn – look for
-            # any see-through pixel in its upper half instead of one at its left edge)
-            assert any(pic.getpixel((x, y))[3] == 0 for x in range(0, w, 3) for y in range(hh // 6, hh // 2, 3))
         ov.set_waiting(("Warte auf Map", "Suche läuft: 1:23 · Killer"))
         ww, wh = ov.render(518)
         assert 120 < ww < 420 and 60 < wh < 320, style
