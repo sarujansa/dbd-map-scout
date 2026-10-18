@@ -1183,8 +1183,13 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
             self.overlay.text_height = text_h
         w, h = self.overlay.render(height)
         room = gh - drop - lift - 2 * margin
-        if a != "custom" and h > room and height > 80:   # the lines below made it too tall: smaller (1.2.11)
-            w, h = self.overlay.render(max(80, height - (h - room)))
+        if a == "custom":                                # 1.8.22: an own place – between the lines of its bar
+            room = layout.own_room((place(w, h)[0], 0, w, h), (gx, gy, gw, gh), bands)
+        for _try in range(3):                            # the lines below made it too tall: smaller (1.2.11)
+            if h <= room or height <= 80 or self.overlay.dragging:
+                break
+            height = max(80, height - (h - room))
+            w, h = self.overlay.render(height)
         x, y = place(w, h)
         if a != "custom":
             y = max(gy, min(y, gy + gh - h))             # never off the screen
