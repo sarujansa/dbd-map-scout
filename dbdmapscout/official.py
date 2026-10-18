@@ -18,13 +18,17 @@ from __future__ import annotations
 
 import bisect
 import json
+import logging
 import math
 import os
 import re
+import traceback
 from dataclasses import asdict, dataclass, field
 from functools import lru_cache
 
 from .textnorm import fold
+
+log = logging.getLogger(__name__)
 
 FILE = "official.jsonl"
 PREFIX = "dbdmapscout-matches"          # file name the userscript downloads (browsers may add " (1)")
@@ -111,7 +115,9 @@ def _player(d) -> Player:
     if not isinstance(d, dict):
         return Player()
     status, img = _status(d.get("status"))
-    return Player(role=ROLES.get(d.get("role"), ""), character=_text(d.get("character"), 60), status=status, img=img)
+    role = d.get("role")
+    return Player(role=ROLES.get(role, "") if isinstance(role, str) else "", character=_text(d.get("character"), 60),
+                  status=status, img=img)
 
 
 def _match(d, now):
@@ -131,11 +137,20 @@ def _match(d, now):
                  status=p.status, img=p.img, opp=[_player(o) for o in opps[:8]])
 
 
+def _safe_match(d, now):
+    """1.8.38: one match of an odd shape is skipped – it must not cost the others of the file."""
+    try:
+        return _match(d, now)
+    except Exception:
+        log.warning("Offizielle Daten: ein Match übersprungen (%s)", traceback.format_exc().strip().splitlines()[-1])
+        return None
+
+
 def parse(data, now=None):
     """Matches of a file the userscript saved -> ([Match], script version). ValueError: not such a file."""
     if not isinstance(data, dict) or data.get("format") != FORMAT or not isinstance(data.get("matches"), list):
         raise ValueError("not a DbD Map Scout match file")
-    out = [m for m in (_match(d, now) for d in data["matches"][:MAX_MATCHES]) if m is not None]
+    out = [m for m in (_safe_match(d, now) for d in data["matches"][:MAX_MATCHES]) if m is not None]
     script = data.get("script")
     return out, script if isinstance(script, int) and not isinstance(script, bool) else 0
 
@@ -254,9 +269,10 @@ def pending(folder: str) -> list:
         with os.scandir(folder) as it:
             found = [e for e in it if e.name.lower().startswith(PREFIX) and e.name.lower().endswith(".json")
                      and e.is_file()]
-    except OSError:
+        stamped = [(e.stat().st_mtime, e.name, e.path) for e in found]
+    except OSError:                       # 1.8.38: also a file that vanished between the scan and stat()
         return []
-    return [e.path for e in sorted(found, key=lambda e: (e.stat().st_mtime, e.name))]
+    return [path for _t, _n, path in sorted(stamped)]
 
 
 @dataclass
@@ -285,9 +301,12 @@ def take_downloads(folder: str, store: str, now=None) -> Taken:
         except (OSError, ValueError):
             res.unreadable.append(path)
             continue
+        except RecursionError:            # 1.8.38: nested deeper than json can read – not ours
+            res.foreign.append(path)
+            continue
         try:
             matches, script = parse(data, now)
-        except ValueError:
+        except Exception:                 # 1.8.38: any other shape (before: a TypeError ended every later import)
             res.foreign.append(path)
             continue
         if matches:

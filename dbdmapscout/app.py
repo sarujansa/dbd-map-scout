@@ -143,6 +143,11 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         self.root.after(250, self._tick_overlay)
         self._log(_("Bereit. {n} Maps geladen, Spielsprachen: {langs}.", n=len(self.catalog.maps),
                     langs=", ".join(self.settings["languages"])), "System")
+        if self.settings.load_error:            # 1.8.38: say it – before, the defaults replaced the file unnoticed
+            self._log(_("settings.json war nicht lesbar ({error}) – Standardwerte geladen. Bis zum Neustart wird "
+                        "nichts gespeichert.", error=self.settings.load_error) if self.settings.frozen else
+                      _("settings.json war nicht lesbar ({error}) – Standardwerte geladen, die alte Datei liegt als "
+                        "settings.json.broken daneben.", error=self.settings.load_error), "Fehler")
         self._srv_refresh(log_summary=True)
         self._show_update_status()
         if self.settings.get("show_connection"):

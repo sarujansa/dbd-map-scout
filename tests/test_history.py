@@ -317,3 +317,16 @@ def test_the_bloodpoints_dashboard_tiles_and_trend():
     trend = dashboard.bp_trend(list(zip(rs, ms)), "day")
     assert [(round((b - t0) / day), bps) for b, bps in trend] == [(0, [30000]), (1, []), (2, [50000])]
     assert dashboard.bp_trend([], "day") == []
+
+
+def test_a_round_after_a_line_cut_off_by_a_crash_is_kept(tmp_path):
+    """1.8.38 (QA audit): a crash while writing left the last line without its line break – the next round was
+    glued to it and both were lost (and dropped for good by the next rewrite)."""
+    path = str(tmp_path / "rounds.jsonl")
+    h.append(path, h.Round(t=1.0, seconds=60.0, map_id="a", map="A"))
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write('{"t": 2.0, "seconds": 60.0, "map_id": "b", "ma')                # cut off
+    h.append(path, h.Round(t=3.0, seconds=60.0, map_id="c", map="C"))
+    h.append_lost(path, 4.0, "D", "neues Banner")
+    assert [r.t for r in h.load(path)] == [1.0, 3.0]
+    assert [d["t"] for d in h._lost_lines(path)] == [4.0]
