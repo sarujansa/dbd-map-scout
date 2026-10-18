@@ -436,21 +436,23 @@ def test_limiter_lines_are_switched_on_dragged_alike_and_undone(app_root, monkey
         assert data["limits_on"] is False and (data["limits"] is not None or gw / gh < 2)
         app._preview_pick(("limit", "left", "top", gh * 0.2))               # dragging one switches it on
         assert o["bar_limits_on"] and app.limits_var.get() and app._preview_data()["limits_on"]
-        assert o["bar_limits"] == [0.2, 0.08, 0.2, 0.08]                     # both bars alike
-        app.limits_same_var.set(False)
-        app._limits_changed()
+        assert o["bar_limits"] == [0.2, 0.08, 0.08, 0.08]                    # 1.8.17: only the left bar
         app._preview_pick(("limit", "right", "bottom", gh * 0.7))
-        assert o["bar_limits"] == [0.2, 0.08, 0.2, 0.3]
+        assert o["bar_limits"] == [0.2, 0.08, 0.08, 0.3]
         app._preview_pick(("limit", "right", "bottom", gh * 0.1))            # never further in than LIMIT_MAX
         assert o["bar_limits"][3] == 0.45
         app.limits_same_var.set(True)                                       # alike again: the right takes the left
         app._limits_changed()
         assert o["bar_limits"] == [0.2, 0.08, 0.2, 0.08]
+        app._preview_pick(("limit", "left", "bottom", gh * 0.8))             # alike: both bars move
+        assert o["bar_limits"] == [0.2, 0.2, 0.2, 0.2]
+        app.limits_same_var.set(False)
+        app._limits_changed()
         clock[0] += 5                                                       # a step of its own for "undo"
         app._limits_reset()
         assert o["bar_limits"] == [0.08] * 4
         app.undo_layout()
-        assert o["bar_limits"] == [0.2, 0.08, 0.2, 0.08] and app.limits_var.get()
+        assert o["bar_limits"] == [0.2, 0.2, 0.2, 0.2] and app.limits_var.get()
         app.toggle_edit()
     finally:
         app.quit()

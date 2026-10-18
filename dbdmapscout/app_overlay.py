@@ -79,7 +79,7 @@ class OverlayTab:
                   ).pack(anchor="w", pady=(4, 0))
         lr = ui.Frame(pos)
         lr.pack(fill="x")
-        self.limits_same_var = ui.BooleanVar(value=bool(o.get("bar_limits_same", True)))
+        self.limits_same_var = ui.BooleanVar(value=bool(o.get("bar_limits_same", False)))
         self._reg("ov.limits_same", ui.Checkbutton(lr, text=_("Links und rechts gleich"),
                                                    variable=self.limits_same_var, command=self._limits_changed)
                   ).pack(side="left")
