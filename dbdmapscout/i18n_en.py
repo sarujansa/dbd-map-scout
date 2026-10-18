@@ -1756,6 +1756,7 @@ EN = {
         'Deletes the marked clip from the drive – after asking. Only files the program made itself.',
     'Öffnet den Ordner „Clips“ neben den Aufnahmen im Explorer.': 'Opens the folder "Clips" beside the recordings in Explorer.',
     'Clips': 'Clips',
+    'Graue Linien in den Balken = Grenzen (aus) – eine ziehen schaltet sie ein': 'Grey lines in the bars = limits (off) – drag one to switch them on',
     'mit kurzer Meldung': 'with a short notification',
     'Clip wird gespeichert …': 'Saving clip …',
     'Die letzten {n} s aus dem Puffer von OBS': "The last {n} s from OBS's buffer",
