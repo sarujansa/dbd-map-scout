@@ -31,6 +31,11 @@ SOURCE_TIPS = {"dbd": N_("Nur der Ton von Dead by Daylight – OBS-Spur 2."),
                "mic": N_("Dein Mikrofon – OBS-Spur 4 (nur, wenn es in OBS aufgenommen wird)."),
                "other": N_("Andere Programme mit eigener Tonquelle in OBS (z. B. Spotify, Browser) – OBS-Spur 5. Der "
                            "Desktop-Ton von Windows enthält auch DBD und Discord und liegt nur auf Spur 1.")}
+ABSENT_TIPS = {"other": N_("In OBS gab es bei dieser Aufnahme keine Hintergrund-Quelle. Für Spotify, Browser & Co. "
+                           "in OBS je Programm eine Anwendungs-Audioaufnahme anlegen – das Programm legt sie auf "
+                           "Spur 5."),
+               "dbd": N_("Diese Tonquelle war bei der Aufnahme unter Einstellungen → Mehr → Aufnahmen mit OBS "
+                         "ausgeschaltet.")}
 MODE_LABELS = {"copy": N_("Schnell (an Schlüsselbildern, Anfang bis zu ein paar Sekunden früher)"),
                "exact": N_("Genau (Bild neu kodiert, dauert etwas)"),
                "discord": N_("Für Discord (passt unter die Zielgrösse)")}
@@ -507,7 +512,7 @@ class ClipWindow(QWidget):
     def __init__(self, path: str, marks: list, clips_dir: str, mode: str = "copy", sound: bool = True,
                  on_saved=None, on_setting=None, log=None, dark=True, qss: str = "", title: str = "",
                  target_mb: int = clipedit.DEFAULT_TARGET_MB, censor_on: bool = False, censor_style: str = "pixel",
-                 censor_boxes=(), mix_on=None, mix_vol=None, compact=False, parent=None, on_expand=None):
+                 censor_boxes=(), mix_on=None, mix_vol=None, compact=False, parent=None, on_expand=None, sources=None):
         # 1.8.8: compact = the preview beside the recordings table (no window of its own, no censor card, sound
         # sources only on/off, start/end in the clip card); "Grosser Editor" (on_expand) opens the full window
         super().__init__(parent, Qt.Widget if compact else Qt.Window)
@@ -535,6 +540,10 @@ class ClipWindow(QWidget):
         self._mix_vol = {k: int((mix_vol or {}).get(k, 100) or 0) for k in obsrec.SOURCES}
         self._sources = obsrec.track_sources(self.info.audio_tracks)
         self._silent = set()                # 1.8.18: sources whose own track holds nothing in this recording
+        # 1.8.23: the sources OBS had on their own track when the round was recorded (None = not known: older
+        # recordings) – a silent track of a source that was not there says "keine Quelle", not "still"
+        self._recorded = None if sources is None else set(sources)
+        self._absent = set()
         self.setObjectName("page")
         self.setWindowTitle(title or _("Clip bearbeiten – {name}", name=os.path.basename(path)))
         if qss:
@@ -876,9 +885,14 @@ class ClipWindow(QWidget):
                 w.setEnabled(have)
             box.setChecked(have and self._mix_on[key])
             silent = key in self._silent
-            box.setText(_("{name} – still", name=_(SOURCE_LABELS[key])) if silent else _(SOURCE_LABELS[key]))
-            box.setToolTip(_("Auf Spur {n} ist in der ganzen Aufnahme nichts zu hören.", n=self._sources[key] + 1)
-                           if silent else _(SOURCE_TIPS[key]))
+            if key in self._absent:                                # 1.8.23: nothing there to record
+                box.setText(_("{name} – keine Quelle", name=_(SOURCE_LABELS[key])) if key == "other"
+                            else _("{name} – in OBS aus", name=_(SOURCE_LABELS[key])))
+                box.setToolTip(_(ABSENT_TIPS.get(key, ABSENT_TIPS["dbd"])))
+            else:
+                box.setText(_("{name} – still", name=_(SOURCE_LABELS[key])) if silent else _(SOURCE_LABELS[key]))
+                box.setToolTip(_("Auf Spur {n} ist in der ganzen Aufnahme nichts zu hören.", n=self._sources[key] + 1)
+                               if silent else _(SOURCE_TIPS[key]))
             sl.setValue(self._mix_vol[key] if have else 100)
             if legacy and key == "discord":                       # 1.8.5 file: Discord only on or off
                 sl.setEnabled(False)
@@ -961,8 +975,10 @@ class ClipWindow(QWidget):
 
     def _show_levels(self, levels):
         """1.8.18: mark the sources whose own track is silent (a 1.8.5 file's Discord has no track of its own)."""
-        self._silent = {k for k, i in self._sources.items()
-                        if i >= 0 and levels.get(i) is not None and levels[i] <= clipedit.SILENT_DB}
+        silent = {k for k, i in self._sources.items()
+                  if i >= 0 and levels.get(i) is not None and levels[i] <= clipedit.SILENT_DB}
+        self._absent = {k for k in silent if self._recorded is not None and k not in self._recorded}
+        self._silent = silent - self._absent
         if self._silent:
             log.info("Clip: stille Spuren in %s: %s", os.path.basename(self.path), ", ".join(sorted(self._silent)))
         self._mix_fill()

@@ -726,7 +726,7 @@ def test_index_paths_stay_inside_the_folder():
 
 def test_farming_rounds_go_into_their_own_subfolder_and_are_pruned_and_deleted_there(obs, tmp_path):
     folder = str(tmp_path)
-    r, posted = _recorder(obs, folder, pre=False)
+    r, posted = _recorder(obs, folder, pre=False, farming_days=0)   # rounds of 1970: not expired here
     r._begin({"t": 1.0, "label": "Coal Tower", "role": "killer", "killer": "Nurse"})
     r._finish({"farming": True})                                     # known at the end (region) counts too
     r._begin({"t": 2.0, "label": "Gas Heaven", "role": "survivor"})
@@ -1213,3 +1213,62 @@ def test_only_the_programs_clips_are_deleted_and_saved_ones_join_the_list(tmp_pa
     assert sorted(os.listdir(cdir)) == [obsrec.CLIPS_INDEX, "foreign.mp4"] and obsrec.load_clips(cdir) == []
     assert [d["file"] for k, d in posted if k == "changed" and d["what"] == "clip_delete"] == [
         "2026-10-18 20-05 Gas Heaven – Survivor (Sofort-Clip).mp4", "mine.mp4"]
+
+
+def test_farming_recordings_go_after_the_chosen_days_but_never_kept_or_marked_ones(obs, tmp_path):
+    """1.8.23 (user's pick 4): farming recordings older than ``farming_days`` are deleted (index entries and their
+    files only) – kept ones and ones with an F8 mark stay, ordinary rounds stay, 0 = never."""
+    folder = str(tmp_path)
+    os.makedirs(os.path.join(folder, obsrec.FARMING_DIR))
+    now = time.time()
+    day = 86400
+
+    def rec(name, age, **kw):
+        path = os.path.join(folder, *name.split("/"))
+        with open(path, "wb") as f:
+            f.write(ROUND_BYTES)
+        return obsrec.Recording(t=now - age * day, file=name, **kw)
+    recs = [rec("Farming/old.mkv", 10, farming=True), rec("Farming/new.mkv", 2, farming=True),
+            rec("Farming/kept.mkv", 30, farming=True, keep=True), rec("Farming/marked.mkv", 30, farming=True, marks=[12.0]),
+            rec("normal.mkv", 30)]
+    assert [r.file for r in obsrec.expired_farming(recs, 7, now)] == ["Farming/old.mkv"]
+    assert obsrec.expired_farming(recs, 0, now) == []
+    with open(os.path.join(folder, "fremd.mkv"), "wb") as f:              # not the program's: never touched
+        f.write(b"x")
+    obsrec.save_index(folder, recs)
+    r, posted = _recorder(obs, folder, farming_days=7)
+    r._expire_farming()
+    left = {x.file for x in obsrec.load_index(folder)}
+    assert left == {"Farming/new.mkv", "Farming/kept.mkv", "Farming/marked.mkv", "normal.mkv"}
+    assert not os.path.exists(os.path.join(folder, "Farming", "old.mkv")) and os.path.exists(os.path.join(folder, "fremd.mkv"))
+    kinds = _drain(posted)
+    assert ("deleted", {"files": ["Farming/old.mkv"], "farming": True, "days": 7}) in kinds
+    r._expire_farming()                                                    # once an hour, not every tick
+    r.cfg.farming_days = 1
+    r._expire_farming(force=True)
+    assert {x.file for x in obsrec.load_index(folder)} == {"Farming/kept.mkv", "Farming/marked.mkv", "normal.mkv"}
+
+
+def test_a_recording_notes_which_sources_obs_had_on_their_own_track(obs, tmp_path):
+    """1.8.23 (user's pick 3): the index entry says which sources were routed and switched on – the clip editor
+    then shows "keine Quelle" for the background instead of "still"; with a background source it is there."""
+    folder = str(tmp_path)
+    r, posted = _recorder(obs, folder, pre=False)
+    c = r._client()
+    try:
+        r._audio(c)
+    finally:
+        c.close()
+    r._begin({"t": 100.0, "label": "Coal Tower", "role": "killer"})
+    r._finish({})
+    assert obsrec.load_index(folder)[-1].extra["sources"] == ["dbd", "discord"]        # no mic, no background
+    obs.inputs["Spotify"] = {"muted": False}
+    r.cfg.audio_mic = True
+    c = r._client()
+    try:
+        r._audio(c)
+    finally:
+        c.close()
+    r._begin({"t": 200.0, "label": "Coal Tower", "role": "killer"})
+    r._finish({})
+    assert obsrec.load_index(folder)[-1].extra["sources"] == ["dbd", "discord", "mic", "other"]

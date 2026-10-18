@@ -1195,6 +1195,19 @@ def test_both_midwich_floors_at_an_own_place_stay_between_the_limiter_lines(app_
             app._place_overlay()
             _x, y, _w, h = app._last_place
             assert app.overlay.stacked() == 2 and top <= y and y + h <= bottom, (anchor, app._last_place)
+        # 1.8.23 (user, right after 1.8.22: "die Map wurde ständig grösser und kleiner"): every tick showed the full
+        # size, then the smaller one – only the final size may reach the screen, and no tick shows another one
+        o.update(anchor="custom")
+        app.show_map(mid, 1, "manual")
+        app._force_until = time.time() + 30
+        app._place_overlay()
+        pushed = []
+        real_push = app.overlay._push
+        app.overlay._push = lambda pos=None: (pushed.append(app.overlay._prepared[app.overlay._frame_i][1:3]),
+                                              real_push(pos))[1]
+        for _ in range(6):
+            app._place_overlay()
+        assert len(set(pushed)) <= 1 and app._last_place[1] + app._last_place[3] <= bottom, (set(pushed),)
         assert layout.own_room((17, 0, 300, 900), (0, 0, 3440, 1440), {"left": (504, 1368), "right": (0, 1)}) == 864
         assert layout.own_room((1500, 0, 300, 900), (0, 0, 3440, 1440), {"left": (504, 1368)}) == 1440   # over the game
         assert layout.own_room((17, 0, 300, 900), (0, 0, 3440, 1440), None) == 1440
