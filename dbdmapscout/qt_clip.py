@@ -476,7 +476,7 @@ class ClipWindow(QWidget):
     def __init__(self, path: str, marks: list, clips_dir: str, mode: str = "copy", sound: bool = True,
                  on_saved=None, on_setting=None, log=None, dark=True, qss: str = "", title: str = "",
                  target_mb: int = clipedit.DEFAULT_TARGET_MB, censor_on: bool = False, censor_style: str = "pixel",
-                 censor_boxes=()):
+                 censor_boxes=(), no_discord: bool = True):
         super().__init__(None, Qt.Window)
         self.path, self.marks, self.clips_dir = path, sorted(float(m) for m in marks or ()), clips_dir
         self.on_saved, self.on_setting, self.log = on_saved, on_setting, (log or (lambda text, kind="System": None))
@@ -496,6 +496,7 @@ class ClipWindow(QWidget):
         self._play_to = None                # 1.6.1: "Clip ansehen" plays start..end, then back to the start
         self._censor_on, self._censor_style = bool(censor_on), censor_style        # 1.7.2: remembered boxes
         self._censor_boxes = [list(b) for b in (censor_boxes or ()) if len(b) == 4]
+        self._no_discord = bool(no_discord)                                        # 1.8.5: take OBS track 2
         self.setObjectName("page")
         self.setWindowTitle(title or _("Clip bearbeiten – {name}", name=os.path.basename(path)))
         if qss:
@@ -641,6 +642,17 @@ class ClipWindow(QWidget):
         self.sound_box.setToolTip(_("Beim Abspielen den Ton der Aufnahme mitlaufen lassen (Windows)."))
         self.sound_box.toggled.connect(lambda v: self._setting("clip_sound", bool(v)))
         row2.addWidget(self.sound_box)
+        self.no_discord_box = QCheckBox(_("Ohne Discord-Ton"))                     # 1.8.5
+        two = self.info.audio_tracks >= 2
+        self.no_discord_box.setEnabled(two)
+        self.no_discord_box.setChecked(self._no_discord and two)
+        self.no_discord_box.setToolTip(
+            _("Nimmt Tonspur 2 der Aufnahme (alles ausser Discord). Dafür legt das Programm Discord in OBS nur auf Spur 1; "
+              "OBS muss mit Ausgabemodus „Erweitert“ und Audiospur 1 + 2 aufnehmen.") if two else
+            _("Diese Aufnahme hat nur eine Tonspur. Für Clips ohne Discord-Ton braucht OBS den Ausgabemodus „Erweitert“ "
+              "mit Audiospur 1 + 2 (Einstellungen → Mehr → Aufnahmen mit OBS)."))
+        self.no_discord_box.toggled.connect(self._no_discord_changed)
+        row2.addWidget(self.no_discord_box)
         el.addLayout(row2)
         row3 = QHBoxLayout()
         self.save_btn = self._btn(row3, _("Clip speichern"), self.save, _("Schreibt den Ausschnitt als MP4 in den Ordner „Clips“ neben den Aufnahmen."))
@@ -738,6 +750,14 @@ class ClipWindow(QWidget):
             b.setToolTip(tip)
         row.addWidget(b)
         return b
+
+    def audio_track(self) -> int | None:
+        """1.8.5: 1 (= OBS's track 2, the mix without Discord) when wanted and the file has it, else None."""
+        return 1 if self.no_discord_box.isEnabled() and self.no_discord_box.isChecked() else None
+
+    def _no_discord_changed(self, on):
+        self._no_discord = bool(on)
+        self._setting("clip_no_discord", bool(on))
 
     def _setting(self, key, value):
         if self.on_setting:
@@ -925,8 +945,10 @@ class ClipWindow(QWidget):
         self.playing = True
         self.play_btn.setText(_("⏸ Pause"))
         if self.sound_box.isChecked() and os.name == "nt":
-            threading.Thread(target=lambda: self.bridge.sound.emit(clipedit.sound_wav(self.path, start, end, self.ffmpeg), start),
-                             name="clip-sound", daemon=True).start()
+            track = self.audio_track()
+            threading.Thread(target=lambda: self.bridge.sound.emit(
+                clipedit.sound_wav(self.path, start, end, self.ffmpeg, audio_track=track), start),
+                name="clip-sound", daemon=True).start()
         else:
             self._run_player(start, end)
 
@@ -994,13 +1016,14 @@ class ClipWindow(QWidget):
         self.status.setText(_("Schreibe {file} …", file=os.path.basename(out)))
         start, end = tl.start, tl.end
 
-        target, info = self._target_mb, self.info
+        target, info, track = self._target_mb, self.info, self.audio_track()
         censor = self._censor_args()
         if mode != "copy" or censor:
             self.status.setText(_("Kodiere {file} … (dauert etwas)", file=os.path.basename(out)))
 
         def work():
-            ok, why = clipedit.cut(self.path, start, end, out, mode, self.ffmpeg, target_mb=target, info=info, **censor)
+            ok, why = clipedit.cut(self.path, start, end, out, mode, self.ffmpeg, target_mb=target, info=info,
+                                   audio_track=track, **censor)
             self.bridge.saved.emit(ok, out, why)
         threading.Thread(target=work, name="clip-save", daemon=True).start()
 

@@ -38,6 +38,7 @@ class FakeObs(threading.Thread):
         self.files = 0
         self.stop_flag = False
         self.inputs = {"Desktop-Audio": {"muted": False}, "Mic/Aux": {"muted": False}}
+        self.profile = {("Output", "Mode"): "Advanced", ("AdvOut", "RecTracks"): "3"}   # 1.8.5: tracks 1 + 2 ticked
 
     def run(self):
         self.srv.settimeout(0.2)
@@ -149,6 +150,13 @@ class FakeObs(threading.Thread):
                     self.inputs[data["inputName"]]["muted"] = data["inputMuted"]
             elif kind == "GetSpecialInputs":
                 out = {"desktop1": "Desktop-Audio", "desktop2": None, "mic1": "Mic/Aux"}
+            elif kind == "SetInputAudioTracks":        # 1.8.5
+                ok = data["inputName"] in self.inputs
+                if ok:
+                    self.inputs[data["inputName"]]["tracks"] = dict(data["inputAudioTracks"])
+            elif kind == "GetProfileParameter":
+                value = self.profile.get((data["parameterCategory"], data["parameterName"]))
+                out = {"parameterValue": value, "defaultParameterValue": None}
             elif kind == "GetLastReplayBufferReplay":
                 if self._pending and self._pending[1] > 0:
                     self._pending[1] -= 1
@@ -864,22 +872,58 @@ def test_the_sound_sources_are_created_once_and_switched(obs, tmp_path):
     assert not obs.requests
 
 
+def test_discord_gets_its_own_track_and_the_profile_is_only_read(obs, tmp_path):
+    """1.8.5: Discord on recording track 1 only, DBD and OBS's own sources on 1 + 2; the profile is read, never
+    written – a hint names what to tick when OBS is not in the advanced mode with tracks 1 and 2."""
+    r, posted = _recorder(obs, str(tmp_path), pre=False)
+    dbd, disc = obsrec.AUDIO_APPS["dbd"][0], obsrec.AUDIO_APPS["discord"][0]
+    c = r._client()
+    try:
+        r._audio(c)
+        assert obs.inputs[disc]["tracks"] == {"1": True, "2": False}
+        assert obs.inputs[dbd]["tracks"] == obs.inputs["Desktop-Audio"]["tracks"] == obs.inputs["Mic/Aux"]["tracks"] == \
+            {"1": True, "2": True}
+        kinds = [k for k, _d in obs.requests]
+        assert "GetProfileParameter" in kinds and not [k for k in kinds if "Profile" in k and k.startswith("Set")]
+        assert "Erweitert" not in r.status                                       # profile fine: no hint
+        obs.profile[("Output", "Mode")] = "Simple"
+        r._audio(c)
+        assert "Ausgabemodus „Erweitert“" in r.status and "Audiospur 1 und 2" in r.status
+        assert _drain(posted)[-1] == ("status", {"text": r.status, "ok": False})
+        obs.profile[("Output", "Mode")], obs.profile[("AdvOut", "RecTracks")] = "Advanced", "1"
+        r.status = ""
+        r._audio(c)
+        assert "Audiospur 1 und 2" in r.status                                   # advanced, but only track 1
+        obs.requests.clear()
+        r.cfg.tracks = False
+        r._audio(c)
+        kinds = [k for k, _d in obs.requests]
+        assert "SetInputAudioTracks" not in kinds and "GetProfileParameter" not in kinds   # off: OBS left alone
+    finally:
+        c.close()
+    assert obsrec.profile_hint("Advanced", "3") == "" == obsrec.profile_hint("advanced", "7")
+    assert obsrec.profile_hint("Simple", "3") and obsrec.profile_hint("Advanced", "2") and obsrec.profile_hint("Advanced", "")
+    assert obsrec.profile_hint("Advanced", "x") and obsrec.profile_hint("", "")
+
+
 def test_the_buffer_runs_for_instant_clips_without_a_pre_roll(obs, tmp_path):
     r, posted = _recorder(obs, str(tmp_path), pre=False, instant=True, buffer_auto=True)
     r._game_changed(True)
     assert obs.replay and r._buffer_ours
 
 
-def _instant(tmp_path, monkeypatch, ffmpeg):
+def _instant(tmp_path, monkeypatch, ffmpeg, streams=1, **kw):
     obs = FakeObs(record_dir=str(tmp_path), replay=True)
     obs.start()
     try:
-        r, posted = _recorder(obs, str(tmp_path), pre=False, instant=True, clip_s=45)
+        r, posted = _recorder(obs, str(tmp_path), pre=False, instant=True, clip_s=45, **kw)
         monkeypatch.setattr(obsrec, "ffmpeg_exe", lambda: ffmpeg)
         calls = []
 
         def run(args, timeout=0):
             calls.append(args)
+            if args[-2] == "-i":                      # 1.8.5: the look at the file – this many audio tracks
+                return 1, b"".join(b"  Stream #0:%d: Audio: aac, 48000 Hz, stereo\n" % (n + 1) for n in range(streams))
             with open(args[-1], "wb") as f:
                 f.write(b"clip")
             return 0, b""
@@ -896,8 +940,22 @@ def test_f8_cuts_the_last_seconds_of_the_buffer_into_the_clips_folder(tmp_path, 
     clips = os.listdir(os.path.join(str(tmp_path), obsrec.CLIPS_DIR))
     assert kind == "clip" and d["ok"] and d["seconds"] == 45 and clips == [d["file"]]
     assert d["file"].endswith("Coal Tower – Nurse (Sofort-Clip).mp4")
-    assert calls[0][calls[0].index("-sseof") + 1] == "-45" and "copy" in calls[0]
+    cut = calls[-1]
+    assert cut[cut.index("-sseof") + 1] == "-45" and "copy" in cut
+    assert cut[cut.index("-map"):][:2] == ["-map", "0"]                            # one track: as it is
     assert not [f for f in os.listdir(str(tmp_path)) if f.startswith("Replay_")]   # our replay is gone
+
+
+def test_the_f8_clip_takes_the_track_without_discord(tmp_path, monkeypatch):
+    """1.8.5: with two audio tracks in the buffer file the instant clip keeps only track 2 (no Discord)."""
+    posted, calls = _instant(tmp_path, monkeypatch, "ffmpeg", streams=2)
+    cut = calls[-1]
+    assert _drain(posted)[-1][1]["ok"] and calls[0][-2:] == ["-i", cut[cut.index("-i") + 1]]   # looked at the file
+    i = cut.index("-map")
+    assert cut[i:i + 4] == ["-map", "0:v", "-map", "0:a:1"] and "copy" in cut
+    posted, calls = _instant(tmp_path, monkeypatch, "ffmpeg", streams=2, clip_no_discord=False)
+    cut = calls[-1]
+    assert len(calls) == 1 and cut[cut.index("-map"):][:2] == ["-map", "0"]        # switched off: no look, all
 
 
 def test_without_ffmpeg_the_whole_buffer_becomes_the_clip(tmp_path, monkeypatch):

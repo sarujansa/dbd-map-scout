@@ -301,6 +301,8 @@ TIPS = {
     'Discord': 'Ton von Discord (Sprachchat) in der Aufnahme.',
     'übriger Desktop-Ton': 'Alles andere, was am PC zu hören ist (Musik, Browser, Systemtöne) – die Quelle „Desktop-Audio“ in OBS.',
     'Mikrofon': 'Dein Mikrofon – die Quelle „Mikrofon/AUX“ in OBS.',
+    'Discord nur auf Tonspur 1 legen – Spur 2 = alles ohne Discord (für Clips ohne Discord-Ton)': 'Das Programm weist in OBS die Tonquellen den Aufnahme-Tonspuren zu: Discord nur Spur 1, DBD, Desktop-Ton und Mikrofon Spur 1 und 2. Spur 1 klingt wie bisher (alles), Spur 2 ist dieselbe Aufnahme ohne Discord – der Clip-Editor und der Sofort-Clip können sie nehmen. OBS schreibt die zweite Spur nur im Ausgabemodus „Erweitert“ mit Audiospur 1 und 2 angehakt (MKV oder MP4, nicht FLV); das Programm prüft das beim DBD-Start und meldet es, ändert aber nichts am OBS-Profil. Aus = Spuren bleiben, wie sie in OBS stehen.',
+    'Sofort-Clip (F8) ohne Discord-Ton (Tonspur 2, wenn vorhanden)': 'Der Sofort-Clip aus dem Wiederholungspuffer nimmt die Tonspur ohne Discord, sobald die Pufferdatei zwei Tonspuren hat; mit nur einer Spur bleibt der Ton wie bisher.',
     'Als Farming markieren': 'Markiert alle genannten Runden als Farming-Runden (und nicht mehr als Custom Game); ihre Aufnahmen wandern in den Ordner „Farming“. Einzeln zurück: „Farming an/aus“ unter „Letzte Runden“.',
     'Ignorieren': 'Diese Runden nicht mehr vorschlagen – sie bleiben, wie sie sind.',
 }
