@@ -64,7 +64,8 @@ AUDIO_APPS = {
 AUDIO_PRIORITY_EXE = 2
 # 1.8.20 (user plays on Epic: the game track stayed silent – the source looked for the Steam executable): which of
 # the windows OBS itself lists for the source is ours. Steam: DeadByDaylight-Win64-Shipping.exe, Epic:
-# DeadByDaylight-EGS-Shipping.exe; Discord also as PTB/Canary. Only OBS's own list is read, never the game.
+# DeadByDaylight-EGS-Shipping.exe, Microsoft Store/Xbox: DeadByDaylight-WinGDK-Shipping.exe (the user plays mostly
+# on Steam, sometimes on the others); Discord also as PTB/Canary. Only OBS's own list is read, never the game.
 WINDOW_EXES = {"dbd": re.compile(r"^DeadByDaylight[\w-]*\.exe$", re.I),
                "discord": re.compile(r"^Discord(PTB|Canary)?\.exe$", re.I)}
 TAILS_S = (0, 3, 5, 8, 10)      # 1.4.1: seconds recorded after the detected end (the result screen)
@@ -1440,6 +1441,7 @@ class Recorder(threading.Thread):
                      and WINDOW_EXES[key].match(str(i.get("itemValue") or "").rsplit(":", 1)[-1])]
             if not found:
                 return []
+            found.sort(key=lambda v: ("Shipping" not in v, ":UnrealWindow:" not in v))   # the game, not a launcher
             current = (c.request("GetInputSettings", {"inputName": name}).get("inputSettings") or {}).get("window")
             if current in found:
                 return []

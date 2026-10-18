@@ -963,6 +963,10 @@ def test_the_game_source_follows_the_epic_or_steam_window_obs_offers(obs, tmp_pa
         obs.requests.clear()
         r._audio(c)
         assert "SetInputSettings" not in [k for k, _d in obs.requests]                   # already right: once
+        obs.windows = ["Launcher:Chrome_WidgetWin_1:DeadByDaylight.exe",
+                       "DeadByDaylight  :UnrealWindow:DeadByDaylight-WinGDK-Shipping.exe"]      # Microsoft Store
+        r._audio(c)
+        assert obs.inputs[dbd]["inputSettings"]["window"] == obs.windows[1]              # the game, not a launcher
     finally:
         c.close()
 
