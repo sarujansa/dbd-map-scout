@@ -282,7 +282,8 @@ class RecordingsTab:
                          target_mb=int(self.settings.get("clip_target_mb", 10) or 10),
                          censor_on=bool(self.settings.get("clip_censor_on", False)),          # 1.7.2
                          censor_style=str(self.settings.get("clip_censor_style", "pixel")),
-                         censor_boxes=self.settings.get("clip_censor_boxes") or [])
+                         censor_boxes=self.settings.get("clip_censor_boxes") or [],
+                         no_discord=bool(self.settings.get("clip_no_discord", True)))            # 1.8.5
         self._clip_windows = [w for w in self._clip_windows if w.isVisible()] + [win]
         win.show()
         win.raise_()

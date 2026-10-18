@@ -282,6 +282,16 @@ class SettingsTab:
         self._reg("st.more.rec_audio_discord", sound_box("discord", _("Discord"))).pack(side="left", padx=(0, 10))
         self._reg("st.more.rec_audio_desktop", sound_box("desktop", _("übriger Desktop-Ton"))).pack(side="left", padx=(0, 10))
         self._reg("st.more.rec_audio_mic", sound_box("mic", _("Mikrofon"))).pack(side="left")
+        self.rec_tracks_var = ui.BooleanVar(value=bool(self.settings.get("rec_tracks", True)))      # 1.8.5
+        self._reg("st.more.rec_tracks", ui.Checkbutton(rc, text=_("Discord nur auf Tonspur 1 legen – Spur 2 = alles ohne Discord (für Clips ohne Discord-Ton)"),
+                                                        variable=self.rec_tracks_var, command=self._rec_audio_changed)).pack(anchor="w", pady=(4, 0))
+        self._reg("st.more.rec_tracks_hint", ui.Label(rc, text=_(
+            "Dafür in OBS: Einstellungen → Ausgabe → Ausgabemodus „Erweitert“ → Reiter Aufnahme → Audiospur 1 und 2 anhaken. "
+            "Das Programm prüft das beim DBD-Start und meldet es im Status unten; es ändert nichts am OBS-Profil."),
+            wraplength=420, style="Dim.TLabel")).pack(anchor="w")
+        self.rec_clip_nodc_var = ui.BooleanVar(value=bool(self.settings.get("rec_clip_no_discord", True)))
+        self._reg("st.more.rec_clip_nodc", ui.Checkbutton(rc, text=_("Sofort-Clip (F8) ohne Discord-Ton (Tonspur 2, wenn vorhanden)"),
+                                                           variable=self.rec_clip_nodc_var, command=self._rec_setting)).pack(anchor="w")
         self.rec_farming_var = ui.BooleanVar(value=bool(self.settings.get("rec_farming_dir", True)))   # 1.5.3
         self._reg("st.more.rec_farming", ui.Checkbutton(rc, text=_("Farming-Runden im Unterordner „Farming“ ablegen"),
                                                          variable=self.rec_farming_var, command=self._rec_setting)).pack(anchor="w")
@@ -504,7 +514,9 @@ class SettingsTab:
                              audio_dbd=bool(self.rec_audio_vars["dbd"].get()),
                              audio_discord=bool(self.rec_audio_vars["discord"].get()),
                              audio_desktop=bool(self.rec_audio_vars["desktop"].get()),
-                             audio_mic=bool(self.rec_audio_vars["mic"].get()))
+                             audio_mic=bool(self.rec_audio_vars["mic"].get()),
+                             tracks=bool(self.rec_tracks_var.get()),                       # 1.8.5
+                             clip_no_discord=bool(self.rec_clip_nodc_var.get()))
 
     def _rec_setting(self, save=True):
         cfg = self._rec_cfg()
@@ -524,6 +536,8 @@ class SettingsTab:
             self.settings.set("rec_audio", cfg.audio)
             for key in ("dbd", "discord", "desktop", "mic"):
                 self.settings.set("rec_audio_" + key, bool(getattr(cfg, "audio_" + key)))
+            self.settings.set("rec_tracks", cfg.tracks)
+            self.settings.set("rec_clip_no_discord", cfg.clip_no_discord)
             self._save_soon()
         self.recorder.configure(cfg)
         folder = cfg.folder

@@ -26,9 +26,32 @@ def clip(tmp_path_factory):
     return path
 
 
+@pytest.fixture(scope="module")
+def two_track(tmp_path_factory):
+    """1.8.5: a recording as OBS writes it with two audio tracks – track 1 with sound, track 2 silent."""
+    path = str(tmp_path_factory.mktemp("clip2") / "2026-10-18 20-10 Ormond – Nurse.mkv")
+    subprocess.run([FF, "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi",
+                    "-i", "testsrc=duration=6:size=320x180:rate=30", "-f", "lavfi", "-i", "sine=frequency=440:duration=6",
+                    "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-map", "0:v", "-map", "1:a", "-map", "2:a",
+                    "-c:v", "libx264", "-preset", "veryfast", "-g", "30", "-pix_fmt", "yuv420p", "-c:a", "aac",
+                    "-shortest", path], check=True, timeout=120)
+    return path
+
+
+def _max_volume(path, track=None):
+    """Loudest moment of an audio track in dB (ffmpeg volumedetect); silence reads about -91 dB."""
+    pick = [] if track is None else ["-map", f"0:a:{track}"]
+    p = subprocess.run([FF, "-hide_banner", "-i", path, *pick, "-vn", "-af", "volumedetect", "-f", "null", "-"],
+                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=60)
+    import re
+    m = re.search(rb"max_volume: (-?[\d.]+) dB", p.stderr)
+    return float(m.group(1)) if m else None
+
+
 def test_probe_reads_length_size_and_frame_rate(clip, tmp_path):
     info = clipedit.probe(clip, FF)
     assert info.ok and 11.5 <= info.duration <= 12.5 and (info.width, info.height) == (320, 180) and info.fps == 30
+    assert info.audio_tracks == 1                                                   # 1.8.5
     assert not clipedit.probe(str(tmp_path / "nothing.mkv"), FF).ok
     assert clipedit.scaled(info, 90) == (160, 90) and clipedit.scaled(info, 540) == (320, 180)   # never upscaled
     assert clipedit.scaled(clipedit.Info(), 90)[1] == 90
@@ -79,6 +102,58 @@ def test_the_sound_stretch_is_a_wav(clip):
         if wav:
             os.remove(wav)
     assert clipedit.sound_wav(clip, 4.0, 2.0, FF) is None
+
+
+def test_a_clip_can_take_the_second_audio_track(two_track, tmp_path):
+    """1.8.5: ``audio_track=1`` keeps only OBS's track 2 (the mix without Discord) – by copy, re-encoded with censor
+    boxes and in the preview sound; without it the clip has the first track as before."""
+    assert clipedit.probe(two_track, FF).audio_tracks == 2 and obsrec.audio_tracks(two_track, FF) == 2
+    assert _max_volume(two_track, 0) > -20 and _max_volume(two_track, 1) < -80
+    quiet, loud = str(tmp_path / "quiet.mp4"), str(tmp_path / "loud.mp4")
+    ok, why = clipedit.cut(two_track, 1.0, 3.0, quiet, "copy", FF, audio_track=1)
+    assert ok, why
+    assert clipedit.probe(quiet, FF).audio_tracks == 1 and _max_volume(quiet) < -80
+    ok, why = clipedit.cut(two_track, 1.0, 3.0, loud, "copy", FF)
+    assert ok, why
+    assert clipedit.probe(loud, FF).audio_tracks == 1 and _max_volume(loud) > -20
+    exact = str(tmp_path / "exact.mp4")
+    ok, why = clipedit.cut(two_track, 1.0, 2.0, exact, "exact", FF, censor=[[0.1, 0.1, 0.3, 0.3]], audio_track=1)
+    assert ok, why
+    assert clipedit.probe(exact, FF).audio_tracks == 1 and _max_volume(exact) < -80
+    wav = clipedit.sound_wav(two_track, 1.0, 2.0, FF, audio_track=1)
+    try:
+        assert wav and _max_volume(wav) < -80
+    finally:
+        if wav:
+            os.remove(wav)
+
+
+def test_the_clip_window_offers_no_discord_only_with_two_tracks(clip, two_track, tmp_path):
+    """1.8.5: the box "Ohne Discord-Ton" is on for a two-track recording (and remembered), off and unticked for a
+    recording with one track."""
+    pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
+    from PySide6.QtWidgets import QApplication
+    from dbdmapscout import qt_clip
+    app = QApplication.instance() or QApplication([])
+    settings = {}
+    win = qt_clip.ClipWindow(two_track, [], str(tmp_path / "Clips"), sound=False, no_discord=True,
+                             on_setting=lambda k, v: settings.__setitem__(k, v))
+    try:
+        win.show()
+        assert win.no_discord_box.isEnabled() and win.no_discord_box.isChecked() and win.audio_track() == 1
+        win.no_discord_box.setChecked(False)
+        assert settings == {"clip_no_discord": False} and win.audio_track() is None
+    finally:
+        win.close()
+        app.processEvents()
+    win = qt_clip.ClipWindow(clip, [], str(tmp_path / "Clips"), sound=False, no_discord=True)
+    try:
+        win.show()
+        assert not win.no_discord_box.isEnabled() and not win.no_discord_box.isChecked() and win.audio_track() is None
+        assert "Tonspur" in win.no_discord_box.toolTip()
+    finally:
+        win.close()
+        app.processEvents()
 
 
 def test_the_frame_player_streams_frames_at_the_files_pace_and_stops(clip):
