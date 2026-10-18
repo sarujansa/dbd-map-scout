@@ -179,6 +179,23 @@ def test_take_downloads_reads_ours_and_deletes_only_ours(tmp_path):
     assert o.take_downloads(str(tmp_path / "missing"), store).files == 0
 
 
+def test_an_odd_file_never_blocks_the_import_of_the_others(tmp_path):
+    """1.8.38 (QA audit): a list as role raised TypeError and a deeply nested file RecursionError – neither was
+    caught, the file stayed and every later export behind it was stuck (re-read every 20 s)."""
+    dl, store = tmp_path / "Downloads", str(tmp_path / o.FILE)
+    dl.mkdir()
+    odd = dict(entry(T0), player={"role": [], "character": {}, "status": 5, "seconds": "x"})
+    mixed = write(dl, "dbdmapscout-matches.json", export(odd, entry(T0 + 600)))
+    deep = write(dl, "dbdmapscout-matches (1).json", "[" * 100000 + "]" * 100000)
+    later = write(dl, "dbdmapscout-matches (2).json", export(entry(T0 + 1200)))
+    os.utime(mixed, (T0, T0)), os.utime(deep, (T0 + 1, T0 + 1)), os.utime(later, (T0 + 2, T0 + 2))
+    res = o.take_downloads(str(dl), store, now=T0 + 3600)
+    assert res.foreign == [deep] and os.path.exists(deep)                     # not ours: left alone
+    assert not os.path.exists(mixed) and not os.path.exists(later)            # read and deleted
+    stored = {m.t: m for m in o.load(store)}
+    assert set(stored) == {T0, T0 + 600, T0 + 1200} and stored[T0].role == "" and stored[T0].character == ""   # odd fields left empty
+
+
 def test_take_downloads_skips_huge_files(tmp_path, monkeypatch):
     monkeypatch.setattr(o, "MAX_FILE", 10)
     big = write(tmp_path, "dbdmapscout-matches.json", export(entry(T0)))

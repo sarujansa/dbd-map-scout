@@ -10,6 +10,7 @@ import struct
 import sys
 import threading
 import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -382,6 +383,68 @@ def test_prune_deletes_the_oldest_unkept_recordings_only_from_the_index(tmp_path
     assert deleted == ["r3.mkv"] and [r.file for r in left] == ["r1.mkv", "r4.mkv"]
     left, deleted = obsrec.prune(folder, left, limit=0, reserve=1000, free=5000)
     assert deleted == []
+
+
+def test_prune_keeps_the_entry_of_a_file_it_could_not_delete(tmp_path, monkeypatch):
+    """1.8.38 (QA audit): a file open in a player could not be deleted, but its entry was dropped – an orphan no
+    later pass removed, and its size missing from the count."""
+    folder = str(tmp_path)
+    recs = []
+    for i in range(3):
+        with open(os.path.join(folder, f"r{i}.mkv"), "wb") as f:
+            f.write(b"\0" * 100)
+        recs.append(obsrec.Recording(t=float(i), file=f"r{i}.mkv"))
+    real = os.remove
+
+    def busy(p):
+        if p.endswith("r0.mkv"):
+            raise PermissionError("in use")
+        real(p)
+
+    monkeypatch.setattr(obsrec.os, "remove", busy)
+    left, deleted = obsrec.prune(folder, recs, limit=150, reserve=0, free=10 ** 9)
+    assert deleted == ["r1.mkv", "r2.mkv"] and [r.file for r in left] == ["r0.mkv"]     # the next one went instead
+
+
+def test_only_a_video_file_named_by_obs_is_moved_or_deleted(tmp_path):
+    """1.8.38: the program runs as admin; anything listening on OBS's port could name any file."""
+    video = tmp_path / "Replay 2026.mkv"
+    video.write_bytes(b"x")
+    doc = tmp_path / "taxes.pdf"
+    doc.write_bytes(b"x")
+    assert obsrec.obs_file(str(video)) == str(video)
+    assert obsrec.obs_file(str(doc)) == "" and obsrec.obs_file("") == "" and obsrec.obs_file(None) == ""
+    assert obsrec.obs_file(str(tmp_path / "not yet written.mp4")).endswith(".mp4")   # checked again at the move
+    if sys.platform != "win32":
+        link = tmp_path / "link.mkv"
+        link.symlink_to(doc)
+        assert obsrec.obs_file(str(link)) == ""                                  # a link is never followed
+
+
+def test_ffmpeg_is_only_the_bundled_one(monkeypatch):
+    """1.8.38: imageio-ffmpeg's get_ffmpeg_exe() takes IMAGEIO_FFMPEG_EXE unchecked and falls back to PATH."""
+    monkeypatch.setenv("IMAGEIO_FFMPEG_EXE", "/somewhere/evil-ffmpeg")
+    exe = obsrec.ffmpeg_exe()
+    if exe is not None:                                       # imageio-ffmpeg installed
+        assert "evil" not in exe and os.path.isfile(exe) and "imageio_ffmpeg" in exe
+
+
+def test_a_huge_websocket_frame_ends_the_connection_instead_of_filling_memory():
+    c = obsrec.ObsClient(1, "")
+    header = bytes([0x81, 127]) + struct.pack("!Q", 1 << 40)
+    c._buf = header
+    reads = []
+
+    def recv(n):                                              # an endless stream: the old code read it all
+        reads.append(n)
+        if len(reads) > 50:
+            raise AssertionError("kept reading a frame of 1 TB")
+        return b"\0" * 65536
+
+    c._sock = SimpleNamespace(recv=recv, sendall=lambda b: None)
+    with pytest.raises(obsrec.ObsError):
+        c._recv_message()
+    assert not reads                                          # refused from the header alone
 
 
 def test_the_index_round_trips_and_skips_bad_lines(tmp_path):

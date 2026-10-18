@@ -7,6 +7,7 @@ __pycache__/
 # runtime files
 settings.json
 settings.json.tmp
+settings.json.broken
 dbdmapscout.log
 diagnose.txt
 debug/

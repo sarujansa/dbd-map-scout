@@ -345,6 +345,7 @@ class LoginServer:
         outer = self
 
         class Handler(BaseHTTPRequestHandler):
+            timeout = 5                           # 1.8.38: a client that connects and sends nothing blocks no login
             def log_message(self, *_a):           # nothing on stderr
                 pass
 
