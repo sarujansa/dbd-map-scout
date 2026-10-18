@@ -26,6 +26,7 @@ class FactBox(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(2)
         self.title = _label(cls="dim")
+        self.title.setWordWrap(True)             # 1.8.2: "Bloodpoints pro Stunde" was cut in a narrow window
         self.value = _label(cls="kpi")
         lay.addWidget(self.title)
         lay.addWidget(self.value)
