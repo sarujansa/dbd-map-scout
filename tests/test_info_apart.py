@@ -157,19 +157,25 @@ def test_a_page_never_changes_width_when_its_scroll_bar_comes_and_goes():
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QScrollArea
     sa = page.findChild(QScrollArea)
-    QTest.qWait(30)
+
+    def settle(cond, ms=1000):                       # the layout runs on timers: wait for it, not a fixed time
+        for _i in range(ms // 20):
+            QTest.qWait(20)
+            if cond():
+                return True
+        return cond()
+    assert settle(lambda: sa.viewport().width() > 0)
     width = sa.viewport().width()
     bar = sa.verticalScrollBar()
     assert bar.property("idle") is True
     extra = QWidget()
     QVBoxLayout(extra).addWidget(QLabel("x\n" * 60))
     lay.addWidget(extra)
-    QTest.qWait(30)
-    assert bar.maximum() > 0 and bar.property("idle") is False
+    assert settle(lambda: bar.maximum() > 0 and bar.property("idle") is False)
     assert sa.viewport().width() == width                              # the content did not move
     extra.hide()
-    QTest.qWait(30)
-    assert sa.viewport().width() == width and bar.property("idle") is True
+    assert settle(lambda: bar.property("idle") is True)
+    assert sa.viewport().width() == width
     page.close()
 
 
