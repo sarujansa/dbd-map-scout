@@ -147,6 +147,8 @@ class PreviewView(QWidget):
             p.setPen(accent)
             # 1.8.8: in its own strip below the screen (1.8.2 put it on the picture, where it hid the music card)
             note = _("Verschieben aktiv – ziehen (rastet ein, Alt = frei), Pfeiltasten = fein, Ecke/Strg+Mausrad = Grösse")
+            if d.get("limits") and not d.get("limits_on", True):       # 1.8.15: the faint limiter lines
+                note += "\n" + _("Graue Linien in den Balken = Grenzen (aus) – eine ziehen schaltet sie ein")
             strip = QRectF(screen.left(), screen.bottom() + 4, screen.width(), self.height() - screen.bottom() - 4)
             p.drawText(strip, Qt.AlignHCenter | Qt.AlignTop | Qt.TextWordWrap, note)
         if d.get("editing"):                       # every element named; the one under the mouse in accent colour
@@ -231,12 +233,15 @@ class PreviewView(QWidget):
             return
         accent = QColor(qt_theme.colours(True)["accent"])
         edit = bool(self._data.get("editing"))
+        on = self._data.get("limits_on", True) or self._limit is not None
+        if not on:                                 # 1.8.15: switched off – faint grey, dragging one switches it on
+            accent = QColor(200, 200, 200)
         for side, which, x0, x1, y in lines:
             a, b, yy = QPointF(ox + x0 * s, oy + y * s), QPointF(ox + x1 * s, oy + y * s), oy + y * s
             p.setPen(QPen(QColor(0, 0, 0, 160), 3))
             p.drawLine(a, b)
             c = QColor(accent)
-            c.setAlpha(255 if edit else 170)
+            c.setAlpha((255 if edit else 170) if on else 110)
             p.setPen(QPen(c, 2 if edit and self._limit == (side, which) else 1.5, Qt.DashLine))
             p.drawLine(a, b)
             if edit:                               # a grip at the end facing the game picture
