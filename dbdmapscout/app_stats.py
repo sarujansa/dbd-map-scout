@@ -347,14 +347,16 @@ class StatsTab:
                 r.seconds = seconds
                 rescued.append(r)
             off[id(r)] = m
-            if m.role and not r.role:                # the page knows it for sure
-                r.role = m.role
+            if m.role:                               # the page knows it for sure (1.8.36: also over a lobby
+                r.role = m.role                      # or result screen reading – user: "Rolle nicht sauber")
             if i < len(all_rounds) and r.custom and not m.custom and not r.farming:
                 public_custom.append(r)              # before 1.5.5 instant (cross-play off) lobbies looked custom
             r.custom = m.custom
             k = self._killer_of(m.character)
-            if m.role == "killer" and r.role == "killer" and k in KILLERS:
-                r.killer = k                         # exact name instead of the lobby reading (skins!)
+            if m.role == "killer" and (k in KILLERS or k.startswith("The ")):
+                r.killer = k                         # exact name instead of the lobby reading (skins!) – 1.8.36:
+            elif m.role == "survivor":               # also a killer not on our list yet ("Aeaiily" read from it)
+                r.killer = ""
         # a second "round" inside a match that already has one: a mid-match false detection – not counted
         ghost = official.phantoms(candidates[:len(all_rounds)], tied)
         phantoms = [all_rounds[i] for i in sorted(ghost)]
@@ -950,10 +952,16 @@ class StatsTab:
         f = self._queue.get("found")                  # the lobby this match came from (once, max. 15 min old)
         farm_on = bool(self.settings.get("farming_crossplay", True))
         if f is not None and 0 <= now - f.t <= 900:
+            # 1.8.36 (user: "Farming-Runden rutschen immer noch als normale Runden in die Statistik"): cross-play
+            # off makes a farming round even when the lobby looked like a custom game (READY without countdown –
+            # an instant lobby); the stats page decides later: a public match is farming, a custom game stays one
             self._hist.update(wait=f.wait, role=f.role or "", custom=f.custom, killer=f.killer,
-                              farming=bool(f.crossplay_off) and not f.custom and farm_on)
+                              farming=bool(f.crossplay_off) and farm_on)
             self._queue = dict(self._queue, found=None, used=f)
-            if self._hist["farming"]:
+            if self._hist["farming"] and f.custom:
+                self._log(_("Crossplay war aus, die Lobby sah aus wie ein Custom Game – die Runde zählt als "
+                            "Farming-Runde, sobald die Stats-Seite sie als öffentliches Match zeigt."), "Erkennung")
+            elif self._hist["farming"]:
                 self._log(_("Crossplay war aus – die Runde zählt als Farming-Runde."), "Erkennung")
             elif farm_on and f.custom:               # 1.5.5: say why a round is no farming round (user diagnosis)
                 self._log(_("Als Custom Game erkannt – die Runde zählt nicht als Farming (unter „Letzte Runden“ "
@@ -963,13 +971,14 @@ class StatsTab:
                         why=_("Lobby zu alt") if f is not None else _("Lobby nicht gesehen")), "Erkennung")
         self.recorder.start_round(t=now, map_id=map_id, label=self._hist["map"], role=self._hist.get("role", ""),
                                   killer=self._hist.get("killer", ""),         # 1.4: OBS records the round
-                                  farming=bool(self._hist.get("farming")))     # 1.4.2: goes first when room is needed
+                                  farming=bool(self._hist.get("farming"))      # 1.4.2: goes first when room is needed
+                                  and not self._hist.get("custom"))
 
     def _hist_close(self, t, role=None):
         rec, self._hist = self._hist, None
         farm_region = self.settings.get("farming_region") or None       # 1.5.3: the region counts as farming too
         self.recorder.stop_round(role=role or (rec or {}).get("role", ""), killer=(rec or {}).get("killer", ""),
-                                 farming=bool(rec and (rec.get("farming")
+                                 farming=bool(rec and ((rec.get("farming") and not rec.get("custom"))
                                                        or (rec.get("region") and rec.get("region") == farm_region))))
         sysrec, self._sysrec = self._sysrec, None
         if rec is None:

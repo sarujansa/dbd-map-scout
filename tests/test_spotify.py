@@ -26,7 +26,8 @@ QUEUE = {"currently_playing": {"type": "track", "name": "Blinding Lights", "arti
 
 class FakeSpotify(threading.Thread):
     """accounts.spotify.com + api.spotify.com on one local port: /api/token (code / refresh grants with PKCE) and
-    /v1/me/player/queue (Bearer). ``mode`` switches the queue answer: ok | 401 | 429 | 403 | 204."""
+    /v1/me/player/queue (Bearer). ``mode`` switches the queue answer: ok | 401 | 429 | 429-bare | quota | 403 |
+    204."""
 
     def __init__(self):
         super().__init__(daemon=True)
@@ -84,6 +85,11 @@ class FakeSpotify(threading.Thread):
                     return self._json(401, {"error": {"status": 401, "message": "The access token expired"}})
                 if outer.mode == "429":
                     return self._json(429, {"error": {"status": 429, "message": "rate"}}, [("Retry-After", "2")])
+                if outer.mode == "429-bare":                     # 1.8.36: no Retry-After at all
+                    return self._json(429, {"error": {"status": 429, "message": "rate"}})
+                if outer.mode == "quota":                        # 1.8.36: Development Mode quota used up
+                    return self._json(429, {"error": {"status": 429, "message": "Quota exceeded",
+                                                      "reason": "QUOTA_EXCEEDED"}}, [("Retry-After", "3")])
                 if outer.mode == "403":
                     return self._json(403, {"error": {"status": 403, "message": "User not registered in the Developer Dashboard"}})
                 if outer.mode == "204":
@@ -564,6 +570,18 @@ def test_the_app_shows_the_list_only_when_spotify_plays_the_same_song(app_root):
         app.settings["overlay"]["media_next_n"] = 1
         assert len(app._upnext(now)[1]) == 1
         assert app._upnext(media.NowPlaying("Other Song", "Someone", True, time.time())) is None
+        # 1.8.36 (user's diagnosis: 10 titles read, none shown): the Windows session is Spotify's own – its queue
+        # counts even when the titles are written differently; not when the reading is old, never for other players
+        store = "SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify"
+        odd = media.NowPlaying("Blinding Lights - 2020 Remaster", "The Weeknd", True, time.time(), app=store)
+        assert app._upnext(odd)[1][0][0] == "Save Your Tears"
+        assert app._upnext(media.NowPlaying("Other Song", "Someone", True, time.time(), app="chrome")) is None
+        fresh = app.spotify.upnext
+        app.spotify.upnext = spotify.parse_queue(QUEUE, wall=time.time() - 120)
+        assert app._upnext(odd) is None
+        app.spotify.upnext = fresh
+        app.media.now = odd
+        assert "gleich=False, Player=Spotify:True" in __import__("dbdmapscout.diagnose").diagnose.spotify_match(app)
         app._spotify_event("token", "plain:eC1yZWY=")
         assert app.settings.get("spotify_token") == "plain:eC1yZWY="
         app._spotify_event("status", ("Spotify: verbunden", True))
@@ -577,3 +595,41 @@ def test_the_app_shows_the_list_only_when_spotify_plays_the_same_song(app_root):
         assert "Spotify:" in text and "Blinding" not in text and "Save Your" not in text
     finally:
         app.quit()
+
+
+def test_a_used_up_quota_pauses_the_list_visibly_and_a_bare_429_backs_off(fake):
+    """1.8.36 (user: "auf Spotify wird mir die Warteschlange nicht mehr angezeigt"): since July 2026 the quota of
+    Development Mode apps counts per developer account; a used-up one answers 429 with reason QUOTA_EXCEEDED. It
+    was silent and – without Retry-After – asked again every 5 s. Now: a status line (logged once) with the time
+    it tries again, at least QUOTA_WAIT_S, the stale list dropped; a 429 without Retry-After doubles its wait."""
+    events = []
+    link = spotify.SpotifyLink(lambda kind, data: events.append((kind, data)), opener=lambda url: False)
+    link.start()
+    try:
+        link.active = True
+        link.configure(True, CID, spotify.protect("ref-stored"))
+        assert _wait(lambda: link.upnext.items != ())
+        fake.mode = "429-bare"
+        link.kick()
+        assert _wait(lambda: link._rate_wait == spotify.RATE_WAIT_S[0])
+        assert link._retry_at - time.time() <= spotify.RATE_WAIT_S[0] and link.upnext.items != ()
+        link._failed(spotify.SpotifyError("rate", "rate"), time.time())
+        assert link._rate_wait == 2 * spotify.RATE_WAIT_S[0]                 # doubled, not every 5 s
+        fake.mode = "quota"
+        link._retry_at = 0.0
+        link.kick()
+        assert _wait(lambda: "Kontingent" in link.status)
+        assert link._retry_at - time.time() > spotify.QUOTA_WAIT_S - 5 and link.upnext.items == ()
+        assert any(k == "status" and not d[1] and "Kontingent" in d[0] for k, d in events)
+        calls = fake.queue_calls
+        link.kick()
+        time.sleep(0.8)
+        assert fake.queue_calls == calls                                       # it waits, no matter the kicks
+        fake.mode = "ok"
+        link._retry_at = 0.0
+        link.kick()
+        assert _wait(lambda: link.status == "Spotify: verbunden" and link.upnext.items != ())
+        assert link._rate_wait == 0.0
+    finally:
+        link.quit()
+        link.join(timeout=3)
