@@ -15,8 +15,9 @@ ANCHORS = [("auto", N_("automatisch")), ("top-left", N_("oben links")), ("top-ri
 
 
 STYLE_DEFER_MS = 30                     # 1.3.4: the window repaints before the slow part of a map style change
-MAP_STYLES = [("classic", N_("Original (lila Boden)")),
-              ("dark", N_("Dunkel – wie Fallen Refuge (durchsichtiger Boden)"))]    # 1.66, mapstyle.py
+MAP_STYLES = [("classic", N_("Original")), ("dark", N_("Dunkel")),            # 1.66, mapstyle.py
+              ("grey", N_("Grau")), ("grey_edge", N_("Grau mit Rand")),         # 1.8.16: with a floor
+              ("lilac", N_("Lila dunkel")), ("lilac_glass", N_("Lila transparent"))]
 
 
 def anchor_label(key: str) -> str:
