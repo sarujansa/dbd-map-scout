@@ -702,7 +702,10 @@ class SettingsTab:
         """1.4.1: the recorder learns whether DBD runs (replay buffer, checks); the overlay shows a REC dot."""
         self.recorder.set_game(self.game is not None and not self.simulate)
         self._rec_tab_tick()
-        self.overlay.set_rec(self.recorder.recording)
+        # 1.8.31 (user: "das Rekord-Zeichen finde ich nicht mehr"): it shows only while OBS records a round – with
+        # recordings switched on, "Overlay testen" shows it too, so one sees where it sits
+        sample = bool(getattr(self, "_forced", False)) and bool(self.settings.get("rec_on", False))
+        self.overlay.set_rec(self.recorder.recording or sample)
 
     def _tray_flag_changed(self):
         on = bool(self.tray_var.get())
