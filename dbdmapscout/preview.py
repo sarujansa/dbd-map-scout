@@ -12,7 +12,7 @@ from . import layout, media, sysinfo
 from . import skin
 from .i18n import _
 from .overlay_win32 import (add_info, backdrop, backdrop_pad, body_cols, compose, info_card, map_backdrop, map_body,
-                            music_body, music_card, render_hud)
+                            music_body, music_card, pad_to, render_hud)
 
 SAMPLE_SNAPSHOT = dict(cpu_load=38, cpu_temp=64, gpu_temp=71, gpu_load=92, gpu_name="GPU",
                        vram_used=7.1, vram_total=16, ram_used=17.2, ram_total=32, gpu_power=241)
@@ -152,52 +152,74 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
         music = music if o.get("media_pos", "below") == "custom" else None
     style = o.get("style", "classic") if o.get("style", "classic") in skin.STYLES else "classic"   # 1.3
     modern = style != "classic"
-    if hud_side and hud_rows:
-        hh = int(gh * min(2.0, max(0.6, float(o.get("hud_scale", 1.0)))))      # its own size (1.64.9)
-        boxed = bool(o.get("hud_backdrop", False))
-        hud = fitted((lambda h: skin.card(hud_rows, h, style, accent, _("SYSTEM"))) if modern else
-                     (lambda h: backdrop(render_hud(hud_rows, h), h) if boxed else render_hud(hud_rows, h)), hh, avail,
-                     ("hud", repr(hud_rows), boxed, style, accent), fits)
-    cards = {}                                              # name: (picture, position setting, own place)
-    if today:
-        th = int(gh * min(2.0, max(0.6, float(o.get("today_scale", 1.0)))))
-        tboxed = bool(o.get("today_backdrop", False))
-        tspot = o.get("today_pos", "below")
-        cards["today"] = (fitted((lambda h: skin.card(today, h, style, accent)) if modern else
-                                 (lambda h: backdrop(render_hud(today, h), h) if tboxed else render_hud(today, h)),
-                                 th, avail if tspot != "custom" else gw / 3, ("today", repr(today), tboxed, style, accent),
-                                 fits),
-                          tspot, o.get("today_xy"))
-    if music:
-        rows_m, cover, prog = music
-        prog = prog if o.get("media_progress", True) else None
-        scale = max(60, min(200, o.get("media_scale", 1.0) * 100)) / 100
-        spot = o.get("media_pos", "below")
-        show_cover = cover if o.get("media_cover", True) else None
-        look = media.look(o)
-        mstyle = o.get("media_style", "big")
-        npos = o.get("media_next_pos", "below")
-        cards["music"] = (fitted((lambda h: skin.music(rows_m, show_cover, h, style, prog, look, accent, mstyle,
-                                                       upnext, npos)) if modern
-                                 else (lambda h: music_card(_music_body(rows_m, show_cover, h, mstyle, look), h,
-                                                            mstyle, prog, look, upnext, npos)),
-                                 int(gh * scale), avail if spot != "custom" else gw / 3,
-                                 ("music", repr(rows_m), id(show_cover), mstyle, prog, look, style, accent,
-                                  repr(upnext), npos), fits),
-                          spot, o.get("media_xy"))
-    # system values and cards first (1.2.11: like the App), the map moves below / above what stands at the
-    # top / bottom of its bar – except with the system values right above the map: those follow it afterwards
-    hud_rect = None
-    placed = {}
     game = (0, 0, gw, gh)
     bands = layout.bar_bands(o, game, margin)               # 1.8.14: the limiter lines of the bars, like the App
-    if hud is not None and hud_side != "above":
-        hx, hy = layout.hud_preview_xy(hud_side, gw, gh, margin, hud.size, hud_own, None, align, gap)
-        hud_rect = layout.clamp_box((hx, hy, hud.width, hud.height), game, bands)
-    spots = {n: c[1] for n, c in cards.items()}
-    free = {n: (c[0].size, c[1], c[2]) for n, c in cards.items()
-            if hud_side != "above" or not layout.hangs_on_hud(n, spots)}  # the rest waits for the values
-    placed = layout.place_cards(game, free, hud_rect, margin, align, gap, bands=bands)
+
+    def render_cards(mins: dict):
+        """The system values and the cards; ``mins`` = {name: min width} (1.8.29: one width per bar)."""
+        hud = None
+        if hud_side and hud_rows:
+            hh = int(gh * min(2.0, max(0.6, float(o.get("hud_scale", 1.0)))))      # its own size (1.64.9)
+            boxed = bool(o.get("hud_backdrop", False))
+            mw = mins.get("hud", 0)
+            hud = fitted((lambda h: skin.card(hud_rows, h, style, accent, _("SYSTEM"), min_w=mw)) if modern else
+                         (lambda h: backdrop(pad_to(render_hud(hud_rows, h), mw), h) if boxed
+                          else pad_to(render_hud(hud_rows, h), mw)), hh, avail,
+                         ("hud", repr(hud_rows), boxed, style, accent, mw), fits)
+        cards = {}                                          # name: (picture, position setting, own place)
+        if today:
+            th = int(gh * min(2.0, max(0.6, float(o.get("today_scale", 1.0)))))
+            tboxed = bool(o.get("today_backdrop", False))
+            tspot = o.get("today_pos", "below")
+            mw = mins.get("today", 0)
+            cards["today"] = (fitted((lambda h: skin.card(today, h, style, accent, min_w=mw)) if modern else
+                                     (lambda h: backdrop(pad_to(render_hud(today, h), mw), h) if tboxed
+                                      else pad_to(render_hud(today, h), mw)),
+                                     th, avail if tspot != "custom" else gw / 3,
+                                     ("today", repr(today), tboxed, style, accent, mw), fits),
+                              tspot, o.get("today_xy"))
+        if music:
+            rows_m, cover, prog = music
+            prog = prog if o.get("media_progress", True) else None
+            scale = max(60, min(200, o.get("media_scale", 1.0) * 100)) / 100
+            spot = o.get("media_pos", "below")
+            show_cover = cover if o.get("media_cover", True) else None
+            look = media.look(o)
+            mstyle = o.get("media_style", "big")
+            npos = o.get("media_next_pos", "below")
+            mw = mins.get("music", 0)
+            cards["music"] = (fitted((lambda h: skin.music(rows_m, show_cover, h, style, prog, look, accent, mstyle,
+                                                           upnext, npos, min_w=mw)) if modern
+                                     else (lambda h: music_card(_music_body(rows_m, show_cover, h, mstyle, look), h,
+                                                                mstyle, prog, look, upnext, npos, min_w=mw)),
+                                     int(gh * scale), avail if spot != "custom" else gw / 3,
+                                     ("music", repr(rows_m), id(show_cover), mstyle, prog, look, style, accent,
+                                      repr(upnext), npos, mw), fits),
+                              spot, o.get("media_xy"))
+        return hud, cards
+
+    def place_all(hud, cards):
+        # system values and cards first (1.2.11: like the App), the map moves below / above what stands at the
+        # top / bottom of its bar – except with the system values right above the map: those follow it afterwards
+        hud_rect = None
+        if hud is not None and hud_side != "above":
+            hx, hy = layout.hud_preview_xy(hud_side, gw, gh, margin, hud.size, hud_own, None, align, gap)
+            hud_rect = layout.clamp_box((hx, hy, hud.width, hud.height), game, bands)
+        spots = {n: c[1] for n, c in cards.items()}
+        free = {n: (c[0].size, c[1], c[2]) for n, c in cards.items()
+                if hud_side != "above" or not layout.hangs_on_hud(n, spots)}  # the rest waits for the values
+        return hud_rect, spots, layout.place_cards(game, free, hud_rect, margin, align, gap, bands=bands)
+
+    hud, cards = render_cards({})
+    hud_rect, spots, placed = place_all(hud, cards)
+    if o.get("cards_same_width", True):                     # 1.8.29: the cards in one bar at the widest width
+        boxes = dict(placed)
+        if hud_rect:
+            boxes["hud"] = hud_rect
+        mins = layout.column_widths(boxes, game)
+        if mins:
+            hud, cards = render_cards(mins)
+            hud_rect, spots, placed = place_all(hud, cards)
     drop = lift = 0
     span = layout.map_bar_range(o["anchor"], o.get("pos_x", 0.0), 0, gw, bar)
     band = bands["left" if span[0] <= 0 else "right"] if bands and span else None
@@ -298,7 +320,7 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
     order = [n for n in ("hud", "text", "today", "music") if n in names]
     boxes = [(n, (out[names[n]][2], out[names[n]][3], out[names[n]][1].width, out[names[n]][1].height))
              for n in order]
-    shift = layout.resolve(boxes, [map_rect] + layout.keep_out_boxes(o, game), game, bands, gap)
+    shift = layout.resolve(boxes, [map_rect], game, bands, gap, soft=layout.keep_out_boxes(o, game))
     for n, (dx, dy) in shift.items():
         name, img, lx, ly = out[names[n]]
         out[names[n]] = (name, img, lx + dx, ly + dy)
