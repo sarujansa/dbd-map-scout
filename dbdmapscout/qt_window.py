@@ -136,9 +136,10 @@ SPECS = {
                 ("slider", "ov.posx"), ("slider", "ov.posy"), ("hint", "ov.pos_hint"),
                 ("row", (("hint", "ov.map_size"), ("stretch",), ("button", "ov.map_size_reset"))),
                 ("row", (("label", "ov.map_style.label"), ("combo", "ov.map_style"), ("stretch",))),
+                ("row", (("label", "ov.info_pos.label"), ("combo", "ov.info_pos"), ("stretch",))),     # 1.8.24
                 ("sub", N_("Darstellung")), ("check", "ov.show_map"), ("check", "ov.caption"), ("check", "ov.floors"),
                 ("check", "ov.transparent"), ("check", "ov.map_backdrop"), ("check", "ov.keep_bar"), ("check", "ov.grow"),
-                ("sub", N_("Unter der Karte")), ("check", "ov.timer"), ("check", "ov.server"), ("check", "ov.record"),
+                ("sub", N_("Infos (Timer, Bilanz, Server)")), ("check", "ov.timer"), ("check", "ov.server"), ("check", "ov.record"),
                 ("sub", N_("Wann zeigen")), ("check", "ov.focus"), ("check", "ov.waiting"))),
             ("ov.sys", N_("Systemwerte"), (
                 ("row", (("label", "ov.sysinfo.label"), ("combo", "ov.sysinfo"), ("stretch",))),
@@ -152,7 +153,9 @@ SPECS = {
             ("ov.music_f", N_("Musik"), (
                 ("check", "ov.media"), ("row", (("label", "ov.media_pos.label"), ("combo", "ov.media_pos"), ("stretch",))),
                 ("row", (("label", "ov.media_style.label"), ("combo", "ov.media_style"), ("stretch",))),
-                ("check", "ov.media_cover"), ("check", "ov.media_progress"), ("check", "ov.media_accent"),
+                ("check", "ov.media_cover"),
+                ("row", (("label", "ov.media_shape.label"), ("combo", "ov.media_shape"), ("stretch",))),   # 1.8.24
+                ("check", "ov.media_progress"), ("check", "ov.media_accent"),
                 ("check", "ov.media_remaining"), ("check", "ov.media_backdrop"), ("check", "ov.media_fade"),
                 ("check", "ov.media_videos"),
                 ("row", (("label", "ov.media_next.label"), ("combo", "ov.media_next"), ("stretch",))),   # 1.8

@@ -154,7 +154,9 @@ def test_the_overlay_draws_the_map_card_in_the_style_and_fits_the_bar():
         seen[style] = ov._prepared[0][0]
         if style == "chips":
             pic = Image.frombytes("RGBA", (w, hh), seen[style])
-            assert pic.getpixel((2, hh // 3))[3] == 0            # no dark box behind the map: transparent stays
+            # no dark box behind the map: transparent stays (1.8.24: the map is cut to what is drawn – look for
+            # any see-through pixel in its upper half instead of one at its left edge)
+            assert any(pic.getpixel((x, y))[3] == 0 for x in range(0, w, 3) for y in range(hh // 6, hh // 2, 3))
         ov.set_waiting(("Warte auf Map", "Suche läuft: 1:23 · Killer"))
         ww, wh = ov.render(518)
         assert 120 < ww < 420 and 60 < wh < 320, style

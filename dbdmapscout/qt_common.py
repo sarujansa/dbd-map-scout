@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from PIL import Image
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import QFrame, QLabel, QScrollArea, QVBoxLayout, QWidget
 
@@ -52,6 +53,24 @@ def _set(widget, text):
         widget.setText(text)
 
 
+def steady_scroll(sa):
+    """1.8.24 (user: "das GUI springt ab und zu kurz nach links und wieder zurück"): a page close to the window's
+    height got its scroll bar for a moment whenever a line came and went – everything moved left by its width and
+    back. The bar is always there; without anything to scroll its handle is invisible (``idle``)."""
+    sa.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+    bar = sa.verticalScrollBar()
+
+    def idle(_lo=0, hi=None):
+        on = (bar.maximum() if hi is None else hi) <= 0
+        if bar.property("idle") != on:
+            bar.setProperty("idle", on)
+            bar.style().unpolish(bar)
+            bar.style().polish(bar)
+    bar.rangeChanged.connect(idle)
+    idle()
+    return sa
+
+
 def _scroll_page(title, scroll=True):
     """(page, body layout): a page that scrolls as a whole, with its title on top (``scroll`` False: a page that
     fits the window, its parts scroll on their own)."""
@@ -65,6 +84,7 @@ def _scroll_page(title, scroll=True):
         sa = QScrollArea()
         sa.setWidgetResizable(True)
         sa.setFrameShape(QFrame.NoFrame)
+        steady_scroll(sa)
         outer.addWidget(sa)
         sa.setWidget(body)
     else:

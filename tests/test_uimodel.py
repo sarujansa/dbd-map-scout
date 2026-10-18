@@ -512,9 +512,18 @@ def test_undo_arrow_keys_and_a_layout_per_window_size(app_root, monkeypatch):
         app._select("map")
         app._size_cap_tick()                                  # 60 % in the 440-px bar: the bar holds it back
         assert "Balken" in app.size_cap_var.get()
+        from dbdmapscout import app_qt, qt_pages
+        st = app_qt.ui_state(app.sel_scale)                   # 1.8.24: the slider marks where it stops growing
+        assert 20 < st["cap"] < 60 and st["text"] == f"60 % → {st['cap']:.0f} %"
+        w, extra = qt_pages.make_control("slider", "ov.sel_size", lambda *a: None)
+        qt_pages.show_control("slider", w, extra, st)
+        assert extra[1].cap == st["cap"]
+        w.resize(400, 30)
+        w.grab()                                              # paints the mark without an error
         app._set_size("map", 20)
         app._size_cap_tick()
         assert app.size_cap_var.get() == ""
+        assert app_qt.ui_state(app.sel_scale)["cap"] is None
     finally:
         app.quit()
 
@@ -1211,5 +1220,81 @@ def test_both_midwich_floors_at_an_own_place_stay_between_the_limiter_lines(app_
         assert layout.own_room((17, 0, 300, 900), (0, 0, 3440, 1440), {"left": (504, 1368), "right": (0, 1)}) == 864
         assert layout.own_room((1500, 0, 300, 900), (0, 0, 3440, 1440), {"left": (504, 1368)}) == 1440   # over the game
         assert layout.own_room((17, 0, 300, 900), (0, 0, 3440, 1440), None) == 1440
+    finally:
+        app.quit()
+
+
+class _InfoWin:
+    """A HudWindow for the map's lines on Linux (1.8.24)."""
+
+    def __init__(self):
+        self.shown = False
+        self.opacity = 0.85
+        self.editing = False
+        self.fade = 1.0
+        self.size = (0, 0)
+        self.edit_label = "INFOS"
+        self.at = None
+
+    def set_editing(self, on):
+        self.editing = bool(on)
+
+    def set_picture(self, pic, key):
+        self.size = pic.size
+        return self.size
+
+    def show_at(self, x, y):
+        self.shown, self.at = True, (int(x), int(y))
+
+    def set_fade(self, f):
+        self.fade = f
+
+    def hide(self):
+        self.shown = False
+
+    def destroy(self):
+        self.shown = False
+
+
+def test_the_maps_lines_are_their_own_window_and_only_the_map_follows_its_size(app_root):
+    """1.8.24 (user: "Zeit etc. nicht mehr mit der Map verbunden – ich will ab und zu nur die eigentliche Map-Grösse
+    ändern"): timer and record in a window of their own right below the map, the map makes room for them."""
+    from dbdmapscout import layout
+    from dbdmapscout.app import App
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        app.info_win = _InfoWin()
+        app._game_rect = lambda: (0, 0, 3440, 1440)
+        o = app.settings["overlay"]
+        o.update(anchor="auto", fade=False, info_pos="below")
+        app._force_until = time.time() + 30
+        app.show_map(next(iter(app.catalog.maps)), 1, "manual")
+        app.overlay.set_record("Ø 2.8 Kills · 12 Runden")
+        sizes = set()
+        for v in (20, 25, 30):
+            app._select("map")
+            app._set_size("map", v)
+            app._place_overlay()
+            x, y, w, h = app._last_place
+            ix, iy = app.info_win.at
+            iw, ih = app.info_win.size
+            assert app.info_win.shown and iy >= y + h and iy + ih <= 1440 - int(1440 * o["margin"]) + 1
+            assert ix >= 0 and ix + iw <= layout.bar_width(3440, 1440)
+            assert app.worker.info_rect == (ix, iy, iw, ih)
+            sizes.add((iw, ih))
+        assert len(sizes) == 1                                       # the lines keep their size
+        assert app.overlay.info_apart
+        o["info_pos"] = "inside"                                     # as before: drawn with the map
+        app._place_overlay()
+        assert not app.info_win.shown and not app.overlay.info_apart and app.worker.info_rect is None
+        o["info_pos"] = "below"
+        app._place_overlay()
+        assert app.info_win.shown
+        app._info_dragged(1700, 600)                                 # dropped over the game: its own place
+        assert o["info_pos"] == "custom" and abs(app.info_win.at[0] - 1700) <= 1
+        app.set_overlay_on(False)
+        app._force_until = 0
+        app._place_overlay()
+        assert not app.info_win.shown and app.worker.info_rect is None
     finally:
         app.quit()
