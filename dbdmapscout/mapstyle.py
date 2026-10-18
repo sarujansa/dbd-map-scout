@@ -24,7 +24,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageSequence
 
 from .mapimage import FONT, title_split
 
-STYLE_VERSION = 7                     # raise when the conversion changes: the cache is made anew
+STYLE_VERSION = 8                     # raise when the conversion changes: the cache is made anew
 FILL = np.array([140, 148, 232])      # the lilac floor of the supplied maps
 FILL_SHARE = 0.3                      # at least this share of the outline must be lilac, else: another style
 M_COLOUR, S_COLOUR = (100, 48, 48), (100, 100, 48)    # as on Fallen Refuge
@@ -106,10 +106,14 @@ def unblend(rgb, fill=None):
 # 1.8.16 (user picked them from sample pictures, "zusätzlich", plain names): the dark conversion with a floor under
 # the drawing – on the black bar the transparent floor of "dark" leaves little more than digits on black.
 # style: (floor RGB, edge RGB or None, edge px at 1280 px height, floor alpha)
-FLOORS = {"grey": ((38, 40, 46), None, 0, 255),
-          "grey_edge": ((34, 36, 42), (120, 124, 136), 4, 255),
-          "lilac": ((40, 42, 72), (110, 118, 200), 4, 255),
+# 1.8.29 (user: "ich seh die Umrandung der Map nicht" – Fallen Refuge in "Grau mit Rand" on the black bar): the
+# floors a little lighter than the cards behind them (glass/chips fill ≈ 24–28 grey), the edge 14 px at 1280 px
+# (≈ 4–5 px at the map's usual 400–500 px; 4 px were 1 px there and vanished)
+FLOORS = {"grey": ((48, 50, 58), None, 0, 255),
+          "grey_edge": ((44, 46, 54), (128, 132, 146), 14, 255),
+          "lilac": ((46, 48, 82), (118, 126, 210), 14, 255),
           "lilac_glass": ((140, 148, 232), None, 0, 70)}
+DARK_SEE_THROUGH = 0.3       # a picture already drawn in the dark style: this share of its outline see-through
 STYLES = ("dark",) + tuple(FLOORS)        # every style made from the dark conversion ("classic" = the original)
 
 
@@ -134,7 +138,8 @@ def add_floor(img: Image.Image, top: int, style: str) -> Image.Image:
 
 def restyle(img: Image.Image, fill=None, style: str = "dark") -> Image.Image:
     """The picture in the dark style (``style`` = one of STYLES: with that floor under it); unchanged if it is not
-    one of the lilac callout maps."""
+    one of the lilac callout maps – except a picture already in the dark style, which gets a floor style's floor
+    (1.8.29)."""
     a = np.asarray(img.convert("RGBA")).copy()
     split = title_split(img)
     top = split[2] if split else 0
@@ -144,6 +149,10 @@ def restyle(img: Image.Image, fill=None, style: str = "dark") -> Image.Image:
     fill = FILL if fill is None else np.asarray(fill)
     dist = np.abs(rgb - fill).sum(axis=2)
     if not shape.any() or (dist[shape] < 30).mean() < FILL_SHARE:
+        # 1.8.29: Fallen Refuge and Freddy Fazbear's Pizza are drawn in the dark style already (see-through floor,
+        # black ring) – a floor style puts its floor under them like under every converted map; "dark" leaves them
+        if style in FLOORS and shape.any() and (body[..., 3][shape] < 20).mean() >= DARK_SEE_THROUGH:
+            return add_floor(img, top, style)
         return img                                             # another style: leave it
     grey, cover, misfit = unblend(rgb, fill)
     if ((misfit >= MISFIT) & (rgb.max(axis=2) > 80))[shape].mean() > MISFIT_SHARE:   # (blue-black line rims: no colour)
