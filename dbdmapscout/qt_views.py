@@ -7,7 +7,7 @@ import html
 import sys
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QContextMenuEvent
 from PySide6.QtWidgets import (QAbstractScrollArea, QPlainTextEdit, QProgressBar, QPushButton, QSizePolicy, QTreeWidget, QTreeWidgetItem,
                                QVBoxLayout, QWidget)
 
@@ -108,8 +108,6 @@ class Table(QTreeWidget):
         self.header().setToolTip(_("Klick: sortieren · Rechtsklick: Spalten ein-/ausblenden"))
         self._menu_on = False             # 1.8.10: the model has actions for a right click on a row
         self._model_sel = set()
-        self.viewport().setContextMenuPolicy(Qt.CustomContextMenu)
-        self.viewport().customContextMenuRequested.connect(self._row_menu)
 
     def col_key(self) -> str:
         """The table's name in the setting: its columns – unlike the model path it stays the same when a later
@@ -277,6 +275,24 @@ class Table(QTreeWidget):
                     item.setText(i, value)
                 item.setData(i, Qt.ForegroundRole, QColor(fg) if fg else None)
             _check(item, tags)
+
+    def contextMenuEvent(self, e):
+        """1.8.12 (user: "rechtsklick auf eine zeile – kommt nichts"): the scroll area hands the right click on its
+        viewport to this method (QAbstractScrollArea.viewportEvent), not to the viewport's own
+        customContextMenuRequested – that signal never fired, the row menus of 1.8.10 never opened. The position
+        is in viewport coordinates (the event is passed on unchanged); the menu key takes the current row."""
+        if e.reason() == QContextMenuEvent.Keyboard:
+            item = self.currentItem() or (self.selectedItems() or [None])[0]
+            if item is None:
+                return super().contextMenuEvent(e)
+            pos = self.visualItemRect(item).center()
+        else:
+            pos = e.pos()
+        if self._menu_on and self.itemAt(pos) is not None:
+            self._row_menu(pos)
+            e.accept()
+        else:
+            super().contextMenuEvent(e)
 
     def _row_menu(self, pos):
         """1.8.10: right click on a row – the row is marked first (unless it is part of the marking), then the App
