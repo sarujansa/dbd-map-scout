@@ -69,15 +69,35 @@ def test_the_dark_picture_is_made_once_and_then_taken_from_the_cache(tmp_path):
     assert mapstyle.warm([path, os.path.join(MAPS, "Other", "Midwich.gif")], str(tmp_path)) == 2
 
 
+def _fake_app(appmod, cat, tmp_path, style):
+    import queue
+    fake = types.SimpleNamespace(catalog=cat, root_dir=str(tmp_path), settings={"overlay": {"map_style": style}},
+                                 events=queue.Queue())
+    fake._style_request = lambda path, st: appmod.App._style_request(fake, path, st)
+    fake._style_ready = types.SimpleNamespace(__name__="_style_ready")            # only posted, never called here
+    return fake
+
+
+def _styled_in_the_background(appmod, fake):
+    """1.8.21: the window thread never makes the picture – first the original, then the event, then the styled."""
+    path = fake.catalog.image_path("coal", 1)[0]
+    assert appmod.App._map_file(fake, "coal", 1) == (path, 1)                 # at once, no waiting
+    kind, fn, (made,) = fake.events.get(timeout=60)
+    assert kind == "call" and fn is fake._style_ready and made == path
+    styled, _v = appmod.App._map_file(fake, "coal", 1)
+    assert styled != path
+    return styled
+
+
 def test_app_takes_the_dark_picture_only_when_chosen_and_never_for_own_pictures(tmp_path):
     from dbdmapscout import app as appmod
     path = os.path.join(MAPS, "McMillan", "Coal Tower.webp")
     own = {"x": False}
     cat = types.SimpleNamespace(image_path=lambda mid, v=1: (path, v), is_own=lambda mid, v=1: own["x"])
-    fake = types.SimpleNamespace(catalog=cat, root_dir=str(tmp_path), settings={"overlay": {"map_style": "classic"}})
+    fake = _fake_app(appmod, cat, tmp_path, "classic")
     assert appmod.App._map_file(fake, "coal", 1) == (path, 1)
     fake.settings["overlay"]["map_style"] = "dark"
-    dark, _v = appmod.App._map_file(fake, "coal", 1)
+    dark = _styled_in_the_background(appmod, fake)
     assert dark.startswith(os.path.join(str(tmp_path), appmod.STYLE_CACHE))
     own["x"] = True
     assert appmod.App._map_file(fake, "coal", 1) == (path, 1)
@@ -249,8 +269,8 @@ def test_the_app_takes_the_picture_of_a_floor_style(tmp_path):
     from dbdmapscout import app as appmod
     path = os.path.join(MAPS, "McMillan", "Coal Tower.webp")
     cat = types.SimpleNamespace(image_path=lambda mid, v=1: (path, v), is_own=lambda mid, v=1: False)
-    fake = types.SimpleNamespace(catalog=cat, root_dir=str(tmp_path), settings={"overlay": {"map_style": "lilac"}})
-    styled, _v = appmod.App._map_file(fake, "coal", 1)
+    fake = _fake_app(appmod, cat, tmp_path, "lilac")
+    styled = _styled_in_the_background(appmod, fake)
     assert styled.startswith(os.path.join(str(tmp_path), appmod.STYLE_CACHE)) and "-lilac-" in styled
     from dbdmapscout.app_overlay import MAP_STYLES
     from dbdmapscout.qt_maps import STYLE_BUTTONS
