@@ -430,13 +430,12 @@ def test_limiter_lines_are_switched_on_dragged_alike_and_undone(app_root, monkey
         _gx, _gy, gw, gh = app._game_rect()
         app._preview_pick(("limit", "left", "top", gh * 0.2))               # not moving: nothing
         assert o["bar_limits"] == [0.08] * 4 and not o["bar_limits_on"]
+        assert app._preview_data()["limits"] is None                         # off and not moving: no lines
         app.toggle_edit()
-        app._preview_pick(("limit", "left", "top", gh * 0.2))               # switched off: nothing either
-        assert o["bar_limits"] == [0.08] * 4
-        app.limits_var.set(True)
-        app._limits_changed()
-        assert o["bar_limits_on"] and app._preview_data()["limits"] is not None or gw / gh < 2
-        app._preview_pick(("limit", "left", "top", gh * 0.2))
+        data = app._preview_data()                                          # 1.8.15: moving – faint lines, off
+        assert data["limits_on"] is False and (data["limits"] is not None or gw / gh < 2)
+        app._preview_pick(("limit", "left", "top", gh * 0.2))               # dragging one switches it on
+        assert o["bar_limits_on"] and app.limits_var.get() and app._preview_data()["limits_on"]
         assert o["bar_limits"] == [0.2, 0.08, 0.2, 0.08]                     # both bars alike
         app.limits_same_var.set(False)
         app._limits_changed()

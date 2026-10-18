@@ -1284,7 +1284,11 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
                 "pics": {name: img for name, img, _lx, _ly in layers}, "opacity": o["opacity"],
                 "opacities": {n: float(o.get(k, o["opacity"])) for n, k in OPACITY_KEYS.items()},
                 "editing": bool(self.overlay.editing), "selected": getattr(self, "_sel", "map"),
-                "limits": layout.bar_bands(o, (0, 0, gw, gh), int(gh * o["margin"])),      # 1.8.14
+                # 1.8.14; 1.8.15 (user: "ich sehe die Balken nicht beim Bearbeiten"): while moving the lines show
+                # even when the limiter is off – faint, dragging one switches it on
+                "limits": layout.bar_bands(o if o.get("bar_limits_on") or not self.overlay.editing
+                                           else dict(o, bar_limits_on=True), (0, 0, gw, gh), int(gh * o["margin"])),
+                "limits_on": bool(o.get("bar_limits_on")),
                 "limits_same": bool(o.get("bar_limits_same", True))}
 
     def _preview_sample(self):
