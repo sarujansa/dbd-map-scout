@@ -112,6 +112,7 @@ class RecordingsTab:
         # the compact clip editor beside the table, shown once a recording is marked
         self.rec_host = ui.Host(tf)
         self._rec_preview_t = None
+        self._table_menu(self.rec_table, self._rec_menu_items, self._rec_menu_act)       # 1.8.10: right click
         self.rec_marks_var = ui.StringVar(value="")
         ui.Label(f, textvariable=self.rec_marks_var, style="Dim.TLabel", wraplength=560).pack(anchor="w", pady=(6, 0))
         ui.Label(f, text=_("OBS nimmt jede Runde auf (Einstellungen → Mehr → Aufnahmen mit OBS). F8 setzt während "
@@ -215,6 +216,22 @@ class RecordingsTab:
             self.rec_marks_var.set(_("Marken: {list}", list=" · ".join(fmt_duration(m) for m in r.marks)))
         else:
             self.rec_marks_var.set(_("Keine Marken – F8 während der Runde setzt eine."))
+
+    def _rec_menu_items(self):
+        """1.8.10: right click on a recording – the buttons above the table, without looking for them."""
+        r = self._rec_selected()
+        if r is None:
+            return []
+        return [("play", _("Abspielen"), True), ("clip", _("Clip bearbeiten …"), True),
+                ("explorer", _("Im Explorer zeigen"), True), None,
+                ("keep", _("Behalten"), True, bool(r.keep)), None,
+                ("delete", _("Aufnahme löschen"), True)]
+
+    def _rec_menu_act(self, ident):
+        act = {"play": self._rec_play, "clip": self._rec_clip, "explorer": self._rec_explorer,
+               "keep": self._rec_keep, "delete": self._rec_delete}.get(ident)
+        if act is not None:
+            act()
 
     def _rec_path(self, r):
         folder = self.recorder.folder()

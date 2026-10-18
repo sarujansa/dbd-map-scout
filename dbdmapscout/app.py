@@ -14,7 +14,7 @@ from . import i18n, layout, mapimage, mapstyle, obsrec, regions, restart, toolti
 from . import uimodel as ui
 from .capture import IS_WIN, describe_window, find_game_window, foreground_root, is_game_window
 from .catalog import Catalog
-from .config import Settings
+from .config import DEFAULTS as CONFIG_DEFAULTS, Settings
 from .toast import Toast
 from .connwatch import ConnectionWatch, IdlePause
 from .official import OpenAfterGame
@@ -1295,6 +1295,9 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         return getattr(self, "_preview_pic", None)
 
     def _preview_pick(self, value):
+        if value[0] == "menu":                    # 1.8.10: right click on an element
+            self._preview_menu(value[1], (value[2], value[3]))
+            return
         if value[0] == "select":                  # 1.64.9: a click on an element picks it for the size slider
             self._select(value[1])
             return
@@ -1307,6 +1310,35 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
             self._nudge(value[1], value[2])
             return
         self._preview_pick_now(value)
+
+    def _preview_menu(self, name, pos):
+        """1.8.10: quick actions of one overlay element (right click in the preview): size back to the default,
+        dark area behind it, hide ("Heute"/music) – the same switches as on the page."""
+        self._select(name)
+        reg = self.__dict__.get("_qt_reg", {})
+        dark = reg.get({"map": "ov.map_backdrop", "hud": "ov.hud_backdrop", "today": "ov.today_backdrop",
+                        "music": "ov.media_backdrop"}.get(name, ""))
+        hide = reg.get({"today": "ov.today", "music": "ov.media"}.get(name, ""))
+        items = [("size", _("Grösse zurücksetzen"), True)]
+        if dark is not None:
+            items.append(("dark", _("Dunkle Fläche dahinter"), True, dark.instate(["selected"])))
+        if hide is not None:
+            items += [None, ("hide", _("Ausblenden"), hide.instate(["selected"]))]
+
+        def act(ident):
+            if ident == "size":
+                if name == "map" and self._own_size_map() and self._own_size_map() in \
+                        self.settings["overlay"].get("map_heights", {}):
+                    self._reset_map_size()
+                elif name == "map":
+                    self._set_size("map", round(CONFIG_DEFAULTS["overlay"]["height"] * 100))
+                else:
+                    self._set_size(name, 100)
+            elif ident == "dark" and dark is not None:
+                dark.invoke()
+            elif ident == "hide" and hide is not None and hide.instate(["selected"]):
+                hide.invoke()
+        self._context_menu(items, pos, act)
 
     def _preview_pick_now(self, value):
         """A click or drag on the preview: an element dragged by the mouse goes where it was dropped ("place",

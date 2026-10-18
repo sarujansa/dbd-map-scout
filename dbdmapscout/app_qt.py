@@ -146,7 +146,8 @@ def ui_state(w) -> dict:
         st.update(columns=cols, rows=rows, selection=list(w.selection()), colours=colours, stretch=stretch,
                   widths=widths,
                   selectable=str(w.cget("selectmode")) != "none" or hasattr(w, "_dbdms_click"),
-                  multi=str(w.cget("selectmode")) == "extended")          # 1.5.4: several rows at once
+                  multi=str(w.cget("selectmode")) == "extended",          # 1.5.4: several rows at once
+                  menu=hasattr(w, "_dbdms_menu"))                         # 1.8.10: right-click actions
         return st
     if isinstance(w, ui.Scale):
         value = w.get()
@@ -220,9 +221,24 @@ def ui_act(w, value=None):
         elif what == "select":                            # 1.5.4: the whole selection of a multi-select table
             w.selection_set([i for i in (arg or []) if w.exists(i)])
             w.event_generate("<<TreeviewSelect>>")
+        elif what == "menu":                              # 1.8.10: right click on a row (marked before)
+            menu = getattr(w, "_dbdms_menu", None)
+            if menu is not None:
+                menu(tuple(arg))
 
 
 class QtShell:
+    def _context_menu(self, items, pos, act):
+        """1.8.10: a right-click menu at screen ``pos``: ``items`` = [(id, label, enabled[, checked]) or None for a
+        line]; the picked id goes to ``act(id)``."""
+        self._menu_act = act
+        if self.qt is not None and items:
+            self.qt.popup_menu(items, pos)
+
+    def _table_menu(self, tree, items, act):
+        """Give a model table right-click actions: ``items()`` builds the menu for the marked rows, ``act(id)``."""
+        tree._dbdms_menu = lambda pos: self._context_menu(items(), pos, act)
+
     def _reg(self, key, widget):
         """Name a widget for the Qt window's hand-made pages (qt_window.SPECS use these keys)."""
         self.__dict__.setdefault("_qt_reg", {})[key] = widget
@@ -352,6 +368,10 @@ class QtShell:
                 ui_act(w, value)
         elif action == "answer":
             self._qt_answer(bool(arg))
+        elif action == "menu_act":                       # 1.8.10: a line of a context menu was picked
+            act = getattr(self, "_menu_act", None)
+            if act is not None:
+                act(arg)
         elif action == "hk_record":
             self._hk_begin(arg.split(".", 2)[2])         # "st.hk.<name>"
         elif action == "hk_key":

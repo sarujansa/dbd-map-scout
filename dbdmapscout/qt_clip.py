@@ -52,6 +52,7 @@ class _Bridge(QObject):
     saved = Signal(bool, str, str)        # ok, path, why
     sound = Signal(object, float)         # wav path (or None) ready for a playback from t
     strip_done = Signal()                 # 1.8.3: the thumbnail thread is through (all it could get)
+    still = Signal(bool, str)             # 1.8.10: a still picture saved (ok, path)
 
 
 class Timeline(QWidget):
@@ -61,6 +62,7 @@ class Timeline(QWidget):
     TOP = 12
     changed = Signal()                    # start/end moved
     seek = Signal(float)                  # the user wants this moment
+    picked = Signal(str, float)           # 1.8.10: a line of the right-click menu, at that moment
 
     def __init__(self, dark=True):
         super().__init__()
@@ -152,6 +154,23 @@ class Timeline(QWidget):
             if abs(self._x(t) - x) <= self.HANDLE:
                 return name
         return "pos"
+
+    def contextMenuEvent(self, e):
+        """1.8.10: right click on the strip: the clip starts/ends here, the playhead here, a still picture."""
+        from PySide6.QtWidgets import QMenu
+        if self.duration <= 0:
+            return
+        t = self._t(e.pos().x())
+        menu = QMenu(self)
+        for ident, label in (("seek", _("Abspielkopf hierher")), ("start", _("Clip beginnt hier")),
+                             ("end", _("Clip endet hier")), (None, None), ("still", _("Standbild hier speichern"))):
+            if ident is None:
+                menu.addSeparator()
+                continue
+            menu.addAction(f"{label}  ({clipedit.fmt_pos(t)})").triggered.connect(
+                lambda _c=False, i=ident: self.picked.emit(i, t))
+        self._menu = menu
+        menu.popup(e.globalPos())
 
     def mousePressEvent(self, e):
         if e.button() != Qt.LeftButton:
@@ -550,6 +569,7 @@ class ClipWindow(QWidget):
         lay.addWidget(self.preview, 1)
         self.timeline = Timeline(self.dark)
         self.timeline.seek.connect(self.goto)
+        self.timeline.picked.connect(self._timeline_pick)
         self.timeline.changed.connect(self._show_range)
         lay.addWidget(self.timeline)
 
@@ -887,6 +907,7 @@ class ClipWindow(QWidget):
         b.strip_done.connect(lambda: self._loaded("strip"))
         b.ended.connect(self._player_ended)
         b.saved.connect(self._saved)
+        b.still.connect(self._still_saved)
         b.sound.connect(self._sound_ready)
         threading.Thread(target=self._scrub_loop, name="clip-scrub", daemon=True).start()
         threading.Thread(target=self._thumb_loop, name="clip-thumbs", daemon=True).start()
@@ -1144,6 +1165,56 @@ class ClipWindow(QWidget):
                                    mix=mix, **censor)
             self.bridge.saved.emit(ok, out, why)
         threading.Thread(target=work, name="clip-save", daemon=True).start()
+
+    def _timeline_pick(self, ident, t):
+        """1.8.10: the right-click menu of the strip."""
+        tl = self.timeline
+        if ident == "seek":
+            self.goto(t)
+        elif ident == "start" and t < tl.end - 0.1:
+            tl.set_range(t, tl.end)
+            self._show_range()
+            self.goto(t)
+        elif ident == "end" and t > tl.start + 0.1:
+            tl.set_range(tl.start, t)
+            self._show_range()
+        elif ident == "still":
+            self.save_still(t)
+
+    def save_still(self, t):
+        """1.8.10: the picture at ``t`` in full size as PNG next to the clips (Clips/<round> – Bild m:ss.png)."""
+        if not self.info.ok or not self.ffmpeg:
+            return
+        name = clipedit.NAME_CHARS.sub("", "{} – {} {}".format(
+            os.path.splitext(os.path.basename(self.path))[0], _("Bild"), clipedit.fmt_pos(t).replace(":", "-")))
+        try:
+            os.makedirs(self.clips_dir, exist_ok=True)
+        except OSError as e:
+            self.status.setText(_("Clips-Ordner nicht anlegbar: {error}", error=e))
+            return
+        out = clipedit.unique_path(self.clips_dir, name, ".png")
+        path, info, ffmpeg, b = self.path, self.info, self.ffmpeg, self.bridge
+
+        def work():
+            img = clipedit.frame_at(path, t, info.height, info, ffmpeg)
+            ok = False
+            if img is not None:
+                try:
+                    img.save(out)
+                    ok = True
+                except OSError:
+                    pass
+            b.still.emit(ok, out)
+        threading.Thread(target=work, name="clip-still", daemon=True).start()
+
+    def _still_saved(self, ok, out):
+        if ok:
+            self._last_out = out
+            self.show_btn.setEnabled(True)
+            self.status.setText(_("Standbild gespeichert: {file}", file=os.path.basename(out)))
+            self.log(_("Standbild gespeichert: {file}", file=out), "System")
+        else:
+            self.status.setText(_("Standbild nicht gespeichert."))
 
     def _saved(self, ok, out, why):
         self.save_btn.setEnabled(True)
