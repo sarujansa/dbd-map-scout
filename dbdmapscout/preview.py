@@ -170,20 +170,23 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
     # top / bottom of its bar – except with the system values right above the map: those follow it afterwards
     hud_rect = None
     placed = {}
+    game = (0, 0, gw, gh)
+    bands = layout.bar_bands(o, game, margin)               # 1.8.14: the limiter lines of the bars, like the App
     if hud is not None and hud_side != "above":
         hx, hy = layout.hud_preview_xy(hud_side, gw, gh, margin, hud.size, hud_own, None, align, gap)
-        hud_rect = (hx, hy, hud.width, hud.height)
+        hud_rect = layout.clamp_box((hx, hy, hud.width, hud.height), game, bands)
     spots = {n: c[1] for n, c in cards.items()}
     free = {n: (c[0].size, c[1], c[2]) for n, c in cards.items()
             if hud_side != "above" or not layout.hangs_on_hud(n, spots)}  # the rest waits for the values
-    placed = layout.place_cards((0, 0, gw, gh), free, hud_rect, margin, align, gap)
+    placed = layout.place_cards(game, free, hud_rect, margin, align, gap, bands=bands)
     drop = lift = 0
     span = layout.map_bar_range(o["anchor"], o.get("pos_x", 0.0), 0, gw, bar)
+    band = bands["left" if span[0] <= 0 else "right"] if bands and span else None
     if span and o["anchor"] != "custom":
         fixed = [hud_rect] + [placed[n] for n in placed if cards[n][1] != "custom"]
-        drop, lift = layout.bar_stack(fixed, span[0], span[1], 0, gh, margin, gap)
-        drop = drop + margin if drop else 0
-        lift = lift + margin if lift else 0
+        drop, lift = layout.bar_room(fixed, span[0], span[1], 0, gh, margin, gap, band)
+        if band and hud is not None and hud_side == "above":     # values + cards above the map (1.8.14)
+            drop += layout.follow_reserve(hud.height, {n: c[0].size for n, c in cards.items()}, spots, gap)
     aspect = map_pic.width / map_pic.height if map_pic is not None else 0.8
     rows = sum(1 for k in ("timer", "server", "record") if info.get(k))
     rows += 1 if info.get("timer") else 0
@@ -224,13 +227,18 @@ def layers(gw: int, gh: int, o: dict, hud_side: str, hud_rows: list, hud_own, ma
                                   o.get("keep_in_bar", True), over.width, over.height, drop, align, lift)
     if in_bar and edge:                                 # the area's edge may stand in the margin (like the App)
         mx = int(layout.clamp_x(in_bar, mx, over.width, 0, gw, bar, margin - edge))
+    if o["anchor"] == "custom" and band:                # an own place in a bar stays between its lines (1.8.14)
+        my = layout.clamp_box((mx, my, over.width, over.height), game, bands)[1]
     map_rect = (mx, my, over.width, over.height)
     out.append(("map", over, mx, my))
     if hud is not None and hud_side == "above":             # right above the map, the cards below them
-        hx, hy = layout.hud_preview_xy(hud_side, gw, gh, margin, hud.size, hud_own, map_rect, align, gap)
-        hud_rect = (hx, hy, hud.width, hud.height)
-        placed = layout.place_cards((0, 0, gw, gh), {n: (c[0].size, c[1], c[2]) for n, c in cards.items()},
-                                    hud_rect, margin, align, gap, up=hy < my, below_box=map_rect)
+        side = layout.box_side(map_rect, game) if bands else None
+        hx, hy = layout.hud_preview_xy(hud_side, gw, gh, margin, hud.size, hud_own, map_rect, align, gap,
+                                       top=bands[side][0] if side else 0)
+        hud_rect = layout.clamp_box((hx, hy, hud.width, hud.height), game, bands)
+        hy = hud_rect[1]
+        placed = layout.place_cards(game, {n: (c[0].size, c[1], c[2]) for n, c in cards.items()},
+                                    hud_rect, margin, align, gap, up=hy < my, below_box=map_rect, bands=bands)
     if hud_rect is not None:
         out.append(("hud", hud, hud_rect[0], hud_rect[1]))
     for name, (cx, cy, _w, _h) in placed.items():       # stacked in order (1.2.7), like the App

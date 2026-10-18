@@ -36,6 +36,8 @@ class PreviewView(QWidget):
         self._sizing = None                    # (layer name, x, y, w, h) while its corner is dragged (1.64.9)
         self._snapped = (None, None)           # lines the dragged element snapped to (1.65), drawn as guides
         self._held = None                      # (name, x, y, since) drawn at once (1.65.2, user: it jumped)
+        self._limit = None                     # (side, "top"/"bottom") while a limiter line is dragged (1.8.14)
+        self._limit_y = None                   # … and where the mouse has it (screen px), drawn at once
         self.setFocusPolicy(Qt.ClickFocus)     # arrow keys after a click (1.65)
         self.setMouseTracking(True)            # open hand over an element
         sp = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
@@ -128,6 +130,7 @@ class PreviewView(QWidget):
             p.drawPixmap(round(ox + lx * s), round(oy + ly * s), pix)
         self._pix = fresh
         p.setOpacity(1.0)
+        self._paint_limits(p, ox, oy, s)
         if d.get("editing"):                       # moving is on: a frame round the screen and a note
             accent = QColor(qt_theme.colours(True)["accent"])
             cx, cy = screen.center().x(), screen.center().y()         # centre cross (1.64.5)
@@ -199,6 +202,59 @@ class PreviewView(QWidget):
             p.setBrush(Qt.NoBrush)
             p.drawRect(QRectF(rx, ry, w * s, h * s))
         p.end()
+
+    LIMIT_GRAB = 6                             # px (widget) above/below a limiter line that grab it
+
+    def _limit_lines(self):
+        """[(side, which, x0, x1, y)] in screen px: the limiter lines of the black bars (1.8.14) – the one being
+        dragged where the mouse has it."""
+        d = self._data
+        bands, sw, bar = d.get("limits"), (d.get("screen") or (0, 0))[0], d.get("bar", 0)
+        if not bands or not bar:
+            return []
+        held = self._limit if self._limit_y is not None else None
+        out = []
+        for side, (top, bottom) in bands.items():
+            x0, x1 = (0, bar) if side == "left" else (sw - bar, sw)
+            for which, y in (("top", top), ("bottom", bottom)):
+                if held and held[1] == which and (held[0] == side or d.get("limits_same", True)):
+                    y = self._limit_y              # with "both alike" the other bar's line moves along
+                out.append((side, which, x0, x1, y))
+        return out
+
+    def _paint_limits(self, p, ox, oy, s):
+        """The limiter lines: dashed in the accent colour, a small tab at the inner end; brighter while moving."""
+        from PySide6.QtCore import QPointF, QRectF
+        from PySide6.QtGui import QPen
+        lines = self._limit_lines()
+        if not lines:
+            return
+        accent = QColor(qt_theme.colours(True)["accent"])
+        edit = bool(self._data.get("editing"))
+        for side, which, x0, x1, y in lines:
+            a, b, yy = QPointF(ox + x0 * s, oy + y * s), QPointF(ox + x1 * s, oy + y * s), oy + y * s
+            p.setPen(QPen(QColor(0, 0, 0, 160), 3))
+            p.drawLine(a, b)
+            c = QColor(accent)
+            c.setAlpha(255 if edit else 170)
+            p.setPen(QPen(c, 2 if edit and self._limit == (side, which) else 1.5, Qt.DashLine))
+            p.drawLine(a, b)
+            if edit:                               # a grip at the end facing the game picture
+                gx = (b.x() - 10) if side == "left" else (a.x() + 2)
+                p.setPen(Qt.NoPen)
+                p.setBrush(c)
+                p.drawRoundedRect(QRectF(gx, yy - 4, 8, 8), 2, 2)
+
+    def _limit_at(self, e):
+        """(side, which) of the limiter line under the mouse (moving mode only), or None."""
+        if not self._data.get("editing"):
+            return None
+        ox, oy, s = self._frame()
+        pos = e.position()
+        for side, which, x0, x1, y in self._limit_lines():
+            if ox + x0 * s <= pos.x() <= ox + x1 * s and abs(oy + y * s - pos.y()) <= self.LIMIT_GRAB:
+                return side, which
+        return None
 
     def contextMenuEvent(self, e):
         """1.8.10: right click on an element: the App shows its quick actions (size, dark area, hide …)."""
@@ -290,6 +346,10 @@ class PreviewView(QWidget):
     def mousePressEvent(self, e):
         if e.button() != Qt.LeftButton:
             return
+        line = self._limit_at(e)
+        if line:                                   # 1.8.14: a limiter line before anything under it
+            self._limit, self._limit_y = line, None
+            return
         corner = self._on_handle(e)
         if corner:
             self._sizing = corner
@@ -306,6 +366,14 @@ class PreviewView(QWidget):
                 self._move(e)
 
     def mouseMoveEvent(self, e):
+        if self._limit:
+            pt = self._screen_pos(e)
+            if pt:
+                sh = (self._data.get("screen") or (0, 1))[1]
+                self._limit_y = min(max(0.0, pt[1]), float(sh))
+                self.update()
+                self._post("act", (self._key, ("limit", self._limit[0], self._limit[1], self._limit_y)))
+            return
         if self._sizing:                       # the corner: as big as the mouse is from the top left corner
             pt = self._screen_pos(e)
             if pt:
@@ -320,7 +388,7 @@ class PreviewView(QWidget):
         else:
             pt = self._screen_pos(e)
             hit = self.layer_at(*pt) if pt else None
-            self.setCursor(Qt.SizeFDiagCursor if self._on_handle(e) else
+            self.setCursor(Qt.SizeVerCursor if self._limit_at(e) else Qt.SizeFDiagCursor if self._on_handle(e) else
                            Qt.OpenHandCursor if hit else Qt.PointingHandCursor)
             if (hit[0] if hit else None) != self._hover:
                 self._hover = hit[0] if hit else None
@@ -332,6 +400,7 @@ class PreviewView(QWidget):
             self.update()
 
     def mouseReleaseEvent(self, _e):
+        self._limit = self._limit_y = None
         self._dragging = False
         self._grab = self._sizing = None
         if self._held:
