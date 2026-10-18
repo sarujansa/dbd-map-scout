@@ -258,3 +258,175 @@ def test_characters_a_font_lacks_come_from_a_fallback_font():
     ow._draw_run(notdef, 0, 0, "￿" * 4, inter, (255, 255, 255, 255))
     assert pic.tobytes() != notdef.tobytes() and pic.getbbox() is not None
     assert ow._run_len(inter, "Кино") == sum(fb.getlength(c) for c in "Кино")
+
+
+class _SizedWin:
+    """A HudWindow whose natural size the test sets; ``min_w`` widens it like the real one."""
+
+    def __init__(self, w, h):
+        self.size, self.shown, self.opacity, self.editing, self.fade, self.calls = (w, h), True, 0.85, False, 1.0, []
+
+    def set_editing(self, on):
+        self.editing = bool(on)
+
+    def render(self, *a, **kw):
+        self.calls.append(kw)
+        self.size = (max(self.size[0], int(kw.get("min_w") or 0)), self.size[1])
+        return self.size
+
+    def render_blend(self, old, new, t):
+        self.calls.append(new)
+        return self.size
+
+    def show_at(self, x, y):
+        pass
+
+    def set_fade(self, f):
+        self.fade = f
+
+    def hide(self):
+        self.shown = False
+
+    def destroy(self):
+        self.shown = False
+
+
+def test_a_card_keeps_its_widest_width_while_its_values_change(tmp_path):
+    """1.8.28: "today" and the music card are drawn again at the widest width they had for the same layout
+    (layout.steady_width) – a shorter title or value never moves the card; another layout starts anew."""
+    import json
+    import time
+    from dbdmapscout import media
+    from dbdmapscout.app import App
+    (tmp_path / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    (tmp_path / "sim").mkdir()
+    app = App(str(tmp_path), simulate=str(tmp_path / "sim"))
+    try:
+        app._media_ctx = (0, 0, 3440, 1440, True)
+        app._forced = True
+        app.settings["overlay"]["media_fade"] = False
+        win = app.media_win = _SizedWin(300, 400)
+        app.media.now = media.NowPlaying("Blinding Lights", "The Weeknd", True, time.time(), position=10.0,
+                                         duration=176.0, at=time.time())
+        assert app._media_card() == (300, 400) and "min_w" not in win.calls[-1]
+        win.size = (260, 400)                                # a shorter title
+        app.media.now = media.NowPlaying("Hi", "X", True, time.time(), position=1.0, duration=90.0, at=time.time())
+        assert app._media_card() == (300, 400) and win.calls[-1]["min_w"] == 300
+        app.settings["overlay"]["media_style"] = "compact"   # another layout: its own steady width
+        win.size = (250, 120)
+        assert app._media_card() == (250, 120) and not win.calls[-1].get("min_w")
+        today = app.today_win = _SizedWin(280, 200)
+        assert app._today_card() == (280, 200)
+        today.size = (250, 200)
+        assert app._today_card() == (280, 200) and today.calls[-1]["min_w"] == 280
+    finally:
+        app.quit()
+
+
+class _DrawWin:
+    """A HudWindow that really draws (like the Windows one) and only remembers where it was shown – the Linux
+    tests had no such windows for "today", the music and the lines, so a placing error never surfaced (1.8.28)."""
+
+    def __init__(self, label=""):
+        self.shown, self.opacity, self.editing, self.fade = False, 0.85, False, 1.0
+        self.size, self.edit_label, self.at, self._bodies = (0, 0), label, None, {}
+
+    def set_editing(self, on):
+        self.editing = bool(on)
+
+    def render(self, rows, height, cover=None, style=None, progress=None, look=(), skin="classic", accent=None,
+               title=None, upnext=None, upnext_pos="below", min_w=0):
+        if not rows:
+            self.size = (0, 0)
+            return self.size
+        if style is not None:
+            pic = ow.music_picture(rows, height, cover, style, progress, look, skin, accent, upnext, upnext_pos,
+                                   None, self._bodies, min_w)
+        elif skin != "classic":
+            from dbdmapscout import skin as skins
+            pic = skins.card(rows, height, skin, accent, title, min_w=min_w)
+        else:
+            pic = ow.pad_to(ow.render_hud(rows, height), min_w)
+        if self.editing:
+            pic = ow.add_border(pic, self.edit_label)
+        self.size = pic.size
+        return self.size
+
+    def render_blend(self, old, new, t):
+        a = ow.music_picture(bodies=self._bodies, **old)
+        b = ow.music_picture(bodies=self._bodies, **new)
+        self.size = ow.blend_cards(a, b, t, True).size
+        return self.size
+
+    def set_picture(self, pic, key):
+        self.size = pic.size
+        return self.size
+
+    def show_at(self, x, y):
+        self.shown, self.at = True, (int(x), int(y))
+
+    def set_fade(self, f):
+        self.fade = f
+
+    def hide(self):
+        self.shown = False
+
+    def destroy(self):
+        self.shown = False
+
+
+USER_OVERLAY = {"anchor": "custom", "style": "chips", "pos_x": 0.011, "pos_y": 0.613, "height": 0.37,
+                "show_caption": False, "info_pos": "custom", "info_xy": [0.064, 0.3093], "media_pos": "custom",
+                "media_xy": [0.9376, 0.8674], "media_cover_shape": "square", "media_style": "big",
+                "media_scale": 0.97, "media_next_pos": "below", "map_backdrop": True, "bar_limits_on": True,
+                "bar_limits": [0.1521, 0.2381, 0.3014, 0.0], "bar_limits_same": False, "media_backdrop": True,
+                "hud_scale": 1.05, "today_pos": "custom", "today_xy": [0.936, 0.5938]}
+
+
+def test_every_element_is_placed_with_real_windows(tmp_path):
+    """1.8.28 (user's diagnosis of 1.8.27: only the system values showed, "Fehler seit Start: ['overlay']"):
+    _cards_place handed _el_show the cards' boxes as four values – a TypeError on every tick that had a card to
+    place, so map, lines, "today" and music never appeared. The App with the user's settings and windows that
+    draw for real: one _place_overlay without an exception, every element on screen, in its bar, none on another."""
+    import json
+    import time
+    from dbdmapscout import media, sysinfo
+    from dbdmapscout.app import App
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for name in ("maps", "models", "maps.json"):
+        os.symlink(os.path.join(root, name), tmp_path / name)
+    (tmp_path / "sim").mkdir()
+    (tmp_path / "settings.json").write_text(json.dumps({"welcome_seen": True, "sysinfo": "custom",
+                                                        "sysinfo_pos": [0.984, 0.383],
+                                                        "overlay": USER_OVERLAY}), encoding="utf-8")
+    app = App(str(tmp_path), simulate=str(tmp_path / "sim"))
+    try:
+        app.info_win, app.hud = _DrawWin("INFOS"), _DrawWin("SYSTEM")
+        app.today_win, app.media_win = _DrawWin("HEUTE"), _DrawWin("MUSIK")
+        app._game_rect = lambda: (0, 0, 3440, 1440)
+        app._force_until = time.time() + 30
+        app._forced = True
+        app.sysmon.snapshot = sysinfo.Snapshot(t=time.time(), cpu_load=63, cpu_temp=75, gpu_temp=77, gpu_load=89,
+                                               vram_used=5.8, vram_total=12, ram_used=21.2, ram_total=32,
+                                               gpu_hot=97.9, gpu_mem=78, hwinfo=True)
+        app.media.now = media.NowPlaying("Blinding Lights", "The Weeknd", True, time.time(), position=70.0,
+                                         duration=176.0, at=time.time())
+        app.show_map("shattered-square", 1, "auto")
+        app.overlay.set_server("?", None)
+        for _ in range(3):
+            app._place_overlay()                                     # raised the TypeError before
+        boxes = {"map": app._last_place}
+        for name, win in (("text", app.info_win), ("hud", app.hud), ("today", app.today_win), ("music", app.media_win)):
+            assert win.shown and win.at is not None and win.size[0] > 0, name
+            boxes[name] = (*win.at, *win.size)
+        assert app.overlay.shown
+        bar = layout.bar_width(3440, 1440)
+        for name, (x, y, w, h) in boxes.items():
+            assert x >= 0 and y >= 0 and x + w <= 3440 and y + h <= 1440, (name, boxes[name])
+            assert x + w <= bar or x >= 3440 - bar, (name, boxes[name])             # in a black bar
+        names = list(boxes)
+        for i, a in enumerate(names):
+            for b in names[i + 1:]:
+                assert not layout.boxes_overlap(boxes[a], boxes[b]), (a, b, boxes[a], boxes[b])
+    finally:
+        app.quit()

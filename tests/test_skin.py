@@ -185,3 +185,41 @@ def test_the_drop_shadow_looks_like_the_full_size_blur():
         got = skin.shadowed(card, u)
         assert got.size == ref.size
         assert np.abs(np.asarray(got, int) - np.asarray(ref, int)).max() <= 8
+
+
+def test_values_never_change_the_size_of_a_card():
+    """1.8.28 (user: "mir ist wichtig, dass sich die GUI-Elemente nicht verschieben, wenn ein Wert grösser oder
+    kleiner wird"): the tile cards have one width, the timer field is at least five digits wide, the ping pill
+    is sized for three digits, the progress time for the song's length – and ``min_w`` widens any card."""
+    from dbdmapscout import overlay_win32 as ow
+
+    def rows(cpu, gpu, vram, ram, throttle=None):
+        return sysinfo.hud_rows(sysinfo.Snapshot(t=0, cpu_load=cpu, cpu_temp=64, gpu_temp=71, gpu_load=gpu,
+                                                 vram_used=vram, vram_total=12, ram_used=ram, ram_total=32,
+                                                 throttle=throttle))
+    cover = sample_cover()
+    for style in MODERN:
+        sizes = {skin.card(rows(*v), 1440, style, None, "SYSTEM").size for v in ((3, 8, 0.9, 9.9), (100, 100, 11.9, 31.5))}
+        assert len(sizes) == 1, style
+        warn = skin.card(rows(38, 92, 7.9, 18.2, "thermal"), 1440, style, None, "SYSTEM")
+        assert warn.width == next(iter(sizes))[0] and warn.height > next(iter(sizes))[1]   # a row more, no wider
+        today = {skin.card([[("HEUTE ", sysinfo.DIM), (t, sysinfo.WHITE)]], 1440, style).size
+                 for t in ("4 RUNDEN · 1:12 h", "12 RUNDEN · 10:12 h")}
+        assert len(today) == 1, style
+        info = {ow.info_card(t, "Frankfurt", p, "", "Ø 2.8 Kills", 518, style).size
+                for t, p in (("0:05", 8), ("9:59", 128), ("10:00", 28))}
+        assert len(info) == 1, style
+        music = {skin.music(MUSIC, cover, 1440, style, prog, ("remaining",), None, "big").size
+                 for prog in ((5, 1000), (900, 1000), (10, 100))}
+        assert len(music) == 1, style
+        assert skin.music(MUSIC, cover, 1440, style, (10, 100), (), None, "compact", min_w=420).width == 420
+        up = ("ALS NÄCHSTES", (("Save Your Tears", "The Weeknd"),))
+        beside = skin.music(MUSIC, cover, 1440, style, (10, 100), (), None, "big", up, "right").width
+        assert skin.music(MUSIC, cover, 1440, style, (10, 100), (), None, "big", up, "right",
+                          min_w=beside + 60).width == beside + 60                  # the list's panel takes it
+        assert skin.card(rows(38, 92, 7.9, 18.2), 1440, style, None, "SYSTEM", min_w=440).width == 440
+    classic = {ow.info_card(t, "Frankfurt", p, "", "", 518).size for t, p in (("0:05", 8), ("9:59", 128), ("10:00", 28))}
+    assert len(classic) == 1
+    assert len({ow.progress_strip(300, el, 1000, 1440, remaining=True).size for el in (5, 900, 995)}) == 1
+    assert ow.music_picture(MUSIC, 1440, cover, "compact", (10, 100), (), min_w=420).width == 420
+    assert ow.music_picture(MUSIC, 1440, cover, "big", (10, 100), ("backdrop",), min_w=420).width >= 420
