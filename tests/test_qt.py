@@ -1395,7 +1395,12 @@ def test_the_overlay_preview_and_its_tools_sit_side_by_side_on_a_wide_page(qapp,
 
 def test_a_right_click_on_a_row_marks_it_and_asks_for_the_menu(qapp, keep):
     """1.8.10: right click on a row of a table with actions – the row is marked first (click / whole selection),
-    then the App is asked for the menu at the mouse; tables without actions keep the plain behaviour."""
+    then the App is asked for the menu at the mouse; tables without actions keep the plain behaviour.
+    1.8.12: through real context-menu events on the viewport – the scroll area hands them to the table itself,
+    the viewport's customContextMenuRequested of 1.8.10 never fired (the tests called _row_menu directly)."""
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtGui import QContextMenuEvent
+    from PySide6.QtTest import QTest
     from dbdmapscout import qt_window
     posted = []
     t = keep(qt_window.Table(".nb.f9.treeview1", lambda a, arg=None: posted.append((a, arg))))
@@ -1405,24 +1410,26 @@ def test_a_right_click_on_a_row_marks_it_and_asks_for_the_menu(qapp, keep):
     t.show()
     t.show_state({"columns": cols, "rows": rows, "colours": {}, "selection": [], "selectable": True, "menu": True})
     qapp.processEvents()
+
+    def menu_at(p):                                                # what Qt sends after a right click
+        qapp.sendEvent(t.viewport(), QContextMenuEvent(QContextMenuEvent.Mouse, p, t.viewport().mapToGlobal(p)))
+
     pos = t.visualItemRect(t.topLevelItem(1)).center()
-    t._row_menu(pos)
+    menu_at(pos)
     assert posted[0] == ("act", (".nb.f9.treeview1", ("click", "b")))
     kind, (key, (what, xy)) = posted[1]
     assert kind == "act" and what == "menu" and len(xy) == 2
     posted.clear()
     t.show_state({"columns": cols, "rows": rows, "colours": {}, "selection": ["a", "b"], "selectable": True,
                   "multi": True, "menu": True})
-    t._row_menu(t.visualItemRect(t.topLevelItem(0)).center())     # part of the marking: it stays
+    menu_at(t.visualItemRect(t.topLevelItem(0)).center())     # part of the marking: it stays
     assert [p[1][1][0] for p in posted] == ["menu"]
     posted.clear()
     t.show_state({"columns": cols, "rows": rows, "colours": {}, "selection": [], "selectable": True})
-    t._row_menu(pos)                                               # no actions: nothing
+    menu_at(pos)                                               # no actions: nothing
     assert posted == []
     # 1.8.11: a real right click – Qt marks the row on the press already; the App must still hear of it (the
     # menu acted on the old row and the marking jumped back)
-    from PySide6.QtCore import Qt
-    from PySide6.QtTest import QTest
     for multi, told in ((False, ("click", "b")), (True, ("select", ["b"]))):
         posted.clear()
         t.show_state({"columns": cols, "rows": rows, "colours": {}, "selection": ["a"], "selectable": True,
@@ -1430,7 +1437,7 @@ def test_a_right_click_on_a_row_marks_it_and_asks_for_the_menu(qapp, keep):
         qapp.processEvents()
         QTest.mousePress(t.viewport(), Qt.RightButton, Qt.NoModifier, pos)
         QTest.mouseRelease(t.viewport(), Qt.RightButton, Qt.NoModifier, pos)
-        t._row_menu(pos)
+        menu_at(pos)
         acts = [p[1][1] for p in posted]
         assert acts.count(told) == 1 and acts[-1][0] == "menu", (multi, acts)
     posted.clear()
@@ -1440,7 +1447,12 @@ def test_a_right_click_on_a_row_marks_it_and_asks_for_the_menu(qapp, keep):
     top = t.visualItemRect(t.topLevelItem(0)).center()
     QTest.mousePress(t.viewport(), Qt.RightButton, Qt.NoModifier, top)
     QTest.mouseRelease(t.viewport(), Qt.RightButton, Qt.NoModifier, top)
-    t._row_menu(top)                                               # inside a marking of two: both stay
+    menu_at(top)                                               # inside a marking of two: both stay
+    assert [p[1][1][0] for p in posted] == ["menu"]
+    posted.clear()                                                 # the menu key: the current row
+    t.show_state({"columns": cols, "rows": rows, "colours": {}, "selection": ["b"], "selectable": True, "menu": True})
+    t.setCurrentItem(t.topLevelItem(1))
+    qapp.sendEvent(t, QContextMenuEvent(QContextMenuEvent.Keyboard, QPoint(0, 0), t.mapToGlobal(QPoint(0, 0))))
     assert [p[1][1][0] for p in posted] == ["menu"]
     win = keep(qt_window.MainWindow(lambda a, arg=None: posted.append((a, arg))))
     menu = win.popup_menu([("x", "Eins", True), None, ("y", "Zwei", False, True)], (10, 10))

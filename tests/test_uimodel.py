@@ -924,6 +924,26 @@ def test_right_click_menus_of_recordings_last_rounds_and_the_overlay_preview(app
         assert [i[0] for i in items if i] == ["killer", "survivor", "custom", "farming", "site", "delete"]
         app._menu_act("killer")
         assert history.load(str(app_root / "rounds.jsonl"))[0].role == "killer"
+        # 1.8.12 (user: "rechtsklick auf eine zeile – kommt nichts"): a real right click on the drawn table
+        from PySide6.QtGui import QContextMenuEvent
+        from PySide6.QtWidgets import QApplication
+        from dbdmapscout import qt_views
+        app.qt.show()
+        app.qt.show_page("stats")
+        QApplication.processEvents()
+        app._qt_refresh()
+        QApplication.processEvents()
+        table = next(t for t in app.qt.findChildren(qt_views.Table) if t._key == str(app.stats_last))
+        app.stats_last.selection_set([])
+        app.stats_last.event_generate("<<TreeviewSelect>>")
+        app._qt_refresh()
+        vp = table.viewport()
+        at = table.visualItemRect(table.topLevelItem(0)).center()
+        n = len(shown)
+        QApplication.sendEvent(vp, QContextMenuEvent(QContextMenuEvent.Mouse, at, vp.mapToGlobal(at)))
+        while not app.events.empty():
+            app._dispatch(app.events.get_nowait())
+        assert len(shown) == n + 1 and app.stats_last.selection() == (repr(t2),)
 
         o = app.settings["overlay"]
         o["hud_scale"] = 1.4
