@@ -219,7 +219,7 @@ class PreviewView(QWidget):
         for side, (top, bottom) in bands.items():
             x0, x1 = (0, bar) if side == "left" else (sw - bar, sw)
             for which, y in (("top", top), ("bottom", bottom)):
-                if held and held[1] == which and (held[0] == side or d.get("limits_same", True)):
+                if held and held[1] == which and (held[0] == side or d.get("limits_same", False)):
                     y = self._limit_y              # with "both alike" the other bar's line moves along
                 out.append((side, which, x0, x1, y))
         return out
