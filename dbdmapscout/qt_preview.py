@@ -15,6 +15,7 @@ from .qt_common import pixmap_from_pil
 
 
 PREVIEW_NAMES = {"map": N_("Karte"), "hud": N_("Systemwerte"), "today": N_("Heute"), "music": N_("Musik")}
+NOTE_H = 40                      # 1.8.8: the strip below the screen for the note while moving
 
 
 class PreviewView(QWidget):
@@ -51,7 +52,11 @@ class PreviewView(QWidget):
 
     def heightForWidth(self, w):
         sw, sh = self._data.get("screen") or (16, 9)
-        return min(self.MAX_H, max(120, round(w * sh / max(1, sw))))
+        return min(self.MAX_H, max(120, round(w * sh / max(1, sw)))) + self._note_h()
+
+    def _note_h(self) -> int:
+        """1.8.8: in moving mode a strip below the screen holds the note (over the picture it hid the music card)."""
+        return NOTE_H if self._data.get("editing") else 0
 
     def sizeHint(self):
         return QSize(560, self.heightForWidth(560))
@@ -63,7 +68,8 @@ class PreviewView(QWidget):
         pics, old_pics = data.get("pics") or {}, self._data.get("pics") or {}
         if key == old and pics.keys() == old_pics.keys() and all(pics[k] is old_pics[k] for k in pics):
             return
-        shape = data.get("screen") != self._data.get("screen")
+        shape = data.get("screen") != self._data.get("screen") or \
+            bool(data.get("editing")) != bool(self._data.get("editing"))
         self._data = data
         if self._held and not self._grab:      # dropped: the App's own place counts again
             self._held = None
@@ -74,8 +80,9 @@ class PreviewView(QWidget):
     def _frame(self):
         """(left, top, scale): where the screen is drawn in the widget, screen px -> widget px."""
         sw, sh = self._data.get("screen") or (16, 9)
-        s = min(self.width() / max(1, sw), self.height() / max(1, sh))
-        return (self.width() - sw * s) / 2, (self.height() - sh * s) / 2, s
+        height = self.height() - self._note_h()
+        s = min(self.width() / max(1, sw), height / max(1, sh))
+        return (self.width() - sw * s) / 2, (height - sh * s) / 2, s
 
     def paintEvent(self, _e):
         from PySide6.QtCore import QPointF, QRectF
@@ -101,7 +108,8 @@ class PreviewView(QWidget):
         f = QFont(self.font())
         f.setPointSizeF(max(7.0, f.pointSizeF() * 0.9))
         p.setFont(f)
-        p.drawText(game, Qt.AlignCenter, _("Spielbild"))
+        if not d.get("editing"):                   # moving: the centre cross is there
+            p.drawText(game, Qt.AlignCenter, _("Spielbild"))
         # every element as the game shows it (1.64): map + lines, system values, music card – real pictures
         pics = d.get("pics") or {}
         ratio = self.devicePixelRatioF()
@@ -134,12 +142,10 @@ class PreviewView(QWidget):
             nf.setBold(True)
             p.setFont(nf)
             p.setPen(accent)
-            # 1.8.2: at the bottom, wrapped and on a dark band – at the top it lay over the names of the elements
+            # 1.8.8: in its own strip below the screen (1.8.2 put it on the picture, where it hid the music card)
             note = _("Verschieben aktiv – ziehen (rastet ein, Alt = frei), Pfeiltasten = fein, Ecke/Strg+Mausrad = Grösse")
-            flags = Qt.AlignHCenter | Qt.AlignBottom | Qt.TextWordWrap
-            box = p.boundingRect(game.adjusted(8, 0, -8, -6), flags, note)
-            p.fillRect(box.adjusted(-6, -3, 6, 3), QColor(20, 20, 24, 170))
-            p.drawText(game.adjusted(8, 0, -8, -6), flags, note)
+            strip = QRectF(screen.left(), screen.bottom() + 4, screen.width(), self.height() - screen.bottom() - 4)
+            p.drawText(strip, Qt.AlignHCenter | Qt.AlignTop | Qt.TextWordWrap, note)
         if d.get("editing"):                       # every element named; the one under the mouse in accent colour
             accent = QColor(qt_theme.colours(True)["accent"])
             held = self._grab[0] if self._grab else self._hover
@@ -147,8 +153,9 @@ class PreviewView(QWidget):
             tf.setBold(True)
             tf.setPixelSize(11)
             p.setFont(tf)
-            for name, lx, ly, lw, lh in self._layers():
-                r = QRectF(ox + lx * s, oy + ly * s, lw * s, lh * s)
+            rects = {name: QRectF(ox + lx * s, oy + ly * s, lw * s, lh * s).adjusted(-2, -2, 2, 2)   # 1.8.8: off the text
+                     for name, lx, ly, lw, lh in self._layers()}
+            for name, r in rects.items():
                 on = name == held or name == d.get("selected")
                 p.setPen(QPen(accent if on else QColor(255, 255, 255, 140), 2 if on else 1,
                               Qt.SolidLine if on else Qt.DashLine))
@@ -157,6 +164,8 @@ class PreviewView(QWidget):
                 tag = _(PREVIEW_NAMES.get(name, name))
                 tw = p.fontMetrics().horizontalAdvance(tag) + 8
                 tr = QRectF(max(screen.left(), min(r.left(), screen.right() - tw)), max(oy, r.top() - 15), tw, 15)
+                if any(tr.intersects(o) for n2, o in rects.items() if n2 != name):
+                    tr.moveTop(r.top())               # 1.8.8: no room above (stacked cards): inside its own frame
                 p.fillRect(tr, accent if on else QColor(30, 30, 34, 220))
                 p.setPen(QColor(20, 16, 4) if on else QColor(235, 235, 235))
                 p.drawText(tr, Qt.AlignCenter, tag)
@@ -177,7 +186,8 @@ class PreviewView(QWidget):
                 p.setFont(tf)
                 what = _("Ziehst: {name}", name=_(PREVIEW_NAMES.get(held, held))) if self._grab else \
                     _("Unter der Maus: {name}", name=_(PREVIEW_NAMES.get(held, held)))
-                p.drawText(game.adjusted(0, 0, 0, -6), Qt.AlignHCenter | Qt.AlignBottom, what)
+                p.drawText(QRectF(screen.left(), screen.bottom() + 4, screen.width(), self.height() - screen.bottom() - 4),
+                           Qt.AlignHCenter | Qt.AlignBottom, what)
         x, y, w, h, _mh = d.get("rect") or (0, 0, 0, 0, 0)
         sel = self._layer(d.get("selected"))
         if sel:                                    # the element the size slider works on (1.64.9)
