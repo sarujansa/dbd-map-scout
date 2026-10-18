@@ -68,6 +68,7 @@ class Toast:
         self.loop = loop                  # mainloop.MainLoop (timers)
         self.win = None
         self._job = None
+        self.on_rect = None               # 1.8.13: told (x, y, w, h) in screen pixels / None – the worker blacks it out
 
     @property
     def shown(self) -> bool:
@@ -84,6 +85,10 @@ class Toast:
         _no_activate(w)
         w.show()
         _no_activate(w)
+        if self.on_rect is not None:
+            g, dpr = w.frameGeometry(), w.devicePixelRatioF()
+            self.on_rect((int(g.x() * dpr) - 4, int(g.y() * dpr) - 4, int(g.width() * dpr) + 8,
+                          int(g.height() * dpr) + 8))
         self._job = self.loop.after(int(seconds * 1000), self.close)
 
     def close(self):
@@ -96,3 +101,5 @@ class Toast:
             except RuntimeError:              # already deleted by Qt
                 pass
             self.win = None
+            if self.on_rect is not None:
+                self.on_rect(None)

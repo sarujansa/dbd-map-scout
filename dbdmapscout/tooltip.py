@@ -174,6 +174,14 @@ TIPS = {
                            "Nochmal drücken hebt es auf.",
     "Aufnahme löschen": "Löscht die markierte Aufnahme (und ihren Vorlauf) von der Platte – nach Rückfrage.",
     "Aufnahmeordner öffnen": "Öffnet den Aufnahmeordner im Explorer.",
+    "mit kurzer Meldung": "Zeigt beim Sofort-Clip (F8) unten rechts ein kleines Hinweisfenster – „Clip wird "
+                          "gespeichert …“ und danach „Clip gespeichert“ bzw. warum nicht. Auch im Spiel, ohne Ton; "
+                          "nimmt nie den Fokus.",
+    "Clip abspielen": "Spielt den markierten Clip im Standard-Player von Windows ab.",
+    "Clip im Explorer zeigen": "Öffnet den Explorer mit dem markierten Clip.",
+    "Clip löschen": "Löscht den markierten Clip von der Platte – nach Rückfrage. Nur Dateien, die das Programm "
+                    "selbst angelegt hat.",
+    "Clips-Ordner öffnen": "Öffnet den Ordner „Clips“ neben den Aufnahmen im Explorer.",
     "Clip bearbeiten …": "Öffnet den Clip-Editor für die markierte Aufnahme: Vorschau, Zeitleiste mit Marken, Start/Ende "
                         "setzen, Ausschnitt als MP4 in den Ordner „Clips“ speichern.",
     "Drehen ↻": "Dreht die angezeigte Karte um 90° im Uhrzeigersinn (für jede Map gemerkt). Der Map-Name "

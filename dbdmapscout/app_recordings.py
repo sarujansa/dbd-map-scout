@@ -21,6 +21,9 @@ REC_ROLES = [("all", N_("Alle Rollen")), ("killer", N_("Killer")), ("survivor", 
              ("farming", N_("Farming"))]
 REC_ONLY = [("all", N_("Alle Aufnahmen")), ("marked", N_("Mit Marke")), ("kept", N_("Behalten")),
             ("bad", N_("Beschädigt"))]
+CLIP_KINDS = [("all", N_("Alle Arten")), ("clip", N_("Clips")), ("instant", N_("Sofort-Clips (F8)")),
+              ("still", N_("Standbilder"))]
+CLIP_KIND_NAMES = {"clip": N_("Clip"), "instant": N_("Sofort-Clip"), "still": N_("Standbild")}
 REC_REFRESH_S = 20            # the table re-reads the index this often while the tab is on display
 PREVIEW_DELAY_MS = 180               # 1.8.11: the clip preview is built once the marking stays
 
@@ -55,8 +58,16 @@ class RecordingsTab:
         self.rec_hint_var = ui.StringVar(value="")
         ui.Label(f, textvariable=self.rec_hint_var, style="Dim.TLabel", wraplength=560).pack(anchor="w")
 
+        # 1.8.13 (user: clips list, "filtern nach Killer/Survivor"): the rounds and the clips on sub-tabs
+        self.rec_nb = ui.Notebook(f)
+        self.rec_nb.pack(fill="both", expand=True, pady=(8, 0))
+        rp = ui.Frame(self.rec_nb, padding=6)
+        self.rec_nb.add(rp, text=_("Runden"))
+        cp = ui.Frame(self.rec_nb, padding=6)
+        self.rec_nb.add(cp, text=_("Clips"))
+        f = rp
         fr = ui.Frame(f)
-        fr.pack(fill="x", pady=(8, 6))
+        fr.pack(fill="x", pady=(0, 6))
         self._rec_periods = [(k, _(label)) for k, label in STATS_PERIODS]
         self.rec_period_var = ui.StringVar(value=self._rec_periods[0][1])
         cb = ui.Combobox(fr, textvariable=self.rec_period_var, values=[lbl for _k, lbl in self._rec_periods],
@@ -120,7 +131,70 @@ class RecordingsTab:
                             "der Runde eine Marke; „Behalten“ schützt eine Aufnahme vor dem Aufräumen, wenn die "
                             "Platte Platz braucht."),
                  style="Dim.TLabel", wraplength=560).pack(anchor="w", pady=(6, 0))
+        self._tab_clips(cp)
         return outer
+
+    def _tab_clips(self, f):
+        """1.8.13: everything in Clips/ the program made – editor clips, F8 instant clips, stills – with the round
+        each came from (role, killer, map), filters and play / Explorer / delete."""
+        self._clip_rows = {}
+        fr = ui.Frame(f)
+        fr.pack(fill="x", pady=(0, 6))
+        self.clip_period_var = ui.StringVar(value=self._rec_periods[0][1])
+        cb = ui.Combobox(fr, textvariable=self.clip_period_var, values=[lbl for _k, lbl in self._rec_periods],
+                         state="readonly", width=16)
+        cb.pack(side="left")
+        cb.bind("<<ComboboxSelected>>", lambda e: self._clips_render())
+        self.clip_role_var = ui.StringVar(value=self._rec_roles[0][1])
+        cb = ui.Combobox(fr, textvariable=self.clip_role_var, values=[lbl for _k, lbl in self._rec_roles],
+                         state="readonly", width=13)
+        cb.pack(side="left", padx=(8, 0))
+        cb.bind("<<ComboboxSelected>>", lambda e: self._clips_render())
+        self._clip_killers = [(None, _("Alle Killer"))]
+        self.clip_killer_var = ui.StringVar(value=self._clip_killers[0][1])
+        self.clip_killer_cb = ui.Combobox(fr, textvariable=self.clip_killer_var, state="readonly", width=16,
+                                          values=[lbl for _k, lbl in self._clip_killers])
+        self.clip_killer_cb.pack(side="left", padx=(8, 0))
+        self.clip_killer_cb.bind("<<ComboboxSelected>>", lambda e: self._clips_render())
+        self._clip_kinds = [(k, _(label)) for k, label in CLIP_KINDS]
+        self.clip_kind_var = ui.StringVar(value=self._clip_kinds[0][1])
+        cb = ui.Combobox(fr, textvariable=self.clip_kind_var, values=[lbl for _k, lbl in self._clip_kinds],
+                         state="readonly", width=17)
+        cb.pack(side="left", padx=(8, 0))
+        cb.bind("<<ComboboxSelected>>", lambda e: self._clips_render())
+
+        row = ui.Frame(f)
+        row.pack(fill="x", pady=(0, 6))
+        self.clip_play_btn = ui.Button(row, text=_("Clip abspielen"), command=self._clip_play, state="disabled")
+        self.clip_play_btn.pack(side="left")
+        self.clip_show_btn = ui.Button(row, text=_("Clip im Explorer zeigen"), command=self._clip_explorer,
+                                       state="disabled")
+        self.clip_show_btn.pack(side="left", padx=(6, 0))
+        self.clip_delete_btn = ui.Button(row, text=_("Clip löschen"), command=self._clip_delete, state="disabled")
+        self.clip_delete_btn.pack(side="left", padx=(6, 0))
+        self.clip_folder_btn = ui.Button(row, text=_("Clips-Ordner öffnen"), command=self._clip_open_folder)
+        self.clip_folder_btn.pack(side="right")
+
+        self.clip_summary_var = ui.StringVar(value="")
+        ui.Label(f, textvariable=self.clip_summary_var, style="Dim.TLabel", wraplength=560).pack(anchor="w",
+                                                                                                  pady=(0, 6))
+        tf = ui.Frame(f)
+        tf.pack(fill="both", expand=True)
+        cols = (("when", _("Wann"), 100, "w"), ("map", _("Map"), 130, "w"), ("role", _("Rolle/Killer"), 110, "w"),
+                ("kind", _("Art"), 85, "w"), ("dur", _("Länge"), 55, "e"), ("size", _("Grösse"), 65, "e"),
+                ("file", _("Datei"), 140, "w"))
+        self.clip_table = ui.Treeview(tf, columns=[c[0] for c in cols], show="headings", height=12,
+                                      selectmode="browse")
+        for key, title, width, anchor in cols:
+            self.clip_table.heading(key, text=title, anchor=anchor)
+            self.clip_table.column(key, width=width, anchor=anchor, stretch=key == "file")
+        self.clip_table.pack(side="left", fill="both", expand=True)
+        self.clip_table.bind("<<TreeviewSelect>>", lambda e: self._clip_buttons())
+        self._table_menu(self.clip_table, self._clip_menu_items, self._clip_menu_act)
+        ui.Label(f, text=_("Hier stehen die Clips aus dem Editor, die Sofort-Clips (F8) und die Standbilder – mit "
+                            "der Runde, aus der sie stammen. Gelöscht werden nur Dateien, die das Programm selbst "
+                            "angelegt hat."),
+                 style="Dim.TLabel", wraplength=560).pack(anchor="w", pady=(6, 0))
 
     # ============================================================ data
     def _rec_filters(self):
@@ -192,6 +266,139 @@ class RecordingsTab:
         if keep and t.exists(keep[0]):
             t.selection_set(keep[0])
         self._rec_buttons()
+        self._clips_render(folder, recs)
+
+    # ============================================================ clips (1.8.13)
+    def _clips_render(self, folder=None, recs=None):
+        if folder is None:
+            folder = self.recorder.folder() if self.settings.get("rec_on", False) or self.settings.get("rec_folder") \
+                else None
+            recs = obsrec.load_index(folder) if folder else []
+        clips = obsrec.list_clips(obsrec.clips_dir(folder), recs) if folder else []
+        j = self._joined()
+        by_t = {r.t: r for r in j.rounds}
+        for c in clips:                                    # the round knows the role when the recording did not
+            rnd = by_t.get(c.source) if c.source else None
+            if rnd is not None:
+                c.role = c.role or rnd.role or ""
+                c.killer = c.killer or rnd.killer or ""
+                c.farming = c.farming or bool(rnd.farming)
+        killers = sorted({self._killer_of(c.killer) for c in clips if c.role == "killer" and c.killer})
+        opts = [(None, _("Alle Killer"))] + [(k, killer_label(k)) for k in killers]
+        if opts != self._clip_killers:
+            self._clip_killers = opts
+            self.clip_killer_cb.configure(values=[lbl for _k, lbl in opts])
+            if self.clip_killer_var.get() not in [lbl for _k, lbl in opts]:
+                self.clip_killer_var.set(opts[0][1])
+        period = next((k for k, lbl in self._rec_periods if lbl == self.clip_period_var.get()), "all")
+        role = next((k for k, lbl in self._rec_roles if lbl == self.clip_role_var.get()), "all")
+        killer = next((k for k, lbl in self._clip_killers if lbl == self.clip_killer_var.get()), None)
+        kind = next((k for k, lbl in self._clip_kinds if lbl == self.clip_kind_var.get()), "all")
+        since = history.period_start(period, time.time()) if period != "all" else None
+        for c in clips:
+            c.killer = self._killer_of(c.killer) if c.killer else ""
+        shown = obsrec.select_clips(clips, since=since, role=None if role == "all" else role, killer=killer,
+                                    kind=None if kind == "all" else kind)
+        if not folder:
+            self.clip_summary_var.set(_("Kein Aufnahmeordner – die Clips liegen in seinem Ordner „Clips“."))
+        elif not clips:
+            self.clip_summary_var.set(_("Noch keine Clips – „Clip bearbeiten …“ bei einer Runde oder F8 im Spiel."))
+        else:
+            self.clip_summary_var.set(" · ".join([_("{n} von {total} Clips", n=len(shown), total=len(clips)),
+                                                  fmt_bytes(sum(c.size for c in shown))]))
+        t = self.clip_table
+        keep = t.selection()
+        t.delete(*t.get_children())
+        self._clip_rows = {}
+        for c in shown:
+            self._clip_rows[c.file] = c
+            if c.role == "killer" and c.killer:
+                who = killer_label(c.killer)
+            else:
+                who = self._role_name(c.role) or "–"
+            if c.farming:
+                who += " · " + _("Farming")
+            t.insert("", "end", iid=c.file, values=(
+                time.strftime("%d.%m.%y %H:%M", time.localtime(c.t)), c.label or "–", who,
+                _(CLIP_KIND_NAMES.get(c.kind, "Clip")), fmt_duration(c.seconds) if c.seconds else "–",
+                fmt_bytes(c.size), c.file))
+        if keep and t.exists(keep[0]):
+            t.selection_set(keep[0])
+        self._clip_buttons()
+
+    def _clip_selected(self):
+        sel = self.clip_table.selection()
+        return self._clip_rows.get(sel[0]) if sel else None
+
+    def _clip_path(self, c):
+        folder = self.recorder.folder()
+        return os.path.join(obsrec.clips_dir(folder), c.file) if folder and c is not None else None
+
+    def _clip_buttons(self):
+        state = "normal" if self._clip_selected() is not None else "disabled"
+        for b in (self.clip_play_btn, self.clip_show_btn, self.clip_delete_btn):
+            b.configure(state=state)
+
+    def _clip_menu_items(self):
+        if self._clip_selected() is None:
+            return []
+        return [("play", _("Abspielen"), True), ("explorer", _("Im Explorer zeigen"), True), None,
+                ("delete", _("Clip löschen"), True)]
+
+    def _clip_menu_act(self, ident):
+        act = {"play": self._clip_play, "explorer": self._clip_explorer, "delete": self._clip_delete}.get(ident)
+        if act is not None:
+            act()
+
+    def _clip_play(self):
+        path = self._clip_path(self._clip_selected())
+        if path is None:
+            return
+        if not os.path.exists(path):
+            self._log(_("Clip fehlt: {file}", file=os.path.basename(path)), "Fehler")
+            return
+        self._open(path)
+
+    def _clip_explorer(self):
+        path = self._clip_path(self._clip_selected())
+        if path is None:
+            return
+        if not IS_WIN:
+            self._log(_("Öffnen nur unter Windows: {path}", path=path), "System")
+            return
+        try:
+            show_in_explorer(path)
+        except OSError as e:
+            self._log(_("Kann {path} nicht öffnen: {error}", path=path, error=e), "Fehler")
+
+    def _clip_delete(self):
+        c = self._clip_selected()
+        if c is None:
+            return
+        if not self._ask(_("Clip löschen"), _("{file} von der Platte löschen?", file=c.file), self._clip_delete):
+            return
+        self.recorder.delete_clip(c.file)
+
+    def _clip_open_folder(self):
+        folder = self.recorder.folder()
+        if not folder:
+            self._log(_("Aufnahme-Laufwerk nicht angeschlossen."), "Fehler")
+            return
+        cdir = obsrec.clips_dir(folder)
+        try:
+            os.makedirs(cdir, exist_ok=True)
+        except OSError as e:
+            self._log(_("Kann {path} nicht öffnen: {error}", path=cdir, error=e), "Fehler")
+            return
+        self._open(cdir)
+
+    def _clip_saved(self, r, out, win):
+        """The editor saved a clip or a still of recording ``r``: into the clips index with its round."""
+        self._rec_dirty = True
+        still = os.path.splitext(out)[1].lower() in obsrec.STILL_EXTS
+        self.recorder.add_clip(file=os.path.basename(out), kind="still" if still else "clip", source=r.t,
+                               map_id=r.map_id, label=r.label, role=r.role, killer=r.killer, farming=r.farming,
+                               seconds=0.0 if still else float(win.saved_seconds.get(out, 0.0)))
 
     def _rec_role(self, r, rnd):
         role, killer = r.role or (rnd.role if rnd else ""), r.killer or (rnd.killer if rnd else "")
@@ -319,17 +526,19 @@ class RecordingsTab:
     def _clip_window(self, r, path, **extra):
         from .clipedit import CLIPS_DIR
         from .qt_clip import ClipWindow
-        return ClipWindow(path, r.marks, os.path.join(self.recorder.folder(), CLIPS_DIR),   # one "Clips" for all
-                          mode=str(self.settings.get("clip_mode", "copy")), sound=bool(self.settings.get("clip_sound", True)),
-                          on_saved=lambda out: self._rec_dirty_set(), on_setting=self.settings.set, log=self._log,
-                          dark=bool(self.settings.get("dark_mode", True)),
-                          qss=getattr(self.qt, "_qss", "") if self.qt is not None else "",
-                          target_mb=int(self.settings.get("clip_target_mb", 10) or 10),
-                          censor_on=bool(self.settings.get("clip_censor_on", False)),          # 1.7.2
-                          censor_style=str(self.settings.get("clip_censor_style", "pixel")),
-                          censor_boxes=self.settings.get("clip_censor_boxes") or [],
-                          mix_on=self.settings.get("clip_mix_on") or {},                           # 1.8.6
-                          mix_vol=self.settings.get("clip_mix_vol") or {}, **extra)
+        win = ClipWindow(path, r.marks, os.path.join(self.recorder.folder(), CLIPS_DIR),   # one "Clips" for all
+                         mode=str(self.settings.get("clip_mode", "copy")), sound=bool(self.settings.get("clip_sound", True)),
+                         on_setting=self.settings.set, log=self._log,
+                         dark=bool(self.settings.get("dark_mode", True)),
+                         qss=getattr(self.qt, "_qss", "") if self.qt is not None else "",
+                         target_mb=int(self.settings.get("clip_target_mb", 10) or 10),
+                         censor_on=bool(self.settings.get("clip_censor_on", False)),          # 1.7.2
+                         censor_style=str(self.settings.get("clip_censor_style", "pixel")),
+                         censor_boxes=self.settings.get("clip_censor_boxes") or [],
+                         mix_on=self.settings.get("clip_mix_on") or {},                           # 1.8.6
+                         mix_vol=self.settings.get("clip_mix_vol") or {}, **extra)
+        win.on_saved = lambda out: self._clip_saved(r, out, win)              # 1.8.13: into the clips list
+        return win
 
     def _rec_preview_follow(self, r):
         """1.8.8: the compact editor beside the table follows the marked recording – a new one for another
@@ -371,12 +580,11 @@ class RecordingsTab:
         if host is not None and host.content is not None:
             host.content.stop()
 
-    def _rec_dirty_set(self):
-        self._rec_dirty = True
-
     def _rec_changed(self, d):
         """Recorder → "changed" (keep / delete from this tab): re-read on the next tick, log the deletion."""
         self._rec_dirty = True
+        if d.get("what") == "clip_delete":
+            self._log(_("Clip gelöscht: {file}", file=d.get("file", "")), "System")
         if d.get("what") == "keep":
             self._log(_("Aufnahme wird behalten: {file}", file=d.get("file", "")) if d.get("on")
                       else _("Aufnahme wird nicht mehr behalten: {file}", file=d.get("file", "")), "System")
