@@ -134,8 +134,12 @@ class PreviewView(QWidget):
             nf.setBold(True)
             p.setFont(nf)
             p.setPen(accent)
-            p.drawText(game.adjusted(0, 6, 0, 0), Qt.AlignHCenter | Qt.AlignTop,
-                       _("Verschieben aktiv – ziehen (rastet ein, Alt = frei), Pfeiltasten = fein, Ecke/Strg+Mausrad = Grösse"))
+            # 1.8.2: at the bottom, wrapped and on a dark band – at the top it lay over the names of the elements
+            note = _("Verschieben aktiv – ziehen (rastet ein, Alt = frei), Pfeiltasten = fein, Ecke/Strg+Mausrad = Grösse")
+            flags = Qt.AlignHCenter | Qt.AlignBottom | Qt.TextWordWrap
+            box = p.boundingRect(game.adjusted(8, 0, -8, -6), flags, note)
+            p.fillRect(box.adjusted(-6, -3, 6, 3), QColor(20, 20, 24, 170))
+            p.drawText(game.adjusted(8, 0, -8, -6), flags, note)
         if d.get("editing"):                       # every element named; the one under the mouse in accent colour
             accent = QColor(qt_theme.colours(True)["accent"])
             held = self._grab[0] if self._grab else self._hover

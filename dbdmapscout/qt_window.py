@@ -115,17 +115,21 @@ STYLE_IDLE_MS = 120               # ms between restyling two hidden pages after 
 # enabled/shown come from it (App._qt_refresh → show_states), a click is done on it (post("act", (key, value))).
 # ("card", frame key, rows) – a row is one control or ("row", [controls]); controls: ("check"|"button"|"combo"|
 # "slider"|"label"|"hint", key), ("stretch",). ("panel", rows) = a card without title; ("tabs", [(frame key, tab
-# label, rows)]) = one tab per frame (hidden with the frame).
+# label, rows)]) = one tab per frame (hidden with the frame); ("side", (panels)) = panels next to each other on a
+# wide page, below each other on a narrow one (qt_pages.SideBySide).
 SPECS = {
     "overlay": (
         # 1.66.4 (user: "6 passt"): the preview stays on top; 1.2.12 (analysis point 9): below it the tools for the
         # element picked (list, size, opacity, move/test/undo – on every tab), then one tab per element and
         # "Allgemein"; a click on an element in the preview opens its tab (MainWindow.open_tab)
-        ("panel", (("preview", "ov.preview"),)),
-        ("panel", (
-            ("row", (("label", "ov.sel.label"), ("combo", "ov.sel"), ("stretch",))), ("slider", "ov.sel_size"),
-            ("slider", "ov.opacity"), ("hint", "ov.size_scope"), ("hint", "ov.size_cap"),
-            ("row", (("button", "ov.edit"), ("button", "ov.test"), ("button", "ov.undo"), ("stretch",))))),
+        # 1.8.2: preview and the tools of the picked element side by side when the page is wide enough – the
+        # tabs with the settings were below the fold on a 760-px window, every change needed scrolling
+        ("side", (
+            ("panel", (("preview", "ov.preview"),)),
+            ("panel", (
+                ("row", (("label", "ov.sel.label"), ("combo", "ov.sel"), ("stretch",))), ("slider", "ov.sel_size"),
+                ("slider", "ov.opacity"), ("hint", "ov.size_scope"), ("hint", "ov.size_cap"),
+                ("row", (("button", "ov.edit"), ("button", "ov.test"), ("button", "ov.undo"), ("stretch",))))))),
         ("tabs", (
             ("ov.look", N_("Karte"), (
                 ("row", (("label", "ov.anchor.label"), ("combo", "ov.anchor"), ("stretch",), ("button", "ov.reset"))),
@@ -237,7 +241,7 @@ def _spec_keys(items):
         if kind == "card":
             yield it[1]
             yield from _spec_keys(it[2])
-        elif kind in ("row", "panel"):
+        elif kind in ("row", "panel", "side"):
             yield from _spec_keys(it[1])
         elif kind == "tabs":
             for frame, _label_, rows in it[1]:
@@ -375,6 +379,7 @@ def nav_icon(key: str, colour: str, ratio: float = 1.0, alert: bool = False) -> 
 
 
 SEARCH_KINDS = ("check", "radio", "button", "title", "label", "slider")   # what the search finds on a page
+MORE_BUTTON, MORE_PREFIX = "st.more_btn", "st.more."   # the settings' fold "Mehr" and the keys of what it holds
 
 
 def _tab_of(w):
@@ -401,6 +406,19 @@ def _open_tabs(w):
         tw.setCurrentWidget(body)
 
 
+class _NavList(QListWidget):
+    """The navigation. Qt's list view makes the first row current as soon as it gets the keyboard focus while no
+    row is current – on the first start that threw the user out of the setup assistant about a second after it
+    came up (1.8.2: the window's first focus went to the list). With no row chosen, the focus changes nothing."""
+
+    def focusInEvent(self, e):
+        if self.currentRow() < 0:
+            QWidget.focusInEvent(self, e)
+            self.viewport().update()
+            return
+        super().focusInEvent(e)
+
+
 class MainWindow(QMainWindow):
     def __init__(self, post, icon_path: str | None = None, layouts: dict | None = None):
         super().__init__()
@@ -415,7 +433,7 @@ class MainWindow(QMainWindow):
         lay = QHBoxLayout(central)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
-        self.nav = QListWidget()
+        self.nav = _NavList()
         self.nav.setObjectName("nav")
         self.nav.setFixedWidth(NAV_W)
         self._nav_compact = False
@@ -596,15 +614,21 @@ class MainWindow(QMainWindow):
         out = {}
         labels = dict(PAGES)
         for key, page in self.forms.items():
+            # 1.8.2: while "Mehr" is shut, what lies under it is found too (and unfolded on the way there)
+            shut = key == "settings" and not any(_reachable(c[1], page) for k, c in page.controls.items()
+                                                 if k.startswith(MORE_PREFIX) and c[0] == "title")
             for ckey, (kind, w, extra) in page.controls.items():
                 if kind not in SEARCH_KINDS:
                     continue
                 target = extra[0] if kind == "slider" else w
                 text = " ".join(target.text().split())
-                if len(text) < 3 or not _reachable(w, page) or text.startswith("▸"):
+                if len(text) < 3 or text.startswith("▸"):
+                    continue
+                folded = not _reachable(w, page)
+                if folded and not (shut and ckey.startswith(MORE_PREFIX)):
                     continue
                 entry = f"{text}  ·  {_(labels[key])}"
-                out.setdefault(entry, (key, w))
+                out.setdefault(entry, (key, w, folded))
         return out
 
     def eventFilter(self, obj, e):
@@ -632,14 +656,16 @@ class MainWindow(QMainWindow):
         hit = self._found.get(entry)
         if hit is None:
             return
-        key, w = hit
+        key, w, folded = hit
         self.show_page(key)
         self.search.clear()
         self.search.clearFocus()
         if self._nav_kept:
             self._nav_kept = False
             self._compact_nav(self.width() < NAV_COMPACT_BELOW)
-        self._reveal_widget(w)
+        if folded:                                        # under "Mehr": the App unfolds it, then we scroll there
+            self._post("act", (MORE_BUTTON, None))
+        self._reveal_widget(w, delay=150 if folded else 0)
 
     def reveal(self, page: str, key: str):
         """1.2.15: open ``page``, scroll to the control ``key`` of a hand-made page and light up its card (the

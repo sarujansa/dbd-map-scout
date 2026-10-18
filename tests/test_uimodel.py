@@ -858,3 +858,24 @@ def test_the_statistics_tabs_keep_their_meaning_when_moved(app_root):
         assert app.qt.nav_keys()[0] == "overview" and app.settings.get("nav_order") == []
     finally:
         app.quit()
+
+
+def test_the_statistics_tabs_are_short_and_the_last_rounds_come_second(app_root):
+    """1.8.2: "Letzte Runden" is the second sub-tab (the most used after the overview), the tab names are short
+    enough for all ten to fit side by side, and the second tab draws the rounds table."""
+    import json
+    from dbdmapscout import history
+    from dbdmapscout.app import App
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    history.append(str(app_root / "rounds.jsonl"), history.Round(time.time() - 900, 600, "coal", "Coal Tower"))
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        texts = [app.stats_nb.tab(t, "text") for t in app.stats_nb.tabs()]
+        assert texts[:3] == ["Übersicht", "Letzte Runden", "Maps"] and texts[-2:] == ["Regionen", "Wartezeit"]
+        assert len(texts) == 10
+        app._stats_render()
+        app._stats_render_tab(1)
+        assert len(app.stats_last.get_children()) == 1
+        assert "Spotify" in app.more_btn.cget("text") and "Discord" in app.more_btn.cget("text")
+    finally:
+        app.quit()

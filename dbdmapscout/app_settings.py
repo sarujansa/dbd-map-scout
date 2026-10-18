@@ -367,7 +367,7 @@ class SettingsTab:
 
     def _show_more(self):
         arrow = "▾ " if self._more_open else "▸ "
-        self.more_btn.configure(text=arrow + _("Mehr (Map-Zuordnungen, Match-Daten, Aufnahmen, Sicherung, Ordner)"))
+        self.more_btn.configure(text=arrow + _("Mehr (Match-Daten, Farming, OBS-Aufnahmen, Discord, Spotify, Sicherung, Ordner)"))
         if self._more_open:
             self.more_frame.pack(fill="x", pady=(4, 0), before=self.version_label)
         else:
