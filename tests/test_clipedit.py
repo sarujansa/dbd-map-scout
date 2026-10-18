@@ -28,11 +28,26 @@ def clip(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def two_track(tmp_path_factory):
-    """1.8.5: a recording as OBS writes it with two audio tracks – track 1 with sound, track 2 silent."""
+    """A 1.8.5 recording with two audio tracks – track 1 with sound, track 2 (all but Discord) silent."""
     path = str(tmp_path_factory.mktemp("clip2") / "2026-10-18 20-10 Ormond – Nurse.mkv")
     subprocess.run([FF, "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi",
                     "-i", "testsrc=duration=6:size=320x180:rate=30", "-f", "lavfi", "-i", "sine=frequency=440:duration=6",
                     "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-map", "0:v", "-map", "1:a", "-map", "2:a",
+                    "-c:v", "libx264", "-preset", "veryfast", "-g", "30", "-pix_fmt", "yuv420p", "-c:a", "aac",
+                    "-shortest", path], check=True, timeout=120)
+    return path
+
+
+@pytest.fixture(scope="module")
+def four_track(tmp_path_factory):
+    """1.8.6: a recording as OBS writes it with the four tracks – 1 everything (loud), 2 game (loud, 440 Hz),
+    3 Discord (quiet, −20 dB), 4 microphone (silent)."""
+    path = str(tmp_path_factory.mktemp("clip4") / "2026-10-18 20-30 Ormond – Nurse.mkv")
+    subprocess.run([FF, "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi",
+                    "-i", "testsrc=duration=6:size=320x180:rate=30", "-f", "lavfi", "-i", "sine=frequency=440:duration=6",
+                    "-f", "lavfi", "-i", "sine=frequency=440:duration=6", "-f", "lavfi", "-i", "sine=frequency=880:duration=6",
+                    "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-filter_complex", "[3:a]volume=0.1[q]",
+                    "-map", "0:v", "-map", "1:a", "-map", "2:a", "-map", "[q]", "-map", "4:a",
                     "-c:v", "libx264", "-preset", "veryfast", "-g", "30", "-pix_fmt", "yuv420p", "-c:a", "aac",
                     "-shortest", path], check=True, timeout=120)
     return path
@@ -104,53 +119,76 @@ def test_the_sound_stretch_is_a_wav(clip):
     assert clipedit.sound_wav(clip, 4.0, 2.0, FF) is None
 
 
-def test_a_clip_can_take_the_second_audio_track(two_track, tmp_path):
-    """1.8.5: ``audio_track=1`` keeps only OBS's track 2 (the mix without Discord) – by copy, re-encoded with censor
-    boxes and in the preview sound; without it the clip has the first track as before."""
-    assert clipedit.probe(two_track, FF).audio_tracks == 2 and obsrec.audio_tracks(two_track, FF) == 2
-    assert _max_volume(two_track, 0) > -20 and _max_volume(two_track, 1) < -80
-    quiet, loud = str(tmp_path / "quiet.mp4"), str(tmp_path / "loud.mp4")
-    ok, why = clipedit.cut(two_track, 1.0, 3.0, quiet, "copy", FF, audio_track=1)
+def test_a_clip_is_mixed_from_the_recordings_own_tracks(four_track, two_track, tmp_path):
+    """1.8.6: ``mix`` picks and levels the sources from OBS's tracks – one source as it is stays a stream copy,
+    a level or several sources re-encode only the sound (also with censor boxes and in the preview sound); a 1.8.5
+    two-track file still gives all or all-but-Discord."""
+    assert clipedit.probe(four_track, FF).audio_tracks == 4 and obsrec.audio_tracks(four_track, FF) == 4
+    assert _max_volume(four_track, 1) > -20 and -45 < _max_volume(four_track, 2) < -30 and _max_volume(four_track, 3) < -80
+    out = lambda n: str(tmp_path / f"{n}.mp4")                                 # noqa: E731
+    ok, why = clipedit.cut(four_track, 1.0, 3.0, out("mic"), "copy", FF, mix={"dbd": 0, "discord": 0, "mic": 1.0})
     assert ok, why
-    assert clipedit.probe(quiet, FF).audio_tracks == 1 and _max_volume(quiet) < -80
-    ok, why = clipedit.cut(two_track, 1.0, 3.0, loud, "copy", FF)
+    assert clipedit.probe(out("mic"), FF).audio_tracks == 1 and _max_volume(out("mic")) < -80      # microphone only: silent
+    ok, why = clipedit.cut(four_track, 1.0, 3.0, out("disc"), "copy", FF, mix={"dbd": 0, "discord": 1.0, "mic": 0})
     assert ok, why
-    assert clipedit.probe(loud, FF).audio_tracks == 1 and _max_volume(loud) > -20
-    exact = str(tmp_path / "exact.mp4")
-    ok, why = clipedit.cut(two_track, 1.0, 2.0, exact, "exact", FF, censor=[[0.1, 0.1, 0.3, 0.3]], audio_track=1)
+    assert -45 < _max_volume(out("disc")) < -30                                                     # Discord only, as recorded
+    ok, why = clipedit.cut(four_track, 1.0, 3.0, out("half"), "copy", FF, mix={"dbd": 0.5, "discord": 0, "mic": 0})
     assert ok, why
-    assert clipedit.probe(exact, FF).audio_tracks == 1 and _max_volume(exact) < -80
-    wav = clipedit.sound_wav(two_track, 1.0, 2.0, FF, audio_track=1)
+    assert -27 < _max_volume(out("half")) < -21                                                     # the game at −6 dB
+    ok, why = clipedit.cut(four_track, 1.0, 3.0, out("both"), "copy", FF, mix={"dbd": 1.0, "discord": 1.0, "mic": 1.0})
+    assert ok, why
+    assert clipedit.probe(out("both"), FF).audio_tracks == 1 and _max_volume(out("both")) > -20
+    ok, why = clipedit.cut(four_track, 1.0, 3.0, out("none"), "copy", FF, mix={"dbd": 0, "discord": 0, "mic": 0})
+    assert ok, why
+    assert clipedit.probe(out("none"), FF).audio_tracks == 0                                        # no sound at all
+    ok, why = clipedit.cut(four_track, 1.0, 2.0, out("exact"), "exact", FF, censor=[[0.1, 0.1, 0.3, 0.3]],
+                           mix={"dbd": 0, "discord": 0, "mic": 1.0})
+    assert ok, why
+    assert clipedit.probe(out("exact"), FF).audio_tracks == 1 and _max_volume(out("exact")) < -80
+    assert clipedit.sound_wav(four_track, 1.0, 2.0, FF, mix={"dbd": 0, "discord": 0, "mic": 0}, n_tracks=4) is None
+    wav = clipedit.sound_wav(four_track, 1.0, 2.0, FF, mix={"dbd": 0, "discord": 1.0, "mic": 0}, n_tracks=4)
     try:
-        assert wav and _max_volume(wav) < -80
+        assert wav and -45 < _max_volume(wav) < -30
     finally:
         if wav:
             os.remove(wav)
+    ok, why = clipedit.cut(two_track, 1.0, 3.0, out("legacy"), "copy", FF, mix={"dbd": 1.0, "discord": 0})
+    assert ok, why
+    assert _max_volume(out("legacy")) < -80                                                         # 1.8.5 file: track 2
 
 
-def test_the_clip_window_offers_no_discord_only_with_two_tracks(clip, two_track, tmp_path):
-    """1.8.5: the box "Ohne Discord-Ton" is on for a two-track recording (and remembered), off and unticked for a
-    recording with one track."""
+def test_the_clip_window_mixes_the_sound_only_with_the_tracks_for_it(clip, four_track, tmp_path):
+    """1.8.6: a four-track recording gets a box and a level per source (remembered, applied to the mix), a
+    one-track recording only the hint."""
     pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
     from PySide6.QtWidgets import QApplication
     from dbdmapscout import qt_clip
     app = QApplication.instance() or QApplication([])
     settings = {}
-    win = qt_clip.ClipWindow(two_track, [], str(tmp_path / "Clips"), sound=False, no_discord=True,
+    win = qt_clip.ClipWindow(four_track, [], str(tmp_path / "Clips"), sound=False,
+                             mix_on={"discord": False}, mix_vol={"dbd": 120},
                              on_setting=lambda k, v: settings.__setitem__(k, v))
     try:
         win.show()
-        assert win.no_discord_box.isEnabled() and win.no_discord_box.isChecked() and win.audio_track() == 1
-        win.no_discord_box.setChecked(False)
-        assert settings == {"clip_no_discord": False} and win.audio_track() is None
+        assert win.mix_hint.isHidden() and all(win.mix_boxes[k].isEnabled() for k in ("dbd", "discord", "mic"))
+        assert win.mix() == {"dbd": 1.2, "discord": 0.0, "mic": 1.0} and win.mix_values["dbd"].text() == "120 %"
+        win.mix_boxes["discord"].setChecked(True)
+        win.mix_sliders["mic"].setValue(0)
+        assert win.mix() == {"dbd": 1.2, "discord": 1.0, "mic": 0.0}
+        assert settings["clip_mix_on"] == {"dbd": True, "discord": True, "mic": True}
+        assert settings["clip_mix_vol"] == {"dbd": 120, "discord": 100, "mic": 0}
+        assert "Ton neu gemischt" in win.size_label.text()
+        win.mix_boxes["dbd"].setChecked(False)
+        win.mix_boxes["discord"].setChecked(False)
+        assert "ohne Ton" in win.size_label.text()
     finally:
         win.close()
         app.processEvents()
-    win = qt_clip.ClipWindow(clip, [], str(tmp_path / "Clips"), sound=False, no_discord=True)
+    win = qt_clip.ClipWindow(clip, [], str(tmp_path / "Clips"), sound=False)
     try:
         win.show()
-        assert not win.no_discord_box.isEnabled() and not win.no_discord_box.isChecked() and win.audio_track() is None
-        assert "Tonspur" in win.no_discord_box.toolTip()
+        assert not win.mix_hint.isHidden() and win.mix_boxes["dbd"].isHidden() and win.mix() is None
+        assert "Spur 1–4" in win.mix_hint.text()
     finally:
         win.close()
         app.processEvents()

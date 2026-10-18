@@ -38,7 +38,7 @@ class FakeObs(threading.Thread):
         self.files = 0
         self.stop_flag = False
         self.inputs = {"Desktop-Audio": {"muted": False}, "Mic/Aux": {"muted": False}}
-        self.profile = {("Output", "Mode"): "Advanced", ("AdvOut", "RecTracks"): "3"}   # 1.8.5: tracks 1 + 2 ticked
+        self.profile = {("Output", "Mode"): "Advanced", ("AdvOut", "RecTracks"): "15"}  # 1.8.6: tracks 1–4 ticked
 
     def run(self):
         self.srv.settimeout(0.2)
@@ -872,28 +872,29 @@ def test_the_sound_sources_are_created_once_and_switched(obs, tmp_path):
     assert not obs.requests
 
 
-def test_discord_gets_its_own_track_and_the_profile_is_only_read(obs, tmp_path):
-    """1.8.5: Discord on recording track 1 only, DBD and OBS's own sources on 1 + 2; the profile is read, never
-    written – a hint names what to tick when OBS is not in the advanced mode with tracks 1 and 2."""
+def test_every_source_gets_its_own_track_and_the_profile_is_only_read(obs, tmp_path):
+    """1.8.6: every source on track 1 (everything) and its own track – game + desktop 2, Discord 3, microphone 4;
+    the profile is read, never written – a hint names what to tick when OBS is not in the advanced mode with
+    tracks 1 to 4."""
     r, posted = _recorder(obs, str(tmp_path), pre=False)
     dbd, disc = obsrec.AUDIO_APPS["dbd"][0], obsrec.AUDIO_APPS["discord"][0]
     c = r._client()
     try:
         r._audio(c)
-        assert obs.inputs[disc]["tracks"] == {"1": True, "2": False}
-        assert obs.inputs[dbd]["tracks"] == obs.inputs["Desktop-Audio"]["tracks"] == obs.inputs["Mic/Aux"]["tracks"] == \
-            {"1": True, "2": True}
+        on = lambda *ns: {str(n): n in ns for n in range(1, 5)}                   # noqa: E731
+        assert obs.inputs[dbd]["tracks"] == obs.inputs["Desktop-Audio"]["tracks"] == on(1, 2)
+        assert obs.inputs[disc]["tracks"] == on(1, 3) and obs.inputs["Mic/Aux"]["tracks"] == on(1, 4)
         kinds = [k for k, _d in obs.requests]
         assert "GetProfileParameter" in kinds and not [k for k in kinds if "Profile" in k and k.startswith("Set")]
         assert "Erweitert" not in r.status                                       # profile fine: no hint
         obs.profile[("Output", "Mode")] = "Simple"
         r._audio(c)
-        assert "Ausgabemodus „Erweitert“" in r.status and "Audiospur 1 und 2" in r.status
+        assert "Ausgabemodus „Erweitert“" in r.status and "Audiospur 1 bis 4" in r.status
         assert _drain(posted)[-1] == ("status", {"text": r.status, "ok": False})
-        obs.profile[("Output", "Mode")], obs.profile[("AdvOut", "RecTracks")] = "Advanced", "1"
+        obs.profile[("Output", "Mode")], obs.profile[("AdvOut", "RecTracks")] = "Advanced", "3"
         r.status = ""
         r._audio(c)
-        assert "Audiospur 1 und 2" in r.status                                   # advanced, but only track 1
+        assert "Audiospur 1 bis 4" in r.status                                   # advanced, but only tracks 1 + 2
         obs.requests.clear()
         r.cfg.tracks = False
         r._audio(c)
@@ -901,9 +902,28 @@ def test_discord_gets_its_own_track_and_the_profile_is_only_read(obs, tmp_path):
         assert "SetInputAudioTracks" not in kinds and "GetProfileParameter" not in kinds   # off: OBS left alone
     finally:
         c.close()
-    assert obsrec.profile_hint("Advanced", "3") == "" == obsrec.profile_hint("advanced", "7")
-    assert obsrec.profile_hint("Simple", "3") and obsrec.profile_hint("Advanced", "2") and obsrec.profile_hint("Advanced", "")
+    assert obsrec.profile_hint("Advanced", "15") == "" == obsrec.profile_hint("advanced", "63")
+    assert obsrec.profile_hint("Simple", "15") and obsrec.profile_hint("Advanced", "7") and obsrec.profile_hint("Advanced", "")
     assert obsrec.profile_hint("Advanced", "x") and obsrec.profile_hint("", "")
+
+
+def test_the_audio_graph_mixes_the_wanted_sources_from_the_tracks():
+    """1.8.6 (pure): one track as it is = plain map (stream copy stays possible), levels or several sources =
+    volume/amix graph, nothing = no sound, a 1.8.5 two-track file = all or all-but-Discord."""
+    g = obsrec.audio_graph
+    assert g(4, None) == ("", "0:a?") and g(1, {"dbd": 1.0}) == ("", "0:a?")
+    assert g(4, {"dbd": 1.0, "discord": 0, "mic": 0}) == ("", "0:a:1")
+    assert g(4, {"dbd": 0, "discord": 0, "mic": 1.0}) == ("", "0:a:3")
+    assert g(3, {"dbd": 0, "discord": 0, "mic": 1.0}) == ("", None)            # no microphone track in the file
+    assert g(4, {"dbd": 0, "discord": 0, "mic": 0}) == ("", None)
+    assert g(4, {"dbd": 0.5}) == ("[0:a:1]volume=0.500[aout]", "[aout]")
+    flt, amap = g(4, {"dbd": 1.0, "discord": 0.8, "mic": 1.5})
+    assert amap == "[aout]" and flt == ("[0:a:1]volume=1.000[a0];[0:a:2]volume=0.800[a1];[0:a:3]volume=1.500[a2];"
+                                        "[a0][a1][a2]amix=inputs=3:normalize=0[aout]")
+    assert obsrec.track_sources(4) == {"dbd": 1, "discord": 2, "mic": 3} and obsrec.track_sources(3) == {"dbd": 1, "discord": 2}
+    assert obsrec.track_sources(2) == {"dbd": 1, "discord": obsrec.LEGACY} and obsrec.track_sources(1) == {}
+    assert g(2, {"dbd": 1.0, "discord": 1.0}) == ("", "0:a:0") and g(2, {"dbd": 1.0, "discord": 0}) == ("", "0:a:1")
+    assert g(2, {"dbd": 0, "discord": 0}) == ("", None) and g(2, {"dbd": 0.5, "discord": 0}) == ("[0:a:1]volume=0.500[aout]", "[aout]")
 
 
 def test_the_buffer_runs_for_instant_clips_without_a_pre_roll(obs, tmp_path):
@@ -946,16 +966,25 @@ def test_f8_cuts_the_last_seconds_of_the_buffer_into_the_clips_folder(tmp_path, 
     assert not [f for f in os.listdir(str(tmp_path)) if f.startswith("Replay_")]   # our replay is gone
 
 
-def test_the_f8_clip_takes_the_track_without_discord(tmp_path, monkeypatch):
-    """1.8.5: with two audio tracks in the buffer file the instant clip keeps only track 2 (no Discord)."""
-    posted, calls = _instant(tmp_path, monkeypatch, "ffmpeg", streams=2)
+def test_the_f8_clip_mixes_its_sources_from_the_buffer_files_tracks(tmp_path, monkeypatch):
+    """1.8.6: with the four tracks in the buffer file the instant clip keeps the chosen sources – game + microphone
+    mixed (sound re-encoded, picture copied), one source as a plain stream copy, none = no sound."""
+    posted, calls = _instant(tmp_path, monkeypatch, "ffmpeg", streams=4)
     cut = calls[-1]
     assert _drain(posted)[-1][1]["ok"] and calls[0][-2:] == ["-i", cut[cut.index("-i") + 1]]   # looked at the file
-    i = cut.index("-map")
-    assert cut[i:i + 4] == ["-map", "0:v", "-map", "0:a:1"] and "copy" in cut
-    posted, calls = _instant(tmp_path, monkeypatch, "ffmpeg", streams=2, clip_no_discord=False)
+    i = cut.index("-filter_complex")
+    assert cut[i + 1] == "[0:a:1]volume=1.000[a0];[0:a:3]volume=1.000[a1];[a0][a1]amix=inputs=2:normalize=0[aout]"
+    assert cut[i + 2:i + 10] == ["-map", "0:v", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac"]
+    posted, calls = _instant(tmp_path, monkeypatch, "ffmpeg", streams=4, clip_sources=("dbd",))
     cut = calls[-1]
-    assert len(calls) == 1 and cut[cut.index("-map"):][:2] == ["-map", "0"]        # switched off: no look, all
+    i = cut.index("-map")
+    assert cut[i:i + 6] == ["-map", "0:v", "-map", "0:a:1", "-c", "copy"]
+    posted, calls = _instant(tmp_path, monkeypatch, "ffmpeg", streams=4, clip_sources=())
+    cut = calls[-1]
+    assert cut[cut.index("-map"):][:3] == ["-map", "0:v", "-an"]
+    posted, calls = _instant(tmp_path, monkeypatch, "ffmpeg", streams=2)         # 1.8.5 file: all but Discord
+    cut = calls[-1]
+    assert cut[cut.index("-map"):][:4] == ["-map", "0:v", "-map", "0:a:1"]
 
 
 def test_without_ffmpeg_the_whole_buffer_becomes_the_clip(tmp_path, monkeypatch):
