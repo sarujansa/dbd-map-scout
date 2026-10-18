@@ -1167,6 +1167,13 @@ EN = {
     "Infos": "Info",
     "INFOS": "INFO",
     "Infos (Timer, Bilanz, Server)": "Info (timer, record, server)",
+    "In OBS ist der Wiederholungspuffer nicht aktiviert – OBS: Einstellungen → Ausgabe → "
+    "Wiederholungspuffer → „Wiederholungspuffer aktivieren“ und übernehmen. Ohne ihn gibt es keine "
+    "Sofort-Clips (F8) und keinen Vorlauf.":
+        "OBS's replay buffer is not enabled – OBS: Settings → Output → Replay Buffer → \"Enable Replay Buffer\" "
+        "and apply. Without it there are no instant clips (F8) and no pre-roll.",
+    "Wiederholungspuffer in OBS nicht aktiviert (Einstellungen → Ausgabe → Wiederholungspuffer)":
+        "Replay buffer not enabled in OBS (Settings → Output → Replay Buffer)",
     "Karten im selben Balken gleich breit (Systemwerte, Heute, Musik)":
         "Cards in the same bar at one width (system values, today, music)",
     "Zu einer Spalte zusammenführen": "Merge into one column",
