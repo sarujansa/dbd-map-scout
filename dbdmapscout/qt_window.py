@@ -199,8 +199,8 @@ SPECS = {
         ("row", (("button", "st.more_btn"), ("stretch",))),
         ("card", "st.more.own", (("row", (("hint", "st.more.aliases"), ("button", "st.more.aliases_clear"))),)),
         ("card", "st.more.official", (("check", "st.more.off_open"), ("check", "st.more.off_notify"),
-                                      ("row", (("button", "st.more.script"), ("button", "st.more.structure"),
-                                               ("stretch",))), ("hint", "st.more.off_text"))),
+                                      ("row", (("button", "st.more.script"), ("button", "st.more.resave"),
+                                               ("button", "st.more.structure"), ("stretch",))), ("hint", "st.more.off_text"))),
         ("card", "st.more.farming", (("check", "st.more.farm_cross"),                       # 1.2.20
                                      ("row", (("label", "st.more.farm_region.label"), ("combo", "st.more.farm_region"),
                                               ("stretch",))),

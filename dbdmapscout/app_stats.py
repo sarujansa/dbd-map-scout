@@ -1365,6 +1365,22 @@ class StatsTab:
                        "Userscripts: vorher „Userscript kopieren“ und in Tampermonkey ersetzen.",
                        n=official.STRUCTURE_SCRIPT, file=official.STRUCTURE_FILE))
 
+    def _official_resave(self):
+        """1.8.52: the stats page with the request to save its matches once more although none is new (userscript
+        from version 4) – after a new install or a lost file; before, only the browser console could do that."""
+        try:
+            webbrowser.open(official.URL + official.RESAVE_HASH)
+        except Exception as e:
+            self._log(_("Stats-Seite konnte nicht geöffnet werden: {error}", error=e), "Fehler")
+            return
+        self._off_fast_until = time.time() + 300      # look for the file more often for a while
+        self._inform(_("Alle Matches neu speichern"),
+                     _("Die Stats-Seite öffnet sich im Browser. Das Userscript (ab Version {n}) speichert ihre "
+                       "letzten 30 Matches noch einmal, auch wenn keines neu ist; das Programm übernimmt sie gleich – "
+                       "bekannte zählen nur einmal. Kommt keine Datei: in der Console des Browsers (F12) steht, ob "
+                       "das Skript läuft. Ältere Userscripts: vorher „Userscript kopieren“ und in Tampermonkey "
+                       "ersetzen.", n=official.RESAVE_SCRIPT))
+
     def _official_copy_script(self):
         path = os.path.join(os.path.dirname(official.__file__), official.SCRIPT)
         try:
