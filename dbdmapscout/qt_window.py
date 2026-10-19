@@ -213,6 +213,7 @@ SPECS = {
                                  ("row", (("label", "st.more.rec_limit.label"), ("combo", "st.more.rec_limit"),
                                           ("stretch",))),
                                  ("check", "st.more.rec_pre"), ("check", "st.more.rec_buffer"),
+                                 ("check", "st.more.rec_window"),
                                  ("check", "st.more.rec_merge"), ("check", "st.more.rec_early"),
                                  ("row", (("check", "st.more.rec_instant"), ("combo", "st.more.rec_clip"),
                                           ("check", "st.more.rec_clip_notify"),
