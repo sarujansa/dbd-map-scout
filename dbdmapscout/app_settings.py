@@ -180,10 +180,14 @@ class SettingsTab:
                                                command=self._official_copy_script)).pack(anchor="w", pady=(6, 0))
         self._reg("st.more.structure", ui.Button(om, text=_("Aufbau der Match-Daten speichern"),       # 1.8.46
                                                   command=self._official_structure)).pack(anchor="w", pady=(6, 0))
+        self._reg("st.more.resave", ui.Button(om, text=_("Alle Matches neu speichern"),                # 1.8.52
+                                               command=self._official_resave)).pack(anchor="w", pady=(6, 0))
         self._reg("st.more.off_text", ui.Label(om, text=_("Einmal einrichten: Tampermonkey im Browser installieren, „Userscript kopieren“ und dort "
-                             "als neues Skript einfügen, auf stats.deadbydaylight.com anmelden. Beim Öffnen der Seite "
-                             "speichert das Skript die letzten 30 Matches im Download-Ordner; das Programm liest die "
-                             "Datei und löscht sie. Es geht dafür selbst nicht ins Internet."),
+                             "als neues Skript einfügen und speichern, auf stats.deadbydaylight.com anmelden. Chrome/"
+                             "Edge: in den Details der Erweiterung „Allow User Scripts“ einschalten, sonst läuft "
+                             "kein Skript. Beim Öffnen der Seite speichert das Skript neue Matches (die letzten 30) im "
+                             "Download-Ordner; das Programm liest die Datei und löscht sie. Es geht dafür selbst nicht "
+                             "ins Internet."),
                   style="Dim.TLabel", wraplength=420)).pack(anchor="w", pady=(4, 0))
 
         fm = self._reg("st.more.farming", ui.LabelFrame(more, text=_("Farming-Runden"), padding=8))   # 1.2.20
@@ -372,9 +376,11 @@ class SettingsTab:
                                                     variable=self.off_open_var,
                                                     command=self._official_setting)).pack(anchor="w")
         self._reg("setup.off_text", ui.Label(sx, text=_("Einmal einrichten: Tampermonkey im Browser installieren, „Userscript kopieren“ und dort "
-                             "als neues Skript einfügen, auf stats.deadbydaylight.com anmelden. Beim Öffnen der Seite "
-                             "speichert das Skript die letzten 30 Matches im Download-Ordner; das Programm liest die "
-                             "Datei und löscht sie. Es geht dafür selbst nicht ins Internet."),
+                             "als neues Skript einfügen und speichern, auf stats.deadbydaylight.com anmelden. Chrome/"
+                             "Edge: in den Details der Erweiterung „Allow User Scripts“ einschalten, sonst läuft "
+                             "kein Skript. Beim Öffnen der Seite speichert das Skript neue Matches (die letzten 30) im "
+                             "Download-Ordner; das Programm liest die Datei und löscht sie. Es geht dafür selbst nicht "
+                             "ins Internet."),
                   style="Dim.TLabel", wraplength=420)).pack(anchor="w")
 
         bk = self._reg("st.more.backup", ui.LabelFrame(more, text=_("Sicherung"), padding=8))
