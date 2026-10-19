@@ -43,7 +43,7 @@ def test_other_labels_stay_and_rooms_are_not_tinted():
 
 
 def test_pictures_of_another_style_and_animations_stay(tmp_path):
-    for rel in ("Withered Isle/Fallen Refuge.webp", "Sleepless District/Trickster's Delusion.webp"):
+    for rel in ("Withered Isle/Fallen Refuge.webp",):
         src = _pic(rel)
         assert mapstyle.restyle(src) is src
         path = os.path.join(MAPS, rel)
@@ -131,7 +131,7 @@ def test_every_map_stays_the_same_picture(dark_maps):
     supplied map – same size and name on top, nothing outside the map changed, no lilac left, clearly white text as
     white as before, and the dark picture laid over the lilac floor again = the original wherever no black backing
     was added (only the rounding of soft edges differs). Box colours never on what was floor."""
-    other = {"Trickster's Delusion.webp", "Fallen Refuge.webp", "Freddy Fazbears Pizza.webp"}
+    other = {"Fallen Refuge.webp", "Freddy Fazbears Pizza.webp"}
     fill = mapstyle.FILL.astype(float)
 
     def check(item):                                   # one map; run in WORKERS threads (1.8.31: 38 → ~12 s)
@@ -170,7 +170,7 @@ def test_every_map_stays_the_same_picture(dark_maps):
     from concurrent.futures import ThreadPoolExecutor
     with ThreadPoolExecutor(WORKERS) as ex:
         styled = sum(ex.map(check, dark_maps.items()))
-    assert styled == 52
+    assert styled == 53                          # 1.8.55: + Trickster's Delusion
 
 
 def test_the_boxes_get_their_colours_on_every_map(dark_maps):
@@ -178,7 +178,8 @@ def test_the_boxes_get_their_colours_on_every_map(dark_maps):
     no_m = {"Midwich.gif", "Wreckers.webp", "Rotten Fields.webp", "Dead Sands.webp", "Hawkins.webp", "Lerys.webp", "THE GAME.webp",
             "Rpd East Wing.webp", "Rpd West Wing.webp"}
     no_s = {"Midwich.gif", "Nostromo Wreckage.webp", "Haddonfield.webp", "Hawkins.webp", "Lerys.webp", "THE GAME.webp",
-            "Rpd East Wing.webp", "Rpd West Wing.webp"}
+            "Rpd East Wing.webp", "Rpd West Wing.webp",
+            "Trickster's Delusion.webp"}     # 1.8.55: a curly S with the "8" in its box – 0.31 (0.72 without the 8) < S_MIN
     def check(item):
         path, out = item
         if out == path:
@@ -295,7 +296,7 @@ def test_no_map_keeps_the_black_ring_in_a_floor_style(map_cache):
     def check(path):
         name = os.path.basename(path)
         out = mapstyle.styled_path(path, map_cache, style="grey")
-        if name in ("Trickster's Delusion.webp", "Midwich.gif"):     # its own kind / its own test
+        if name == "Midwich.gif":                                     # its own test
             return None
         assert out != path, name
         src = Image.open(path).convert("RGBA")
@@ -313,7 +314,7 @@ def test_no_map_keeps_the_black_ring_in_a_floor_style(map_cache):
 
     with ThreadPoolExecutor(WORKERS) as ex:
         shares = [s for s in ex.map(check, _supplied()) if s is not None]
-    assert len(shares) == 54 and sorted(shares)[len(shares) // 2] < 0.05
+    assert len(shares) == 55 and sorted(shares)[len(shares) // 2] < 0.05
     src = _pic("Raccoon City/Rpd West Wing.webp")                  # the text on the outline stays white
     top = title_split(src)[2]
     rim = cv2_erode_edge(mapstyle._outline(np.asarray(src)[top:, :, 3]), 14)
@@ -346,7 +347,8 @@ def test_maps_drawn_dark_already_get_the_floor_of_a_floor_style(tmp_path, style)
     """1.8.29 (user: "ich seh die Umrandung der Map nicht" – Fallen Refuge in "Grau mit Rand"): Fallen Refuge and
     Freddy Fazbear's Pizza come in the dark style (see-through floor, black ring), so the floor styles left them as
     they were – a black ring on the black bar. Now they get the style's floor and edge like every converted map;
-    "dark" leaves them, Trickster's Delusion (opaque, its own kind) stays in every style."""
+    "dark" leaves them. (Trickster's Delusion was an opaque picture of its own kind until 1.8.55 – now a callout map
+    like the others, see test_tricksters_delusion_is_a_callout_map_like_the_others.)"""
     from dbdmapscout.mapimage import title_split
     for rel in ("Withered Isle/Fallen Refuge.webp", "Withered Isle/Freddy Fazbears Pizza.webp"):
         path = os.path.join(MAPS, rel)
@@ -370,5 +372,24 @@ def test_maps_drawn_dark_already_get_the_floor_of_a_floor_style(tmp_path, style)
         if edge is not None:                                                      # the light edge, wide enough
             rim = shape & ~mapstyle.cv2.erode(shape.astype(np.uint8), mapstyle._disk(8)).astype(bool)
             assert (np.abs(out[top:][rim][:, :3] - np.array(edge)).max(axis=1) <= 2).mean() > 0.9, rel
-    trick = os.path.join(MAPS, "Sleepless District", "Trickster's Delusion.webp")
-    assert mapstyle.styled_path(trick, str(tmp_path), style=style) == trick
+
+
+def test_tricksters_delusion_is_a_callout_map_like_the_others(tmp_path):
+    """1.8.55 (user: "das ist die offizielle von Hens"): the grey grid layout became the lilac callout map – name on
+    top, see-through background (no crosses left), and every map style converts it."""
+    import cv2
+    from dbdmapscout.mapimage import title_split
+    path = os.path.join(MAPS, "Sleepless District", "Trickster's Delusion.webp")
+    src = Image.open(path).convert("RGBA")
+    assert src.height == 1280 and title_split(src) is not None
+    a = np.asarray(src).astype(int)
+    assert a[0, 0, 3] == 0 and a[-1, -1, 3] == 0 and a[-1, 0, 3] == 0             # the background is gone
+    navy = (np.abs(a[..., :3] - (39, 42, 66)).max(axis=2) <= 6) & (a[..., 3] > 200)
+    cross = (np.abs(a[..., :3] - (84, 87, 129)).max(axis=2) <= 6) & (a[..., 3] > 200)
+    # no background, no crosses left (the source: whole areas of them) – only thin edge pixels where the black outline
+    # meets the floor or a room
+    for colour in (navy, cross):
+        _n, _lab, stats, _c = cv2.connectedComponentsWithStats(colour.astype(np.uint8), connectivity=8)
+        assert not [s for s in stats[1:] if min(s[2], s[3]) >= 4 and s[4] >= 30], stats[1:][:5]
+    for style in mapstyle.STYLES:
+        assert mapstyle.styled_path(path, str(tmp_path), style=style) != path, style

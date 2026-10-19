@@ -9,7 +9,7 @@ grey laid over the lilac floor (``unblend``); the conversion takes the floor off
 over lilac again gives back the original wherever no black backing was added – tests/test_mapstyle.py checks that
 for every map.
 
-Pictures in another style (Fallen Refuge, Freddy, Trickster's Delusion) stay unchanged; Midwich (animated, floors,
+Pictures in another style (Fallen Refuge, Freddy) stay unchanged (1.8.55: Trickster's Delusion is a callout map now); Midwich (animated, floors,
 framed) has its own way since 1.66.2 (``restyle_floors``).
 """
 from __future__ import annotations
