@@ -1914,4 +1914,16 @@ EN = {
     'OBS wird gestartet …': 'Starting OBS …',
     'OBS ist offen, aber nicht erreichbar – in OBS unter Werkzeuge → WebSocket-Servereinstellungen den Server aktivieren und Port/Passwort prüfen. ({error})':
         'OBS is open but cannot be reached – in OBS under Tools → WebSocket Server Settings enable the server and check port/password. ({error})',
+    # 1.8.48
+    'Builds': 'Builds',
+    'Build (4 Perks)': 'Build (4 perks)',
+    'Perk': 'Perk',
+    'Add-on': 'Add-on',
+    'Opfergabe': 'Offering',
+    'Kraft/Item': 'Power/item',
+    'ohne': 'without',
+    'Dein Loadout laut Stats-Seite (ab Userscript Version 3). „Ergebnis“ = als Killer Ø Kills, als Survivor Anteil entkommen; „ohne“ = dasselbe in deinen Runden derselben Rolle ohne diesen Eintrag. Builds ab {n} Runden.':
+        'Your loadout from the stats page (userscript version 3 or newer). "Result" = as killer Ø kills, as survivor the share escaped; "without" = the same in your rounds of that role without this entry. Builds from {n} rounds.',
+    'Noch keine Matches mit Loadout in dieser Auswahl – die Stats-Seite liefert es ab Userscript Version 3 (Einstellungen → Mehr → Offizielle Match-Daten → „Userscript kopieren“).':
+        'No matches with a loadout in this selection yet – the stats page sends it from userscript version 3 (Settings → More → Official match data → "Copy userscript").',
 }

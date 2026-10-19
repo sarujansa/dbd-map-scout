@@ -10,7 +10,7 @@ import time
 import webbrowser
 from types import SimpleNamespace
 
-from . import dashboard, history, official, records, regions, sysinfo
+from . import builds, dashboard, history, official, records, regions, sysinfo
 from . import uimodel as ui
 from .capture import foreground_root, is_game_window
 from .i18n import N_, _
@@ -25,6 +25,7 @@ log = logging.getLogger("dbdmapscout")
 
 STATS_ROLES = [("all", N_("Alle Rollen")), ("killer", N_("Killer")), ("survivor", N_("Survivor")),
                ("custom", N_("Custom Games")), ("farming", N_("Farming"))]
+BUILD_KINDS = {"perk": N_("Perk"), "addon": N_("Add-on"), "offering": N_("Opfergabe"), "power": N_("Kraft/Item")}
 STATS_WAIT_GROUPS = [("weekday", N_("nach Wochentag")), ("hour", N_("nach Uhrzeit")), ("region", N_("nach Region"))]
 WEEKDAYS = [N_("Montag"), N_("Dienstag"), N_("Mittwoch"), N_("Donnerstag"), N_("Freitag"), N_("Samstag"),
             N_("Sonntag")]
@@ -302,6 +303,21 @@ class StatsTab:
                                 "getötet (z. B. Mori), „Aufgegeben“ schließt verlassene Matches ein. „Ø Kills ohne "
                                 "Aufgaben“ zählt nur Matches, in denen kein Survivor aufgab oder ging."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
+        # 1.8.48: the own loadouts from the stats page (userscript 3) and how those matches ended
+        box_bu = self._stats_page(_("Builds"))
+        self.stats_build_var = ui.StringVar(value="")
+        ui.Label(box_bu, textvariable=self.stats_build_var, wraplength=520).pack(anchor="w")
+        self.stats_items = self._stats_tree(box_bu, (("name", _("Name"), 190, "w"), ("kind", _("Art"), 85, "w"),
+                                                     ("role", _("Rolle"), 70, "w"), ("n", _("Runden"), 60, "e"),
+                                                     ("share", _("Anteil"), 60, "e"), ("res", _("Ergebnis"), 75, "e"),
+                                                     ("without", _("ohne"), 65, "e")), 9)
+        self.stats_builds = self._stats_tree(box_bu, (("build", _("Build (4 Perks)"), 360, "w"),
+                                                      ("who", _("Killer"), 110, "w"), ("n", _("Runden"), 60, "e"),
+                                                      ("res", _("Ergebnis"), 75, "e")), 5)
+        ui.Label(box_bu, text=_("Dein Loadout laut Stats-Seite (ab Userscript Version 3). „Ergebnis“ = als Killer "
+                                 "Ø Kills, als Survivor Anteil entkommen; „ohne“ = dasselbe in deinen Runden derselben "
+                                 "Rolle ohne diesen Eintrag. Builds ab {n} Runden.", n=builds.BUILD_MIN),
+                  style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         self._stats_sort = ("n", True)
         return outer
 
@@ -449,7 +465,8 @@ class StatsTab:
         part = (self._stats_part_dash, self._stats_part_last, self._stats_part_maps, self._stats_part_killers,
                 self._stats_part_bp, self._stats_part_records, self._stats_part_trend,
                 self._stats_part_sys, self._stats_part_regions, self._stats_part_wait,      # tab order (1.8.2)
-                self._stats_part_opponents)                                                 # 1.8.46
+                self._stats_part_opponents,                                                 # 1.8.46
+                self._stats_part_builds)                                                    # 1.8.48
         if i < len(part):
             part[i](c)
 
@@ -574,6 +591,28 @@ class StatsTab:
                                         pct(official.share(o.fates, "sacrificed")),
                                         pct(official.share(o.fates, "killed")),
                                         pct(official.share(o.fates, "abandoned", "gone"))))
+
+    def _stats_part_builds(self, c):
+        """1.8.48: perks, add-ons, offerings and powers/items of the own loadouts, and the four-perk builds."""
+        def res(role, v):
+            if v is None:
+                return "–"
+            return f"Ø {v:.2f}" if role == "killer" else f"{v:.0%}"
+
+        n = builds.with_loadout(c.pairs)
+        self.stats_build_var.set("" if n else _("Noch keine Matches mit Loadout in dieser Auswahl – die Stats-Seite "
+                                                 "liefert es ab Userscript Version 3 (Einstellungen → Mehr → Offizielle "
+                                                 "Match-Daten → „Userscript kopieren“)."))
+        t = self.stats_items
+        t.delete(*t.get_children())
+        for it in builds.items(c.pairs):
+            t.insert("", "end", values=(it.name, _(BUILD_KINDS[it.kind]), self._role_name(it.role), it.n,
+                                        f"{it.share:.0%}", res(it.role, it.mean), res(it.role, it.mean_without)))
+        t = self.stats_builds
+        t.delete(*t.get_children())
+        for b in builds.builds(c.pairs):
+            who = killer_label(self._killer_of(b.character)) if b.character else self._role_name(b.role)
+            t.insert("", "end", values=(" · ".join(b.perks), who, b.n, res(b.role, b.mean)))
 
     def _stats_part_trend(self, c):
         self._trend_render(c.pairs, TREND_UNIT.get(c.period, "week"))

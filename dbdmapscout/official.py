@@ -85,6 +85,20 @@ class Match:
     status: str = ""        # own status (survivor)
     img: str = ""
     opp: list = field(default_factory=list)     # [Player]
+    # 1.8.48 (userscript 3, the user's pick: own data and match infos; [] / "" / None from older files)
+    mode: list = field(default_factory=list)     # [id, name] of the page's gameType
+    event: str = ""                              # specialEventId
+    map_key: str = ""                            # the page's map id
+    duration: float = 0.0                        # the whole match (matchDuration)
+    perks: list = field(default_factory=list)    # own loadout: [[id, name]] …
+    addons: list = field(default_factory=list)
+    offering: list = field(default_factory=list)  # [id, name] or []
+    power: list = field(default_factory=list)    # killer power / survivor item: [id, name] or []
+    emblems: list = field(default_factory=list)  # [[id, name, quality]]
+    score: dict = field(default_factory=dict)    # {DBD_…ScoreCat_…: points}
+    prestige: int | None = None
+    level: int | None = None
+    killer_status: str = ""
 
 
 # ------------------------------------------------------------------ reading the userscript's file
@@ -116,6 +130,42 @@ def _status(d) -> tuple:
     return key, stem
 
 
+SCORE_KEY = re.compile(r"^DBD_(Camper|Slasher)ScoreCat_[A-Za-z]{1,40}$")
+
+
+def _ref(v) -> list:
+    """[id, name] of a perk, add-on, offering, power or mode; [] = none."""
+    if not isinstance(v, dict):
+        return []
+    ref = [_text(v.get("id"), 80), _text(v.get("name"), 80)]
+    return ref if any(ref) else []
+
+
+def _refs(v, most) -> list:
+    return [r for r in (_ref(x) for x in (v if isinstance(v, list) else [])[:most]) if r]
+
+
+def _int(v, top=10 ** 6):
+    n = _num(v)
+    return int(n) if n is not None and 0 <= n < top else None
+
+
+def _own_extra(me, d) -> dict:
+    """1.8.48: the fields userscript 3 adds – own loadout, emblems, score, match infos."""
+    lo = me.get("loadout") if isinstance(me.get("loadout"), dict) else {}
+    emblems = [[_text(e.get("id"), 80), _text(e.get("name"), 80), _text(e.get("quality"), 20)]
+               for e in (me.get("emblems") if isinstance(me.get("emblems"), list) else [])[:8] if isinstance(e, dict)]
+    score = {k: float(v) for k, v in (me.get("score") if isinstance(me.get("score"), dict) else {}).items()
+             if isinstance(k, str) and SCORE_KEY.match(k) and _num(v) is not None and 0 <= v < 1e7}
+    duration = _num(d.get("duration"))
+    return dict(mode=_ref(d.get("mode")), event=_text(d.get("event"), 80), map_key=_text(d.get("mapId"), 80),
+                duration=duration if duration is not None and 0 <= duration < 86400 else 0.0,
+                perks=_refs(lo.get("perks"), 4), addons=_refs(lo.get("addons"), 2), offering=_ref(lo.get("offering")),
+                power=_ref(lo.get("power")), emblems=[e for e in emblems if any(e)], score=score,
+                prestige=_int(me.get("prestige"), 1000), level=_int(me.get("level"), 1000),
+                killer_status=_text(me.get("killerStatus"), 60))
+
+
 def _player(d) -> Player:
     if not isinstance(d, dict):
         return Player()
@@ -139,7 +189,7 @@ def _match(d, now):
     return Match(t=t, map=_text(d.get("map")), custom=d.get("custom") is True, role=p.role, character=p.character,
                  seconds=max(0.0, seconds) if seconds is not None else 0.0,
                  bp=int(bp) if bp is not None and 0 <= bp < 1e9 else 0,
-                 status=p.status, img=p.img, opp=[_player(o) for o in opps[:8]])
+                 status=p.status, img=p.img, opp=[_player(o) for o in opps[:8]], **_own_extra(me, d))
 
 
 def _safe_match(d, now):
@@ -186,12 +236,34 @@ def load(path: str) -> list:
                     out.append(Match(t=float(d["t"]), map=str(d.get("map") or ""), custom=bool(d.get("custom")),
                                      role=str(d.get("role") or ""), character=str(d.get("character") or ""),
                                      seconds=float(d.get("seconds") or 0), bp=int(d.get("bp") or 0),
-                                     status=str(d.get("status") or ""), img=str(d.get("img") or ""), opp=opp))
+                                     status=str(d.get("status") or ""), img=str(d.get("img") or ""), opp=opp,
+                                     **_stored_extra(d)))
                 except (ValueError, KeyError, TypeError):
                     continue
     except OSError:
         return []
     return sorted(out, key=lambda m: m.t)
+
+
+def _stored_extra(d) -> dict:
+    """1.8.48: the extra fields of a stored line (lines from before have none – the defaults)."""
+    def pairs(v, width=2):
+        return [[str(x) for x in r[:width]] for r in (v if isinstance(v, list) else [])
+                if isinstance(r, list) and len(r) >= width]
+
+    def pair(v):
+        return [str(x) for x in v[:2]] if isinstance(v, list) and len(v) >= 2 else []
+
+    def opt_int(v):
+        return int(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+    score = d.get("score") if isinstance(d.get("score"), dict) else {}
+    return dict(mode=pair(d.get("mode")), event=str(d.get("event") or ""), map_key=str(d.get("map_key") or ""),
+                duration=float(d.get("duration") or 0), perks=pairs(d.get("perks")), addons=pairs(d.get("addons")),
+                offering=pair(d.get("offering")), power=pair(d.get("power")), emblems=pairs(d.get("emblems"), 3),
+                score={str(k): float(v) for k, v in score.items() if isinstance(v, (int, float))},
+                prestige=opt_int(d.get("prestige")), level=opt_int(d.get("level")),
+                killer_status=str(d.get("killer_status") or ""))
 
 
 def load_gaps(path: str) -> list:
