@@ -1926,4 +1926,6 @@ EN = {
         'Your loadout from the stats page (userscript version 3 or newer). "Result" = as killer Ø kills, as survivor the share escaped; "without" = the same in your rounds of that role without this entry. Builds from {n} rounds.',
     'Noch keine Matches mit Loadout in dieser Auswahl – die Stats-Seite liefert es ab Userscript Version 3 (Einstellungen → Mehr → Offizielle Match-Daten → „Userscript kopieren“).':
         'No matches with a loadout in this selection yet – the stats page sends it from userscript version 3 (Settings → More → Official match data → "Copy userscript").',
+    # 1.8.49
+    'Alle Modi': 'All modes',
 }

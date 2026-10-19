@@ -1060,6 +1060,37 @@ def test_the_builds_tab_lists_the_own_loadout_with_its_results(app_root):
         app.quit()
 
 
+def test_the_mode_filter_appears_with_known_modes_and_filters_the_rounds(app_root):
+    """1.8.49: the game mode of the stats page as a filter – hidden while no match names one, "Alle Modi" by default
+    (nothing changes on its own), a picked mode keeps only its rounds."""
+    import json
+    from dbdmapscout import history, official
+    from dbdmapscout.app import App
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    ms = []
+    for i, mode in enumerate((["Online", "Public Match"], ["Online", "Public Match"], ["2v8", "2v8"], [])):
+        t = time.time() - 9000 + i * 1800
+        history.append(str(app_root / "rounds.jsonl"), history.Round(t, 600, "coal", "Coal Tower", role="killer"))
+        ms.append(official.Match(t=t - 38, map="Coal Tower", role="killer", character="The Nurse", seconds=560,
+                                 mode=mode))
+    official.merge(str(app_root / official.FILE), ms)
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        assert not app.stats_mode_cb.winfo_manager()                 # before any rendering: not there
+        app._stats_render()
+        assert app.stats_mode_cb.winfo_manager() == "pack"
+        assert app.stats_mode_var.get() == "Alle Modi" and len(app._stats_rounds_shown) == 4
+        assert [lbl for _k, lbl in app._stats_modes] == ["Alle Modi", "Public Match", "2v8"]
+        app.stats_mode_var.set("2v8")
+        app._stats_render()
+        assert len(app._stats_rounds_shown) == 1
+        app.stats_mode_var.set("Public Match")
+        app._stats_render()
+        assert len(app._stats_rounds_shown) == 2                     # the round without a mode is not counted in
+    finally:
+        app.quit()
+
+
 def test_a_saved_tab_order_survives_a_new_tab(app_root):
     """1.8.46: the statistics got an eleventh tab – an order saved with ten keeps it, the new tab goes to the end
     (before, any list that was not a full permutation fell back to the built-in order)."""
