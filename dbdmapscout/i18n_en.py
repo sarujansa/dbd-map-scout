@@ -1883,4 +1883,23 @@ EN = {
     'Die hosts-Datei wurde direkt nach dem Schreiben wieder verändert (Virenschutz oder ein anderes Programm?).':
         'The hosts file was changed again right after writing (antivirus or another program?).',
     'Keine Schreibrechte auf die hosts-Datei (Administratorrechte?).': 'No permission to write the hosts file (administrator rights?).',
+    # 1.8.46
+    'Aufbau der Match-Daten speichern': 'Save the structure of the match data',
+    'Öffnet die Stats-Seite so, dass das Userscript einmal den Aufbau ihrer Match-Daten im Download-Ordner speichert: nur Feldnamen und Arten, keine Werte. Damit lässt sich entscheiden, welche Daten das Programm zusätzlich auswerten könnte.':
+        'Opens the stats page so that the userscript saves the structure of its match data once in the download folder: field names and types only, no values. That shows which further data the program could use.',
+    'Die Stats-Seite öffnet sich im Browser. Das Userscript (ab Version {n}) legt danach „{file}“ in den Download-Ordner: nur die Namen und Arten der Felder, die die Seite liefert – keine Werte, keine Namen, keine IDs. Das Programm liest diese Datei nicht; du kannst sie weitergeben, um zu entscheiden, welche Felder zusätzlich übernommen werden sollen. Ältere Userscripts: vorher „Userscript kopieren“ und in Tampermonkey ersetzen.':
+        'The stats page opens in the browser. The userscript (version {n} or newer) then puts "{file}" into the download folder: only the names and kinds of the fields the page sends – no values, no names, no IDs. The program does not read this file; you can pass it on to decide which further fields should be taken. Older userscripts: first "Copy userscript" and replace it in Tampermonkey.',
+    'Gegner': 'Opponents',
+    'Charakter': 'Character',
+    'Begegnungen': 'Encounters',
+    'Geopfert': 'Sacrificed',
+    'Getötet': 'Killed',
+    'Aufgegeben': 'Abandoned',
+    'Laut Stats-Seite: als Killer die Survivor gegen dich und wie ihr Match endete, als Survivor der Killer und wie dein Match endete. „Getötet“ = vom Killer direkt getötet (z. B. Mori), „Aufgegeben“ schließt verlassene Matches ein. „Ø Kills ohne Aufgaben“ zählt nur Matches, in denen kein Survivor aufgab oder ging.':
+        'From the stats page: as killer the survivors against you and how their match ended, as survivor the killer and how your match ended. "Killed" = killed by the killer directly (e.g. a mori), "Abandoned" includes matches left. "Clean Ø kills" counts only matches in which no survivor abandoned or left.',
+    'Noch keine Runden mit Daten der Stats-Seite in dieser Auswahl.': 'No rounds with stats-page data in this selection yet.',
+    'Schnellste 4K': 'Fastest 4K',
+    '{n} von {total} Runden': '{n} of {total} rounds',
+    '{n} Survivor': '{n} survivors',
+    'Ø Kills ohne Aufgaben': 'Clean Ø kills',
 }

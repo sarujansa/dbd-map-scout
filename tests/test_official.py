@@ -377,6 +377,85 @@ def test_userscript_saves_a_file_the_program_reads(tmp_path):
     assert len(ms) == 1 and o.kills(ms[0]) == 4 and ms[0].opp[0].img == "sacrificed"
 
 
+STRUCTURE_HARNESS = r"""
+const fs = require('fs'), vm = require('vm');
+const code = fs.readFileSync(process.argv[2], 'utf8');
+const answer = fs.readFileSync(process.argv[3], 'utf8');
+const api = 'https://account-backend.bhvr.com/player-stats/match-history/games/dbd/providers/bhvr?lang=en&limit=30';
+function run(hash, store) {
+  const files = [];
+  let pending = null;
+  class XHR { open() {} send() {} addEventListener(ev, fn) { this.onload = fn; } }
+  const ctx = {
+    console: { log() {} }, setTimeout: fn => setTimeout(fn, 0), clearTimeout, Date,
+    XMLHttpRequest: XHR, location: { hash },
+    sessionStorage: { getItem: () => null },
+    localStorage: { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = v; },
+                    removeItem: k => { delete store[k]; } },
+    URL: { createObjectURL: b => { pending = b.text; return 'blob:x'; }, revokeObjectURL() {} },
+    Blob: class { constructor(parts) { this.text = parts.join(''); } },
+    document: { body: { appendChild() {} }, addEventListener() {},
+                createElement: () => { const a = { click() { files.push([a.download, pending]); }, remove() {},
+                                                   style: {} }; return a; } },
+  };
+  ctx.window = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(code, ctx);
+  const x = new ctx.XMLHttpRequest();
+  x.open('GET', api);
+  x.send();
+  x.responseType = '';
+  x.responseText = answer;
+  x.onload();
+  return files;
+}
+const store = {};
+const asked = run('#dbdmapscout-structure', store);
+setTimeout(() => {
+  const again = run('', store);              // the request is used up: matches only
+  const plain = run('', {});
+  setTimeout(() => process.stdout.write(JSON.stringify({ asked, again, plain })), 20);
+}, 20);
+"""
+
+
+def test_userscript_saves_the_structure_only_on_request_and_without_values(tmp_path):
+    """1.8.46: opened with #dbdmapscout-structure the script saves once the shape of the page's answer – field
+    names and types, no value, no id-like or name-like field name."""
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not installed")
+    page_answer = {"data": [{
+        "matchStat": {"matchStartTime": T0, "map": {"name": "Mother's Dwelling"}, "isCustomMatch": False,
+                      "matchId": "secret-match-id", "extra": None},
+        "playerStat": {"playerName": "MyOwnName", "perks": [{"name": "Pop Goes the Weasel", "tier": 3}],
+                       "bloodpointsEarned": 241377},
+        "opponentStat": [{"playerName": "SomeoneElse", "platformId": "765611"}],
+        "byPlayer": {"0123456789abcdef": {"score": 1}, "Some Name": {"score": 2}}},
+        {"matchStat": {"matchStartTime": T0 - 900, "extra": "x"}, "playerStat": {}, "opponentStat": []}]}
+    script_path = tmp_path / "harness.js"
+    answer_path = tmp_path / "answer.json"
+    script_path.write_text(STRUCTURE_HARNESS, encoding="utf-8")
+    answer_path.write_text(json.dumps(page_answer), encoding="utf-8")
+    out = subprocess.run([node, str(script_path), SCRIPT, str(answer_path)], capture_output=True, text=True,
+                         timeout=60)
+    assert out.returncode == 0, out.stderr
+    res = json.loads(out.stdout)
+    names = [n for n, _body in res["asked"]]
+    assert "dbdmapscout-structure.json" in names and "dbdmapscout-matches.json" in names
+    body = dict(res["asked"])["dbdmapscout-structure.json"]
+    for secret in ("MyOwnName", "SomeoneElse", "765611", "secret-match-id", "Pop Goes", "241377", "Mother",
+                   "0123456789abcdef", "Some Name"):
+        assert secret not in body
+    shape = json.loads(body)
+    assert shape["format"] == "dbdmapscout-structure" and shape["script"] == o.script_version(SCRIPT)
+    match = shape["shape"]["data"][0]
+    assert match["matchStat"]["matchStartTime"] == "number" and match["matchStat"]["extra"] == "string"
+    assert match["playerStat"]["perks"] == [{"name": "string", "tier": "number"}]
+    assert match["byPlayer"] == {"<key>": {"score": "number"}}
+    assert [n for n, _b in res["again"]] == [] and [n for n, _b in res["plain"]] == ["dbdmapscout-matches.json"]
+
+
 # ------------------------------------------------------------------ map correction, trend
 def test_correct_maps_takes_the_page_map_as_layout_one():
     ids = {"Coal Tower": "coal", "Groaning Storehouse": "gs"}.get
@@ -451,3 +530,38 @@ def test_take_downloads_hands_over_the_new_matches(tmp_path):
     write(str(tmp_path), "dbdmapscout-matches (1).json", export(entry(T0 + 1800)))      # the same match twice
     res = o.take_downloads(str(tmp_path), store, now=T0 + 3600)
     assert [m.t for m in res.fresh] == [T0 + 1800] and res.new == 1                      # only the unknown one
+
+
+# ------------------------------------------------------------------ 1.8.46: fates and opponents
+def _kmatch(*statuses, chars=None):
+    chars = chars or ["Meg Thomas", "Feng Min", "Dwight Fairfield", "Claudette Morel"]
+    return o.Match(t=T0, map="Coal Tower", role="killer",
+                   opp=[o.Player(role="survivor", character=c, status=s, img=i)
+                        for c, (s, i) in zip(chars, statuses)])
+
+
+def test_fates_split_hook_kills_from_other_kills_and_spot_the_abandon_bug():
+    assert o.fate("SACRIFICED", "VE_Sacrificed") == "sacrificed"
+    assert o.fate("DEAD", "VE_Killed") == "killed" and o.fate("", "VE_Killed") == "killed"
+    assert o.fate("ESCAPED", "VE_Escaped") == "escaped"
+    assert o.fate("ESCAPED", "VE_SurrenderDraw") == "abandoned"         # the page's bug: the picture is right
+    assert o.fate("", "VE_ManuallyLeftMatch") == "gone" and o.fate("", "") is None
+
+
+def test_fates_clean_kills_and_opponents():
+    s, k, e, a = ("SACRIFICED", "VE_Sacrificed"), ("DEAD", "VE_Killed"), ("ESCAPED", "VE_Escaped"), \
+        ("ESCAPED", "VE_SurrenderDraw")
+    m1 = _kmatch(s, s, k, e)                       # 3 kills, played out
+    m2 = _kmatch(a, s, s, s)                       # 4 kills with an abandon: not "clean"
+    surv = o.Match(t=T0, map="Badham", role="survivor", status="SACRIFICED", img="VE_Sacrificed",
+                   opp=[o.Player(role="killer", character="The Nurse"), o.Player(role="survivor", character="Ace")])
+    pairs = [(None, m1), (None, m2), (None, surv)]
+    assert o.fates(pairs) == {"sacrificed": 5, "killed": 1, "escaped": 1, "abandoned": 1}
+    assert o.share(o.fates(pairs), "abandoned", "gone") == 1 / 8 and o.share({}, "escaped") is None
+    assert o.clean_kills(pairs) == [3]
+    opp = {(x.name, x.role): x for x in o.opponents(pairs)}
+    assert opp[("Meg Thomas", "survivor")].n == 2 and opp[("Meg Thomas", "survivor")].fates == {"sacrificed": 1,
+                                                                                                  "abandoned": 1}
+    assert opp[("The Nurse", "killer")].fates == {"sacrificed": 1}      # as survivor: how your own match ended
+    assert ("Ace", "survivor") not in opp                               # a fellow survivor is no opponent
+    assert o.opponents(pairs)[0].n == 2                                  # most met first

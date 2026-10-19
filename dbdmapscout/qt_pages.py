@@ -683,17 +683,19 @@ class _Arranged:
         """Let the user drag the tabs of ``tw``; a move posts ("tab_order", (page, tabs id, [ids]))."""
         self._tabsets = list(self._tabsets) + [(tabs_id, tw, ids)]
         tw.tabBar().setMovable(True)
+        # 1.8.46: many tabs (statistics: eleven) – a little less padding, so they fit side by side again
+        tw.tabBar().setProperty("dense", len(ids) >= DENSE_TABS)
         if page_key:
             tw.tabBar().tabMoved.connect(lambda *_a, t=tw, i=ids, tid=tabs_id: self._applying or self._post(
                 "tab_order", (page_key, tid, self._tab_ids(t, i))))
 
     def apply_tab_order(self, saved: dict):
-        """{tabs id: [ids]} (setting tab_order[page]); a list that is not a permutation of the tabs, or none, means
-        the built-in order."""
+        """{tabs id: [ids]} (setting tab_order[page]); none means the built-in order. 1.8.46: a tab the saved order
+        does not know yet (a new version's tab) goes to the end and ids no longer there are dropped – the
+        user's order stays (before, any such list fell back to the built-in order)."""
         for tabs_id, tw, ids in self._tabsets:
-            want = [str(i) for i in (saved or {}).get(tabs_id, [])]
-            if sorted(want) != sorted(ids):
-                want = list(ids)
+            want = list(dict.fromkeys(str(i) for i in (saved or {}).get(tabs_id, []) if str(i) in ids))
+            want += [i for i in ids if i not in want]
             if want == self._tab_ids(tw, ids):
                 continue
             # not blockSignals: the QTabWidget moves its pages along only from the bar's tabMoved signal
@@ -705,6 +707,9 @@ class _Arranged:
                         tw.tabBar().moveTab(now, pos)
             finally:
                 self._applying = False
+
+
+DENSE_TABS = 11                        # from this many tabs in a row the bar gets less padding (qt_theme)
 
 
 class HostView(QWidget):

@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         DbD Map Scout – match export
 // @namespace    dbd-map-scout
-// @version      1
-// @description  Saves the recent match history of stats.deadbydaylight.com as dbdmapscout-matches.json (download folder) for DbD Map Scout. Only match data (time, map, role, character, status) – no account or login data. Sends nothing anywhere.
+// @version      2
+// @description  Saves the recent match history of stats.deadbydaylight.com as dbdmapscout-matches.json (download folder) for DbD Map Scout. Only match data (time, map, role, character, status) – no account or login data. Sends nothing anywhere. On request (DbD Map Scout opens the page with #dbdmapscout-structure) once the structure of the page's answer: field names and types, no values.
 // @match        https://stats.deadbydaylight.com/*
 // @run-at       document-start
 // @grant        none
@@ -13,14 +13,23 @@
 // ties the matches to its own rounds (dbdmapscout/official.py). This script makes no requests of its
 // own: it only reads the answer the page itself loads (the same request "DBD Detailed Match History"
 // reads) and saves a reduced copy once per page load, only when it holds a match not saved before.
+// Version 2 (DbD Map Scout 1.8.46): on request also the structure of that answer – which fields the page
+// sends, as names and types without any value – so the user can decide whether more fields are worth taking.
 (function () {
     'use strict';
 
-    const SCRIPT_VERSION = 1;
+    const SCRIPT_VERSION = 2;
     const FORMAT = 'dbdmapscout-matches';
     const FILE_NAME = 'dbdmapscout-matches.json';
     const API = /\/player-stats\/match-history\/games\/dbd\//;
     const LAST_KEY = 'dbdmapscout.newestSaved';
+
+    const STRUCTURE_FORMAT = 'dbdmapscout-structure';
+    const STRUCTURE_FILE = 'dbdmapscout-structure.json';
+    const STRUCTURE_HASH = '#dbdmapscout-structure';
+    const STRUCTURE_KEY = 'dbdmapscout.structureUntil';
+    const STRUCTURE_WAIT_MS = 15 * 60 * 1000;   // the request survives the login (a redirect drops the hash)
+    const FIELD_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,40}$/;
 
     const collected = new Map();          // start time -> reduced match
     let saveTimer = null;
@@ -70,9 +79,97 @@
         };
     }
 
+    // --- the structure of the answer (on request only): names and types, never a value ---
+    function asked() {
+        try {
+            return String((window.location && window.location.hash) || '') === STRUCTURE_HASH;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function structureWanted() {
+        try {
+            if (asked()) localStorage.setItem(STRUCTURE_KEY, String(Date.now() + STRUCTURE_WAIT_MS));
+            return Number(localStorage.getItem(STRUCTURE_KEY)) > Date.now();
+        } catch (e) {
+            return asked();
+        }
+    }
+
+    function merged(a, b) {
+        if (a === undefined) return b;
+        if (b === undefined || a === b) return a;
+        if (a === 'null') return b;
+        if (b === 'null') return a;
+        if (Array.isArray(a) && Array.isArray(b)) return a.length ? (b.length ? [merged(a[0], b[0])] : a) : b;
+        if (typeof a === 'object' && typeof b === 'object' && !Array.isArray(a) && !Array.isArray(b)) {
+            const out = Object.assign({}, a);
+            for (const k of Object.keys(b)) out[k] = merged(out[k], b[k]);
+            return out;
+        }
+        if (typeof a === 'string' && typeof b === 'string') {
+            return Array.from(new Set(a.split('|').concat(b.split('|')))).sort().join('|');
+        }
+        return 'mixed';
+    }
+
+    // a field name that is not a plain identifier (an id, a player name used as a key) never leaves the page
+    function shape(v, depth) {
+        if (depth > 12) return '...';
+        if (v === null || v === undefined) return 'null';
+        if (Array.isArray(v)) {
+            let item;
+            for (const x of v.slice(0, 50)) item = merged(item, shape(x, depth + 1));
+            return item === undefined ? [] : [item];
+        }
+        if (typeof v === 'object') {
+            const out = {};
+            for (const [k, x] of Object.entries(v)) {
+                const key = FIELD_NAME.test(k) && !/^[0-9a-f]{8,}$/i.test(k) ? k : '<key>';
+                out[key] = merged(out[key], shape(x, depth + 1));
+            }
+            return out;
+        }
+        return typeof v;
+    }
+
+    function download(name, body) {
+        const url = URL.createObjectURL(new Blob([body], { type: 'application/json' }));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+    }
+
+    function saveStructure(data) {
+        if (!document.body) {
+            document.addEventListener('DOMContentLoaded', () => saveStructure(data), { once: true });
+            return;
+        }
+        try {
+            localStorage.removeItem(STRUCTURE_KEY);       // once per request
+        } catch (e) { /* ignore */ }
+        download(STRUCTURE_FILE, JSON.stringify({
+            format: STRUCTURE_FORMAT, version: 1, script: SCRIPT_VERSION,
+            exported: Math.floor(Date.now() / 1000), shape: shape(data, 0),
+        }, null, 1));
+        console.log('[DbD Map Scout] saved the structure of the match history as ' + STRUCTURE_FILE);
+    }
+
+    let structureDone = false;
+
     // wait: after the page's answer 1.5 s (it may come in parts), after the cached copy alone 10 s
     // (the fresh answer usually follows and replaces it -> one file instead of two)
     function collect(data, wait) {
+        if (!structureDone && data && typeof data === 'object' && structureWanted()) {
+            structureDone = true;
+            saveStructure(data);
+        }
         if (data && !Array.isArray(data) && Array.isArray(data.data)) data = data.data;
         if (!Array.isArray(data)) return;
         let added = 0;
@@ -106,15 +203,7 @@
             format: FORMAT, version: 1, script: SCRIPT_VERSION,
             exported: Math.floor(Date.now() / 1000), matches: matches,
         });
-        const url = URL.createObjectURL(new Blob([body], { type: 'application/json' }));
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = FILE_NAME;
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        download(FILE_NAME, body);
         try {
             localStorage.setItem(LAST_KEY, String(newest));
         } catch (e) { /* ignore */ }
