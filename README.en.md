@@ -8,7 +8,7 @@ Map overlay for Dead by Daylight. When a match starts, the map name is detected 
 
 ## Installation (once)
 
-1. **Install Python** (if you do not have it yet): <https://www.python.org/downloads/>, version 3.12 or newer. Tick **"Add python.exe to PATH"** in the installer.
+1. **Install Python** (if you do not have it yet): <https://www.python.org/downloads/>, version **3.12 to 3.14** (onnxruntime and pywinrt are not available for 3.15 yet; a newer version may stay installed alongside, `start.bat` picks the right one). Tick **"Add python.exe to PATH"** in the installer.
 2. Unpack the folder, e.g. to `C:\Tools\dbd-map-scout`.
 3. Double-click **`start.bat`**. The first start creates a Python environment of its own (`.venv`) and installs the packages (about 1–2 minutes, around 250 MB). The program then starts right away.
 4. **Desktop shortcut:** once the program runs as administrator (e.g. right-click `start.bat` → "Run as administrator"), it sets the shortcut up **by itself** and renews it after updates or when you move the folder. By hand: **`verknuepfung_erstellen.bat`** (Windows asks once for administrator rights). Both create the task "DbD Map Scout" in the Windows Task Scheduler and put "DbD Map Scout" with its own icon on the desktop: the shortcut starts the program as administrator (needed for "Connected to") **without a Windows prompt** and without a console window. The same shortcut goes into the **Start menu**. Pin it via the shortcut (right-click → "Pin to taskbar") or directly on the running program in the taskbar – either way it is one button with the program icon. (Pinned before 1.30.3 and it shows the Python icon? "Unpin from taskbar" once, start the program once through the desktop shortcut, pin again.)
