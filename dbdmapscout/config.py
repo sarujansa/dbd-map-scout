@@ -126,6 +126,7 @@ DEFAULTS = {
     "user_aliases": {},                 # own assignments of unknown banner texts: {map_id: [text, ...]}
     "welcome_seen": False,              # the setup assistant of the first start was finished or skipped
     "killer_aliases": {},               # killer names as read (skins, new killers): {fold(name): "The Nurse"}
+    "stats_mode": "",                   # 1.8.51: game-mode filter of the statistics, "" = all modes
     "official_open_after_dbd": False,   # open stats.deadbydaylight.com once DBD was closed (userscript saves the matches)
     "official_dir": "",                 # where the userscript's files land ("" = the Windows download folder)
     "official_notify": True,

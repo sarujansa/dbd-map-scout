@@ -26,6 +26,9 @@ log = logging.getLogger("dbdmapscout")
 STATS_ROLES = [("all", N_("Alle Rollen")), ("killer", N_("Killer")), ("survivor", N_("Survivor")),
                ("custom", N_("Custom Games")), ("farming", N_("Farming"))]
 BUILD_KINDS = {"perk": N_("Perk"), "addon": N_("Add-on"), "offering": N_("Opfergabe"), "power": N_("Kraft/Item")}
+# 1.8.51: the stats page's mode ids as the user's matches showed them (others keep the page's name)
+MODE_LABELS = {"Online": N_("Öffentlich"), "SeasonalEvent": N_("Event-Modus")}
+QUALITY_LABELS = (N_("keins"), N_("Bronze"), N_("Silber"), N_("Gold"), N_("Iri"))   # builds.QUALITIES, worst first
 STATS_WAIT_GROUPS = [("weekday", N_("nach Wochentag")), ("hour", N_("nach Uhrzeit")), ("region", N_("nach Region"))]
 WEEKDAYS = [N_("Montag"), N_("Dienstag"), N_("Mittwoch"), N_("Donnerstag"), N_("Freitag"), N_("Samstag"),
             N_("Sonntag")]
@@ -118,7 +121,8 @@ class StatsTab:
         self.stats_mode_var = ui.StringVar(value=self._stats_modes[0][1])
         self.stats_mode_cb = ui.Combobox(fr, textvariable=self.stats_mode_var, state="readonly", width=16,
                                           values=[lbl for _k, lbl in self._stats_modes])
-        self.stats_mode_cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
+        self.stats_mode_cb.bind("<<ComboboxSelected>>", lambda e: self._stats_mode_pick())
+        self._stats_mode_want = self.settings.get("stats_mode") or None      # 1.8.51: the pick is remembered
         ui.Button(fr, text=_("Stats-Seite öffnen"),
                   command=lambda: self._official_open(False)).pack(side="right")
         self._stats_last_limit = LAST_ROUNDS_STEP
@@ -320,9 +324,23 @@ class StatsTab:
         self.stats_builds = self._stats_tree(box_bu, (("build", _("Build (4 Perks)"), 360, "w"),
                                                       ("who", _("Killer"), 110, "w"), ("n", _("Runden"), 60, "e"),
                                                       ("res", _("Ergebnis"), 75, "e")), 5)
+        # 1.8.51: emblems, score categories and the killer's rating (user's pick: here, no tab of their own)
+        self.stats_emblems = self._stats_tree(box_bu, (("name", _("Emblem"), 150, "w"), ("role", _("Rolle"), 70, "w"),
+                                                       ("n", _("Runden"), 60, "e"), ("mean", _("Ø Stufe"), 90, "e"),
+                                                       ("iri", _("Iri"), 55, "e"), ("gold", _("Gold"), 55, "e"),
+                                                       ("silver", _("Silber"), 60, "e"),
+                                                       ("bronze", _("Bronze"), 60, "e")), 4)
+        self.stats_scores = self._stats_tree(box_bu, (("name", _("Punktekategorie"), 150, "w"),
+                                                      ("role", _("Rolle"), 70, "w"), ("n", _("Runden"), 60, "e"),
+                                                      ("mean", _("Ø Punkte"), 85, "e"), ("full", _("voll"), 60, "e")),
+                                             4)
+        self.stats_rating_var = ui.StringVar(value="")
+        ui.Label(box_bu, textvariable=self.stats_rating_var, wraplength=520).pack(anchor="w", pady=(4, 0))
         ui.Label(box_bu, text=_("Dein Loadout laut Stats-Seite (ab Userscript Version 3). „Ergebnis“ = als Killer "
                                  "Ø Kills, als Survivor Anteil entkommen; „ohne“ = dasselbe in deinen Runden derselben "
-                                 "Rolle ohne diesen Eintrag. Builds ab {n} Runden.", n=builds.BUILD_MIN),
+                                 "Rolle ohne diesen Eintrag. Builds ab {n} Runden. Embleme: Ø Stufe von keins (0) bis "
+                                 "Iri (4); „voll“ = Kategorie mit {max} Punkten.", n=builds.BUILD_MIN,
+                                 max=f"{builds.SCORE_MAX:,}".replace(",", ".")),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         self._stats_sort = ("n", True)
         return outer
@@ -434,9 +452,13 @@ class StatsTab:
         since = history.period_start(period, time.time())
         rounds = history.select(all_rounds, since=since, region=wanted, role=role, killer=killer, map_label=wmap)
         wmode = next((k for k, lbl in self._stats_modes if lbl == self.stats_mode_var.get()), None)
-        self._stats_modes = [(None, _("Alle Modi"))] + official.modes_seen(off[id(r)] for r in all_rounds
-                                                                         if id(r) in off)
-        if wmode not in [k for k, _lbl in self._stats_modes]:
+        self._stats_modes = [(None, _("Alle Modi"))] + [
+            (k, _(MODE_LABELS[k]) if k in MODE_LABELS else lbl)
+            for k, lbl in official.modes_seen(off[id(r)] for r in all_rounds if id(r) in off)]
+        seen = [k for k, _lbl in self._stats_modes]
+        if wmode is None and self._stats_mode_want in seen:     # the saved pick, once its mode is there
+            wmode = self._stats_mode_want
+        if wmode not in seen:
             wmode = None
         self.stats_mode_cb.configure(values=[lbl for _k, lbl in self._stats_modes])
         self.stats_mode_var.set(dict(self._stats_modes)[wmode])
@@ -630,6 +652,28 @@ class StatsTab:
         for b in builds.builds(c.pairs):
             who = killer_label(self._killer_of(b.character)) if b.character else self._role_name(b.role)
             t.insert("", "end", values=(" · ".join(b.perks), who, b.n, res(b.role, b.mean)))
+        t = self.stats_emblems
+        t.delete(*t.get_children())
+        for e in builds.emblems(c.pairs):
+            t.insert("", "end", values=(e.name, self._role_name(e.role), e.n,
+                                        f"{_(QUALITY_LABELS[round(e.mean)])} ({e.mean:.1f})",
+                                        *(f"{e.share(q):.0%}" for q in ("Iridescent", "Gold", "Silver", "Bronze"))))
+        t = self.stats_scores
+        t.delete(*t.get_children())
+        for sc in builds.scores(c.pairs):
+            t.insert("", "end", values=(sc.name, self._role_name(sc.role), sc.n,
+                                        f"{sc.mean:,.0f}".replace(",", "."), f"{sc.full:.0%}"))
+        rated = builds.ratings(c.pairs)
+        self.stats_rating_var.set(_("Killer-Wertung: {list}", list=" · ".join(f"{name} {n}×" for name, n in rated))
+                                  if rated else "")
+
+    def _stats_mode_pick(self):
+        """1.8.51 (user: "Merken"): the picked mode is saved and applies again after a restart."""
+        key = next((k for k, lbl in self._stats_modes if lbl == self.stats_mode_var.get()), None)
+        self._stats_mode_want = key
+        self.settings.set("stats_mode", key or "")
+        self.settings.save()
+        self._stats_render()
 
     def _stats_part_trend(self, c):
         self._trend_render(c.pairs, TREND_UNIT.get(c.period, "week"))
