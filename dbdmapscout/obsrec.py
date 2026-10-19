@@ -121,6 +121,13 @@ def buffer_missing(e: Exception) -> bool:
     return getattr(e, "code", None) == BUFFER_OFF_CODE or "not available" in str(e).lower()
 
 
+def BUFFER_FAILED() -> str:
+    """1.8.42: OBS took the start request, but its replay buffer did not start (OBS shows its own dialog)."""
+    return _("OBS konnte den Wiederholungspuffer nicht starten (OBS meldet einen Fehler der Ausgabe, meist des "
+             "Kodierers – Details im OBS-Log). Das Programm versucht es erst beim nächsten DBD-Start wieder; bis dahin "
+             "keine Sofort-Clips (F8) und kein Vorlauf.")
+
+
 def BUFFER_HINT() -> str:
     return _("In OBS ist der Wiederholungspuffer nicht aktiviert – OBS: Einstellungen → Ausgabe → "
              "Wiederholungspuffer → „Wiederholungspuffer aktivieren“ und übernehmen. Ohne ihn gibt es keine "
@@ -897,6 +904,8 @@ class Recorder(threading.Thread):
         self._farming_t = 0.0        # 1.8.23: last look for expired farming recordings
         self._routed = None          # 1.8.23: sources OBS had on their own track (None = unknown / not routed)
         self._ready = False          # 1.8.41: OBS was set up for this DBD session (else retried every RECHECK_S)
+        self._buffer_tried = False   # 1.8.42: we asked OBS to start its replay buffer (once per DBD/OBS session)
+        self._buffer_check = False   # … and look on the next round whether it really runs
         self._next_check = 0.0
 
     @property
@@ -993,8 +1002,12 @@ class Recorder(threading.Thread):
                         log.exception("OBS-Aufnahme beim Beenden")
                     return
                 if cmd == "config":
+                    changed = arg != self.cfg
                     self.cfg = arg
                     self._look_at_space(force=True)    # the tile follows a new folder/switch at once
+                    if changed and self._game:         # 1.8.42 (user: "Fenster wurde nicht hinterlegt"): a setting
+                        self._ready = False            # changed while DBD runs – OBS is set up again within seconds,
+                        self._next_check = 0.0         # not only at the next DBD start
                 elif cmd == "test":
                     self._test()
                 elif cmd == "start":
@@ -1247,6 +1260,7 @@ class Recorder(threading.Thread):
     def _game_changed(self, on: bool):
         self._game = on
         self._ready = False
+        self._buffer_tried = self._buffer_check = False
         if not on:
             self._flush()                               # DBD closed: the round is over
             if self._buffer_ours:
@@ -1278,17 +1292,33 @@ class Recorder(threading.Thread):
         try:
             c = self._client()
         except ObsError:
-            self._ready = False                         # OBS closed: set up again once it is back
+            self._ready = False                         # OBS closed: set up again once it is back (a new OBS
+            self._buffer_tried = self._buffer_check = False   # gets one start of its own)
             return
         try:
-            if self._buffer_state(c) is False:
-                c.request("StartReplayBuffer")
-                self._buffer_ours = True
-                log.info("OBS: Wiederholungspuffer wieder gestartet")
+            state = self._buffer_state(c)
+            if state:
+                self._buffer_check = False
+            elif state is False and self._buffer_check:
+                # 1.8.42 (user's screenshot: OBS "Starten des Replaypuffers fehlgeschlagen"): our start did not take –
+                # OBS shows a dialog for every failed start, so no second one; the user hears it once, here
+                self._buffer_check = self._buffer_ours = False
+                self._warn(BUFFER_FAILED())
+            elif state is False:
+                self._start_buffer(c)
         except ObsError as e:
             log.info("OBS: Wiederholungspuffer nicht geprüft (%s)", e)
         finally:
             c.close()
+
+    def _start_buffer(self, c: ObsClient):
+        """StartReplayBuffer at most once per DBD start and OBS session (1.8.42): when OBS cannot start the output
+        (encoder, driver), every request opens an error dialog in OBS – 1.8.41 asked again every RECHECK_S."""
+        if self._buffer_tried:
+            return
+        self._buffer_tried = self._buffer_check = True
+        c.request("StartReplayBuffer")
+        self._buffer_ours = True
 
     def _setup(self, quiet: bool):
         """DBD runs: check drive and OBS, set the audio sources, our window capture (1.8.41) and the replay buffer.
@@ -1317,8 +1347,7 @@ class Recorder(threading.Thread):
                     if state is None:                   # 1.8.32: not enabled in OBS – say how, once per start
                         sound = " ".join(t for t in (sound, BUFFER_HINT()) if t)
                     elif not state:
-                        c.request("StartReplayBuffer")
-                        self._buffer_ours = True
+                        self._start_buffer(c)
                 except ObsError as e:
                     log.info("OBS: Wiederholungspuffer nicht gestartet (%s)", e)
             if sound:

@@ -45,6 +45,7 @@ class FakeObs(threading.Thread):
         self.profile = {("Output", "Mode"): "Advanced", ("AdvOut", "RecTracks"): "31"}  # 1.8.19: tracks 1–5 ticked
         self.scenes = {}                            # 1.8.18: {scene: [scene items]}
         self.windows = []                           # 1.8.20: what OBS lists for an application audio capture
+        self.replay_fails = False                   # 1.8.42: the encoder cannot start the replay buffer
 
     def run(self):
         self.srv.settimeout(0.2)
@@ -141,7 +142,7 @@ class FakeObs(threading.Thread):
             elif kind == "GetReplayBufferStatus":
                 out = {"outputActive": self.replay}
             elif kind == "StartReplayBuffer":
-                self.replay = True
+                self.replay = not self.replay_fails      # 1.8.42: OBS takes the request, the output fails
             elif kind == "StopReplayBuffer":
                 self.replay = False
             elif kind == "SaveReplayBuffer":
@@ -1483,10 +1484,18 @@ def test_obs_opened_after_dbd_is_set_up_by_the_retry(tmp_path):
         r._next_check = 0
         r._recheck()
         assert r._ready and obs.replay and r._buffer_ours and r.status.startswith("OBS bereit")
-        obs.replay = False                                 # OBS restarted: its buffer is off again
+        r._next_check = 0
+        r._recheck()                                       # runs: nothing to do
+        assert obs.replay
+        r.cfg.port = 1                                     # OBS closed …
         r._next_check = 0
         r._recheck()
-        assert obs.replay
+        assert not r._ready
+        obs.replay = False
+        r.cfg.port = port                                  # … and opened again: its buffer gets one start of its own
+        r._next_check = 0
+        r._recheck()
+        assert r._ready and obs.replay
         r._game_changed(False)                             # DBD closed: the buffer we started stops
         assert not obs.replay
         r._next_check = 0
@@ -1495,3 +1504,48 @@ def test_obs_opened_after_dbd_is_set_up_by_the_retry(tmp_path):
         assert len(obs.requests) == n
     finally:
         obs.stop()
+
+
+def test_a_replay_buffer_that_does_not_start_is_asked_for_once_and_reported(obs, tmp_path):
+    """1.8.42 (user's screenshot: OBS "Starten des Replaypuffers fehlgeschlagen"): OBS opens an error dialog for
+    every failed start – 1.8.41 asked again every 30 s. Now one start per DBD start and OBS session, then one
+    message here; the next DBD start tries again."""
+    obs.replay = False
+    obs.replay_fails = True
+    r, posted = _recorder(obs, str(tmp_path), pre=False, instant=True, buffer_auto=True, audio=False)
+    r._game_changed(True)
+    _drain(posted)
+    for _i in range(4):
+        r._next_check = 0
+        r._recheck()
+    starts = [k for k, _d in obs.requests].count("StartReplayBuffer")
+    warns = [d["text"] for k, d in _drain(posted) if k == "warn"]
+    assert starts == 1 and len(warns) == 1 and "nicht starten" in warns[0] and not r._buffer_ours
+    r._game_changed(False)                                 # nothing of ours to stop
+    assert [k for k, _d in obs.requests].count("StopReplayBuffer") == 0
+    obs.replay_fails = False
+    r._game_changed(True)                                  # the next DBD start tries once more
+    assert obs.replay and [k for k, _d in obs.requests].count("StartReplayBuffer") == 2
+
+
+def test_ticking_the_window_while_dbd_runs_sets_it_up_without_a_restart(obs, tmp_path):
+    """1.8.42 (user: "Fenster wurde nicht hinterlegt"): OBS was set up only when DBD started – the box ticked while
+    DBD ran created nothing until the next DBD start. A changed setting sets OBS up again within seconds."""
+    r, posted = _recorder(obs, str(tmp_path), pre=False, audio=False)
+    r.start()
+    try:
+        r.cmds.put(("game", True))
+        end = time.time() + 5
+        while not r._ready and time.time() < end:
+            time.sleep(0.02)
+        assert r._ready and obsrec.WINDOW_SOURCE not in obs.inputs
+        cfg = obsrec.Config(**{**r.cfg.__dict__, "window": True})
+        r.configure(cfg)
+        end = time.time() + 8                              # the idle loop looks at least every 5 s
+        while obsrec.WINDOW_SOURCE not in obs.inputs and time.time() < end:
+            time.sleep(0.05)
+        assert obsrec.WINDOW_SOURCE in obs.inputs
+        assert [k for k, _d in obs.requests].count("StartReplayBuffer") <= 1
+    finally:
+        r.quit()
+        r.join(timeout=5)
