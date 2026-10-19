@@ -1008,7 +1008,7 @@ def test_the_statistics_tabs_keep_their_meaning_when_moved(app_root):
 def test_the_statistics_tabs_are_short_and_the_last_rounds_come_second(app_root):
     """1.8.2: "Letzte Runden" is the second sub-tab (the most used after the overview), the tab names are short
     enough for all of them to fit side by side, and the second tab draws the rounds table (1.8.46: eleven, the new
-    "Gegner" last – the saved order of moved tabs keeps its meaning)."""
+    "Gegner" last – the saved order of moved tabs keeps its meaning; 1.8.48: twelve with "Builds")."""
     import json
     from dbdmapscout import history
     from dbdmapscout.app import App
@@ -1017,12 +1017,45 @@ def test_the_statistics_tabs_are_short_and_the_last_rounds_come_second(app_root)
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
         texts = [app.stats_nb.tab(t, "text") for t in app.stats_nb.tabs()]
-        assert texts[:3] == ["Übersicht", "Letzte Runden", "Maps"] and texts[-3:] == ["Regionen", "Wartezeit", "Gegner"]
-        assert len(texts) == 11
+        assert texts[:3] == ["Übersicht", "Letzte Runden", "Maps"] and texts[-3:] == ["Wartezeit", "Gegner", "Builds"]
+        assert len(texts) == 12
         app._stats_render()
         app._stats_render_tab(1)
         assert len(app.stats_last.get_children()) == 1
         assert "Spotify" in app.more_btn.cget("text") and "Discord" in app.more_btn.cget("text")
+    finally:
+        app.quit()
+
+
+def test_the_builds_tab_lists_the_own_loadout_with_its_results(app_root):
+    """1.8.48: sub-tab "Builds" – perks, add-ons, offering, power from the stats page (userscript 3)."""
+    import json
+    from dbdmapscout import history, official
+    from dbdmapscout.app import App
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    perks = [["P1", "Lethal Pursuer"], ["P2", "Pop Goes the Weasel"], ["P3", "Grim Embrace"], ["P4", "Deadlock"]]
+    sac = official.Player(role="survivor", character="Meg Thomas", status="SACRIFICED", img="VE_Sacrificed")
+    esc = official.Player(role="survivor", character="Feng Min", status="ESCAPED", img="VE_Escaped")
+    ms = []
+    for i, kills in enumerate((4, 2)):
+        t = time.time() - 7200 + i * 1800
+        history.append(str(app_root / "rounds.jsonl"), history.Round(t, 600, "coal", "Coal Tower", role="killer"))
+        ms.append(official.Match(t=t - 38, map="Coal Tower", role="killer", character="The Nurse", seconds=560,
+                                 opp=[sac] * kills + [esc] * (4 - kills), perks=perks,
+                                 power=["W1", "Spencer's Last Breath"]))
+    official.merge(str(app_root / official.FILE), ms)
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        app._stats_render()
+        i = next(i for i, tab in enumerate(app.stats_nb.tabs()) if app.stats_nb.tab(tab, "text") == "Builds")
+        app._stats_render_tab(i)
+        rows = {app.stats_items.item(c, "values")[0]: app.stats_items.item(c, "values")
+                for c in app.stats_items.get_children()}
+        assert rows["Lethal Pursuer"][1:6] == ("Perk", "Killer", 2, "100%", "Ø 3.00")
+        assert rows["Spencer's Last Breath"][1] == "Kraft/Item"
+        builds_rows = [app.stats_builds.item(c, "values") for c in app.stats_builds.get_children()]
+        assert len(builds_rows) == 1 and builds_rows[0][1:] == ("Nurse", 2, "Ø 3.00")
+        assert app.stats_build_var.get() == ""
     finally:
         app.quit()
 
@@ -1041,8 +1074,8 @@ def test_a_saved_tab_order_survives_a_new_tab(app_root):
         tabs_id, tw, ids = page._tabsets[0]
         old = ["1", "0"] + [str(i) for i in range(2, 10)] + ["99"]          # ten known ids and a vanished one
         page.apply_tab_order({tabs_id: old})
-        assert page._tab_ids(tw, ids) == ["1", "0"] + [str(i) for i in range(2, 11)]
-        assert tw.tabBar().property("dense") is True                         # eleven tabs: less padding
+        assert page._tab_ids(tw, ids) == ["1", "0"] + [str(i) for i in range(2, 12)]
+        assert tw.tabBar().property("dense") is True                         # eleven tabs and more: less padding
     finally:
         app.quit()
 
