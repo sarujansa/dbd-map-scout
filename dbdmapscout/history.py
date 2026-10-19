@@ -41,9 +41,19 @@ def normal(r: Round) -> bool:
     return not (r.custom or r.farming)
 
 
+def _append_line(path: str, line: str) -> None:
+    """One line at the end. 1.8.38: a file cut off mid-line (crash, power loss while writing) first gets its
+    line break – else the new round was glued to the broken line and both were lost."""
+    with open(path, "a+b") as fh:
+        if fh.tell() > 0:
+            fh.seek(-1, os.SEEK_END)
+            if fh.read(1) != b"\n":
+                fh.write(b"\n")
+        fh.write((line + "\n").encode("utf-8"))
+
+
 def append(path: str, rnd: Round) -> None:
-    with open(path, "a", encoding="utf-8") as fh:
-        fh.write(json.dumps(asdict(rnd), ensure_ascii=False) + "\n")
+    _append_line(path, json.dumps(asdict(rnd), ensure_ascii=False))
     _tidy(path)
 
 
@@ -81,8 +91,7 @@ def append_lost(path: str, t: float, map_label: str, reason: str, **known) -> No
     count once the official match data brings its length. load() skips these lines."""
     rec = {"lost": True, "t": t, "map": map_label, "reason": reason}
     rec.update({k: v for k, v in known.items() if k in LOST_KEYS and v not in (None, "")})
-    with open(path, "a", encoding="utf-8") as fh:
-        fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    _append_line(path, json.dumps(rec, ensure_ascii=False))
 
 
 def _lost_lines(path: str) -> list:

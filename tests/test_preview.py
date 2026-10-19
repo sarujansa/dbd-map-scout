@@ -84,6 +84,26 @@ def test_onnxruntime_telemetry_is_off_before_it_is_loaded():
     assert out.stdout.strip() == "1", out.stderr
 
 
+def test_numpy_does_one_thread_so_nothing_spins_between_the_looks():
+    """1.8.38 (QA audit, measured): multithreaded OpenBLAS threads spun between the OCR looks – about half a core
+    in the menus for one tiny matrix product (46 % → 4 % of a core with one thread). The package sets it before
+    numpy loads; a value the user set stays, and the OCR session does not spin either."""
+    import subprocess
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    code = ("import os; os.environ.pop('OPENBLAS_NUM_THREADS', None); import dbdmapscout.ocr; "
+            "print(os.environ.get('OPENBLAS_NUM_THREADS'))")
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=root)
+    assert out.stdout.strip() == "1", out.stderr
+    env = dict(os.environ, OPENBLAS_NUM_THREADS="3")
+    out = subprocess.run([sys.executable, "-c", "import os, dbdmapscout; print(os.environ['OPENBLAS_NUM_THREADS'])"],
+                         capture_output=True, text=True, cwd=root, env=env)
+    assert out.stdout.strip() == "3", out.stderr
+    from dbdmapscout.ocr import Recognizer
+    rec = Recognizer(os.path.join(root, "models", "ch_PP-OCRv4_rec_infer.onnx"), threads=2)
+    opts = rec.session.get_session_options()
+    assert opts.get_session_config_entry("session.intra_op.allow_spinning") == "0"
+
+
 def test_system_values_keep_their_place_while_values_change_width():
     """1.64.7 (user: "bewegt sich immer leicht nach rechts und links"): placed by the widest width seen."""
     state, w = layout.steady_width(None, ("right", 1440, ("CPU ",)), 300)

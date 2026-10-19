@@ -5,6 +5,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import pytest  # noqa: E402
 from PIL import Image  # noqa: E402
 
 from dbdmapscout import layout, preview  # noqa: E402
@@ -13,6 +14,8 @@ from dbdmapscout.config import DEFAULTS  # noqa: E402
 from dbdmapscout.mapimage import title_split  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# the whole program, like tests/test_uimodel.py: Linux only – on Windows it would touch the system (hosts file …)
+WHOLE_APP = pytest.mark.skipif(sys.platform == "win32", reason="Linux: the Windows job tests the native parts")
 COAL = os.path.join(ROOT, "maps", "McMillan", "Coal Tower.webp")
 W, H = 3440, 1440
 INFO = {"timer": "3:27", "server": "Frankfurt", "ping": 31.0, "record": "Bilanz: Ø 2,8 Kills · 12 Runden",
@@ -291,6 +294,7 @@ class _SizedWin:
         self.shown = False
 
 
+@WHOLE_APP
 def test_a_card_keeps_its_widest_width_while_its_values_change(tmp_path):
     """1.8.28: "today" and the music card are drawn again at the widest width they had for the same layout
     (layout.steady_width) – a shorter title or value never moves the card; another layout starts anew."""
@@ -383,6 +387,7 @@ USER_OVERLAY = {"anchor": "custom", "style": "chips", "pos_x": 0.011, "pos_y": 0
                 "hud_scale": 1.05, "today_pos": "custom", "today_xy": [0.936, 0.5938]}
 
 
+@WHOLE_APP
 def test_every_element_is_placed_with_real_windows(tmp_path):
     """1.8.28 (user's diagnosis of 1.8.27: only the system values showed, "Fehler seit Start: ['overlay']"):
     _cards_place handed _el_show the cards' boxes as four values – a TypeError on every tick that had a card to
@@ -432,6 +437,7 @@ def test_every_element_is_placed_with_real_windows(tmp_path):
         app.quit()
 
 
+@WHOLE_APP
 def test_cards_in_the_same_bar_share_one_width_and_merge_into_a_column(tmp_path):
     """1.8.29 (user's screenshot: system values, today and music in the right bar at three widths – "nicht
     untereinander … zusammenführen"): the cards in one bar are drawn at the widest one's width; the button
@@ -492,6 +498,7 @@ def test_cards_in_the_same_bar_share_one_width_and_merge_into_a_column(tmp_path)
         app.quit()
 
 
+@WHOLE_APP
 def test_a_song_change_never_shrinks_the_music_card_or_its_column(tmp_path):
     """1.8.30 (user: "wenn Spotify den Song wechselt, werden die Felder kurz kleiner und wieder normal – sie sollen
     ihre fixe Grösse behalten"): Windows shows the new title before Spotify's queue matches it and sometimes
@@ -548,6 +555,7 @@ def test_a_song_change_never_shrinks_the_music_card_or_its_column(tmp_path):
         app.quit()
 
 
+@WHOLE_APP
 def test_the_rec_dot_blinks_in_the_lines_and_shows_in_the_overlay_test(tmp_path, monkeypatch):
     """1.8.31 (user: "das Rekord-Zeichen finde ich nicht mehr"): with the lines as their own element the red dot
     sits right of the timer there, on in even seconds, off in odd ones; it shows only while OBS records – with
@@ -597,6 +605,7 @@ def test_the_rec_dot_blinks_in_the_lines_and_shows_in_the_overlay_test(tmp_path,
         app.quit()
 
 
+@WHOLE_APP
 def test_the_diagnosis_tells_where_the_overlay_tick_spends_its_time(tmp_path):
     """1.8.31: every overlay tick is timed per step (map, system values, today, music, lines, moving aside) – the
     diagnosis shows average and maximum."""
@@ -626,6 +635,7 @@ def test_the_diagnosis_tells_where_the_overlay_tick_spends_its_time(tmp_path):
         app.quit()
 
 
+@WHOLE_APP
 def test_the_lines_can_be_joined_to_the_map_above_it(tmp_path):
     """1.8.34 (user: "von mir aus kann man dies auch mit der Map kombinieren, oben oder unten, und gleich breit"):
     "Mit der Karte verbunden, oben" – one block, timer and chips between the header and the map (modern) or the

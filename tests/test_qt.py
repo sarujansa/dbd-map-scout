@@ -774,6 +774,49 @@ def test_search_finds_a_setting_and_lights_its_card(qapp, keep):
     assert tabs.currentWidget() is win.forms["overlay"].controls["ov.look"][2] and tabs.property("found") is True
 
 
+def _completions(win, text):
+    win.completer.setCompletionPrefix(text)
+    m = win.completer.completionModel()
+    return [m.index(i, 0).data() for i in range(m.rowCount())]
+
+
+def test_the_search_knows_other_words_both_languages_and_tells_twins_apart(qapp, keep):
+    """1.8.38 (QA audit: "autostart", "Größe", "shortcut", "color" found nothing; "Position" three times on the
+    overlay page, only the first reachable; a 190-px list cut ⅔ of the entries off; "Overlay" matched everything)."""
+    from dbdmapscout import qt_window
+    win = keep(qt_window.MainWindow(lambda a, arg=None: None))
+    win.resize(1100, 800)
+    win.show()
+    qapp.processEvents()
+    win.show_states("overlay", {
+        "ov.caption": {"text": "Map-Namen über der Karte anzeigen", "value": False, "enabled": True, "visible": True},
+        "ov.map_size_reset": {"text": "Eigene Grösse zurücksetzen", "visible": True, "enabled": True},
+        "ov.sysinfo.label": {"text": "Position", "visible": True},
+        "ov.today_pos.label": {"text": "Position", "visible": True},
+        "ov.media_pos.label": {"text": "Position", "visible": True}})
+    win.show_states("settings", {"st.autostart": {"text": "Mit Windows starten (im Infobereich, ohne Windows-Abfrage)",
+                                                  "value": True, "enabled": True, "visible": True}})
+    win.update_search_index()
+    assert any(e.startswith("Mit Windows starten") for e in _completions(win, "autostart"))
+    assert any(e.startswith("Eigene Grösse") for e in _completions(win, "Größe"))      # ß ↔ ss
+    assert any(e.startswith("Map-Namen über") for e in _completions(win, "map name above"))   # the English name
+    positions = sorted(e for e in win._found if e.startswith("Position"))
+    assert len(positions) == 3 and len(set(positions)) == 3 and all("(" in e for e in positions)
+    every = len(win._found)
+    assert len(_completions(win, "Overlay")) < every / 2                   # the page name is not searched
+    assert any(e.startswith("Musik") for e in _completions(win, "Musik"))  # a tab of the overlay page
+    longest = max(win.completer.popup().fontMetrics().horizontalAdvance(e) for e in win._found)
+    assert win.completer.popup().minimumWidth() >= min(qt_window.POPUP_W[1], longest)
+    win.search.setText("Größe")
+    hit = _completions(win, "Größe")[0]
+    win._search_first()                                       # Enter: the first hit
+    assert win.current_key() == "overlay" and hit.startswith("Eigene Grösse")
+    win.search.setText("qqqxyz")
+    win.completer.setCompletionPrefix("qqqxyz")
+    win._search_first()                                       # nothing: a tip, no page change, no error
+    assert win.current_key() == "overlay"
+
+
 def test_open_tab_shows_an_elements_settings(qapp, keep):
     """1.2.12 (analysis point 10): a click on an element in the preview opens its tab of the overlay page."""
     from dbdmapscout import qt_window
@@ -1371,7 +1414,8 @@ def test_the_search_finds_settings_under_more_and_unfolds_them(qapp, keep):
         posted.get_nowait()
     win.go_to_found(hit)
     assert win.current_key() == "settings"
-    assert ("act", ("st.more_btn", None)) in [posted.get_nowait() for _i in range(posted.qsize())]
+    # 1.8.38: "open", not the toggle button – with a stale index the toggle shut the fold instead
+    assert ("more_open", None) in [posted.get_nowait() for _i in range(posted.qsize())]
 
 
 def test_the_overlay_preview_and_its_tools_sit_side_by_side_on_a_wide_page(qapp, keep):

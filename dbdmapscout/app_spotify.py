@@ -12,6 +12,8 @@ from .i18n import N_, _
 MEDIA_NEXT_SPOTS = [("below", N_("Unter dem Lied")), ("right", N_("Rechts neben dem Lied"))]
 MEDIA_NEXT_N = (1, 5)                      # tracks shown
 LIST_FRESH_S = spotify.POLL_S + 15.0       # 1.8.36: a list this old still counts for Spotify's own session
+SONG_LAG_S = 2.0                           # 1.8.37: …but only when read this long after the song started (a skip
+                                           # is answered with the old queue for a moment)
 SAMPLE_UPNEXT = (("Save Your Tears", "The Weeknd"), ("Levitating", "Dua Lipa"), ("As It Was", "Harry Styles"),
                  ("Bad Habits", "Ed Sheeran"), ("Flowers", "Miley Cyrus"), ("Starboy", "The Weeknd"),
                  ("Anti-Hero", "Taylor Swift"), ("Heat Waves", "Glass Animals"), ("Stay", "The Kid LAROI"),
@@ -22,6 +24,7 @@ class SpotifyUpNext:
     def _spotify_init(self):
         self.spotify = spotify.SpotifyLink(lambda kind, data: self.events.put(("spotify", kind, data)))
         self.spotify.start()
+        self._up_song, self._up_since = None, 0.0  # 1.8.37: the song the list was last checked for, since when
         self._spotify_setting(save=False)
 
     # ---------------------------------------------------------- settings card (Einstellungen → Mehr)
@@ -98,12 +101,19 @@ class SpotifyUpNext:
         n = max(MEDIA_NEXT_N[0], min(MEDIA_NEXT_N[1], int(o.get("media_next_n", 3))))
         if o.get("media_next_pos", "below") == "right":   # 1.8.24 (user: "rechts … verlängert, bis die Liste da voll
             n = spotify.MAX_ITEMS                         # ist"): as many as fit beside the card – the drawing trims
+        song = (now.title, now.artist)
+        if self._up_song is not None and song != self._up_song:   # 1.8.37: when this song started
+            self._up_since = time.time()
+        self._up_song = song
         up = spotify.advance(self.spotify.upnext, now.title, now.artist)   # 1.8.1: moved up at once on a new song
         if spotify.matches(up, now.title, now.artist):
             items = spotify.lines(up, n)
-        elif spotify.is_spotify(getattr(now, "app", "")) and up.items and time.time() - up.t <= LIST_FRESH_S:
+        elif spotify.is_spotify(getattr(now, "app", "")) and up.items and time.time() - up.t <= LIST_FRESH_S \
+                and up.t >= self._up_since + SONG_LAG_S:
             # 1.8.36 (user's diagnosis: 10 titles read, none shown): the player is Spotify itself – its queue is
-            # the right one even when its title and the Windows one differ (spelling, "feat.", a missing current)
+            # the right one even when its title and the Windows one differ (spelling, "feat.", a missing current).
+            # 1.8.37 (user: "Spotify Up Next stimmt nicht mehr"): only a list read after this song started – the
+            # one from before still has this song as the next one (and stayed up to 30 s since the 1.8.36 poll)
             items = spotify.lines(up, n)
         elif sample:
             items = SAMPLE_UPNEXT[:n]
