@@ -1006,12 +1006,29 @@ EN = {
     "Noch keine offiziellen Daten. Einrichten: Einstellungen → Mehr → Offizielle Match-Daten.":
         "No official data yet. Set up: Settings → More → Official match data.",
     "Offizielle Match-Daten": "Official match data",
-    "Einmal einrichten: Tampermonkey im Browser installieren, „Userscript kopieren“ und dort als neues Skript einfügen, "
-    "auf stats.deadbydaylight.com anmelden. Beim Öffnen der Seite speichert das Skript die letzten 30 Matches im "
-    "Download-Ordner; das Programm liest die Datei und löscht sie. Es geht dafür selbst nicht ins Internet.":
-        "Set up once: install Tampermonkey in the browser, \"Copy userscript\" and paste it there as a new script, sign "
-        "in on stats.deadbydaylight.com. When the page opens, the script saves the last 30 matches into the download "
-        "folder; the program reads the file and deletes it. It does not go online for this itself.",
+    "Einmal einrichten: Tampermonkey im Browser installieren, „Userscript kopieren“ und dort als neues Skript einfügen "
+    "und speichern, auf stats.deadbydaylight.com anmelden. Chrome/Edge: in den Details der Erweiterung „Allow User "
+    "Scripts“ einschalten, sonst läuft kein Skript. Beim Öffnen der Seite speichert das Skript neue Matches (die "
+    "letzten 30) im Download-Ordner; das Programm liest die Datei und löscht sie. Es geht dafür selbst nicht ins "
+    "Internet.":
+        "Set up once: install Tampermonkey in the browser, \"Copy userscript\", paste it there as a new script and "
+        "save it, sign in on stats.deadbydaylight.com. Chrome/Edge: switch on \"Allow User Scripts\" in the "
+        "extension's details, otherwise no script runs. When the page opens, the script saves new matches (the last "
+        "30) into the download folder; the program reads the file and deletes it. It does not go online for this "
+        "itself.",
+    "Alle Matches neu speichern": "Save all matches again",
+    "Öffnet die Stats-Seite so, dass das Userscript ihre letzten 30 Matches noch einmal speichert, auch wenn keines "
+    "neu ist – nach einer Neuinstallation oder wenn die Datei verloren ging.":
+        "Opens the stats page so that the userscript saves its last 30 matches once more although none is new – "
+        "after a new install or when the file got lost.",
+    "Die Stats-Seite öffnet sich im Browser. Das Userscript (ab Version {n}) speichert ihre letzten 30 Matches noch "
+    "einmal, auch wenn keines neu ist; das Programm übernimmt sie gleich – bekannte zählen nur einmal. Kommt keine "
+    "Datei: in der Console des Browsers (F12) steht, ob das Skript läuft. Ältere Userscripts: vorher „Userscript "
+    "kopieren“ und in Tampermonkey ersetzen.":
+        "The stats page opens in the browser. The userscript (version {n} or newer) saves its last 30 matches once "
+        "more although none is new; the program takes them right away – known ones count once. If no file comes: the "
+        "browser's console (F12) says whether the script runs. Older userscripts: \"Copy userscript\" first and "
+        "replace it in Tampermonkey.",
     # statistics: trend page, today line (1.37)
     "Verlauf": "Trend",
     "Nur Runden, die einem Match auf der Stats-Seite zugeordnet sind. Die Maus über einer Säule zeigt Wert und Anzahl "
