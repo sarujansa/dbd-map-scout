@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dbdmapscout import restart  # noqa: E402
 
-ROOT = r"C:\Users\saruj\Desktop\dbd-map-scout"
+ROOT = r"C:\Users\Player\Desktop\dbd-map-scout"
 
 
 def test_start_command_runs_start_bat_minimised():
