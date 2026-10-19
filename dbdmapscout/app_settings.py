@@ -248,6 +248,9 @@ class SettingsTab:
         self.rec_buffer_var = ui.BooleanVar(value=bool(self.settings.get("rec_buffer_auto", True)))   # 1.4.1
         self._reg("st.more.rec_buffer", ui.Checkbutton(rc, text=_("Wiederholungspuffer mit DBD starten und stoppen"),
                                                         variable=self.rec_buffer_var, command=self._rec_setting)).pack(anchor="w")
+        self.rec_window_var = ui.BooleanVar(value=bool(self.settings.get("rec_window", False)))   # 1.8.41
+        self._reg("st.more.rec_window", ui.Checkbutton(rc, text=_("Nur das DBD-Fenster aufnehmen (Fensteraufnahme in OBS selbst einrichten)"),
+                                                        variable=self.rec_window_var, command=self._rec_setting)).pack(anchor="w")
         self.rec_merge_var = ui.BooleanVar(value=bool(self.settings.get("rec_merge", True)))       # 1.4.2
         self._reg("st.more.rec_merge", ui.Checkbutton(rc, text=_("Vorlauf und Runde zu einer Datei zusammenfügen"),
                                                        variable=self.rec_merge_var, command=self._rec_setting)).pack(anchor="w")
@@ -528,6 +531,7 @@ class SettingsTab:
                              volume=str(self.settings.get("rec_volume", "")), rel=str(self.settings.get("rec_rel", "")),
                              folder=str(self.settings.get("rec_folder", "")), limit_gb=limit,
                              pre=bool(self.rec_pre_var.get()), tail_s=tail, buffer_auto=bool(self.rec_buffer_var.get()),
+                             window=bool(self.rec_window_var.get()),
                              merge=bool(self.rec_merge_var.get()), farming_sub=bool(self.rec_farming_var.get()),
                              early=bool(self.rec_early_var.get()), instant=bool(self.rec_instant_var.get()),
                              clip_s=next((s for s, lbl in self._rec_clips if lbl == self.rec_clip_var.get()),
@@ -552,6 +556,7 @@ class SettingsTab:
             self.settings.set("rec_pre", cfg.pre)
             self.settings.set("rec_tail_s", int(cfg.tail_s))
             self.settings.set("rec_buffer_auto", cfg.buffer_auto)
+            self.settings.set("rec_window", cfg.window)
             self.settings.set("rec_merge", cfg.merge)
             self.settings.set("rec_farming_dir", cfg.farming_sub)
             self.settings.set("rec_farming_days", int(cfg.farming_days))

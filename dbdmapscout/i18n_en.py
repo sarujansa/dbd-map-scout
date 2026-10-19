@@ -1482,6 +1482,17 @@ EN = {
     'Läuft in OBS der Wiederholungspuffer, wird er beim Map-Banner gespeichert – der Anfang (Spawn) fehlt dann nicht, aber die Datei enthält auch Lobby und Ladebildschirm. Seit 1.5.5 standardmässig aus (Wunsch des Nutzers: nur die Runde). Die Datei liegt als „(Vorlauf)“ neben der Runde.': 'If OBS\'s replay buffer is running, it is saved at the map banner – the start (spawn) is not missing then, but the file also holds the lobby and the loading screen. Off by default since 1.5.5 (user\'s wish: the round only). The file lies next to the round as "(Vorlauf)".',
     # 1.4.1
     'Wiederholungspuffer mit DBD starten und stoppen': "Start and stop the replay buffer with DBD",
+    "Nur das DBD-Fenster aufnehmen (Fensteraufnahme in OBS selbst einrichten)":
+        "Record only the DBD window (set up a window capture in OBS)",
+    "Bildquelle angelegt: {name} (Szene „{scene}“)": "Picture source created: {name} (scene \"{scene}\")",
+    "Bildquelle in der Szene „{scene}“ ausgeblendet: {name}": "Picture source hidden in the scene \"{scene}\": {name}",
+    "Bildquelle zur Szene „{scene}“ hinzugefügt: {name}": "Picture source added to the scene \"{scene}\": {name}",
+    "Bildquelle in der Szene „{scene}“ wieder eingeblendet: {name}":
+        "Picture source shown again in the scene \"{scene}\": {name}",
+    "Bildquelle {name} zeigt jetzt {exe}": "Picture source {name} now shows {exe}",
+    "DBD-Fenster in OBS nicht eingerichtet: {error}": "DBD window not set up in OBS: {error}",
+    "Das Programm legt in OBS eine Fensteraufnahme „DbD Map Scout – DBD-Fenster“ an (oben in der laufenden Szene, auf die Leinwand eingepasst) und stellt sie auf Steam, Epic oder Store um. Aufgenommen wird dann nur das Spiel – ohne Discord, Benachrichtigungen und ohne das Overlay dieses Programms. OBS nimmt über Windows auf (wie die Fensteraufnahme), nicht über die Spielaufnahme, die sich ins Spiel hängt. Aus: die Quelle wird nur ausgeblendet, deine eigene Bildschirmaufnahme bleibt unangetastet.":
+        "The program creates a window capture \"DbD Map Scout – DBD-Fenster\" in OBS (on top of the scene on air, fitted to the canvas) and switches it to Steam, Epic or the Store. Only the game is recorded then – without Discord, notifications and without this program's overlay. OBS captures through Windows (like the window capture), not through game capture, which hooks into the game. Off: the source is only hidden, your own display capture stays untouched.",
     'Das Programm startet den Wiederholungspuffer in OBS, sobald DBD läuft, und stoppt ihn, wenn DBD zu ist – so kostet er ausserhalb des Spiels nichts und du musst nicht daran denken.': "The program starts OBS's replay buffer as soon as DBD runs and stops it when DBD is closed – so it costs nothing outside the game and you need not think of it.",
     'Nachlauf nach dem Rundenende': 'Tail after the end of the round',
     '{n} s': '{n} s',

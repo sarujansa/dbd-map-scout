@@ -70,6 +70,16 @@ AUDIO_PRIORITY_EXE = 2
 # on Steam, sometimes on the others); Discord also as PTB/Canary. Only OBS's own list is read, never the game.
 WINDOW_EXES = {"dbd": re.compile(r"^DeadByDaylight[\w-]*\.exe$", re.I),
                "discord": re.compile(r"^Discord(PTB|Canary)?\.exe$", re.I)}
+# 1.8.41 (user: "dass das Programm es selber macht mit der Fenstererkennung und im OBS hinterlegen"): OBS's own
+# window capture of the DBD window instead of the whole monitor – created once in the scene on air, on top, fitted
+# to the canvas. OBS captures (Windows Graphics Capture, like this program's own wincapture), never game capture,
+# which hooks into the game. Priority "title, otherwise a window of the same type": class UnrealWindow is the same
+# for Steam, Epic and the Store; _follow_window still points it at the running executable.
+WINDOW_KIND = "window_capture"
+WINDOW_SOURCE = "DbD Map Scout – DBD-Fenster"
+WINDOW_PRIORITY_CLASS = 0              # OBS: 0 title, else same type · 1 title only · 2 title, else same program
+WINDOW_METHOD_WGC = 2                  # OBS window capture: 0 automatic · 1 BitBlt · 2 Windows 10 (1903 and up)
+RECHECK_S = 30.0                       # 1.8.41: while DBD runs, OBS is set up again this often if it was not ready
 TAILS_S = (0, 3, 5, 8, 10)      # 1.4.1: seconds recorded after the detected end (the result screen)
 DEFAULT_TAIL_S = 5
 MIN_FILE_BYTES = 1024 * 1024    # 1.4.1: a recording smaller than this is reported as broken/empty
@@ -830,6 +840,7 @@ class Config:
     tracks: bool = True              # 1.8.6: every source on its own OBS track (SOURCE_TRACKS), 1 = everything
     clip_sources: tuple = DEFAULT_CLIP_SOURCES   # 1.8.6: what the F8 clip keeps when the buffer file has the tracks
     farming_days: int = DEFAULT_FARMING_DAYS     # 1.8.23: farming recordings go after this many days (0 = never)
+    window: bool = False             # 1.8.41: our window capture of DBD in OBS (WINDOW_SOURCE) instead of the monitor
 
     @property
     def wants_buffer(self) -> bool:
@@ -885,6 +896,8 @@ class Recorder(threading.Thread):
         self._space_t = 0.0
         self._farming_t = 0.0        # 1.8.23: last look for expired farming recordings
         self._routed = None          # 1.8.23: sources OBS had on their own track (None = unknown / not routed)
+        self._ready = False          # 1.8.41: OBS was set up for this DBD session (else retried every RECHECK_S)
+        self._next_check = 0.0
 
     @property
     def recording(self) -> bool:
@@ -963,6 +976,7 @@ class Recorder(threading.Thread):
                 try:
                     self._due()
                     self._watchdog()
+                    self._recheck()
                     self._look_at_space()
                     self._expire_farming()
                 except ObsError as e:
@@ -1232,6 +1246,7 @@ class Recorder(threading.Thread):
 
     def _game_changed(self, on: bool):
         self._game = on
+        self._ready = False
         if not on:
             self._flush()                               # DBD closed: the round is over
             if self._buffer_ours:
@@ -1245,19 +1260,57 @@ class Recorder(threading.Thread):
                 except ObsError as e:
                     log.info("OBS: Wiederholungspuffer nicht gestoppt (%s)", e)
             return
+        self._next_check = time.time() + RECHECK_S
+        self._setup(quiet=False)
+
+    def _recheck(self):
+        """1.8.41: while DBD runs, every RECHECK_S – OBS opened after DBD (before: "OBS läuft nicht" once, then no
+        replay buffer and no sources until DBD restarted), recordings switched on mid-game, OBS restarted (its
+        replay buffer stopped). A silent retry: the warning came once already."""
+        if not self._game or not self.cfg.on or time.time() < self._next_check:
+            return
+        self._next_check = time.time() + RECHECK_S
+        if not self._ready:
+            self._setup(quiet=True)
+            return
+        if not (self.cfg.wants_buffer and self.cfg.buffer_auto):
+            return
+        try:
+            c = self._client()
+        except ObsError:
+            self._ready = False                         # OBS closed: set up again once it is back
+            return
+        try:
+            if self._buffer_state(c) is False:
+                c.request("StartReplayBuffer")
+                self._buffer_ours = True
+                log.info("OBS: Wiederholungspuffer wieder gestartet")
+        except ObsError as e:
+            log.info("OBS: Wiederholungspuffer nicht geprüft (%s)", e)
+        finally:
+            c.close()
+
+    def _setup(self, quiet: bool):
+        """DBD runs: check drive and OBS, set the audio sources, our window capture (1.8.41) and the replay buffer.
+        ``quiet``: a retry – no second warning."""
         if not self.cfg.on:
             return
         folder = self.folder()
         if folder is None:
-            self._warn(_("Aufnahme-Laufwerk nicht angeschlossen – die Runden werden nicht aufgenommen."))
+            if not quiet:
+                self._warn(_("Aufnahme-Laufwerk nicht angeschlossen – die Runden werden nicht aufgenommen."))
             return
         try:
             c = self._client()
         except ObsError as e:
-            self._warn(_("OBS läuft nicht – die Runden werden nicht aufgenommen. ({error})", error=e))
+            if not quiet:
+                self._warn(_("OBS läuft nicht – die Runden werden nicht aufgenommen. ({error})", error=e))
             return
+        self._ready = True
         try:
             sound = self._audio(c) if self.cfg.audio else ""     # 1.8.7: a sound problem must stay in the status
+            picture = self._video(c)                              # 1.8.41
+            sound = " ".join(t for t in (sound, picture) if t)
             if self.cfg.wants_buffer and self.cfg.buffer_auto:
                 try:
                     state = self._buffer_state(c)
@@ -1543,7 +1596,9 @@ class Recorder(threading.Thread):
                         scene = cur.get("currentProgramSceneName") or cur.get("sceneName") or ""
                     notes += self._in_scene(c, scene, name)
                 if on:
-                    notes += self._follow_window(c, key, name)
+                    exe = self._follow_window(c, key, name)
+                    if exe:
+                        notes.append(_("Tonquelle {name} hört jetzt auf {exe}", name=name, exe=exe))
                 c.request("SetInputMute", {"inputName": name, "inputMuted": not on})
             special = c.request("GetSpecialInputs")
             others = []
@@ -1567,27 +1622,96 @@ class Recorder(threading.Thread):
         return hint
 
     @staticmethod
-    def _follow_window(c: ObsClient, key: str, name: str) -> list:
+    def _follow_window(c: ObsClient, key: str, name: str, priority: int = AUDIO_PRIORITY_EXE) -> str:
         """1.8.20: point our source at the window OBS offers for the program (WINDOW_EXES) – Steam or Epic DBD,
-        Discord stable/PTB/Canary. Nothing when the program is not running (OBS does not list it then) or the
-        source already points at a listed match; a failure only goes to the log."""
+        Discord stable/PTB/Canary; the executable it now follows, "" when nothing changed: the program is not
+        running (OBS does not list it then) or the source already points at a listed match. A failure only goes
+        to the log. ``priority`` (1.8.41): how OBS matches the window – the window capture uses another one."""
         try:
             items = c.request("GetInputPropertiesListPropertyItems",
                               {"inputName": name, "propertyName": "window"}).get("propertyItems") or []
             found = [i.get("itemValue") for i in items if i.get("itemEnabled", True)
                      and WINDOW_EXES[key].match(str(i.get("itemValue") or "").rsplit(":", 1)[-1])]
             if not found:
-                return []
+                return ""
             found.sort(key=lambda v: ("Shipping" not in v, ":UnrealWindow:" not in v))   # the game, not a launcher
             current = (c.request("GetInputSettings", {"inputName": name}).get("inputSettings") or {}).get("window")
             if current in found:
-                return []
+                return ""
             c.request("SetInputSettings", {"inputName": name, "inputSettings": {"window": found[0],
-                                                                                "priority": AUDIO_PRIORITY_EXE}})
+                                                                                "priority": priority}})
         except ObsError as e:
-            log.info("OBS: Fenster der Tonquelle nicht geprüft (%s)", e)
-            return []
-        return [_("Tonquelle {name} hört jetzt auf {exe}", name=name, exe=found[0].rsplit(":", 1)[-1])]
+            log.info("OBS: Fenster der Quelle %s nicht geprüft (%s)", name, e)
+            return ""
+        return found[0].rsplit(":", 1)[-1]
+
+    def _video(self, c: ObsClient) -> str:
+        """1.8.41: our window capture of DBD (WINDOW_SOURCE) in the scene on air – created on top of it and fitted
+        to the canvas the first time, added to another scene the same way, shown again when hidden, pointed at the
+        running DBD (Steam/Epic/Store). Switched off: only hidden in this scene, never deleted – the user's own
+        sources (the monitor capture) are never touched. Returns a problem for the status line, else ""."""
+        notes = []
+        try:
+            names = {i.get("inputName") for i in c.request("GetInputList").get("inputs", [])}
+            if WINDOW_SOURCE not in names and not self.cfg.window:
+                return ""                                 # never created, not wanted: nothing to do
+            cur = c.request("GetCurrentProgramScene")
+            scene = cur.get("currentProgramSceneName") or cur.get("sceneName") or ""
+            if WINDOW_SOURCE not in names:
+                made = c.request("CreateInput", {"sceneName": scene, "inputName": WINDOW_SOURCE,
+                                                 "inputKind": WINDOW_KIND, "sceneItemEnabled": True,
+                                                 "inputSettings": {"window": AUDIO_APPS["dbd"][1],
+                                                                   "priority": WINDOW_PRIORITY_CLASS,
+                                                                   "method": WINDOW_METHOD_WGC, "cursor": False}})
+                self._fit(c, scene, made.get("sceneItemId"))
+                notes.append(_("Bildquelle angelegt: {name} (Szene „{scene}“)", name=WINDOW_SOURCE, scene=scene))
+            elif scene:
+                items = [i for i in c.request("GetSceneItemList", {"sceneName": scene}).get("sceneItems", [])
+                         if i.get("sourceName") == WINDOW_SOURCE]
+                if not self.cfg.window:
+                    for i in items:
+                        if i.get("sceneItemEnabled", True):
+                            c.request("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": i.get("sceneItemId"),
+                                                              "sceneItemEnabled": False})
+                            notes.append(_("Bildquelle in der Szene „{scene}“ ausgeblendet: {name}", scene=scene,
+                                           name=WINDOW_SOURCE))
+                    for n in notes:
+                        log.info("OBS: %s", n)
+                    return ""
+                if not items:
+                    made = c.request("CreateSceneItem", {"sceneName": scene, "sourceName": WINDOW_SOURCE,
+                                                         "sceneItemEnabled": True})
+                    self._fit(c, scene, made.get("sceneItemId"))
+                    notes.append(_("Bildquelle zur Szene „{scene}“ hinzugefügt: {name}", scene=scene,
+                                   name=WINDOW_SOURCE))
+                elif not any(i.get("sceneItemEnabled", True) for i in items):
+                    c.request("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": items[0].get("sceneItemId"),
+                                                      "sceneItemEnabled": True})
+                    notes.append(_("Bildquelle in der Szene „{scene}“ wieder eingeblendet: {name}", scene=scene,
+                                   name=WINDOW_SOURCE))
+            exe = self._follow_window(c, "dbd", WINDOW_SOURCE, WINDOW_PRIORITY_CLASS)
+            if exe:
+                notes.append(_("Bildquelle {name} zeigt jetzt {exe}", name=WINDOW_SOURCE, exe=exe))
+        except ObsError as e:
+            log.info("OBS: Bildquelle nicht eingerichtet (%s)", e)
+            return _("DBD-Fenster in OBS nicht eingerichtet: {error}", error=e)
+        for n in notes:
+            log.info("OBS: %s", n)
+        return ""
+
+    @staticmethod
+    def _fit(c: ObsClient, scene: str, item_id):
+        """Our new scene item at the top left, scaled into the canvas (the DBD window may differ from it, e.g. a
+        2560×1440 canvas for 3440×1440 with its black bars). Placed once – a later change by the user stays."""
+        if item_id is None or not scene:
+            return
+        video = c.request("GetVideoSettings")
+        w, h = int(video.get("baseWidth") or 0), int(video.get("baseHeight") or 0)
+        if w <= 0 or h <= 0:
+            return
+        c.request("SetSceneItemTransform", {"sceneName": scene, "sceneItemId": item_id, "sceneItemTransform": {
+            "positionX": 0, "positionY": 0, "alignment": 5, "boundsType": "OBS_BOUNDS_SCALE_INNER",
+            "boundsAlignment": 0, "boundsWidth": w, "boundsHeight": h}})
 
     @staticmethod
     def _in_scene(c: ObsClient, scene: str, name: str) -> list:

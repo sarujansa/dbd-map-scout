@@ -153,6 +153,12 @@ TIPS = {
     "Aufnahmeordner wählen …": "Ordner, in den OBS die Runden legt – z. B. auf der externen Platte. Gemerkt wird das "
                                "Laufwerk, nicht der Buchstabe: bekommt die Platte einen anderen, findet das "
                                "Programm den Ordner trotzdem.",
+    "Nur das DBD-Fenster aufnehmen (Fensteraufnahme in OBS selbst einrichten)":
+        "Das Programm legt in OBS eine Fensteraufnahme „DbD Map Scout – DBD-Fenster“ an (oben in der laufenden Szene, "
+        "auf die Leinwand eingepasst) und stellt sie auf Steam, Epic oder Store um. Aufgenommen wird dann nur das "
+        "Spiel – ohne Discord, Benachrichtigungen und ohne das Overlay dieses Programms. OBS nimmt über Windows auf "
+        "(wie die Fensteraufnahme), nicht über die Spielaufnahme, die sich ins Spiel hängt. Aus: die Quelle wird nur "
+        "ausgeblendet, deine eigene Bildschirmaufnahme bleibt unangetastet.",
     "Wiederholungspuffer mit DBD starten und stoppen": "Das Programm startet den Wiederholungspuffer in OBS, sobald "
                                                        "DBD läuft, und stoppt ihn, wenn DBD zu ist – so kostet er "
                                                        "ausserhalb des Spiels nichts und du musst nicht daran denken.",

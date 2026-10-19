@@ -156,7 +156,8 @@ class FakeObs(threading.Thread):
                 out = {"currentProgramSceneName": "Szene", "sceneName": "Szene"}
             elif kind == "CreateInput":
                 self.inputs[data["inputName"]] = dict(data, muted=False)
-                self._item(data["sceneName"], data["inputName"], data.get("sceneItemEnabled", True))
+                out = {"sceneItemId": self._item(data["sceneName"], data["inputName"],
+                                                 data.get("sceneItemEnabled", True))}
             elif kind == "GetInputPropertiesListPropertyItems":     # 1.8.20: the windows OBS offers
                 ok = data["inputName"] in self.inputs and data["propertyName"] == "window"
                 if ok:
@@ -176,7 +177,15 @@ class FakeObs(threading.Thread):
             elif kind == "CreateSceneItem":
                 ok = data["sourceName"] in self.inputs
                 if ok:
-                    self._item(data["sceneName"], data["sourceName"], data.get("sceneItemEnabled", True))
+                    out = {"sceneItemId": self._item(data["sceneName"], data["sourceName"],
+                                                     data.get("sceneItemEnabled", True))}
+            elif kind == "GetVideoSettings":           # 1.8.41
+                out = {"baseWidth": 2560, "baseHeight": 1440, "outputWidth": 2560, "outputHeight": 1440}
+            elif kind == "SetSceneItemTransform":
+                hits = [i for i in self.scenes.get(data["sceneName"], []) if i["sceneItemId"] == data["sceneItemId"]]
+                ok = bool(hits)
+                for i in hits:
+                    i["transform"] = dict(data["sceneItemTransform"])
             elif kind == "SetSceneItemEnabled":
                 hits = [i for i in self.scenes.get(data["sceneName"], []) if i["sceneItemId"] == data["sceneItemId"]]
                 ok = bool(hits)
@@ -217,6 +226,7 @@ class FakeObs(threading.Thread):
     def _item(self, scene, source, enabled=True):
         items = self.scenes.setdefault(scene, [])
         items.append({"sourceName": source, "sceneItemId": len(items) + 1, "sceneItemEnabled": enabled})
+        return len(items)
 
     def _write_replay(self):
         path, self._pending = self._pending[0], None
@@ -1408,5 +1418,80 @@ def test_a_replay_buffer_not_enabled_in_obs_is_explained_and_f8_gets_an_answer(t
         r._test()
         assert "Wiederholungspuffer in OBS nicht aktiviert" in r.status
         assert obsrec.buffer_missing(obsrec.ObsError("x", 604)) and not obsrec.buffer_missing(obsrec.ObsError("x", 204))
+    finally:
+        obs.stop()
+
+
+# ------------------------------------------------------------------ 1.8.41: the DBD window, retried set-up
+def test_the_dbd_window_is_set_up_in_obs_and_follows_the_launcher(obs, tmp_path):
+    """1.8.41 (user: "dass das Programm es selber macht mit der Fenstererkennung und im OBS hinterlegen"): our own
+    window capture of DBD in the scene on air – fitted to the canvas, priority "title, otherwise same type"
+    (UnrealWindow: Steam, Epic and Store alike), Windows 10 capture; the user's own sources stay untouched."""
+    obs.inputs["Bildschirmaufnahme"] = {"inputKind": "monitor_capture", "video": True}
+    obs._item("Szene", "Bildschirmaufnahme")
+    obs.windows = ["DeadByDaylight  :UnrealWindow:DeadByDaylight-EGS-Shipping.exe"]
+    r, posted = _recorder(obs, str(tmp_path), pre=False, audio=False, window=True)
+    r._game_changed(True)
+    src = obs.inputs[obsrec.WINDOW_SOURCE]
+    assert src["inputKind"] == "window_capture" and src["sceneName"] == "Szene"
+    assert src["inputSettings"]["priority"] == obsrec.WINDOW_PRIORITY_CLASS == 0
+    assert src["inputSettings"]["method"] == 2 and src["inputSettings"]["cursor"] is False
+    assert src["inputSettings"]["window"] == obs.windows[0]                     # Epic, not the Steam default
+    items = obs.scenes["Szene"]
+    mine = next(i for i in items if i["sourceName"] == obsrec.WINDOW_SOURCE)
+    assert items[-1] is mine and mine["transform"]["boundsType"] == "OBS_BOUNDS_SCALE_INNER"   # on top, fitted
+    assert (mine["transform"]["boundsWidth"], mine["transform"]["boundsHeight"]) == (2560, 1440)
+    assert items[0]["sceneItemEnabled"] and "transform" not in items[0]        # the monitor capture untouched
+    assert not any(k in ("RemoveInput", "RemoveSceneItem") for k, _d in obs.requests)
+    assert r.status.startswith("OBS bereit")
+    # off: only hidden in the scene, never deleted; then on again: shown again, not created twice
+    r.cfg.window = False
+    r._game_changed(False)
+    r._game_changed(True)
+    assert not mine["sceneItemEnabled"] and obsrec.WINDOW_SOURCE in obs.inputs
+    r.cfg.window = True
+    r._game_changed(False)
+    r._game_changed(True)
+    assert mine["sceneItemEnabled"]
+    assert [k for k, d in obs.requests if k == "CreateInput"].count("CreateInput") == 1
+
+
+def test_without_the_setting_no_picture_source_is_created(obs, tmp_path):
+    r, posted = _recorder(obs, str(tmp_path), pre=False, audio=False)
+    r._game_changed(True)
+    assert obsrec.WINDOW_SOURCE not in obs.inputs
+    assert not any(k == "CreateInput" for k, _d in obs.requests)
+
+
+def test_obs_opened_after_dbd_is_set_up_by_the_retry(tmp_path):
+    """1.8.41: OBS started after DBD – before, "OBS läuft nicht" once and then no replay buffer (and no sources)
+    until DBD was restarted; the user started the buffer by hand. Now a silent retry every RECHECK_S."""
+    obs = FakeObs(record_dir=str(tmp_path))
+    obs.start()
+    try:
+        r, posted = _recorder(obs, str(tmp_path), pre=False, instant=True, buffer_auto=True, audio=False)
+        port, r.cfg.port = r.cfg.port, 1                   # OBS not running yet
+        r._game_changed(True)
+        assert not r._ready and not obs.replay
+        assert sum(1 for k, _d in _drain(posted) if k == "warn") == 1
+        r._next_check = 0
+        r._recheck()                                       # still not running: no second warning
+        assert not any(k == "warn" for k, _d in _drain(posted))
+        r.cfg.port = port                                  # OBS opened
+        r._recheck()                                       # too early: waits RECHECK_S
+        assert not obs.replay
+        r._next_check = 0
+        r._recheck()
+        assert r._ready and obs.replay and r._buffer_ours and r.status.startswith("OBS bereit")
+        obs.replay = False                                 # OBS restarted: its buffer is off again
+        r._next_check = 0
+        r._recheck()
+        assert obs.replay
+        r._game_changed(False)                             # DBD closed: the buffer we started stops
+        assert not obs.replay
+        r._next_check = 0
+        n = len(obs.requests)
+        r._recheck()                                       # no DBD: nothing is asked
+        assert len(obs.requests) == n
     finally:
         obs.stop()
