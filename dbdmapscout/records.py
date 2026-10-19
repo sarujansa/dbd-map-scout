@@ -1,5 +1,5 @@
 """Streaks and records (1.7, user's pick 6): longest and current 4K streak, longest and current escape streak,
-best week as killer / survivor, most rounds in a day, longest session, longest round.
+best week as killer / survivor, most rounds in a day, longest session, longest round; 1.8.46 the fastest 4K.
 
 Pure logic on the rounds the statistics selected and their official matches; the sub-tab "Rekorde" shows the
 result as tiles (dashboard.Tile).
@@ -102,6 +102,19 @@ def longest_round(rounds):
     return max(rounds, key=lambda r: (r.seconds, r.t)) if rounds else None
 
 
+def fastest_four(pairs):
+    """1.8.46: the 4K with the shortest match – (round, match, seconds) or None. The page's time in the match
+    (exact) when it has one, else the detected length."""
+    best = None
+    for r, m in pairs:
+        if official.kills(m) != 4:
+            continue
+        seconds = m.seconds or r.seconds
+        if seconds > 0 and (best is None or seconds < best[2]):
+            best = (r, m, seconds)
+    return best
+
+
 def _date(t: float) -> str:
     return time.strftime("%d.%m.%y", time.localtime(t))
 
@@ -116,8 +129,9 @@ def _streak_tile(title: str, s: Streak, empty: str) -> Tile:
     return Tile(title, str(s.best), sub)
 
 
-def tiles(rounds, pairs) -> list:
-    """The tiles of the sub-tab "Rekorde" for the selected ``rounds`` and their official ``pairs``."""
+def tiles(rounds, pairs, killer_name=None) -> list:
+    """The tiles of the sub-tab "Rekorde" for the selected ``rounds`` and their official ``pairs``;
+    ``killer_name`` turns a killer id into its display name."""
     kills = [(r.t, official.kills(m)) for r, m in pairs]
     esc = [(r.t, official.escaped(m)) for r, m in pairs]
     out = [_streak_tile(_("4K-Serie"), streak([(t, None if k is None else k == 4) for t, k in kills]),
@@ -142,4 +156,10 @@ def tiles(rounds, pairs) -> list:
     r = longest_round(rounds)
     if r is not None:
         out.append(Tile(_("Längste Runde"), fmt_duration(r.seconds), f"{r.map} · {_date(r.t)}"))
+    fast = fastest_four(pairs)
+    if fast is not None:
+        r, _m, seconds = fast
+        who = (killer_name or str)(r.killer) if r.killer else ""
+        out.append(Tile(_("Schnellste 4K"), fmt_duration(seconds),
+                        " · ".join(x for x in (who, r.map, _date(r.t)) if x)))
     return out

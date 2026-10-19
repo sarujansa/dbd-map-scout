@@ -34,6 +34,11 @@ FILE = "official.jsonl"
 PREFIX = "dbdmapscout-matches"          # file name the userscript downloads (browsers may add " (1)")
 FORMAT = "dbdmapscout-matches"          # marker inside the file
 URL = "https://stats.deadbydaylight.com/match-history"
+# 1.8.46: opened with this hash, the userscript (from version STRUCTURE_SCRIPT) saves STRUCTURE_FILE once – the
+# field names and types of the page's answer, no values; the program never reads it (it is for the user)
+STRUCTURE_HASH = "#dbdmapscout-structure"
+STRUCTURE_FILE = "dbdmapscout-structure.json"
+STRUCTURE_SCRIPT = 2
 SCRIPT = "matchexport.user.js"          # next to this module
 MAX_FILE = 5_000_000                    # bytes; the page's 30 matches are ~20 kB
 MAX_MATCHES = 500                       # per file
@@ -373,6 +378,79 @@ def escaped(m: Match):
         return None
     kind = classify(m.status, m.img)
     return None if kind is None else kind == "escaped"
+
+
+# 1.8.46: how a survivor's match ended, finer than classify(): "dead" split into sacrificed (hook) and killed
+# (the page's DEAD / VE_Killed – a mori or another kill by the killer)
+FATES = ("escaped", "sacrificed", "killed", "abandoned", "gone")
+
+
+def fate(status: str, img: str = "") -> str | None:
+    """One of FATES for a status name and its picture, None = unknown."""
+    kind = classify(status, img)
+    if kind != "dead":
+        return kind
+    return "sacrificed" if any("sacrific" in t.lower() for t in (status, img) if t) else "killed"
+
+
+def fates(pairs) -> dict:
+    """{fate: count} of the survivors in the killer matches of ``pairs`` ([(round, match)]); None = unknown."""
+    out = {}
+    for _r, m in pairs:
+        if m.role == "killer":
+            for p in survivors(m):
+                f = fate(p.status, p.img)
+                out[f] = out.get(f, 0) + 1
+    return out
+
+
+def clean_kills(pairs) -> list:
+    """Kills of the killer matches in which no survivor abandoned or left (a 4v4 to the end)."""
+    out = []
+    for _r, m in pairs:
+        if m.role != "killer" or not survivors(m):
+            continue
+        fs = [fate(p.status, p.img) for p in survivors(m)]
+        if None not in fs and "abandoned" not in fs and "gone" not in fs:
+            out.append(fs.count("sacrificed") + fs.count("killed"))
+    return out
+
+
+@dataclass
+class Opponent:
+    name: str                   # character as the page names it
+    role: str                   # the opponent's role: survivor (you played killer) | killer (you played survivor)
+    n: int = 0                  # matches against it
+    fates: dict = field(default_factory=dict)       # {fate | None: count} – of that survivor / of you
+
+
+def opponents(pairs) -> list:
+    """1.8.46: the characters you met (only characters – the page's player names never reach the file): as killer
+    every survivor with how its match ended, as survivor the killer with how your match ended. Most met first."""
+    found = {}
+
+    def add(name, role, f):
+        if not name:
+            return
+        o = found.setdefault((name, role), Opponent(name, role))
+        o.n += 1
+        o.fates[f] = o.fates.get(f, 0) + 1
+
+    for _r, m in pairs:
+        if m.role == "killer":
+            for p in survivors(m):
+                add(p.character, "survivor", fate(p.status, p.img))
+        elif m.role == "survivor":
+            killer = next((p for p in m.opp if p.role == "killer"), None)
+            if killer is not None:
+                add(killer.character, "killer", fate(m.status, m.img))
+    return sorted(found.values(), key=lambda o: (-o.n, o.role, o.name.lower()))
+
+
+def share(counts: dict, *keys):
+    """Share of ``keys`` among the known fates in ``counts`` (None without any)."""
+    known = sum(v for k, v in counts.items() if k is not None)
+    return sum(counts.get(k, 0) for k in keys) / known if known else None
 
 
 def unknown_statuses(matches) -> dict:
