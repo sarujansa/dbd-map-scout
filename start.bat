@@ -5,11 +5,16 @@ set "VENV=%~dp0.venv"
 if exist "%VENV%\installed.ok" goto update
 
 echo === DbD Map Scout: Ersteinrichtung (einmalig, ca. 2-4 Minuten) ===
+rem Python 3.12 bis 3.14: fuer neuere gibt es noch nicht alle Pakete (onnxruntime, pywinrt). Der Launcher
+rem "py" nimmt gezielt eine passende Version, auch wenn daneben eine neuere installiert ist (Eingabe aus
+rem nul: nie auf eine Rueckfrage des Python-Installationsmanagers warten).
 set "PY="
-where py >nul 2>nul && set "PY=py -3"
-if not defined PY where python >nul 2>nul && set "PY=python"
+for %%V in (3.14 3.13 3.12) do if not defined PY (py -%%V -c "pass" <nul >nul 2>nul && set "PY=py -%%V")
+if not defined PY (python -c "import sys; sys.exit(not (3, 12) <= sys.version_info[:2] <= (3, 14))" <nul >nul 2>nul && set "PY=python")
 if not defined PY goto nopython
 
+rem Eine abgebrochene Ersteinrichtung (kein installed.ok) neu beginnen, z. B. mit einer anderen Python-Version
+if exist "%VENV%" rd /s /q "%VENV%"
 %PY% -m venv "%VENV%"
 if errorlevel 1 goto nopython
 "%VENV%\Scripts\python.exe" -m pip install --upgrade pip
@@ -41,9 +46,14 @@ exit /b 0
 
 :nopython
 echo.
-echo Python wurde nicht gefunden.
-echo Bitte Python 3.12 oder neuer von https://www.python.org/downloads/ installieren
-echo und im Installer "Add python.exe to PATH" anhaken. Danach start.bat erneut starten.
+echo Kein passendes Python gefunden: DbD Map Scout braucht Python 3.12, 3.13 oder 3.14.
+echo Fuer Python 3.15 und neuer gibt es noch nicht alle Pakete (z. B. onnxruntime fuer die Texterkennung).
+where py >nul 2>nul && (echo Installiert: & py --list <nul)
+echo.
+echo Python 3.14 zusaetzlich installieren - eine neuere Version darf daneben bleiben:
+echo   im Terminal "py install 3.14" (Python-Installationsmanager) oder
+echo   https://www.python.org/downloads/ und im Installer "Add python.exe to PATH" anhaken.
+echo Danach start.bat erneut starten.
 pause
 exit /b 1
 
