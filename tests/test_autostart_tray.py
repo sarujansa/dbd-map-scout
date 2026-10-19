@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dbdmapscout import autostart as au  # noqa: E402
 from dbdmapscout.tray import Tray  # noqa: E402
 
-ROOT = r"C:\Users\saruj\Desktop\dbd-map-scout"
+ROOT = r"C:\Users\Player\Desktop\dbd-map-scout"
 
 
 # ------------------------------------------------------------------ tasks
@@ -51,8 +51,8 @@ def test_shortcut_gets_the_program_app_id(monkeypatch, tmp_path):
     """Pinned shortcut and running window must share one AppUserModelID (one taskbar button, own icon)."""
     import dbdmapscout.icon as icon
     monkeypatch.setattr(icon, "save_ico", lambda path: None)
-    start = r"C:\Users\saruj\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\DbD Map Scout.lnk"
-    desk = r"C:\Users\saruj\Desktop\DbD Map Scout.lnk"
+    start = r"C:\Users\Player\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\DbD Map Scout.lnk"
+    desk = r"C:\Users\Player\Desktop\DbD Map Scout.lnk"
 
     def fake(script):
         if "CreateShortcut" not in script:
