@@ -153,6 +153,10 @@ TIPS = {
     "Aufnahmeordner wählen …": "Ordner, in den OBS die Runden legt – z. B. auf der externen Platte. Gemerkt wird das "
                                "Laufwerk, nicht der Buchstabe: bekommt die Platte einen anderen, findet das "
                                "Programm den Ordner trotzdem.",
+    "OBS mit DBD starten, falls es noch nicht läuft":
+        "Startet DBD und ist OBS nicht erreichbar, startet das Programm OBS einmal minimiert im Infobereich – nur, "
+        "wenn kein OBS-Fenster offen ist. OBS bleibt offen, wenn DBD beendet wird. OBS läuft dann mit denselben "
+        "Rechten wie das Programm (Administrator).",
     "Nur das DBD-Fenster aufnehmen (Fensteraufnahme in OBS selbst einrichten)":
         "Das Programm legt in OBS eine Fensteraufnahme „DbD Map Scout – DBD-Fenster“ an (oben in der laufenden Szene, "
         "auf die Leinwand eingepasst) und stellt sie auf Steam, Epic oder Store um. Aufgenommen wird dann nur das "
