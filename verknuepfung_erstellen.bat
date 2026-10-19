@@ -11,7 +11,9 @@ if not exist ".venv\Scripts\python.exe" (
 )
 net session >nul 2>&1
 if errorlevel 1 (
-  powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
+  rem Pfad ueber eine Variable: ein ' im Ordnernamen (O'Brien) beendete sonst den PowerShell-Text
+  set "DBDMS_SELF=%~f0"
+  powershell -NoProfile -Command "Start-Process -FilePath $env:DBDMS_SELF -Verb RunAs"
   exit /b 0
 )
 ".venv\Scripts\python.exe" -m dbdmapscout.autostart install

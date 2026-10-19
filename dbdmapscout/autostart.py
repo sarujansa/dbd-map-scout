@@ -10,8 +10,10 @@ runs elevated when started through the task.
 Tasks:
   "DbD Map Scout"               on demand; the shortcuts run it (schtasks /run)
   "DbD Map Scout (Autostart)"   at logon (20 s delay), starts in the notification area ("tray")
-Both run: cmd /c start "" /min cmd /c ""<folder>\\start.bat" [tray]"  – so updates and packages keep
-working, and the minimised console closes again (start alone would use cmd /K and leave it open).
+Both run: cmd /c start "" /min cmd /c .\\start.bat [tray]  in the program folder (working directory) – so
+updates and packages keep working, and the minimised console closes again (start alone would use cmd /K and
+leave it open). 1.8.45: the folder is never part of the command line – cmd would read "&" in it as a second
+command and expand "%…%" (the working directory is not parsed).
 
 Both shortcuts carry the program's AppUserModelID (appid.py). The Start menu one is needed for pinning
 the running window: Windows looks for a shortcut with that ID there (not on the desktop) and pins it –
@@ -27,7 +29,7 @@ import sys
 from .appid import set_link_app_id
 from .i18n import _
 
-SETUP_VERSION = 4           # raise when task, shortcut or icon change: the program then renews them itself
+SETUP_VERSION = 5           # raise when task, shortcut or icon change: the program then renews them itself
 TASK = "DbD Map Scout"
 TASK_AUTO = "DbD Map Scout (Autostart)"
 LINK_NAME = "DbD Map Scout.lnk"
@@ -42,10 +44,10 @@ def _q(s: str) -> str:
 def task_script(root: str, name: str, at_logon: bool) -> str:
     """PowerShell that (re)creates one task for the current user, run level highest."""
     root = os.path.abspath(root)
-    bat = os.path.join(root, "start.bat")
     # "start" alone would run the .bat with cmd /K – its (minimised) console would stay open afterwards.
-    # Explicit cmd /c closes it. Quoting: cmd /c strips the outer pair of ""…"".
-    arg = f'/c start "" /min cmd /c ""{bat}"' + (" tray" if at_logon else "") + '"'
+    # Explicit cmd /c closes it. 1.8.45: start.bat by its name in the working directory (-WorkingDirectory,
+    # which start passes on) – a folder with "&" or "%" on the command line broke the task.
+    arg = '/c start "" /min cmd /c .\\start.bat' + (" tray" if at_logon else "")
     lines = [
         "$ErrorActionPreference = 'Stop'",
         "$user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name",

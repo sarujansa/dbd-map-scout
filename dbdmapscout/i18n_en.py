@@ -1876,4 +1876,11 @@ EN = {
     'Lila dunkel': 'Dark lilac',
     'Lila transparent': 'Lilac see-through',
     'Lila Boden, halb durchsichtig – gilt auch im Spiel.': 'Lilac floor, half see-through – in the game too.',
+    # 1.8.45
+    'Wichtig: In DBD unter Einstellungen → Grafik den Anzeigemodus „Fenster-Vollbild“ wählen. Im exklusiven Vollbild kann Windows kein Fenster über dem Spiel zeigen – die Karte bliebe unsichtbar.':
+        'Important: in DBD under Settings → Graphics choose the display mode "Windowed Fullscreen". In exclusive fullscreen Windows cannot show a window above the game – the map would stay invisible.',
+    'Ungültiger Servername im Auftrag: {name}': 'Invalid server name in the job: {name}',
+    'Die hosts-Datei wurde direkt nach dem Schreiben wieder verändert (Virenschutz oder ein anderes Programm?).':
+        'The hosts file was changed again right after writing (antivirus or another program?).',
+    'Keine Schreibrechte auf die hosts-Datei (Administratorrechte?).': 'No permission to write the hosts file (administrator rights?).',
 }
