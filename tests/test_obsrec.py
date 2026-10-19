@@ -356,6 +356,20 @@ def test_quitting_mid_round_stops_obs_and_files_the_recording(obs, tmp_path):
     assert len(obsrec.load_index(str(tmp_path))) == 1         # filed under its own name, deletable later
 
 
+def test_a_renamed_round_files_its_recording_under_the_new_name(obs, tmp_path):
+    """1.8.39: the round turned out to be another layout – the running recording takes its name, nothing restarts."""
+    folder = str(tmp_path)
+    r, posted = _recorder(obs, folder, pre=False)
+    t = time.mktime((2026, 10, 19, 9, 5, 0, 0, 0, -1))
+    r._begin({"t": t, "map_id": "coal-tower", "label": "Coal Tower I", "role": "killer", "killer": "Nurse"})
+    r.cmds.put(("relabel", {"map_id": "coal-tower", "label": "Coal Tower II"}))
+    r.cmds.put(("quit", None))
+    r.run()                                                   # handles relabel, then quit finishes the round
+    assert [k for k, _d in obs.requests].count("StartRecord") == 1
+    assert [k for k, _d in obs.requests].count("StopRecord") == 1
+    assert "2026-10-19 09-05 Coal Tower II – Nurse.mkv" in os.listdir(folder)
+
+
 def test_quitting_without_a_round_does_not_call_obs(obs, tmp_path):
     r, posted = _recorder(obs, str(tmp_path), pre=False)
     r.start()
