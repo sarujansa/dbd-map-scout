@@ -311,6 +311,9 @@ TIPS = {
     "Userscript kopieren": "Kopiert das Userscript in die Zwischenablage. In Tampermonkey „Neues Skript erstellen“, "
                            "alles ersetzen und speichern. Es liest nur die Match-Liste, die die Seite selbst lädt – "
                            "keine Konto- oder Login-Daten – und schickt nichts irgendwohin.",
+    "Alle Matches neu speichern":                                                                   # 1.8.52
+        "Öffnet die Stats-Seite so, dass das Userscript ihre letzten 30 Matches noch einmal speichert, auch wenn "
+        "keines neu ist – nach einer Neuinstallation oder wenn die Datei verloren ging.",
     "Aufbau der Match-Daten speichern":
         "Öffnet die Stats-Seite so, dass das Userscript einmal den Aufbau ihrer Match-Daten im Download-Ordner "
         "speichert: nur Feldnamen und Arten, keine Werte. Damit lässt sich entscheiden, welche Daten das "

@@ -462,6 +462,47 @@ def test_userscript_saves_the_structure_only_on_request_and_without_values(tmp_p
     assert [n for n, _b in res["again"]] == [] and [n for n, _b in res["plain"]] == ["dbdmapscout-matches.json"]
 
 
+RESAVE_RUNS = r"""
+const store = {};
+const first = run('', store);                          // a new match: saved
+setTimeout(() => {
+  const again = run('', store);                        // nothing new: nothing saved, and the console says why
+  const resave = run('#dbdmapscout-resave', store);    // asked: saved once more although nothing is new
+  setTimeout(() => {
+    const after = run('', store);                      // the request is used up
+    setTimeout(() => process.stdout.write(JSON.stringify({ first, again, resave, after, logs })), 20);
+  }, 20);
+}, 20);
+"""
+
+
+def test_userscript_4_saves_all_matches_again_on_request_and_says_what_it_does(tmp_path):
+    """1.8.52: after a new install the user had to reset the script's memory in the browser console to get a file
+    without a new match – #dbdmapscout-resave does it once; the console tells that the script runs and why it saved
+    nothing (the user saw an empty console and could not tell whether the script ran at all)."""
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not installed")
+    head = STRUCTURE_HARNESS[:STRUCTURE_HARNESS.index("const store = {};")]
+    harness = ("const logs = [];\n" + head.replace("console: { log() {} }", "console: { log: m => logs.push(String(m)) }")
+               + RESAVE_RUNS)
+    page_answer = {"data": [{"matchStat": {"matchStartTime": T0, "map": {"name": "Coal Tower"}},
+                             "playerStat": {"playerRole": "VE_Slasher"}, "opponentStat": []}]}
+    (tmp_path / "harness.js").write_text(harness, encoding="utf-8")
+    (tmp_path / "answer.json").write_text(json.dumps(page_answer), encoding="utf-8")
+    out = subprocess.run([node, str(tmp_path / "harness.js"), SCRIPT, str(tmp_path / "answer.json")],
+                         capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0, out.stderr
+    res = json.loads(out.stdout)
+    names = {k: [n for n, _b in res[k]] for k in ("first", "again", "resave", "after")}
+    assert names == {"first": ["dbdmapscout-matches.json"], "again": [], "resave": ["dbdmapscout-matches.json"],
+                     "after": []}
+    assert o.parse(json.loads(res["resave"][0][1]), now=T0)[0][0].map == "Coal Tower"
+    assert sum("userscript 4 active" in m for m in res["logs"]) == 4                 # once per page load
+    assert sum("no new match" in m for m in res["logs"]) == 2                       # "again" and "after"
+    assert o.RESAVE_HASH == "#dbdmapscout-resave" and o.RESAVE_SCRIPT == o.script_version(SCRIPT)
+
+
 # ------------------------------------------------------------------ map correction, trend
 def test_correct_maps_takes_the_page_map_as_layout_one():
     ids = {"Coal Tower": "coal", "Groaning Storehouse": "gs"}.get

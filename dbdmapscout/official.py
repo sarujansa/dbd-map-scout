@@ -39,6 +39,10 @@ URL = "https://stats.deadbydaylight.com/match-history"
 STRUCTURE_HASH = "#dbdmapscout-structure"
 STRUCTURE_FILE = "dbdmapscout-structure.json"
 STRUCTURE_SCRIPT = 2
+# 1.8.52: opened with this hash, the userscript (from version RESAVE_SCRIPT) saves the matches once more although
+# none is new (new install, lost file) – the program merges them, known ones count once
+RESAVE_HASH = "#dbdmapscout-resave"
+RESAVE_SCRIPT = 4
 SCRIPT = "matchexport.user.js"          # next to this module
 MAX_FILE = 5_000_000                    # bytes; the page's 30 matches are ~20 kB
 MAX_MATCHES = 500                       # per file

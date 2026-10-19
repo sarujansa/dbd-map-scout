@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         DbD Map Scout – match export
 // @namespace    dbd-map-scout
-// @version      3
-// @description  Saves the recent match history of stats.deadbydaylight.com as dbdmapscout-matches.json (download folder) for DbD Map Scout. Only match data (time, map, mode, role, character, status, your own loadout, emblems and score) – no account or login data, nothing about other players but character and status. Sends nothing anywhere. On request (DbD Map Scout opens the page with #dbdmapscout-structure) once the structure of the page's answer: field names and types, no values.
+// @version      4
+// @description  Saves the recent match history of stats.deadbydaylight.com as dbdmapscout-matches.json (download folder) for DbD Map Scout. Only match data (time, map, mode, role, character, status, your own loadout, emblems and score) – no account or login data, nothing about other players but character and status. Sends nothing anywhere. On request (DbD Map Scout opens the page with #dbdmapscout-structure) once the structure of the page's answer: field names and types, no values; with #dbdmapscout-resave once the matches again although none is new.
 // @match        https://stats.deadbydaylight.com/*
 // @run-at       document-start
 // @grant        none
@@ -18,10 +18,13 @@
 // Version 3 (1.8.48, the user's pick from that structure): the match's mode, event, map id and length, and of the
 // own player only: loadout (perks, add-ons, offering, power/item), emblems, score categories, prestige, level and
 // the killer result – never more of the other players than before (character, role, status).
+// Version 4 (1.8.52): opened with #dbdmapscout-resave it saves the matches once more although none is new (a new
+// install, a lost file – before, only the browser console could reset that); it says in the console that it runs
+// and why it saved nothing. Same fields, still no requests of its own.
 (function () {
     'use strict';
 
-    const SCRIPT_VERSION = 3;
+    const SCRIPT_VERSION = 4;
     const FORMAT = 'dbdmapscout-matches';
     const FILE_NAME = 'dbdmapscout-matches.json';
     const API = /\/player-stats\/match-history\/games\/dbd\//;
@@ -32,6 +35,9 @@
     const STRUCTURE_HASH = '#dbdmapscout-structure';
     const STRUCTURE_KEY = 'dbdmapscout.structureUntil';
     const STRUCTURE_WAIT_MS = 15 * 60 * 1000;   // the request survives the login (a redirect drops the hash)
+    const RESAVE_HASH = '#dbdmapscout-resave';
+    const RESAVE_KEY = 'dbdmapscout.resaveUntil';
+    const LOG = '[DbD Map Scout] ';
     const FIELD_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,40}$/;
 
     const collected = new Map();          // start time -> reduced match
@@ -112,21 +118,26 @@
     }
 
     // --- the structure of the answer (on request only): names and types, never a value ---
-    function asked() {
+    function asked(hash) {
         try {
-            return String((window.location && window.location.hash) || '') === STRUCTURE_HASH;
+            return String((window.location && window.location.hash) || '') === hash;
         } catch (e) {
             return false;
         }
     }
 
-    function structureWanted() {
+    // a request by hash, kept for a while in the page's storage: the login's redirect drops the hash
+    function wanted(hash, key) {
         try {
-            if (asked()) localStorage.setItem(STRUCTURE_KEY, String(Date.now() + STRUCTURE_WAIT_MS));
-            return Number(localStorage.getItem(STRUCTURE_KEY)) > Date.now();
+            if (asked(hash)) localStorage.setItem(key, String(Date.now() + STRUCTURE_WAIT_MS));
+            return Number(localStorage.getItem(key)) > Date.now();
         } catch (e) {
-            return asked();
+            return asked(hash);
         }
+    }
+
+    function structureWanted() {
+        return wanted(STRUCTURE_HASH, STRUCTURE_KEY);
     }
 
     function merged(a, b) {
@@ -194,6 +205,7 @@
     }
 
     let structureDone = false;
+    let resaveDone = false;
 
     // wait: after the page's answer 1.5 s (it may come in parts), after the cached copy alone 10 s
     // (the fresh answer usually follows and replaces it -> one file instead of two)
@@ -230,7 +242,18 @@
         try {
             last = Number(localStorage.getItem(LAST_KEY)) || 0;
         } catch (e) { /* storage blocked: save anyway */ }
-        if (newest <= last) return;                   // nothing new since the last file
+        const resave = !resaveDone && wanted(RESAVE_HASH, RESAVE_KEY);
+        if (newest <= last && !resave) {              // nothing new since the last file
+            console.log(LOG + 'no new match since the last file - nothing saved (DbD Map Scout: "Save all matches '
+                        + 'again" saves them anyway)');
+            return;
+        }
+        if (resave) {
+            resaveDone = true;                        // once per request, the hash stays in the address
+            try {
+                localStorage.removeItem(RESAVE_KEY);
+            } catch (e) { /* ignore */ }
+        }
         const body = JSON.stringify({
             format: FORMAT, version: 1, script: SCRIPT_VERSION,
             exported: Math.floor(Date.now() / 1000), matches: matches,
@@ -294,6 +317,7 @@
             }
         } catch (e) { /* no cache */ }
     }
+    console.log(LOG + 'userscript ' + SCRIPT_VERSION + ' active - saves new matches as ' + FILE_NAME);
     fromCache();
     document.addEventListener('DOMContentLoaded', fromCache, { once: true });
 })();
