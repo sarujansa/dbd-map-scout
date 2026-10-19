@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         DbD Map Scout – match export
 // @namespace    dbd-map-scout
-// @version      2
-// @description  Saves the recent match history of stats.deadbydaylight.com as dbdmapscout-matches.json (download folder) for DbD Map Scout. Only match data (time, map, role, character, status) – no account or login data. Sends nothing anywhere. On request (DbD Map Scout opens the page with #dbdmapscout-structure) once the structure of the page's answer: field names and types, no values.
+// @version      3
+// @description  Saves the recent match history of stats.deadbydaylight.com as dbdmapscout-matches.json (download folder) for DbD Map Scout. Only match data (time, map, mode, role, character, status, your own loadout, emblems and score) – no account or login data, nothing about other players but character and status. Sends nothing anywhere. On request (DbD Map Scout opens the page with #dbdmapscout-structure) once the structure of the page's answer: field names and types, no values.
 // @match        https://stats.deadbydaylight.com/*
 // @run-at       document-start
 // @grant        none
@@ -15,10 +15,13 @@
 // reads) and saves a reduced copy once per page load, only when it holds a match not saved before.
 // Version 2 (DbD Map Scout 1.8.46): on request also the structure of that answer – which fields the page
 // sends, as names and types without any value – so the user can decide whether more fields are worth taking.
+// Version 3 (1.8.48, the user's pick from that structure): the match's mode, event, map id and length, and of the
+// own player only: loadout (perks, add-ons, offering, power/item), emblems, score categories, prestige, level and
+// the killer result – never more of the other players than before (character, role, status).
 (function () {
     'use strict';
 
-    const SCRIPT_VERSION = 2;
+    const SCRIPT_VERSION = 3;
     const FORMAT = 'dbdmapscout-matches';
     const FILE_NAME = 'dbdmapscout-matches.json';
     const API = /\/player-stats\/match-history\/games\/dbd\//;
@@ -53,6 +56,19 @@
         return out;
     }
 
+    // {id, name} of a perk, add-on, offering, power, mode – no picture
+    function ref(o) {
+        if (!o || typeof o !== 'object') return null;
+        const id = text(o.id), name = text(o.name);
+        return id || name ? { id, name } : null;
+    }
+
+    function refs(list, most) {
+        return Array.isArray(list) ? list.slice(0, most).map(ref).filter(Boolean) : [];
+    }
+
+    const SCORE_KEY = /^DBD_(Camper|Slasher)ScoreCat_[A-Za-z]+$/;
+
     function player(p, own) {
         if (!p || typeof p !== 'object') return null;
         const out = {
@@ -63,6 +79,18 @@
         if (own) {
             out.seconds = num(p.playerTimeInMatch);
             out.bp = num(p.bloodpointsEarned);
+            const l = p.characterLoadout || {};
+            out.loadout = { perks: refs(l.perks, 4), addons: refs(l.addOns, 2), offering: ref(l.offering),
+                            power: ref(l.power) };
+            out.emblems = Array.isArray(p.emblems) ? p.emblems.slice(0, 8).filter(e => e && typeof e === 'object')
+                .map(e => ({ id: text(e.emblem_id), name: text(e.emblem_name), quality: text(e.emblem_quality) })) : [];
+            out.score = {};
+            for (const [k, v] of Object.entries(p.postGameStat || {})) {
+                if (SCORE_KEY.test(k) && num(v) !== null) out.score[k] = v;
+            }
+            out.prestige = num(p.prestigeLevel);
+            out.level = num(p.characterLevel);
+            out.killerStatus = text(p.killerMatchStatus);
         }
         return out;
     }
@@ -73,7 +101,11 @@
         return {
             start: s.matchStartTime,
             map: text(s.map && s.map.name),
+            mapId: text(s.map && s.map.id),
             custom: s.isCustomMatch === true,
+            mode: ref(s.gameType),
+            event: text(s.specialEventId),
+            duration: num(s.matchDuration),
             player: player(m.playerStat, true),
             opponents: Array.isArray(m.opponentStat) ? m.opponentStat.map(p => player(p, false)).filter(Boolean) : [],
         };

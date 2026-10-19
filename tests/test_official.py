@@ -565,3 +565,64 @@ def test_fates_clean_kills_and_opponents():
     assert opp[("The Nurse", "killer")].fates == {"sacrificed": 1}      # as survivor: how your own match ended
     assert ("Ace", "survivor") not in opp                               # a fellow survivor is no opponent
     assert o.opponents(pairs)[0].n == 2                                  # most met first
+
+
+# ------------------------------------------------------------------ 1.8.48: userscript 3 – own loadout, match infos
+LOADOUT_ANSWER = [{
+    "matchStat": {"matchStartTime": T0, "map": {"id": "Ind_Coal_Tower", "name": "Coal Tower", "image": {"path": "x"}},
+                  "isCustomMatch": False, "matchDuration": 612, "specialEventId": "",
+                  "gameType": {"id": "Online", "name": "Public Match"}, "matchId": "secret-match-id"},
+    "playerStat": {"playerRole": "VE_Slasher", "characterName": {"name": "The Nurse"}, "playerTimeInMatch": 600,
+                   "bloodpointsEarned": 30000, "prestigeLevel": 12, "characterLevel": 50, "platform": "steam",
+                   "killerMatchStatus": "Merciless", "leaderboardScore": 999,
+                   "postGameStat": {"DBD_SlasherScoreCat_Hunter": 8000, "Other_Secret": 1},
+                   "emblems": [{"emblem_id": "Gatekeeper", "emblem_name": "Gatekeeper", "emblem_quality": "Iridescent"}],
+                   "characterLoadout": {
+                       "perks": [{"id": f"P{i}", "name": n, "image": {"path": "p.png"}}
+                                 for i, n in enumerate(["Lethal Pursuer", "Pop Goes the Weasel", "Grim Embrace",
+                                                        "Deadlock"])],
+                       "addOns": [{"id": "A1", "name": "Bad Man's Last Breath"}, {"id": "A2", "name": "Kavanagh's"}],
+                       "offering": {"id": "O1", "name": "Ebony Memento Mori", "image": {"background": "b"}},
+                       "power": {"id": "W1", "name": "Spencer's Last Breath"}}},
+    "opponentStat": [{"playerRole": "VE_Camper", "characterName": {"name": "Meg Thomas"}, "prestigeLevel": 99,
+                      "platform": "xbox", "bloodpointsEarned": 1234,
+                      "characterLoadout": {"perks": [{"id": "DH", "name": "Dead Hard"}]},
+                      "emblems": [{"emblem_name": "Benevolent"}],
+                      "playerStatus": {"name": "SACRIFICED", "image": {"path": "VE_Sacrificed.png"}}}] * 4}]
+
+
+def test_userscript_3_takes_the_own_loadout_and_match_infos_but_nothing_more_of_the_others(tmp_path):
+    """1.8.48: the user's pick from the structure – own data and match infos; the other players stay at character,
+    role and status (no perks, prestige, platform, BP, emblems of them)."""
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not installed")
+    script_path, answer_path = tmp_path / "harness.js", tmp_path / "answer.json"
+    script_path.write_text(HARNESS, encoding="utf-8")
+    answer_path.write_text(json.dumps(LOADOUT_ANSWER), encoding="utf-8")
+    out = subprocess.run([node, str(script_path), SCRIPT, str(answer_path)], capture_output=True, text=True,
+                         timeout=60)
+    assert out.returncode == 0, out.stderr
+    body = json.loads(out.stdout)["xhr"][0]
+    for secret in ("secret-match-id", "Dead Hard", "xbox", "1234", "Benevolent", "99", "Other_Secret", "steam",
+                   "999", "p.png"):
+        assert secret not in body
+    saved = json.loads(body)["matches"][0]
+    assert set(saved["opponents"][0]) == {"role", "character", "status"}
+    ms, script = o.parse(json.loads(body), now=T0)
+    m = ms[0]
+    assert script == o.script_version(SCRIPT) >= 3
+    assert m.mode == ["Online", "Public Match"] and m.map_key == "Ind_Coal_Tower" and m.duration == 612
+    assert [p[1] for p in m.perks] == ["Lethal Pursuer", "Pop Goes the Weasel", "Grim Embrace", "Deadlock"]
+    assert m.addons[0] == ["A1", "Bad Man's Last Breath"] and m.offering == ["O1", "Ebony Memento Mori"]
+    assert m.power == ["W1", "Spencer's Last Breath"] and m.emblems == [["Gatekeeper", "Gatekeeper", "Iridescent"]]
+    assert m.score == {"DBD_SlasherScoreCat_Hunter": 8000.0} and (m.prestige, m.level) == (12, 50)
+    assert m.killer_status == "Merciless" and o.kills(m) == 4
+    # stored and read back; an old line without the fields still loads
+    store = str(tmp_path / "official.jsonl")
+    o.merge(store, ms)
+    with open(store, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps({"t": T0 - 3600, "map": "Badham", "role": "killer"}) + "\n")
+    old, back = o.load(store)
+    assert back.perks == m.perks and back.score == m.score and back.prestige == 12 and back.mode == m.mode
+    assert old.perks == [] and old.prestige is None and old.mode == []
