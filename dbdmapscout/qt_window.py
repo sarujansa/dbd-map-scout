@@ -9,14 +9,13 @@ from __future__ import annotations
 
 import base64
 import collections
-import html
 import sys
 
 from PySide6.QtCore import QByteArray, QEvent, QModelIndex, QObject, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QFontDatabase, QIcon, QPalette, QPixmap, QStandardItem
 from PySide6.QtWidgets import (QAbstractItemView, QAbstractScrollArea, QAbstractSlider, QAbstractSpinBox, QApplication,
                                QComboBox, QCompleter,
-                               QFrame, QHBoxLayout, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QPushButton,
+                               QHBoxLayout, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QPushButton,
                                QScrollArea, QStackedWidget, QTabWidget, QVBoxLayout, QWidget)
 
 from . import i18n, qt_theme
@@ -29,7 +28,7 @@ from .qt_preview import (PREVIEW_NAMES, PreviewView)
 from .qt_maps import (TILE_W, TILE_H, TILE_PIC, ALL_MAPS, RECENT, MapTile, RealmDelegate, MapsPage)
 from .qt_pages import (THUMB_H, SETUP_W, GAME_LANGS, SETUP_HOTKEYS, SETUP, OverviewPage, make_control, show_control,
                        Grip, CardColumn, _card_head, _Arranged, FitTabs, FormPage, FLOW_KINDS, _grows, _fills,
-                       AutoPage, DialogWindow, SetupPage)
+                       AutoPage, DialogWindow, MessageBox, SetupPage)
 
 
 # The classes and helpers moved to qt_common / qt_views / qt_preview / qt_maps / qt_pages (1.2.14, analysis point 2)
@@ -550,23 +549,9 @@ class MainWindow(QMainWindow):
         right = QVBoxLayout()
         right.setContentsMargins(0, 0, 0, 0)
         right.setSpacing(0)
-        # OK/Cancel or a note (App._ask/_inform) – a bar, not a modal dialog
-        self.question = QFrame()
-        self.question.setObjectName("question")
-        ql = QHBoxLayout(self.question)
-        ql.setContentsMargins(16, 10, 16, 10)
-        self.question_text = _label(wrap=True)
-        ql.addWidget(self.question_text, 1)
-        self.question_ok = QPushButton(_("OK"))
-        self.question_ok.setObjectName("primary")
-        self.question_ok.clicked.connect(lambda: post("answer", True))
-        self.question_cancel = QPushButton(_("Abbrechen"))
-        self.question_cancel.clicked.connect(lambda: post("answer", False))
-        ql.addWidget(self.question_ok, alignment=Qt.AlignVCenter)
-        ql.addWidget(self.question_cancel, alignment=Qt.AlignVCenter)
-        self.question.hide()
+        # OK/Cancel or a note (App._ask/_inform): 1.8.44 a small window to answer, not a bar at the top
+        self.message = MessageBox(self, post)
         self._question = None
-        right.addWidget(self.question)
         right.addWidget(self.stack, 1)
         lay.addLayout(right, 1)
         self.setCentralWidget(central)
@@ -829,15 +814,18 @@ class MainWindow(QMainWindow):
         dlg.open()
         self._file_dialog = dlg                       # keep it alive while it is open
 
-    def show_question(self, q):
-        """q = (title, text, ask) or None; ask False = only a note with OK."""
-        if q == self._question:
+    def show_question(self, q, activate: bool = True):
+        """q = (title, text, ask) or None; ask False = only a note with OK. 1.8.44: shown in MessageBox; it waits
+        while this window is hidden or minimised (tray) and opens without the focus when ``activate`` is False."""
+        if q is None:
+            if self._question is not None:
+                self._question = None
+                self.message.withdraw()
+            return
+        if q == self._question or not self.isVisible() or self.isMinimized():
             return
         self._question = q
-        self.question.setVisible(q is not None)
-        if q is not None:
-            self.question_text.setText(f"<b>{html.escape(q[0])}</b><br>" + html.escape(q[1]).replace("\n", "<br>"))
-            self.question_cancel.setVisible(bool(q[2]))
+        self.message.ask(q[0], q[1], bool(q[2]), activate)
 
     def set_hidden_columns(self, hidden: dict):
         """1.3.6: the columns the user hid, per table ({column ids joined by "|": [hidden ids]}, setting
@@ -937,12 +925,12 @@ class MainWindow(QMainWindow):
 
     def _style_lazily(self, qss: str):
         """1.3.4: the style sheet per part, not on the window – Qt repolishes every widget of a window whose sheet
-        changes, hidden pages too (1236 widgets ≈ 250 ms for a theme/zoom click). Navigation, question bar and the
+        changes, hidden pages too (1236 widgets ≈ 250 ms for a theme/zoom click). Navigation, message window and the
         page on display get it at once, the other pages one after another while idle or when they are opened."""
         if qss == self._qss:
             return
         self._qss = qss
-        for w in (self._side, self.question, self.completer.popup()):
+        for w in (self._side, self.message, self.completer.popup()):
             w.setStyleSheet(qss)
         current = self.stack.currentWidget()
         self._stale = [self.stack.widget(i) for i in range(self.stack.count())]
