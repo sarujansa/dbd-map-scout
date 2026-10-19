@@ -626,3 +626,11 @@ def test_userscript_3_takes_the_own_loadout_and_match_infos_but_nothing_more_of_
     old, back = o.load(store)
     assert back.perks == m.perks and back.score == m.score and back.prestige == 12 and back.mode == m.mode
     assert old.perks == [] and old.prestige is None and old.mode == []
+
+
+def test_modes_seen_most_played_first_and_unknown_left_out():
+    """1.8.49: the game modes the page named (userscript 3); matches from before have none."""
+    ms = [o.Match(t=T0 + i, map="x", mode=mode) for i, mode in
+          enumerate((["Online", "Public Match"], ["Online", "Public Match"], ["2v8", "2v8 Mode"], [], ["", "Event"]))]
+    assert o.modes_seen(ms) == [("Online", "Public Match"), ("2v8", "2v8 Mode"), ("Event", "Event")]
+    assert o.mode_key(ms[3]) == "" and o.mode_key(None) == ""

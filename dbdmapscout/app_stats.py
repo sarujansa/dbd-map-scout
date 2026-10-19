@@ -113,6 +113,12 @@ class StatsTab:
                                          values=[lbl for _k, lbl in self._stats_maps_f])
         self.stats_map_cb.pack(side="left", padx=(8, 0))
         self.stats_map_cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
+        # 1.8.49: game mode as the stats page names it (userscript 3) – only shown once a mode is known
+        self._stats_modes = [(None, _("Alle Modi"))]
+        self.stats_mode_var = ui.StringVar(value=self._stats_modes[0][1])
+        self.stats_mode_cb = ui.Combobox(fr, textvariable=self.stats_mode_var, state="readonly", width=16,
+                                          values=[lbl for _k, lbl in self._stats_modes])
+        self.stats_mode_cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
         ui.Button(fr, text=_("Stats-Seite öffnen"),
                   command=lambda: self._official_open(False)).pack(side="right")
         self._stats_last_limit = LAST_ROUNDS_STEP
@@ -427,7 +433,18 @@ class StatsTab:
         self.stats_map_var.set(dict(self._stats_maps_f)[wmap])
         since = history.period_start(period, time.time())
         rounds = history.select(all_rounds, since=since, region=wanted, role=role, killer=killer, map_label=wmap)
-        fkey = (period, wanted, role, killer, wmap)
+        wmode = next((k for k, lbl in self._stats_modes if lbl == self.stats_mode_var.get()), None)
+        self._stats_modes = [(None, _("Alle Modi"))] + official.modes_seen(off[id(r)] for r in all_rounds
+                                                                         if id(r) in off)
+        if wmode not in [k for k, _lbl in self._stats_modes]:
+            wmode = None
+        self.stats_mode_cb.configure(values=[lbl for _k, lbl in self._stats_modes])
+        self.stats_mode_var.set(dict(self._stats_modes)[wmode])
+        if len(self._stats_modes) > 1 and not self.stats_mode_cb.winfo_manager():
+            self.stats_mode_cb.pack(side="left", padx=(8, 0), after=self.stats_map_cb)
+        if wmode is not None:        # a round without the page's mode is not known to be in it
+            rounds = [r for r in rounds if official.mode_key(off.get(id(r))) == wmode]
+        fkey = (period, wanted, role, killer, wmap, wmode)
         if fkey != self._stats_filter_key:                 # other filters: the round list starts short again
             self._stats_filter_key, self._stats_last_limit = fkey, LAST_ROUNDS_STEP
         self._stats_rounds_shown = rounds
