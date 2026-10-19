@@ -683,7 +683,7 @@ class _Arranged:
         """Let the user drag the tabs of ``tw``; a move posts ("tab_order", (page, tabs id, [ids]))."""
         self._tabsets = list(self._tabsets) + [(tabs_id, tw, ids)]
         tw.tabBar().setMovable(True)
-        # 1.8.46: many tabs (statistics: eleven) – a little less padding, so they fit side by side again
+        # 1.8.46: many tabs (statistics: eleven, 1.8.48 twelve) – less padding, so they fit side by side again
         tw.tabBar().setProperty("dense", len(ids) >= DENSE_TABS)
         if page_key:
             tw.tabBar().tabMoved.connect(lambda *_a, t=tw, i=ids, tid=tabs_id: self._applying or self._post(
