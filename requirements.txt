@@ -1,12 +1,17 @@
-# Getestet mit: numpy 2.5.3, opencv-python-headless 5.0.0, onnxruntime 1.30.0, Pillow 12.3.0, mss 10.2.0,
-#   PySide6-Essentials 6.11.2
-numpy>=1.26
-opencv-python-headless>=4.8
-onnxruntime>=1.17
-Pillow>=10.0
-mss>=9.0
+# Alle Versionen fest (seit 1.8.53, Sicherheits-Check: das Repo ist öffentlich, start.bat installiert mit
+# Administratorrechten – eine neue Version kommt nur nach einem Test hier hinein, nie von selbst). Getestet mit
+# Python 3.12–3.14 unter Linux (CI) und Windows (CI + Nutzer). Neue Version: Windows-Wheels für 3.12–3.14 prüfen,
+# Tests laufen lassen, bei onnxruntime die Telemetrie (CLAUDE.md), dann hier anheben.
+numpy==2.5.4
+opencv-python-headless==5.0.0.93
+onnxruntime==1.31.0
+flatbuffers==25.12.19    # von onnxruntime
+protobuf==7.36.2         # von onnxruntime
+packaging==26.3          # von onnxruntime
+Pillow==13.0.0
+mss==10.2.0
 pystray==0.19.5          # Symbol im Infobereich (LGPL-3.0, unverändert genutzt)
-six>=1.16                # von pystray benötigt
+six==1.17.0              # von pystray benötigt
 PySide6-Essentials==6.11.2   # neues Steuerfenster (Qt, LGPL-3.0, unverändert genutzt; ~80 MB)
 imageio-ffmpeg==0.6.0        # Aufnahmen (1.4.2): Vorlauf + Runde zu einer Datei (ffmpeg-Binary, BSD-2, ~29 MB; nur Kopie der Streams)
 # „Läuft gerade“ (Musik im Balken, seit 1.64): Windows-Mediensteuerung über pywinrt (MIT, ~0,4 MB).
