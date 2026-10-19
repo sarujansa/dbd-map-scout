@@ -525,6 +525,23 @@ def share(counts: dict, *keys):
     return sum(counts.get(k, 0) for k in keys) / known if known else None
 
 
+def mode_key(m) -> str:
+    """1.8.49: the match's game mode as the page names it (gameType id, else its name); "" = not known (a file
+    from before userscript 3)."""
+    return (m.mode[0] or m.mode[1]) if m is not None and m.mode else ""
+
+
+def modes_seen(matches) -> list:
+    """[(key, label)] of the game modes among ``matches``, the most played first."""
+    count, label = {}, {}
+    for m in matches:
+        key = mode_key(m)
+        if key:
+            count[key] = count.get(key, 0) + 1
+            label[key] = m.mode[1] or key
+    return [(k, label[k]) for k in sorted(count, key=lambda k: (-count[k], label[k].lower()))]
+
+
 def unknown_statuses(matches) -> dict:
     """{status as named on the page: count} of the statuses classify() does not know."""
     out = {}
