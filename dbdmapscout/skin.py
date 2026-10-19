@@ -664,7 +664,10 @@ def _upnext_fitted(label, items, u, style, max_w) -> dict:
     def fit(num, item):
         title, artist = (tuple(item) + ("", ""))[:2]
         text = f"{title} – {artist}" if artist else title
-        tf, text = _fit_text(text, "Regular" if style == "line" else "Medium", int(14 * u), max_w - num_w)
+        # 1.8.40 (user's screenshot: the first row tiny, the others normal): every row in the same size – a long
+        # one is cut with "…", never set smaller
+        tf, text = _fit_text(text, "Regular" if style == "line" else "Medium", int(14 * u), max_w - num_w,
+                             min_scale=1.0)
         return num, tf, text, len(title)
 
     rows = [fit(str(i), item) for i, item in enumerate(items, 1)]
@@ -810,10 +813,10 @@ def map_card(body, name: str, realm: str, timer: str, note: str, record: str, se
     y = pad
     for kind, bh, g in blocks:
         y += g
-        if kind == "realm":
-            _header(im, pad, y, realm, u, acc)
-        elif kind == "name":
-            _text(im, pad, y - int(2 * u), name, nf, WHITE)
+        if kind == "realm":                          # 1.8.40 (user: "über der Map der name soll mittig sein"):
+            _header(im, (w - _header_w(realm, u)) / 2 if body is not None else pad, y, realm, u, acc)   # centred
+        elif kind == "name":                         # over the map like the timer; the lines alone stay left
+            _text(im, (w - _width(nf, name)) / 2 if body is not None else pad, y - int(2 * u), name, nf, WHITE)
         elif kind == "body":
             im.alpha_composite(body, ((w - body.width) // 2, y))
         elif kind == "body_below":
