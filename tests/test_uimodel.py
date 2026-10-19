@@ -1080,13 +1080,26 @@ def test_the_mode_filter_appears_with_known_modes_and_filters_the_rounds(app_roo
         app._stats_render()
         assert app.stats_mode_cb.winfo_manager() == "pack"
         assert app.stats_mode_var.get() == "Alle Modi" and len(app._stats_rounds_shown) == 4
-        assert [lbl for _k, lbl in app._stats_modes] == ["Alle Modi", "Public Match", "2v8"]
+        assert [lbl for _k, lbl in app._stats_modes] == ["Alle Modi", "Öffentlich", "2v8"]
         app.stats_mode_var.set("2v8")
         app._stats_render()
         assert len(app._stats_rounds_shown) == 1
-        app.stats_mode_var.set("Public Match")
+        app.stats_mode_var.set("Öffentlich")                        # 1.8.51: known ids get a name of their own
         app._stats_render()
         assert len(app._stats_rounds_shown) == 2                     # the round without a mode is not counted in
+        assert app.settings.get("stats_mode", "") == ""              # set by code, not picked: nothing saved
+        app._stats_mode_pick()                                       # picked in the box: remembered
+        assert app.settings.get("stats_mode") == "Online"
+    finally:
+        app.quit()
+    # 1.8.51 (user: "Merken"): after a restart the saved mode applies again
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        app._stats_render()
+        assert app.stats_mode_var.get() == "Öffentlich" and len(app._stats_rounds_shown) == 2
+        app.stats_mode_var.set("Alle Modi")
+        app._stats_mode_pick()
+        assert app.settings.get("stats_mode") == "" and len(app._stats_rounds_shown) == 4
     finally:
         app.quit()
 

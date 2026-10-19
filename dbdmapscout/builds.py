@@ -110,3 +110,91 @@ def builds(pairs, minimum=BUILD_MIN) -> list:
 def with_loadout(pairs) -> int:
     """How many of the pairs' matches have a loadout (userscript 3 or newer)."""
     return sum(1 for _r, m in pairs if has_loadout(m))
+
+
+# --- 1.8.51: emblems, score categories and the killer's rating (user's pick: on the Builds tab) ---
+
+QUALITIES = ("None", "Bronze", "Silver", "Gold", "Iridescent")   # the page's emblem qualities, worst first
+SCORE_MAX = 10000            # a score category is full at this many points
+
+
+def _title(text: str) -> str:
+    """The page's upper-case names ("BRUTAL KILLER", "THE ENTITY HUNGERS...") as the game writes them in menus."""
+    return text.title() if text.isupper() else text
+
+
+@dataclass
+class Emblem:
+    role: str
+    key: str
+    name: str
+    counts: dict = field(default_factory=dict)      # quality -> matches
+
+    @property
+    def n(self):
+        return sum(self.counts.values())
+
+    @property
+    def mean(self):
+        """Mean quality as a rank: 0 none … 4 iridescent."""
+        return sum(QUALITIES.index(q) * c for q, c in self.counts.items()) / self.n if self.n else None
+
+    def share(self, quality):
+        return self.counts.get(quality, 0) / self.n if self.n else 0.0
+
+
+@dataclass
+class Score:
+    role: str
+    key: str
+    name: str
+    points: list = field(default_factory=list)
+
+    @property
+    def n(self):
+        return len(self.points)
+
+    @property
+    def mean(self):
+        return sum(self.points) / len(self.points) if self.points else None
+
+    @property
+    def full(self):
+        """Share of the matches with the category full."""
+        return sum(1 for p in self.points if p >= SCORE_MAX) / len(self.points) if self.points else 0.0
+
+
+def _own(pairs):
+    return [m for _r, m in pairs if m.role in ("killer", "survivor")]
+
+
+def emblems(pairs) -> list:
+    """Each emblem category of the own matches in ``pairs`` with how often it reached which quality, per role."""
+    found = {}
+    for m in _own(pairs):
+        for key, name, quality in m.emblems:
+            if quality not in QUALITIES:
+                continue
+            e = found.setdefault((m.role, key or name), Emblem(m.role, key or name, _title(name or key)))
+            e.counts[quality] = e.counts.get(quality, 0) + 1
+    return sorted(found.values(), key=lambda e: (e.role, e.name.lower()))
+
+
+def scores(pairs) -> list:
+    """Each score category of the own matches in ``pairs`` (DBD_CamperScoreCat_Objectives → Objectives), per role."""
+    found = {}
+    for m in _own(pairs):
+        for key, points in m.score.items():
+            s = found.setdefault((m.role, key), Score(m.role, key, key.rsplit("_", 1)[-1]))
+            s.points.append(points)
+    return sorted(found.values(), key=lambda s: (s.role, s.name.lower()))
+
+
+def ratings(pairs) -> list:
+    """[(rating, matches)] of the killer's rating on the page ("Brutal Killer" …), the most frequent first."""
+    count = {}
+    for m in _own(pairs):
+        if m.role == "killer" and m.killer_status:
+            name = _title(m.killer_status)
+            count[name] = count.get(name, 0) + 1
+    return sorted(count.items(), key=lambda kv: (-kv[1], kv[0].lower()))

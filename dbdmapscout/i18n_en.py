@@ -1922,8 +1922,21 @@ EN = {
     'Opfergabe': 'Offering',
     'Kraft/Item': 'Power/item',
     'ohne': 'without',
-    'Dein Loadout laut Stats-Seite (ab Userscript Version 3). „Ergebnis“ = als Killer Ø Kills, als Survivor Anteil entkommen; „ohne“ = dasselbe in deinen Runden derselben Rolle ohne diesen Eintrag. Builds ab {n} Runden.':
-        'Your loadout from the stats page (userscript version 3 or newer). "Result" = as killer Ø kills, as survivor the share escaped; "without" = the same in your rounds of that role without this entry. Builds from {n} rounds.',
+    'Dein Loadout laut Stats-Seite (ab Userscript Version 3). „Ergebnis“ = als Killer Ø Kills, als Survivor Anteil entkommen; „ohne“ = dasselbe in deinen Runden derselben Rolle ohne diesen Eintrag. Builds ab {n} Runden. Embleme: Ø Stufe von keins (0) bis Iri (4); „voll“ = Kategorie mit {max} Punkten.':
+        'Your loadout from the stats page (userscript version 3 or newer). "Result" = as killer Ø kills, as survivor the share escaped; "without" = the same in your rounds of that role without this entry. Builds from {n} rounds. Emblems: Ø tier from none (0) to iri (4); "full" = category at {max} points.',
+    'Öffentlich': 'Public',
+    'Event-Modus': 'Event mode',
+    'keins': 'none',
+    'Bronze': 'Bronze',
+    'Silber': 'Silver',
+    'Gold': 'Gold',
+    'Iri': 'Iri',
+    'Emblem': 'Emblem',
+    'Ø Stufe': 'Ø tier',
+    'Punktekategorie': 'Score category',
+    'Ø Punkte': 'Ø points',
+    'voll': 'full',
+    'Killer-Wertung: {list}': 'Killer rating: {list}',
     'Noch keine Matches mit Loadout in dieser Auswahl – die Stats-Seite liefert es ab Userscript Version 3 (Einstellungen → Mehr → Offizielle Match-Daten → „Userscript kopieren“).':
         'No matches with a loadout in this selection yet – the stats page sends it from userscript version 3 (Settings → More → Official match data → "Copy userscript").',
     # 1.8.49
