@@ -1902,4 +1902,16 @@ EN = {
     '{n} von {total} Runden': '{n} of {total} rounds',
     '{n} Survivor': '{n} survivors',
     'Ø Kills ohne Aufgaben': 'Clean Ø kills',
+    # 1.8.47
+    'OBS mit DBD starten, falls es noch nicht läuft': 'Start OBS with DBD if it is not running yet',
+    'Startet DBD und ist OBS nicht erreichbar, startet das Programm OBS einmal minimiert im Infobereich – nur, wenn kein OBS-Fenster offen ist. OBS bleibt offen, wenn DBD beendet wird. OBS läuft dann mit denselben Rechten wie das Programm (Administrator).':
+        'When DBD starts and OBS cannot be reached, the program starts OBS once, minimised to the notification area – only if no OBS window is open. OBS stays open when DBD is closed. OBS then runs with the same rights as the program (administrator).',
+    'OBS wurde gestartet, ist aber nicht erreichbar – in OBS unter Werkzeuge → WebSocket-Servereinstellungen den Server aktivieren und Port/Passwort prüfen. ({error})':
+        'OBS was started but cannot be reached – in OBS under Tools → WebSocket Server Settings enable the server and check port/password. ({error})',
+    'OBS nicht gefunden – bitte OBS selbst starten (gesucht unter Programme\\obs-studio).':
+        'OBS not found – please start OBS yourself (looked in Program Files\\obs-studio).',
+    'OBS konnte nicht gestartet werden: {error}': 'OBS could not be started: {error}',
+    'OBS wird gestartet …': 'Starting OBS …',
+    'OBS ist offen, aber nicht erreichbar – in OBS unter Werkzeuge → WebSocket-Servereinstellungen den Server aktivieren und Port/Passwort prüfen. ({error})':
+        'OBS is open but cannot be reached – in OBS under Tools → WebSocket Server Settings enable the server and check port/password. ({error})',
 }

@@ -1549,3 +1549,73 @@ def test_ticking_the_window_while_dbd_runs_sets_it_up_without_a_restart(obs, tmp
     finally:
         r.quit()
         r.join(timeout=5)
+
+
+def test_obs_is_started_with_dbd_once_and_never_next_to_an_open_obs(tmp_path, monkeypatch):
+    """1.8.47 (user: "OBS autostart" – when DBD starts, OBS stays open afterwards): OBS not reachable when DBD starts
+    → started once (minimised, from its own folder), looked for every few seconds, then set up as usual. Never a
+    second start in the same DBD session, never next to an open OBS window, nothing without the setting."""
+    obs = FakeObs(record_dir=str(tmp_path))
+    obs.start()
+    try:
+        exe = str(tmp_path / "OBS" / "bin" / "64bit" / obsrec.OBS_EXE)
+        monkeypatch.setattr(obsrec, "obs_exe", lambda: exe)
+        windows = []
+        monkeypatch.setattr(obsrec, "_top_windows", lambda: windows)
+        r, posted = _recorder(obs, str(tmp_path), pre=False, instant=True, buffer_auto=True, audio=False,
+                              obs_start=True)
+        started = []
+        r.start_obs = started.append
+        port, r.cfg.port = r.cfg.port, 1                     # OBS not running
+        r._game_changed(True)
+        assert started == [exe] and not any(k == "warn" for k, _d in _drain(posted))
+        assert r.status == "OBS wird gestartet …" and r._next_check - time.time() <= obsrec.OBS_START_POLL_S
+        r._next_check = 0
+        r._recheck()                                         # still starting: no second start, no warning
+        assert started == [exe] and not any(k == "warn" for k, _d in _drain(posted))
+        assert r._next_check - time.time() <= obsrec.OBS_START_POLL_S      # looked for often while it starts
+        r.cfg.port = port                                    # OBS is up
+        r._next_check = 0
+        r._recheck()
+        assert r._ready and obs.replay and r.status.startswith("OBS bereit")
+        r._game_changed(False)                               # DBD closed: OBS stays (nothing asks it to quit)
+        assert "Quit" not in str(obs.requests)
+        # next DBD start, OBS window open but its WebSocket off: no second OBS, the usual warning
+        r.cfg.port = 1
+        windows.append(("OBS 31.0.2 - Profil: Unbenannt - Szenen: Unbenannt", "Qt6110QWindowIcon"))
+        r._game_changed(True)
+        warns = [d["text"] for k, d in _drain(posted) if k == "warn"]
+        assert started == [exe] and len(warns) == 1 and warns[0].startswith("OBS ist offen")
+        # started, but it never answers: one hint where to switch the server on, after OBS_START_WAIT_S
+        windows.clear()
+        r._game_changed(True)
+        assert started == [exe, exe]
+        r._obs_wait = 0
+        r._next_check = 0
+        r._recheck()
+        warns = [d["text"] for k, d in _drain(posted) if k == "warn"]
+        assert len(warns) == 1 and "WebSocket" in warns[0]
+        r._next_check = 0
+        r._recheck()
+        assert not any(k == "warn" for k, _d in _drain(posted))
+        # without the setting nothing is started
+        r.cfg.obs_start = False
+        r._game_changed(True)
+        assert started == [exe, exe]
+    finally:
+        obs.stop()
+
+
+def test_obs_is_found_in_the_registry_folder_or_program_files(tmp_path):
+    exe_dir = tmp_path / "Custom OBS" / "bin" / "64bit"
+    exe_dir.mkdir(parents=True)
+    (exe_dir / obsrec.OBS_EXE).write_bytes(b"MZ")
+    assert obsrec.obs_exe(registry=[str(tmp_path / "Custom OBS")], env={}) == str(exe_dir / obsrec.OBS_EXE)
+    pf = tmp_path / "PF"
+    (pf / "obs-studio" / "bin" / "64bit").mkdir(parents=True)
+    (pf / "obs-studio" / "bin" / "64bit" / obsrec.OBS_EXE).write_bytes(b"MZ")
+    assert obsrec.obs_exe(registry=["relative\\path", ""], env={"ProgramFiles": str(pf)}).startswith(str(pf))
+    assert obsrec.obs_exe(registry=[], env={}) is None
+    assert obsrec.obs_window_open([("OBS 30.2.3 - Profile: x - Scenes: y", "Qt663QWindowIcon")])
+    assert not obsrec.obs_window_open([("OBS 30.2.3", "Chrome_WidgetWin_1"),           # a browser tab about OBS
+                                       ("Settings - OBS", "Qt663QWindowIcon"), ("", "")])

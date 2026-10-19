@@ -123,6 +123,21 @@ def _class_name(hwnd) -> str:
     return buf.value
 
 
+def top_windows() -> list:
+    """1.8.47: [(title, class)] of every top-level window, hidden ones too (EnumWindows) – window-manager
+    information only, no process is opened. Used to see whether OBS is already open before starting it."""
+    if not IS_WIN:
+        return []
+    out = []
+
+    def cb(hwnd, _):
+        out.append((_window_text(hwnd), _class_name(hwnd)))
+        return True
+
+    user32.EnumWindows(WNDENUMPROC(cb), 0)
+    return out
+
+
 @dataclass
 class GameWindow:
     hwnd: int
