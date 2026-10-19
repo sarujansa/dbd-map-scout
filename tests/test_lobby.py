@@ -134,6 +134,26 @@ def test_custom_game_has_no_wait_and_no_role():
     assert found == Found(0, None, None, custom=True)
 
 
+def test_a_second_custom_game_in_the_same_lobby_is_found_again():
+    """1.8.43 (QA audit; user plays custom games with bots): after a custom match DBD returns straight to the same
+    custom lobby – no PLAY screen between. Before, the state stayed "custom", no second "found" came and the round
+    was stored as a public one. The map banner (round_started) uses the lobby up; the next looks find it again."""
+    q = QueueTracker()
+    ev = run(q, [(0, V("custom")), (1, V("custom"))])
+    assert [e[1].custom for e in ev if e[0] == "found"] == [True]
+    q.round_started()                                                           # the banner of round 1
+    ev = run(q, [(700, None), (900, V("custom")), (901, V("custom"))])          # match, then the same lobby again
+    found = [e[1] for e in ev if e[0] == "found"]
+    assert len(found) == 1 and found[0].custom and found[0].wait is None and not any(e[0] == "left" for e in ev)
+    # a public round: after the banner the PLAY screen does not say "left" (the lobby was used, not left)
+    q = QueueTracker()
+    run(q, [(0, V("search", "killer", 0)), (1, V("search", "killer", 1)), (60, V("lobby", "killer")),
+            (61, V("lobby", "killer"))])
+    q.round_started()
+    ev = run(q, [(900, V("play")), (901, V("play"))])
+    assert ev == [] and q.state == "idle"
+
+
 def test_lobby_before_its_countdown_is_no_custom_game():
     """1.64.4 (user diagnosis: "Zustand custom" in a normal match): READY with nothing below right after a search
     is the found lobby before its countdown starts – with the wait; in a lobby (someone left, countdown stopped)
