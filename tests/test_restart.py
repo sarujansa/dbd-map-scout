@@ -10,9 +10,16 @@ ROOT = r"C:\Users\saruj\Desktop\dbd-map-scout"
 
 
 def test_start_command_runs_start_bat_minimised():
-    cmd = restart.start_command(ROOT)
-    bat = os.path.join(os.path.abspath(ROOT), "start.bat")
-    assert ' /c start "" /min cmd /c ""' in cmd and cmd.endswith(f'""{bat}""')
+    cmd = restart.start_command()
+    # 1.8.45: start.bat from the working directory – the folder ("&", "%") never on cmd's command line
+    assert cmd.endswith(' /c start "" /min cmd /c .\\start.bat')
+
+
+def test_the_helper_starts_in_the_program_folder(monkeypatch):
+    calls = []
+    monkeypatch.setattr(restart.subprocess, "Popen", lambda cmd, **kw: calls.append((cmd, kw["cwd"])))
+    assert restart.wait_and_start(r"C:\Spiele & Tools\dbd-map-scout", running=lambda: False)
+    assert calls == [(restart.start_command(), r"C:\Spiele & Tools\dbd-map-scout")]
 
 
 def test_helper_is_the_program_itself():

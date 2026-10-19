@@ -230,6 +230,27 @@ def measure_all(codes=None, workers: int = 8) -> dict:
 
 
 # ------------------------------------------------------------------ applying (UAC)
+# 1.8.45: the elevated helper's own texts (hostsedit.BAD_NAME, CHANGED_AFTER, NO_RIGHTS – keep them equal); it has
+# no i18n and answers in German, so the English UI showed them in German
+HELPER_TEXTS = (N_("Ungültiger Servername im Auftrag: {name}"),
+                N_("Die hosts-Datei wurde direkt nach dem Schreiben wieder verändert (Virenschutz oder ein anderes "
+                   "Programm?)."),
+                N_("Keine Schreibrechte auf die hosts-Datei (Administratorrechte?)."))
+
+
+def helper_result(res) -> dict:
+    """The helper's answer with its error in the UI language (a text it names that is not ours stays as it is)."""
+    if not isinstance(res, dict):
+        return {"ok": False, "error": str(res)}
+    text, args = res.get("error_text"), res.get("error_args")
+    if text in HELPER_TEXTS:
+        try:
+            res = dict(res, error=_(text, **(args if isinstance(args, dict) else {})))
+        except (KeyError, IndexError, ValueError):
+            pass
+    return res
+
+
 def run_job(job: dict, hwnd: int | None = None, timeout: float = 90.0) -> dict:
     """Write the hosts file through the elevated helper (Windows asks for administrator rights).
 
@@ -253,7 +274,7 @@ def run_job(job: dict, hwnd: int | None = None, timeout: float = 90.0) -> dict:
                 return res
         try:
             with open(res_f, encoding="utf-8") as fh:
-                return json.load(fh)
+                return helper_result(json.load(fh))
         except (OSError, ValueError):
             if exit_code == 0:                      # result not readable, but the helper said "ok"
                 return {"ok": True, "changed": True}

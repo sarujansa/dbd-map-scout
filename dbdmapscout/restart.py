@@ -21,11 +21,11 @@ IS_WIN = sys.platform == "win32"
 WAIT_S = 60.0                                   # the helper waits this long for the old copy to end
 
 
-def start_command(root: str) -> str:
-    """cmd line that runs start.bat minimised; cmd /c strips the outer quotes of ""…""."""
-    bat = os.path.join(os.path.abspath(root), "start.bat")
+def start_command() -> str:
+    """cmd line that runs start.bat minimised – run in the program folder (cwd). 1.8.45: the folder is not on
+    the command line: cmd reads "&" in it as a second command and expands "%…%"."""
     comspec = os.environ.get("COMSPEC", "cmd.exe")
-    return f'"{comspec}" /c start "" /min cmd /c ""{bat}""'
+    return f'"{comspec}" /c start "" /min cmd /c .\\start.bat'
 
 
 def helper_args(python: str | None = None, update: bool = True) -> list:
@@ -143,7 +143,7 @@ def wait_and_start(root: str, timeout: float = WAIT_S, running=None, run=None, u
     env.pop("DBDMS_UPDATED", None)       # left by start.bat after an earlier update: would skip this one
     run = run or (lambda cmd, env: subprocess.Popen(cmd, cwd=root, env=env,
                                                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)))
-    run(start_command(root), env)
+    run(start_command(), env)
     return True
 
 
