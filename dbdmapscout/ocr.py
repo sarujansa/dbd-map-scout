@@ -66,6 +66,7 @@ class Recognizer:
         so.intra_op_num_threads = max(1, int(threads))
         so.inter_op_num_threads = 1
         so.log_severity_level = 3
+        so.add_session_config_entry("session.intra_op.allow_spinning", "0")   # 1.8.38: no busy wait after a run
         self.session = ort.InferenceSession(model_path, so, providers=["CPUExecutionProvider"])
         meta = self.session.get_modelmeta().custom_metadata_map
         chars = meta.get("character", "").splitlines()

@@ -409,6 +409,9 @@ class QtShell:
             self._qt_search = str(arg or "")
             self._qt_maps_rev = getattr(self, "_qt_maps_rev", 0) + 1
             self._fill_list()
+        elif action == "more_open":                  # 1.8.38: a search hit under "Mehr" – open it, never shut it
+            if not self._more_open:
+                self._toggle_more()
         elif action == "search_open":                # the search reads the texts of all pages: fill them now
             reg, auto = self.__dict__.get("_qt_reg", {}), self._qt_auto
             for page, form in self.qt.forms.items():

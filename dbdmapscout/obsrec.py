@@ -24,6 +24,7 @@ import os
 import queue
 import re
 import shutil
+import stat
 import socket
 import struct
 import subprocess
@@ -49,6 +50,7 @@ RENAME_TRIES = 40               # OBS may still hold the file a moment after Sto
 RENAME_WAIT = 0.5
 REPLAY_WAIT = 4.0               # 1.5.4: s to wait for OBS to finish writing the replay buffer (it saves asynchronously)
 REPLAY_POLL = 0.2
+MAX_MESSAGE = 16 * 1024 * 1024  # 1.8.38: a WebSocket message larger than this ends the connection (OBS sends KBs)
 MAX_ROUND_S = 45 * 60           # a recording longer than this is stopped (an end that was never detected)
 EARLY_WAIT_S = 180              # 1.6: started at the end of the loading screen – no banner within this: filed as it is
 CLIP_SECONDS = (15, 30, 45, 60, 90, 120)   # 1.6: F8 instant clip – the last n seconds of the replay buffer
@@ -166,6 +168,8 @@ class ObsClient:
                 n = struct.unpack("!H", self._recv_exact(2))[0]
             elif n == 127:
                 n = struct.unpack("!Q", self._recv_exact(8))[0]
+            if n + sum(len(p) for p in parts) > MAX_MESSAGE:     # 1.8.38: no length from the wire allocates GBs
+                raise ObsError(_("OBS hat die Verbindung geschlossen"))
             mask = self._recv_exact(4) if b1 & 0x80 else None
             data = self._recv_exact(n)
             if mask:
@@ -445,6 +449,9 @@ def prune(folder: str, recs: list[Recording], limit: int, reserve: int = RESERVE
                     deleted.append(n)
                 except OSError:
                     pass
+        main = rel_path(folder, r.file)
+        if main and os.path.exists(main):   # 1.8.38: not deleted (open in a player): the entry stays and counts –
+            continue                        # dropped, the file was an orphan no later pass would ever remove
         total -= r.size
         free += r.size
         left.remove(r)
@@ -653,15 +660,40 @@ def space(folder: str | None, recs: list[Recording] | None = None) -> Space:
                  folder=folder, t=time.time())
 
 
+VIDEO_EXTS = (".mkv", ".mp4", ".mov", ".flv", ".ts", ".m3u8", ".fragmented.mp4", ".hybrid.mp4", ".hybrid.mov")
+
+
+def obs_file(path) -> str:
+    """1.8.38 (QA audit): a path OBS named (StopRecord, the replay buffer) before it is moved or deleted – the
+    program runs as admin, and anything listening on the port could answer in OBS's place. Only a regular video
+    file, no link and no junction/reparse point; else "" (logged)."""
+    p = str(path or "")
+    if not p:
+        return ""
+    try:
+        st = os.lstat(p)
+        ok = (p.lower().endswith(VIDEO_EXTS) and stat.S_ISREG(st.st_mode)
+              and not getattr(st, "st_file_attributes", 0) & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400))
+    except OSError:
+        return p if p.lower().endswith(VIDEO_EXTS) else ""     # not written yet: looked at again before the move
+    if not ok:
+        log.warning("OBS nannte eine Datei, die keine Aufnahme ist – nicht angefasst: %s", os.path.basename(p))
+    return p if ok else ""
+
+
 # ------------------------------------------------------------------ ffmpeg (1.4.2): pre-roll + round → one file
 def ffmpeg_exe() -> str | None:
     """The ffmpeg binary imageio-ffmpeg ships (BSD-2; no PATH lookup – only the one pip installed into .venv),
-    None when the package is missing."""
+    None when the package or the file is missing. 1.8.38 (QA audit): not ``get_ffmpeg_exe()`` – that takes
+    IMAGEIO_FFMPEG_EXE unchecked and, without a valid binary of its own, ffmpeg from sys.prefix or PATH; the
+    program runs as admin. The bin folder and file name are those of imageio-ffmpeg 0.6.0 (pinned)."""
     try:
-        import imageio_ffmpeg
-        return imageio_ffmpeg.get_ffmpeg_exe()
+        from imageio_ffmpeg._definitions import FNAME_PER_PLATFORM, get_platform
+        from imageio_ffmpeg._utils import _get_bin_dir
+        exe = os.path.join(_get_bin_dir(), FNAME_PER_PLATFORM.get(get_platform(), ""))
     except Exception:
         return None
+    return exe if os.path.isfile(exe) else None
 
 
 def _run(args: list[str], timeout: float = FFMPEG_TIMEOUT) -> tuple[int, bytes]:
@@ -933,6 +965,13 @@ class Recorder(threading.Thread):
                 continue
             try:
                 if cmd == "quit":
+                    # 1.8.38: quitting mid-round (or in the tail) stops the recording and our replay buffer –
+                    # else OBS records on, the file is never filed and every later round finds "OBS nimmt schon
+                    # auf" and starts nothing
+                    try:
+                        self._game_changed(False)
+                    except Exception:
+                        log.exception("OBS-Aufnahme beim Beenden")
                     return
                 if cmd == "config":
                     self.cfg = arg
@@ -1311,7 +1350,8 @@ class Recorder(threading.Thread):
             if cur and cur != before:
                 path = cur
             if path and os.path.exists(path):
-                return path
+                return obs_file(path)
+        path = obs_file(path)
         if path:
             log.info("OBS: Vorlauf %s noch nicht geschrieben – wird am Rundenende gesucht", path)
         else:
@@ -1328,7 +1368,7 @@ class Recorder(threading.Thread):
             path = c.request("StopRecord").get("outputPath", "")
         finally:
             c.close()
-        if not path:
+        if not obs_file(path):
             self._say(_("OBS hat keinen Dateinamen genannt – Aufnahme nicht zugeordnet"), False)
             return
         self._file_away(rec, path)
@@ -1346,7 +1386,7 @@ class Recorder(threading.Thread):
         name = self._unique(dest, file_name(rec.get("t") or time.time(), rec.get("label", ""), who, ext))
         target = os.path.join(dest, name)
         final = self._move(path, target)
-        pre = rec.get("pre") or ""
+        pre = obs_file(rec.get("pre"))
         pre_name = ""
         if pre and os.path.exists(pre):
             pname = self._unique(dest, file_name(rec.get("t") or time.time(), rec.get("label", ""), who,
@@ -1656,7 +1696,7 @@ class Recorder(threading.Thread):
             raise
         finally:
             c.close()
-        if not src or not os.path.exists(src):
+        if not src or not os.path.exists(src) or not obs_file(src):
             self._post("clip", ok=False, why=_("OBS hat den Puffer nicht gespeichert"))
             return
         clips = os.path.join(folder, CLIPS_DIR)

@@ -4,6 +4,8 @@ from __future__ import annotations
 import copy
 import json
 import os
+import shutil
+import time
 
 HUD_SHOWN = ("above", "left", "right", "custom")    # settings.sysinfo values that show the system values
 SETTINGS_VERSION = 8
@@ -176,16 +178,34 @@ DEFAULTS = {
 
 def _merge(base: dict, override: dict) -> dict:
     out = copy.deepcopy(base)
-    for k, v in (override or {}).items():
-        if isinstance(v, dict) and isinstance(out.get(k), dict):
-            out[k] = _merge(out[k], v)
+    for k, v in (override if isinstance(override, dict) else {}).items():
+        if isinstance(out.get(k), dict):
+            if isinstance(v, dict):
+                out[k] = _merge(out[k], v)
+            # 1.8.38: anything else where the defaults hold a dict ("overlay": null) keeps the defaults
         else:
             out[k] = v
     return out
 
 
+def _version(raw: dict) -> int:
+    """settings_version of a stored file; a hand-edited odd value counts as current (no migration runs on it)."""
+    v = raw.get("settings_version", 1)
+    if isinstance(v, bool):
+        return SETTINGS_VERSION
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return SETTINGS_VERSION
+
+
+SECRET_KEYS = ("rec_password", "spotify_token")   # 1.8.38: never in a backup (they get shared, synced, uploaded)
+
+
 def export_settings(data: dict, path: str) -> None:
-    """Backup of all settings (hotkeys, sizes/rotations per map, own map assignments …)."""
+    """Backup of all settings (hotkeys, sizes/rotations per map, own map assignments …) – without the OBS password
+    and the Spotify token (SECRET_KEYS; an import keeps this PC's own anyway, LOCAL_KEYS)."""
+    data = {k: v for k, v in data.items() if k not in SECRET_KEYS}
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2, ensure_ascii=False)
@@ -216,7 +236,7 @@ def read_backup(path: str, current: dict) -> dict:
     try:
         with open(path, encoding="utf-8") as fh:
             raw = json.load(fh)
-    except (OSError, ValueError) as e:
+    except (OSError, ValueError, RecursionError) as e:
         raise ValueError(str(e)) from e
     if not isinstance(raw, dict) or not isinstance(raw.get("overlay"), dict) or "hotkeys" not in raw:
         raise ValueError("no DbD Map Scout settings")
@@ -229,47 +249,78 @@ def read_backup(path: str, current: dict) -> dict:
     return merged
 
 
+def _read_json(path: str):
+    """The stored file; one retry when it is locked for a moment (virus scanner, cloud sync)."""
+    for attempt in (0, 1):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                return json.load(fh)
+        except PermissionError:
+            if attempt:
+                raise
+            time.sleep(0.5)
+
+
+def _load(raw) -> dict:
+    """Stored settings -> merged over the defaults and migrated (1.8.38: built aside, so a failure leaves nothing
+    half-merged behind)."""
+    if not isinstance(raw, dict):
+        raise ValueError("settings.json holds no object")
+    ver = _version(raw)
+    data = _merge(DEFAULTS, raw)
+    ov = data["overlay"]
+    if ver < 2:  # defaults changed in 1.1
+        if ov.get("anchor") == "top-left":
+            ov["anchor"] = "auto"
+        ov["show_caption"] = False
+    if ver < 3:  # 1.2: position sliders
+        ov["pos_x"] = min(1.0, max(0.0, float(ov.pop("custom_x", 0.0))))
+        ov["pos_y"] = min(1.0, max(0.0, float(ov.pop("custom_y", 0.0))))
+    if ver < 4 and ov.get("media_pos") == "below":
+        ov["media_pos"] = "bottom_right"  # 1.64.7: the music card stands on its own (user's wish)
+    if ver < 5:  # 1.2.6: "today" is an element of its own
+        if data.pop("today_side", None) == "custom" and raw.get("sysinfo") not in HUD_SHOWN:
+            ov["today_pos"] = "custom"                    # it stood alone at its own place
+            fx, fy = (data.get("sysinfo_pos") or [1.0, 0.0])[:2]
+            ov["today_xy"] = [float(fx), float(fy)]
+    if ver < 6:  # 1.2.7: opacity per card, cards stack
+        for key in ("hud_opacity", "today_opacity", "media_opacity"):
+            ov[key] = ov.get("opacity", 0.85)             # as before: one opacity for everything
+        if ov.get("media_pos") == "below" and ov.get("today_pos", "below") == "below" \
+                and ov.get("show_today", True):
+            ov["media_pos"] = "under_today"               # 1.2.6 hung the music below "today"
+    if ver < 7:  # 1.5.5 (user: "no lobby in the recording",
+        data["rec_pre"] = False                      # joined files played too fast in the round)
+        data["rec_merge"] = False
+    if ver < 8:  # 1.8.17 (user: left and right lines of their own)
+        ov["bar_limits_same"] = False
+    if data.get("color_theme") == "oled":            # 1.62.0: OLED was a theme of its own
+        data["color_theme"], data["oled_black"] = "gold", True
+    data["settings_version"] = SETTINGS_VERSION
+    return data
+
+
 class Settings:
     def __init__(self, path: str):
         self.path = path
         self.frozen = False             # after importing a backup: nothing is written until the restart
         self.data = copy.deepcopy(DEFAULTS)
+        self.load_error = ""            # 1.8.38: the file could not be read (the app says so in the log)
         if os.path.exists(path):
             try:
-                with open(path, encoding="utf-8") as fh:
-                    raw = json.load(fh)
-                self.data = _merge(DEFAULTS, raw)
-                ov = self.data["overlay"]
-                if raw.get("settings_version", 1) < 2:                # defaults changed in 1.1
-                    if ov.get("anchor") == "top-left":
-                        ov["anchor"] = "auto"
-                    ov["show_caption"] = False
-                if raw.get("settings_version", 1) < 3:                # 1.2: position sliders
-                    ov["pos_x"] = min(1.0, max(0.0, float(ov.pop("custom_x", 0.0))))
-                    ov["pos_y"] = min(1.0, max(0.0, float(ov.pop("custom_y", 0.0))))
-                if raw.get("settings_version", 1) < 4 and ov.get("media_pos") == "below":
-                    ov["media_pos"] = "bottom_right"  # 1.64.7: the music card stands on its own (user's wish)
-                if raw.get("settings_version", 1) < 5:                # 1.2.6: "today" is an element of its own
-                    if self.data.pop("today_side", None) == "custom" and raw.get("sysinfo") not in HUD_SHOWN:
-                        ov["today_pos"] = "custom"                    # it stood alone at its own place
-                        fx, fy = (self.data.get("sysinfo_pos") or [1.0, 0.0])[:2]
-                        ov["today_xy"] = [float(fx), float(fy)]
-                if raw.get("settings_version", 1) < 6:                # 1.2.7: opacity per card, cards stack
-                    for key in ("hud_opacity", "today_opacity", "media_opacity"):
-                        ov[key] = ov.get("opacity", 0.85)             # as before: one opacity for everything
-                    if ov.get("media_pos") == "below" and ov.get("today_pos", "below") == "below" \
-                            and ov.get("show_today", True):
-                        ov["media_pos"] = "under_today"               # 1.2.6 hung the music below "today"
-                if raw.get("settings_version", 1) < 7:                # 1.5.5 (user: "no lobby in the recording",
-                    self.data["rec_pre"] = False                      # joined files played too fast in the round)
-                    self.data["rec_merge"] = False
-                if raw.get("settings_version", 1) < 8:                # 1.8.17 (user: left and right lines of their own)
-                    ov["bar_limits_same"] = False
-                if self.data.get("color_theme") == "oled":            # 1.62.0: OLED was a theme of its own
-                    self.data["color_theme"], self.data["oled_black"] = "gold", True
-                self.data["settings_version"] = SETTINGS_VERSION
-            except (OSError, ValueError, AttributeError):
-                pass  # broken file -> defaults, will be rewritten on save
+                self.data = _load(_read_json(path))
+            except (OSError, ValueError, TypeError, AttributeError, KeyError, RecursionError) as e:
+                self.load_error = f"{type(e).__name__}: {e}"
+                self._keep_broken(path)
+
+    def _keep_broken(self, path: str):
+        """1.8.38: a file that could not be read is never overwritten with the defaults (it held the hotkeys, the
+        layouts, the OBS password …): it is copied to settings.json.broken first; if not even that works (locked),
+        nothing is written in this session."""
+        try:
+            shutil.copy2(path, path + ".broken")
+        except OSError:
+            self.frozen = True
 
     def __getitem__(self, key):
         return self.data[key]

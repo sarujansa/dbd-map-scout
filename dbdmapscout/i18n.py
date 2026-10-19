@@ -84,6 +84,15 @@ def source(text: str) -> str:
     return _reverse.get(text, text)
 
 
+def other(text: str) -> str:
+    """1.8.38: the same text in the language not shown (the search finds a setting by either name); "" if none."""
+    if _lang == "en":
+        de = _reverse.get(text, "")
+        return de if de != text else ""
+    from .i18n_en import EN
+    return EN.get(text, "")
+
+
 def N_(text: str) -> str:
     """Marks a text for translation where it is defined (lists, tables); translated later with _()."""
     return text

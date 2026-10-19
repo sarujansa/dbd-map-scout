@@ -286,12 +286,14 @@ def test_system_values_window_can_be_dragged_in_edit_mode(root):
     from PIL import Image
     cover = Image.new("RGBA", (160, 160), (200, 30, 60, 255))
     song = [[("Blinding Lights", (255, 255, 255, 255))], [("The Weeknd", (150, 156, 170, 255))]]
+    # (1.8.37: the body cache is ``_bodies`` since 1.8.1 – this test still read the old ``_body_key``)
     size1 = hud.render(song, 1440, cover, "big", (70, 176), ("accent",))
-    body = hud._body_key
+    bodies = dict(hud._bodies)
     size2 = hud.render(song, 1440, cover, "big", (71, 176), ("accent",))
-    assert body is not None and hud._body_key is body and size1 == size2
+    assert len(bodies) == 1 and size1 == size2
+    assert hud._bodies.keys() == bodies.keys() and all(hud._bodies[k] is v for k, v in bodies.items())
     hud.render(song, 1440, cover, "compact", (71, 176), ("accent",))
-    assert hud._body_key is not body                           # another style: a new body
+    assert set(hud._bodies) - set(bodies)                      # another style: a new body
     hud.destroy()
 
 

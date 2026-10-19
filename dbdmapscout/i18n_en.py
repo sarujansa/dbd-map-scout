@@ -682,6 +682,12 @@ EN = {
     "Zurück im Spiel – Overlay wieder sichtbar.": "Back in the game – overlay visible again.",
     "Die Erkennung ist abgestürzt – Details in dbdmapscout.log": "The detection crashed – details in dbdmapscout.log",
     "Die Erkennung ist abgestürzt:": "The detection crashed:",
+    "Die Erkennung ist abgestürzt – bitte DbD Map Scout neu starten.": "The detection crashed – please restart DbD Map Scout.",
+    "Nichts gefunden": "Nothing found",
+    "settings.json war nicht lesbar ({error}) – Standardwerte geladen. Bis zum Neustart wird nichts gespeichert.":
+        "settings.json could not be read ({error}) – defaults loaded. Nothing is saved until the restart.",
+    "settings.json war nicht lesbar ({error}) – Standardwerte geladen, die alte Datei liegt als settings.json.broken daneben.":
+        "settings.json could not be read ({error}) – defaults loaded, the old file was kept as settings.json.broken.",
     "Scan fehlgeschlagen: {error}": "Scan failed: {error}",
     "per Scan gefunden: „{text}“": "found by scan: “{text}”",
     "Scan ({s} s): {map}": "Scan ({s} s): {map}",
