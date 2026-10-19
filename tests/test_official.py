@@ -419,6 +419,12 @@ setTimeout(() => {
 """
 
 
+def _without_clock(body: str) -> str:
+    """The saved file without its "exported" time – the clock's digits are no leaked value (1.8.51: CI failed when
+    the time 1792410993 held the secret "99")."""
+    return json.dumps({k: v for k, v in json.loads(body).items() if k != "exported"})
+
+
 def test_userscript_saves_the_structure_only_on_request_and_without_values(tmp_path):
     """1.8.46: opened with #dbdmapscout-structure the script saves once the shape of the page's answer – field
     names and types, no value, no id-like or name-like field name."""
@@ -446,7 +452,7 @@ def test_userscript_saves_the_structure_only_on_request_and_without_values(tmp_p
     body = dict(res["asked"])["dbdmapscout-structure.json"]
     for secret in ("MyOwnName", "SomeoneElse", "765611", "secret-match-id", "Pop Goes", "241377", "Mother",
                    "0123456789abcdef", "Some Name"):
-        assert secret not in body
+        assert secret not in _without_clock(body)
     shape = json.loads(body)
     assert shape["format"] == "dbdmapscout-structure" and shape["script"] == o.script_version(SCRIPT)
     match = shape["shape"]["data"][0]
@@ -606,7 +612,7 @@ def test_userscript_3_takes_the_own_loadout_and_match_infos_but_nothing_more_of_
     body = json.loads(out.stdout)["xhr"][0]
     for secret in ("secret-match-id", "Dead Hard", "xbox", "1234", "Benevolent", "99", "Other_Secret", "steam",
                    "999", "p.png"):
-        assert secret not in body
+        assert secret not in _without_clock(body)
     saved = json.loads(body)["matches"][0]
     assert set(saved["opponents"][0]) == {"role", "character", "status"}
     ms, script = o.parse(json.loads(body), now=T0)
