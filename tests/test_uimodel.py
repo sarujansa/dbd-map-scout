@@ -1007,7 +1007,8 @@ def test_the_statistics_tabs_keep_their_meaning_when_moved(app_root):
 
 def test_the_statistics_tabs_are_short_and_the_last_rounds_come_second(app_root):
     """1.8.2: "Letzte Runden" is the second sub-tab (the most used after the overview), the tab names are short
-    enough for all ten to fit side by side, and the second tab draws the rounds table."""
+    enough for all of them to fit side by side, and the second tab draws the rounds table (1.8.46: eleven, the new
+    "Gegner" last – the saved order of moved tabs keeps its meaning)."""
     import json
     from dbdmapscout import history
     from dbdmapscout.app import App
@@ -1016,12 +1017,59 @@ def test_the_statistics_tabs_are_short_and_the_last_rounds_come_second(app_root)
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
         texts = [app.stats_nb.tab(t, "text") for t in app.stats_nb.tabs()]
-        assert texts[:3] == ["Übersicht", "Letzte Runden", "Maps"] and texts[-2:] == ["Regionen", "Wartezeit"]
-        assert len(texts) == 10
+        assert texts[:3] == ["Übersicht", "Letzte Runden", "Maps"] and texts[-3:] == ["Regionen", "Wartezeit", "Gegner"]
+        assert len(texts) == 11
         app._stats_render()
         app._stats_render_tab(1)
         assert len(app.stats_last.get_children()) == 1
         assert "Spotify" in app.more_btn.cget("text") and "Discord" in app.more_btn.cget("text")
+    finally:
+        app.quit()
+
+
+def test_a_saved_tab_order_survives_a_new_tab(app_root):
+    """1.8.46: the statistics got an eleventh tab – an order saved with ten keeps it, the new tab goes to the end
+    (before, any list that was not a full permutation fell back to the built-in order)."""
+    import json
+    from dbdmapscout.app import App
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        app.qt.show_page("stats")
+        app._qt_refresh(force=True)
+        page = app.qt.forms["stats"]
+        tabs_id, tw, ids = page._tabsets[0]
+        old = ["1", "0"] + [str(i) for i in range(2, 10)] + ["99"]          # ten known ids and a vanished one
+        page.apply_tab_order({tabs_id: old})
+        assert page._tab_ids(tw, ids) == ["1", "0"] + [str(i) for i in range(2, 11)]
+        assert tw.tabBar().property("dense") is True                         # eleven tabs: less padding
+    finally:
+        app.quit()
+
+
+def test_the_opponents_tab_shows_how_the_survivors_matches_ended(app_root):
+    """1.8.46: sub-tab "Gegner" – the characters met from the stats page, the fates as tiles, the clean kills."""
+    import json
+    from dbdmapscout import history, official
+    from dbdmapscout.app import App
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    t = time.time() - 1800
+    history.append(str(app_root / "rounds.jsonl"), history.Round(t, 600, "coal", "Coal Tower", role="killer"))
+    meg = official.Player(role="survivor", character="Meg Thomas", status="SACRIFICED", img="VE_Sacrificed")
+    feng = official.Player(role="survivor", character="Feng Min", status="ESCAPED", img="VE_Escaped")
+    official.merge(str(app_root / official.FILE), [official.Match(t=t - 38, map="Coal Tower", role="killer",
+                                                                 character="The Nurse", seconds=560,
+                                                                 opp=[meg, meg, meg, feng])])
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        app._stats_render()
+        i = next(i for i, tab in enumerate(app.stats_nb.tabs()) if app.stats_nb.tab(tab, "text") == "Gegner")
+        app._stats_render_tab(i)
+        rows = [app.stats_opp.item(c, "values") for c in app.stats_opp.get_children()]
+        assert rows[0][:5] == ("Meg Thomas", "Survivor", 3, "0%", "100%") and rows[1][0] == "Feng Min"
+        tiles = {x.title: x for x in app.stats_opp_tiles.data}
+        assert tiles["Geopfert"].value == "75%" and tiles["Entkommen"].value == "25%"
+        assert tiles["Ø Kills ohne Aufgaben"].value == "3.00" and app.stats_opp_var.get() == ""
     finally:
         app.quit()
 

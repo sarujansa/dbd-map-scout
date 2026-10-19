@@ -178,6 +178,8 @@ class SettingsTab:
             command=self._official_setting)).pack(anchor="w")
         self._reg("st.more.script", ui.Button(om, text=_("Userscript kopieren"),
                                                command=self._official_copy_script)).pack(anchor="w", pady=(6, 0))
+        self._reg("st.more.structure", ui.Button(om, text=_("Aufbau der Match-Daten speichern"),       # 1.8.46
+                                                  command=self._official_structure)).pack(anchor="w", pady=(6, 0))
         self._reg("st.more.off_text", ui.Label(om, text=_("Einmal einrichten: Tampermonkey im Browser installieren, „Userscript kopieren“ und dort "
                              "als neues Skript einfügen, auf stats.deadbydaylight.com anmelden. Beim Öffnen der Seite "
                              "speichert das Skript die letzten 30 Matches im Download-Ordner; das Programm liest die "

@@ -287,6 +287,21 @@ class StatsTab:
         ui.Label(box_w, text=_("Gemessen von „CANCEL“ (Suche läuft) bis zur gefundenen Lobby – nur wenn das Programm "
                                 "die Suche gesehen hat. Custom Games haben keine Wartezeit."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
+        # 1.8.46: the characters met and how the survivors' matches ended (page data that was read but unused)
+        box_o = self._stats_page(_("Gegner"))
+        self.stats_opp_var = ui.StringVar(value="")       # only when there is nothing to show
+        ui.Label(box_o, textvariable=self.stats_opp_var, wraplength=400).pack(anchor="w")
+        self.stats_opp_tiles = ui.Tiles(box_o)
+        self.stats_opp_tiles.pack(fill="x", pady=(0, 6))
+        self.stats_opp = self._stats_tree(box_o, (("who", _("Charakter"), 150, "w"), ("as", _("Rolle"), 75, "w"),
+                                                  ("n", _("Begegnungen"), 90, "e"), ("esc", _("Entkommen"), 80, "e"),
+                                                  ("sac", _("Geopfert"), 75, "e"), ("kill", _("Getötet"), 70, "e"),
+                                                  ("dc", _("Aufgegeben"), 85, "e")), 8)
+        ui.Label(box_o, text=_("Laut Stats-Seite: als Killer die Survivor gegen dich und wie ihr Match endete, als "
+                                "Survivor der Killer und wie dein Match endete. „Getötet“ = vom Killer direkt "
+                                "getötet (z. B. Mori), „Aufgegeben“ schließt verlassene Matches ein. „Ø Kills ohne "
+                                "Aufgaben“ zählt nur Matches, in denen kein Survivor aufgab oder ging."),
+                  style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         self._stats_sort = ("n", True)
         return outer
 
@@ -433,7 +448,8 @@ class StatsTab:
         self._stats_dirty.discard(i)
         part = (self._stats_part_dash, self._stats_part_last, self._stats_part_maps, self._stats_part_killers,
                 self._stats_part_bp, self._stats_part_records, self._stats_part_trend,
-                self._stats_part_sys, self._stats_part_regions, self._stats_part_wait)      # tab order (1.8.2)
+                self._stats_part_sys, self._stats_part_regions, self._stats_part_wait,      # tab order (1.8.2)
+                self._stats_part_opponents)                                                 # 1.8.46
         if i < len(part):
             part[i](c)
 
@@ -529,7 +545,35 @@ class StatsTab:
 
     def _stats_part_records(self, c):
         self.stats_records_var.set("" if c.rounds else _("Noch keine Runden in dieser Auswahl."))
-        self.stats_records.data = records.tiles(c.rounds, c.pairs) if c.rounds else []
+        self.stats_records.data = records.tiles(c.rounds, c.pairs, killer_label) if c.rounds else []
+
+    def _stats_part_opponents(self, c):
+        """1.8.46: how the survivors' matches ended (tiles) and the characters met (table)."""
+        pct = lambda v: f"{v:.0%}" if v is not None else "–"
+        counts = official.fates(c.pairs)
+        tiles = []
+        if counts:
+            n_txt = _("{n} Survivor", n=sum(counts.values()))
+            for title, keys in ((N_("Geopfert"), ("sacrificed",)), (N_("Getötet"), ("killed",)),
+                                (N_("Aufgegeben"), ("abandoned", "gone")), (N_("Entkommen"), ("escaped",))):
+                v = official.share(counts, *keys)
+                tiles.append(Tile(_(title), pct(v), n_txt, frac=v))
+            all_kills = [k for k in (official.kills(m) for _r, m in c.pairs) if k is not None]
+            clean = official.clean_kills(c.pairs)
+            tiles.append(Tile(_("Ø Kills ohne Aufgaben"), f"{sum(clean) / len(clean):.2f}" if clean else "–",
+                              _("{n} von {total} Runden", n=len(clean), total=len(all_kills)),
+                              frac=sum(clean) / len(clean) / 4 if clean else None))
+        self.stats_opp_tiles.data = tiles
+        found = official.opponents(c.pairs)
+        self.stats_opp_var.set("" if found else _("Noch keine Runden mit Daten der Stats-Seite in dieser Auswahl."))
+        t = self.stats_opp
+        t.delete(*t.get_children())
+        for o in found:
+            name = killer_label(self._killer_of(o.name)) if o.role == "killer" else o.name
+            t.insert("", "end", values=(name, self._role_name(o.role), o.n, pct(official.share(o.fates, "escaped")),
+                                        pct(official.share(o.fates, "sacrificed")),
+                                        pct(official.share(o.fates, "killed")),
+                                        pct(official.share(o.fates, "abandoned", "gone"))))
 
     def _stats_part_trend(self, c):
         self._trend_render(c.pairs, TREND_UNIT.get(c.period, "week"))
@@ -1204,6 +1248,22 @@ class StatsTab:
         self._off_fast_until = time.time() + 300      # look for the file more often for a while
         if after_game:
             self._log(_("DBD beendet – Stats-Seite geöffnet; das Userscript speichert die Matches."), "System")
+
+    def _official_structure(self):
+        """1.8.46: the stats page with the request for the structure of its answer (userscript from version 2):
+        field names and types only – to decide which further fields are worth taking."""
+        try:
+            webbrowser.open(official.URL + official.STRUCTURE_HASH)
+        except Exception as e:
+            self._log(_("Stats-Seite konnte nicht geöffnet werden: {error}", error=e), "Fehler")
+            return
+        self._inform(_("Aufbau der Match-Daten speichern"),
+                     _("Die Stats-Seite öffnet sich im Browser. Das Userscript (ab Version {n}) legt danach "
+                       "„{file}“ in den Download-Ordner: nur die Namen und Arten der Felder, die die Seite liefert – "
+                       "keine Werte, keine Namen, keine IDs. Das Programm liest diese Datei nicht; du kannst sie "
+                       "weitergeben, um zu entscheiden, welche Felder zusätzlich übernommen werden sollen. Ältere "
+                       "Userscripts: vorher „Userscript kopieren“ und in Tampermonkey ersetzen.",
+                       n=official.STRUCTURE_SCRIPT, file=official.STRUCTURE_FILE))
 
     def _official_copy_script(self):
         path = os.path.join(os.path.dirname(official.__file__), official.SCRIPT)
