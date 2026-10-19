@@ -474,6 +474,15 @@ class QueueTracker:
             self._reset()
         return events
 
+    def round_started(self):
+        """1.8.43 (QA audit, user: "Custom Games mit Bots"): a match began – the lobby it came from is used up.
+        After a custom match DBD goes straight back to the same custom lobby, with no PLAY screen between: the
+        state stayed "custom", no second "found" came, and the next round was stored as a public one (kills,
+        records, no early recording). From idle, the next lobby looks confirm it again. The last button (instant
+        lobby after PLAY vs. custom game) and the last cross-play look stay."""
+        self._reset()
+        self._pending, self.found, self._reminded = None, None, False
+
     @staticmethod
     def _state_of(kind):
         return {"play": "idle"}.get(kind, kind)

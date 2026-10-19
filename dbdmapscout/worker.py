@@ -361,6 +361,7 @@ class DetectionWorker(threading.Thread):
                                 self._last_sighting_save = tick
                                 session_saved = self._save_sighting(img, res, sep, "umgeschaltet" if d else "gesehen")
                             if d is not None:
+                                self.queue.round_started()  # 1.8.43: the lobby is used up (same custom lobby next)
                                 self.post("detected", map_id=d.map_id, variant=d.variant, probability=d.probability,
                                           variant_probability=d.variant_probability, name_text=d.name_text,
                                           realm_text=d.realm_text, frames=d.frames, name_fit=d.name_fit,
