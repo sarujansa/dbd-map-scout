@@ -6,11 +6,12 @@ from PIL import Image
 from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtGui import QPalette, QPixmap
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu,
-                               QPushButton, QStyle, QStyledItemDelegate, QStyleOptionViewItem, QScrollArea,
+                               QPlainTextEdit, QPushButton, QStyle, QStyledItemDelegate, QStyleOptionViewItem, QScrollArea,
                                QSizePolicy, QStackedWidget, QVBoxLayout, QWidget)
 
 from .qt_layouts import FlowRow
 from .i18n import N_, _
+from .mapnotes import MAX_CHARS as NOTE_CHARS
 from .qt_common import pixmap_from_pil, steady_scroll, _label, _tip, _card, _set, _scroll_page
 
 
@@ -216,6 +217,21 @@ class MapsPage(QWidget):
         cl.addWidget(self.p_name)
         cl.addWidget(self.p_realm)
         cl.addWidget(self.p_pic, 1)
+        # 1.8.54 (user: "Notizen für die Map"): the own note, saved while typing, shown in the game with the map
+        cl.addWidget(_label(_("Eigene Notiz (im Spiel unter dem Timer)"), "dim"))
+        self.p_note = QPlainTextEdit()
+        self.p_note.setPlaceholderText(_("z. B. Shack links vom Main, Gen im Keller …"))
+        self.p_note.setToolTip(_tip("Eigene Notiz"))
+        self.p_note.setTabChangesFocus(True)
+        self.p_note.setFixedHeight(84)
+        self.p_note.setEnabled(False)
+        self.p_note.textChanged.connect(self._note_typed)
+        cl.addWidget(self.p_note)
+        self._note_key = None              # map_id the editor shows the note of
+        self._note_saver = QTimer(self)
+        self._note_saver.setSingleShot(True)
+        self._note_saver.setInterval(600)
+        self._note_saver.timeout.connect(self._save_note)
         self.stack.addWidget(big)
         body.addWidget(self.stack, 1)
         lay.addLayout(body, 1)
@@ -360,7 +376,8 @@ class MapsPage(QWidget):
 
     # ------------------------------------------------------------------ right click (1.2.18)
     MENU = (("show", N_("Anzeigen")), ("rotate", N_("Drehen ↻")),
-            ("size_reset", N_("Eigene Grösse und Drehung zurücksetzen")), ("picture", N_("Kartenbild ersetzen …")))
+            ("size_reset", N_("Eigene Grösse und Drehung zurücksetzen")), ("picture", N_("Kartenbild ersetzen …")),
+            ("note", N_("Notiz bearbeiten …")))
 
     def menu_entries(self, key):
         """[(action, label, enabled)] of a tile's context menu – the reset only when the map has own values."""
@@ -374,7 +391,10 @@ class MapsPage(QWidget):
         for action, label, enabled in self.menu_entries(key):
             act = menu.addAction(label)
             act.setEnabled(enabled)
-            act.triggered.connect(lambda _c=False, a=action, k=tuple(key): self._post("map_action", (a, k)))
+            if action == "note":                     # 1.8.54: here – the map big, the cursor in its note
+                act.triggered.connect(lambda _c=False, k=tuple(key): self.edit_note(k))
+            else:
+                act.triggered.connect(lambda _c=False, a=action, k=tuple(key): self._post("map_action", (a, k)))
         self._menu = menu
         menu.popup(pos)
 
@@ -393,7 +413,49 @@ class MapsPage(QWidget):
         self.stack.setCurrentIndex(1)
 
     def close_big(self):
+        self._save_note()
         self.stack.setCurrentIndex(0)
+
+    def edit_note(self, key):
+        self.open_big(key)
+        self.p_note.setFocus()
+
+    # ------------------------------------------------------------------ own note of the map shown big (1.8.54)
+    def _note_typed(self):
+        if self._note_key is None:
+            return
+        text = self.p_note.toPlainText()
+        if len(text) > NOTE_CHARS:                     # the game shows four lines – more is cut while typing
+            cur = self.p_note.textCursor()
+            pos = min(cur.position(), NOTE_CHARS)
+            self.p_note.blockSignals(True)
+            self.p_note.setPlainText(text[:NOTE_CHARS])
+            self.p_note.blockSignals(False)
+            cur = self.p_note.textCursor()
+            cur.setPosition(pos)
+            self.p_note.setTextCursor(cur)
+        self._note_saver.start()
+
+    def _save_note(self):
+        """The note typed so far to the app (settings, the overlay when that map is on display)."""
+        if self._note_saver.isActive() or self._note_dirty():
+            self._note_saver.stop()
+            self._post("map_note", (self._note_key, self.p_note.toPlainText()))
+            self._note_saved = self.p_note.toPlainText()
+
+    def _note_dirty(self) -> bool:
+        return self._note_key is not None and self.p_note.toPlainText() != getattr(self, "_note_saved", "")
+
+    def _show_note(self, map_id, text):
+        """The editor on another map: what was typed for the last one is saved first."""
+        if map_id == self._note_key:
+            return
+        self._save_note()
+        self._note_key = None                          # no save of the text set here
+        self.p_note.setPlainText(text or "")
+        self._note_saved = text or ""
+        self._note_key = map_id
+        self.p_note.setEnabled(map_id is not None)
 
     def show_in_game(self, key):
         self._clicker.stop()
@@ -411,7 +473,8 @@ class MapsPage(QWidget):
             self._post("show_map", tuple(self._preview_key))
 
     def show_preview(self, p):
-        """p = (map_id, variant, name, realm, PIL picture or None) or None (nothing selected)."""
+        """p = (map_id, variant, name, realm, PIL picture or None, own note) or None (nothing selected)."""
+        self._show_note(p[0] if p else None, p[5] if p and len(p) > 5 else "")
         key = tuple(p[:2]) if p else None
         if p is not None and key == self._preview_key and p[4] is self._preview_src:
             return

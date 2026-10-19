@@ -484,6 +484,20 @@ EN = {
     "Survivor: {share} entkommen ({n})": "Survivor: {share} escaped ({n})",
     "{share} entkommen · {n} Runden": "{share} escaped · {n} rounds",
     "Eigene Bilanz auf der Map unter dem Timer (Stats-Seite)": "Own record on the map below the timer (stats page)",
+    "Eigene Notiz zur Map unter dem Timer (Seite Maps)": "Own note on the map below the timer (Maps page)",
+    "Zeigt deine eigene Notiz zur Map unter dem Rundentimer – geschrieben auf der Seite Maps (Map anklicken "
+    "oder Rechtsklick → „Notiz bearbeiten …“), höchstens vier Zeilen.":
+        "Shows your own note on the map below the round timer – written on the Maps page (click a map or right "
+        "click → \"Edit note …\"), at most four lines.",
+    "Deine Notiz zu dieser Map – wird beim Tippen gespeichert und im Spiel unter dem Timer gezeigt (höchstens vier "
+    "Zeilen). Leer = keine Notiz.":
+        "Your note on this map – saved while you type and shown in the game below the timer (at most four lines). "
+        "Empty = no note.",
+    "Eigene Notiz (im Spiel unter dem Timer)": "Own note (in the game below the timer)",
+    "z. B. Shack links vom Main, Gen im Keller …": "e.g. shack left of main, gen in the basement …",
+    "Notiz bearbeiten …": "Edit note …",
+    "Eigene Notiz": "Own note",
+    "Eigene Notiz: {note}": "Own note: {note}",
     "Zeigt unter dem Rundentimer, wie es dir auf dieser Map bisher ging: als Killer Ø Kills, als Survivor den "
     "Anteil Escapes – aus den Runden mit Daten der Stats-Seite, ab 3 Runden.":
         "Shows below the round timer how you have done on this map so far: average kills as killer, share of "

@@ -203,6 +203,7 @@ class OverlayTab:
         self.waiting_var = ui.BooleanVar(value=o.get("show_waiting", True))
         self.floor_auto_var = ui.BooleanVar(value=o.get("floor_auto", True))
         self.record_var = ui.BooleanVar(value=o.get("show_record", True))
+        self.notes_var = ui.BooleanVar(value=o.get("show_notes", True))
         self._reg("ov.keep_bar", ui.Checkbutton(
             pos, text=_("Karte im schwarzen Rand halten (Ultrawide: nie ins Spielbild ragen)"),
             variable=self.keep_bar_var, command=self._overlay_flags_changed)).pack(anchor="w", pady=(4, 0))
@@ -220,6 +221,7 @@ class OverlayTab:
                                ("floors", N_("Etagen (Midwich) untereinander zeigen (aus: nur die untere)"),
                                 self.floor_auto_var),
                                ("record", N_("Eigene Bilanz auf der Map unter dem Timer (Stats-Seite)"), self.record_var),
+                               ("notes", N_("Eigene Notiz zur Map unter dem Timer (Seite Maps)"), self.notes_var),
                                ("transparent", N_("Transparenter Rand um die Karte"), self.transp_var)):
             self._reg(f"ov.{key}", ui.Checkbutton(look, text=_(text), variable=var,
                                                    command=self._overlay_flags_changed)).pack(anchor="w", pady=1)
@@ -553,6 +555,9 @@ class OverlayTab:
         if bool(self.record_var.get()) != o.get("show_record", True):
             o["show_record"] = bool(self.record_var.get())
             self._update_record()
+        if bool(self.notes_var.get()) != o.get("show_notes", True):
+            o["show_notes"] = bool(self.notes_var.get())
+            self._update_memo()
         if bool(self.floor_auto_var.get()) != o.get("floor_auto", True):
             o["floor_auto"] = bool(self.floor_auto_var.get())
             self._floor = None if o["floor_auto"] else 0          # the map on display follows right away

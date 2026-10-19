@@ -355,6 +355,7 @@ TITLE_SCALE = 1.15                 # the music card's title, a bit larger than t
 INFO_SERVER = (178, 184, 248, 255)     # light tone of the map colour
 INFO_DOT = (74, 222, 128, 255)         # "connected"
 INFO_WARN = (251, 191, 36, 255)        # doubtful detection
+INFO_MEMO = (236, 238, 245, 255)       # 1.8.54: the own note on the map
 PING_GOOD, PING_OK = 60, 120           # ms: green up to here, amber up to here, red above
 PING_COLOURS = ((134, 239, 172, 255), (251, 191, 36, 255), (248, 113, 113, 255))
 
@@ -376,20 +377,21 @@ def _tracked_width(d, text, font, track):
 
 def add_info(pic: Image.Image, timer: str, server: str, height: int, backdrop: bool = False,
              ping: float | None = None, status=(), note: str = "", record: str = "",
-             beside: bool = False, rec=None) -> Image.Image:
+             beside: bool = False, rec=None, memo=()) -> Image.Image:
     """Round timer, connected server and its ping below the map, styled like the map title: white heavy
     digits with a soft shadow (no box); below them a green "connected" dot with the region in small
     caps, and the ping coloured by quality. The ping is only shown together with a server.
     ``status``: lines of the waiting card (no map on screen) – first one white, the others dimmer.
     ``note``: a warning in amber right below the timer (doubtful detection).
     ``record``: own results on this map (stats page), dimmer, below the timer/note.
+    ``memo``: lines of the own note on this map (1.8.54, mapnotes), white, below the record – as written.
     ``backdrop``: the map sits on a dark rectangle (transparent edge off) – extend it behind the info.
     ``beside``: the block goes right of the map, centred in height (low wide bar above/below the picture).
     ``rec``: OBS records – True = the red dot right of the timer is on, False = off phase of the blink (1.5.2,
     user: "rechts von der Rundenzeit blinkend"), None = not recording."""
     if not server:
         ping = None
-    if not timer and not server and not status and not note and not record:
+    if not timer and not server and not status and not note and not record and not memo:
         return pic
     d0 = ImageDraw.Draw(pic)
     tfont, sfont = _font(max(22, height // 11), heavy=True), _font(max(14, height // 24))
@@ -404,6 +406,8 @@ def add_info(pic: Image.Image, timer: str, server: str, height: int, backdrop: b
         rows.append(("note", [(note.upper(), INFO_WARN)], sfont))
     if record:
         rows.append(("record", [(record.upper(), INFO_SERVER)], sfont))
+    for line in memo:                          # 1.8.54: as written – no caps, no tracking
+        rows.append(("memo", [(line, INFO_MEMO)], sfont))
     for i, line in enumerate(status):          # waiting card: above the server, like the timer on the map
         rows.append(("status", [(line.upper(), INFO_TIMER if i == 0 else INFO_SERVER)], sfont))
     if server:
@@ -420,6 +424,8 @@ def add_info(pic: Image.Image, timer: str, server: str, height: int, backdrop: b
         boxes.append(d0.textbbox((0, 0), text if kind == "timer" else text or "0", font=font))   # dot never move
         if kind == "timer":
             widths.append(boxes[-1][2] - boxes[-1][0])
+        elif kind == "memo":
+            widths.append(int(d0.textlength(text, font=font)))
         else:
             widths.append(int(_tracked_width(d0, text, font, track)) + (2 * dot if kind == "server" else 0))
     heights = [b[3] - b[1] for b in boxes]
@@ -470,7 +476,7 @@ def add_info(pic: Image.Image, timer: str, server: str, height: int, backdrop: b
                     x += 2 * dot
                 for text, colour in segs:
                     x = _draw_run(im, x, y - y0, text, font, dark if shadow else colour, halo if shadow else 0,
-                                  dark, track)
+                                  dark, 0 if kind == "memo" else track)
             y += h + (int(TIMER_GAP * gap) if kind == "timer" else gap)
 
     shadow = Image.new("RGBA", (layer_w, layer_h), (0, 0, 0, 0))
@@ -1166,15 +1172,16 @@ def rec_phase(now: float | None = None) -> bool:
 
 
 def info_card(timer: str, server: str, ping, note: str, record: str, text_h: int, style: str = "classic",
-              accent=None, transparent: bool = True, dark_area: bool = False, rec=None) -> Image.Image:
+              accent=None, transparent: bool = True, dark_area: bool = False, rec=None, memo=()) -> Image.Image:
     """1.8.24 (user: "Zeit etc. nicht mehr mit der Map verbunden, eigene Elemente – ich will ab und zu nur die
     eigentliche Map-Grösse ändern"): timer, note, record, server and ping as a card of their own – the same lines
     as below the map, without the map; shared by the overlay (App.info_win) and the preview."""
     if style != "classic":
         from .skin import map_card
-        return map_card(None, "", "", timer, note, record, server, ping, (), text_h, style, accent, rec=rec)
+        return map_card(None, "", "", timer, note, record, server, ping, (), text_h, style, accent, rec=rec,
+                        memo=memo)
     pic = add_info(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), timer, server, text_h, backdrop=not transparent,
-                   ping=ping, note=note, record=record, rec=rec)
+                   ping=ping, note=note, record=record, rec=rec, memo=memo)
     return map_backdrop([pic], text_h)[0] if dark_area else pic
 
 
@@ -1213,6 +1220,7 @@ class PictureOverlay:
         self._waiting = ()              # lines of the waiting card: shown instead of everything else
         self._note = ""                 # warning below the timer ("" = none)
         self._record = ""               # own results on this map below the timer ("" = none)
+        self._memo = ()                 # 1.8.54: lines of the own note on this map (mapnotes.lines)
         self._rec = False               # 1.4.1: OBS records the round – blinking red dot right of the timer
         self._base = []                 # [(PIL RGBA, duration)] scaled map (+ caption), cached per size
         self._base_key = None
@@ -1271,6 +1279,10 @@ class PictureOverlay:
         """Own results on the map on display ("Ø 2.8 Kills · 12 Runden"); "" = none."""
         self._record = text or ""
 
+    def set_memo(self, lines):
+        """1.8.54: the own note on the map on display as lines (mapnotes.lines); () = none."""
+        self._memo = tuple(lines or ())
+
     def set_rec(self, on: bool):   # 1.4.1 / 1.5.2: blinking red dot right of the round timer
         """1.4.1: a red dot top right while OBS records the round."""
         self._rec = bool(on)
@@ -1324,7 +1336,7 @@ class PictureOverlay:
         return self._view_frames()[0][0][0].size if self._frames and self.show_map and not self._waiting else (0, 0)
 
     def has_info(self) -> bool:
-        return bool(self._timer or self._server or self._note or self._record)
+        return bool(self._timer or self._server or self._note or self._record or self._memo)
 
     def set_lines_top(self, on: bool):
         """1.8.34 (user: "mit der Map kombinieren, oben oder unten"): the lines drawn with the map go above it."""
@@ -1349,15 +1361,15 @@ class PictureOverlay:
         """The lines as a card of their own (1.8.24), None when there are none; ``placeholder``: a timer text to
         show without any lines (moving mode – something to drag)."""
         timer = self._timer or ("" if self.has_info() else placeholder)
-        if not (timer or self._server or self._note or self._record):
+        if not (timer or self._server or self._note or self._record or self._memo):
             return None
         rec = rec_phase() if self._rec else None
-        key = (int(text_h), timer, self._server, self._ping, self._note, self._record, rec, self.skin, self.accent,
-               self.transparent, self.backdrop)
+        key = (int(text_h), timer, self._server, self._ping, self._note, self._record, self._memo, rec, self.skin,
+               self.accent, self.transparent, self.backdrop)
         if getattr(self, "_info_key", None) != key:
             self._info_key = key
             self._info_pic = info_card(timer, self._server, self._ping, self._note, self._record, int(text_h),
-                                       self.skin, self.accent, self.transparent, self.backdrop, rec)
+                                       self.skin, self.accent, self.transparent, self.backdrop, rec, self._memo)
         return self._info_pic
 
     def set_show_map(self, on: bool):
@@ -1429,10 +1441,10 @@ class PictureOverlay:
             self._base_key = base_key
         here = self._lines_here()                    # 1.8.24: the lines apart – the map alone
         rec = rec_phase() if self._rec and here else None     # 1.5.2: the dot blinks with the seconds
-        timer, server, ping, note, record = (self._timer, self._server, self._ping, self._note, self._record) \
-            if here else ("", "", None, "", "")
+        timer, server, ping, note, record, memo = (self._timer, self._server, self._ping, self._note, self._record,
+                                                   self._memo) if here else ("", "", None, "", "", ())
         top = self.lines_top and not self.info_beside
-        key = (base_key, self._editing, timer, server, ping, note, record,
+        key = (base_key, self._editing, timer, server, ping, note, record, memo,
                self.info_beside, self.backdrop, self.skin, self.accent, self.realm, rec, top)
         if key != self._key:
             self._prepared = []
@@ -1442,17 +1454,17 @@ class PictureOverlay:
                 for pic, dur in self._base:
                     pics.append(map_card(pic if self.show_map else None, self._caption, self.realm, timer,
                                          note, record, server, ping, (), text_h, self.skin,
-                                         self.accent, rec=rec, lines_top=top))
+                                         self.accent, rec=rec, lines_top=top, memo=memo))
             for pic, dur in ([] if modern else self._base):
                 if here and self.has_info() and top and self.show_map:      # 1.8.34: the lines above the map
                     pic = lines_above(pic, add_info(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), self._timer,
                                                     self._server, text_h, backdrop=not self.transparent,
                                                     ping=self._ping, note=self._note, record=self._record,
-                                                    rec=rec), text_h)
+                                                    rec=rec, memo=self._memo), text_h)
                 elif here and self.has_info():
                     pic = add_info(pic, self._timer, self._server, text_h, backdrop=not self.transparent,
                                    ping=self._ping, note=self._note, record=self._record,
-                                   beside=self.info_beside and self.show_map, rec=rec)
+                                   beside=self.info_beside and self.show_map, rec=rec, memo=self._memo)
                 pics.append(pic)
             if self.backdrop and not modern:
                 pics = map_backdrop(pics, text_h)
@@ -1510,7 +1522,8 @@ class PictureOverlay:
 
     def _content_key(self) -> tuple:
         """What the overlay's size depends on besides the heights (the timer with its widest digits)."""
-        return (re.sub(r"\d", "0", self._timer), self._server, self._ping, self._note, self._record, self.info_beside,
+        return (re.sub(r"\d", "0", self._timer), self._server, self._ping, self._note, self._record, self._memo,
+                self.info_beside,
                 self.info_apart, self.lines_top,
                 self._editing, self.show_map, self.show_caption, self._caption, self.transparent, self.backdrop,
                 self._floor, id(self._frames[0][0]) if self._frames else None, self.skin, self.accent, self.realm,

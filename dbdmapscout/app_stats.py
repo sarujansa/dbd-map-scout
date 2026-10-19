@@ -10,7 +10,7 @@ import time
 import webbrowser
 from types import SimpleNamespace
 
-from . import builds, dashboard, history, official, records, regions, sysinfo
+from . import builds, dashboard, history, mapnotes, official, records, regions, sysinfo
 from . import uimodel as ui
 from .capture import foreground_root, is_game_window
 from .i18n import N_, _
@@ -1197,6 +1197,13 @@ class StatsTab:
             except Exception:
                 log.exception("record")
         self.overlay.set_record(text)
+
+    def _update_memo(self):
+        """1.8.54: the own note on the map on display into the overlay (setting overlay.show_notes)."""
+        lines = ()
+        if self.current and self.settings["overlay"].get("show_notes", True):
+            lines = mapnotes.lines(mapnotes.get(self.settings.get(mapnotes.KEY), self.current[0]))
+        self.overlay.set_memo(lines)
 
     # ---------------------------------------------------------- official match data (stats.deadbydaylight.com)
     def _official_path(self):

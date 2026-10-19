@@ -139,7 +139,7 @@ SPECS = {
                 ("row", (("label", "ov.info_pos.label"), ("combo", "ov.info_pos"), ("stretch",))),     # 1.8.24
                 ("sub", N_("Darstellung")), ("check", "ov.show_map"), ("check", "ov.caption"), ("check", "ov.floors"),
                 ("check", "ov.transparent"), ("check", "ov.map_backdrop"), ("check", "ov.keep_bar"), ("check", "ov.grow"),
-                ("sub", N_("Infos (Timer, Bilanz, Server)")), ("check", "ov.timer"), ("check", "ov.server"), ("check", "ov.record"),
+                ("sub", N_("Infos (Timer, Bilanz, Server)")), ("check", "ov.timer"), ("check", "ov.server"), ("check", "ov.record"), ("check", "ov.notes"),
                 ("sub", N_("Wann zeigen")), ("check", "ov.focus"), ("check", "ov.waiting"))),
             ("ov.sys", N_("Systemwerte"), (
                 ("row", (("label", "ov.sysinfo.label"), ("combo", "ov.sysinfo"), ("stretch",))),
