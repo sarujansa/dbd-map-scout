@@ -445,18 +445,35 @@ def test_chart_draws_columns_and_a_line(qapp, keep):
     assert chart.minimumHeight() == 2 * (chart.PANEL_H + 10)
 
 
-def test_question_bar_asks_instead_of_a_dialog(qapp, keep):
+def test_questions_and_notes_open_a_small_window_to_answer(qapp, keep):
+    """1.8.44 (user: a small window to confirm instead of the bar at the top): OK/Cancel and notes in MessageBox –
+    application-modal, opened with show() (no exec()), waiting while the main window is hidden."""
+    from PySide6.QtCore import Qt
     from dbdmapscout import qt_window
     posted = queue.Queue()
     win = keep(qt_window.MainWindow(lambda a, arg=None: posted.put((a, arg))))
+    box = win.message
     win.show_question(("Verlauf löschen", "Alle <Runden> löschen?", True))
-    assert not win.question.isHidden() and "&lt;Runden&gt;" in win.question_text.text()
-    assert not win.question_cancel.isHidden()
-    win.question_ok.click()
-    win.show_question(("Hinweis", "Nur zur Info", False))
-    assert win.question_cancel.isHidden()
+    assert box.isHidden()                                   # the window is in the tray: it waits
+    win.show()
+    win.show_question(("Verlauf löschen", "Alle <Runden> löschen?", True))
+    assert box.isVisible() and box.windowModality() == Qt.ApplicationModal
+    assert box.heading.text() == "Verlauf löschen" and box.text.text() == "Alle <Runden> löschen?"
+    assert box.text.textFormat() == Qt.PlainText and not box.cancel.isHidden()
+    win.show_question(("Verlauf löschen", "Alle <Runden> löschen?", True))     # the next refresh: no second answer
+    box.ok.click()
+    assert box.isHidden() and posted.get_nowait() == ("answer", True)
+    box.ok.click()                                          # answered once only
+    assert posted.empty()
     win.show_question(None)
-    assert win.question.isHidden() and posted.get_nowait() == ("answer", True)
+    win.show_question(("Hinweis", "Nur zur Info", False), activate=False)      # DBD in front: no focus taken
+    assert box.isVisible() and box.cancel.isHidden() and box.testAttribute(Qt.WA_ShowWithoutActivating)
+    box.reject()                                            # Esc / X
+    assert box.isHidden() and posted.get_nowait() == ("answer", False)
+    win.show_question(None)
+    win.show_question(("Frage", "Weg damit?", True))
+    win.show_question(None)                                 # taken back by the program: no answer
+    assert box.isHidden() and posted.empty()
     win.allow_close = True
     win.close()
 

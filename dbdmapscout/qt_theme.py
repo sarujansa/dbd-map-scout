@@ -218,7 +218,7 @@ QLabel[class="h1"] {{ font-size: {px(24)}; font-weight: 700; color: {c['head']};
 QLabel[class="map"] {{ font-family: 'Fira Sans ExtraBold', 'Segoe UI'; font-size: {px(26)}; color: {c['head']}; }}
 QLabel[class="h2"] {{ font-size: {px(12)}; font-weight: 700; color: {c['accent']}; letter-spacing: 1px; }}
 QLabel[class="big"] {{ font-size: {px(16)}; font-weight: 700; color: {c['head']}; }}
-QFrame#question {{ background: {rgba(c['accent'], 0.18)}; border-bottom: 1px solid {c['accent']}; }}
+QDialog#message {{ background: {c['bg']}; }}  /* 1.8.44: App._ask/_inform */
 QTabWidget::pane {{ border: 1px solid {c['border']}; border-radius: 8px; top: -1px; }}
 QTabWidget#formtabs::pane {{ background: {c['card']}; border: 1px solid {c['border']}; border-radius: 10px; top: -1px;
     border-top-left-radius: 0; }}

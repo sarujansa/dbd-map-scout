@@ -16,7 +16,7 @@ from PIL import Image
 
 from . import __version__, history, official, overview, tooltip
 from . import uimodel as ui
-from .capture import IS_WIN
+from .capture import IS_WIN, foreground_root, is_game_window
 from .i18n import _
 from .mainloop import MainLoop
 
@@ -299,8 +299,9 @@ class QtShell:
             log.debug("warm pages", exc_info=True)
 
     def _ask(self, title, text, retry, parent=None) -> bool:
-        """OK/Cancel before something that cannot be undone: a bar at the top of the window (no modal dialog –
-        it would stop the timers); OK runs ``retry`` again, which then gets True here."""
+        """OK/Cancel before something that cannot be undone: a small window to answer (1.8.44, before a bar at
+        the top; MessageBox, shown with show() – exec() would stop the timers); OK runs ``retry`` again, which then
+        gets True here."""
         if getattr(self, "_confirmed", False):
             self._confirmed = False
             return True
@@ -556,7 +557,12 @@ class QtShell:
             q.show_states(page, {k: ui_state(self._qt_auto[k]) for k in q.visible_keys(page) if k in self._qt_auto})
         self._qt_dialog_tick()
         qq = self._qt_question
-        q.show_question(None if qq is None else (qq[0], qq[1], qq[2] is not None))
+        if qq is None:
+            q.show_question(None)
+        else:   # 1.8.44: a window of its own – it must not take the focus from DBD (a crash note while playing)
+            front = getattr(self, "game", None) is not None and not getattr(self, "simulate", False) \
+                and is_game_window(foreground_root())
+            q.show_question((qq[0], qq[1], qq[2] is not None), activate=not front)
 
     def _qt_preview(self, sel):
         """(map_id, variant, name, realm, picture) of the map selected on the maps page (the shown map before a
