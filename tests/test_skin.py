@@ -117,6 +117,42 @@ def test_the_map_card_carries_map_timer_and_lines(style):
     assert skin.frame_pad(style, 518) > 0 and skin.frame_pad("classic", 518) == 0   # 1.8.27: every style frames the map
 
 
+@pytest.mark.parametrize("style", MODERN)
+def test_the_maps_name_and_realm_stand_centred_over_it(style, monkeypatch):
+    """1.8.40 (user: "über der Map der name soll mittig sein"): name and realm centred like the timer below."""
+    pic, body = _coal_body()
+    drawn = []
+    real = skin._text
+
+    def spy(im, x, y, text, font, fill, track=0):
+        drawn.append((text, x, skin._width(font, text, track)))
+        return real(im, x, y, text, font, fill, track)
+
+    monkeypatch.setattr(skin, "_text", spy)
+    card = skin.map_card(body, "Mount Ormond Resort I", "Ormond", "00:32", "", "", "Global", None, (), 518, style)
+    name = next(d for d in drawn if d[0] == "Mount Ormond Resort I")
+    realm = next(d for d in drawn if d[0] == "ORMOND")
+    timer = next(d for d in drawn if d[0] == "00:32")
+    mid = timer[1] + timer[2] / 2                                            # the timer was centred already
+    assert abs(name[1] + name[2] / 2 - mid) <= 2
+    assert abs(realm[1] + realm[2] / 2 - mid) <= 8       # the header centred – its text sits 5u right of the mark
+    assert card.width > body.width
+
+
+@pytest.mark.parametrize("style", MODERN)
+def test_every_up_next_row_has_the_same_size_and_a_long_one_is_cut(style):
+    """1.8.40 (user's screenshot: "Creep On Me (feat. French Montana & DJ Snake) – DASH, …" tiny, the next rows
+    normal): a long row was set smaller before it was cut – now all rows share one size, the long one ends in …"""
+    items = [("Creep On Me (feat. French Montana & DJ Snake)", "GASHI, French Montana, DJ Snake"),
+             ("Bad guy", "Duroc Creep"), ("BAD EYEZ", "Nimo, Luciano")]
+    u = 1.0
+    q = skin._upnext_fitted("UP NEXT", items, u, style, 300)
+    sizes = {tf.size for _n, tf, _t, _k in q["rows"]}
+    assert len(sizes) == 1
+    assert q["rows"][0][2].endswith("…") and q["rows"][1][2] == "Bad guy – Duroc Creep"
+    assert all(skin._width(tf, t) + q["num_w"] <= 300 for _n, tf, t, _k in q["rows"])
+
+
 def test_the_overlay_draws_the_map_card_in_the_style_and_fits_the_bar():
     """PictureOverlay with skin glass / chips / line: the card stays inside the 440-px bar (its frame may use the
     margin like the dark area), the waiting card follows the style, and a style change re-renders."""
