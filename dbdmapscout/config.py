@@ -50,6 +50,7 @@ DEFAULTS = {
         "map_rotations": {},            # map id -> map turned clockwise by 90/180/270° (button / hotkey)
         "floor_auto": True,             # maps with floors (Midwich): all one below the other (False: bottom only)
         "show_record": True,            # own record on the map below the timer (official match data)
+        "show_notes": True,             # 1.8.54: own note on the map below the timer (mapnotes)
         "show_map": True,               # off: overlay shows only timer, server and ping
         "show_media": True,             # "Läuft gerade": music of the Windows media controls (1.64)
         "media_pos": "bottom_right",    # its own window: below / bottom_right / bottom_left / custom (1.64.7)
@@ -124,6 +125,7 @@ DEFAULTS = {
     "notify_background_only": True,     # only while DBD is not the active window
     "auto_update": True,                # start.bat: pull the newest state from GitHub before starting
     "user_aliases": {},                 # own assignments of unknown banner texts: {map_id: [text, ...]}
+    "map_notes": {},                    # 1.8.54: own notes per map, shown with the map: {map_id: text}
     "welcome_seen": False,              # the setup assistant of the first start was finished or skipped
     "killer_aliases": {},               # killer names as read (skins, new killers): {fold(name): "The Nurse"}
     "stats_mode": "",                   # 1.8.51: game-mode filter of the statistics, "" = all modes

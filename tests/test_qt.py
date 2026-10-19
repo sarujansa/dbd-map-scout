@@ -183,7 +183,7 @@ def _registered_keys():
                     pattern = "".join(v.value if isinstance(v, ast.Constant) else "{}" for v in a.values)
                     names = [k for k, _l in HOTKEY_LABELS] + ["lobby_notify", "lobby_remind", "notify_background_only",
                                                               "show_map", "focus", "caption", "timer", "server",
-                                                              "waiting", "floors", "record", "transparent"] + \
+                                                              "waiting", "floors", "record", "notes", "transparent"] + \
                         [code for code, _l in LANGS]
                     keys.update(pattern.format(k) for k in names)
     return keys
@@ -1211,9 +1211,9 @@ def test_map_tiles_show_marks_and_a_context_menu(qapp, keep):
     coal, pit = page._tiles[("coal", 1)], page._tiles[("pit", 1)]
     assert coal.info.text().startswith("6 Runden") and coal.info.toolTip().endswith("Eigene …") and pit.info.text() == ""
     entries = page.menu_entries(("coal", 1))
-    assert [a for a, _l, _e in entries] == ["show", "rotate", "size_reset", "picture"]
+    assert [a for a, _l, _e in entries] == ["show", "rotate", "size_reset", "picture", "note"]
     assert all(e for _a, _l, e in entries)
-    assert [e for _a, _l, e in page.menu_entries(("pit", 1))] == [True, True, False, True]
+    assert [e for _a, _l, e in page.menu_entries(("pit", 1))] == [True, True, False, True, True]
     page.open_menu(("coal", 1), coal.mapToGlobal(coal.rect().center()))
     acts = page._menu.actions()
     assert [a.text() for a in acts][:2] == ["Anzeigen", "Drehen ↻"]

@@ -10,7 +10,7 @@ import threading
 import time
 import traceback
 
-from . import i18n, layout, mapimage, mapstyle, obsrec, regions, restart, tooltip
+from . import i18n, layout, mapimage, mapnotes, mapstyle, obsrec, regions, restart, tooltip
 from . import uimodel as ui
 from .capture import IS_WIN, find_game_window
 from .catalog import Catalog
@@ -367,6 +367,7 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
             self._floor = None if self.settings["overlay"].get("floor_auto", True) else 0
         self._apply_floor()
         self._update_record()
+        self._update_memo()
         if not was_on and not keep_timer:
             self._round_started(time.time())     # map appears -> timer from zero (a switch while on keeps it)
         self.user_visible = True
@@ -1068,6 +1069,8 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
                 "server": _("Frankfurt") if o.get("show_server", True) and self.settings.get("show_connection") else "",
                 "ping": 31.0,
                 "record": _("Bilanz: Ø 2,8 Kills · 12 Runden") if o.get("show_record", True) else "",
+                "memo": mapnotes.lines(mapnotes.get(self.settings.get(mapnotes.KEY), self.current[0]))
+                if self.current and o.get("show_notes", True) else (),          # 1.8.54: the own note
                 "name": name if pic is not None else "",             # 1.3.1: the styled card's header
                 "realm": self._realm_name(m) if m and pic is not None else ""}
         side = self.settings.get("sysinfo", "off")

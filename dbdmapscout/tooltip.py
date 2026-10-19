@@ -52,6 +52,11 @@ TIPS = {
     "Eigene Bilanz auf der Map unter dem Timer (Stats-Seite)":
         "Zeigt unter dem Rundentimer, wie es dir auf dieser Map bisher ging: als Killer Ø Kills, als Survivor den "
         "Anteil Escapes – aus den Runden mit Daten der Stats-Seite, ab 3 Runden.",
+    "Eigene Notiz zur Map unter dem Timer (Seite Maps)":
+        "Zeigt deine eigene Notiz zur Map unter dem Rundentimer – geschrieben auf der Seite Maps (Map anklicken "
+        "oder Rechtsklick → „Notiz bearbeiten …“), höchstens vier Zeilen.",
+    "Eigene Notiz": "Deine Notiz zu dieser Map – wird beim Tippen gespeichert und im Spiel unter dem Timer "
+                    "gezeigt (höchstens vier Zeilen). Leer = keine Notiz.",
     "Einrichtung starten": "Öffnet noch einmal die Einrichtung vom ersten Start: Spielsprache, Overlay-Position "
                            "und die wichtigsten Tasten.",
     "„Heute“: Runden, Spielzeit, Ø Kills/Entkommen, Uhrzeit":

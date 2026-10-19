@@ -14,7 +14,7 @@ import traceback
 
 from PIL import Image
 
-from . import __version__, history, official, overview, tooltip
+from . import __version__, history, mapnotes, official, overview, tooltip
 from . import uimodel as ui
 from .capture import IS_WIN, foreground_root, is_game_window
 from .i18n import _
@@ -451,6 +451,16 @@ class QtShell:
         elif action == "map_preview":
             mid, v = arg
             self._qt_preview_sel = (mid, int(v))
+        elif action == "map_note":                   # 1.8.54: the own note typed on the maps page
+            mid, text = arg
+            if mid in self.catalog.maps:
+                notes = mapnotes.put(self.settings.get(mapnotes.KEY), mid, text)
+                if notes != (self.settings.get(mapnotes.KEY) or {}):
+                    self.settings.set(mapnotes.KEY, notes)
+                    self._save_soon()
+                    self._qt_maps_rev = getattr(self, "_qt_maps_rev", 0) + 1     # the tile's mark
+                if self.current and self.current[0] == mid:
+                    self._update_memo()
         elif action == "show_map":
             mid, v = arg
             if mid in self.catalog.maps:
@@ -571,9 +581,10 @@ class QtShell:
             return None
         mid, v = sel[0], int(sel[1])
         path, shown = self._map_file(mid, v)              # 1.8.21: never made here – the original until it is there
+        note = mapnotes.get(self.settings.get(mapnotes.KEY), mid)          # 1.8.54: never cached – typed meanwhile
         cached = getattr(self, "_qt_preview_cache", None)
         if cached is not None and cached[0] == (mid, v, id(self.catalog), path):
-            return cached[1]
+            return cached[1] + (note,)
         m = self.catalog.maps[mid]
         pic = None
         if path:
@@ -587,7 +598,7 @@ class QtShell:
         realm = self.catalog.realm_display(m) or _("Eigene Bilder")
         out = (mid, shown, m.label(shown), realm, pic)
         self._qt_preview_cache = ((mid, v, id(self.catalog), path), out)
-        return out
+        return out + (note,)
 
     def _qt_thumbs(self, items):
         """{(map_id, variant): picture path} for the tiles – the dark picture only if already made (no waiting)."""
@@ -623,6 +634,7 @@ class QtShell:
         o = self.settings["overlay"]
         heights, rots = o.get("map_heights") or {}, o.get("map_rotations") or {}
         out = {}
+        notes = self.settings.get(mapnotes.KEY) or {}
         for _realm, label, mid, v in items:
             parts, tips = [], []
             n, kills = cache[1].get(label, (0, []))
@@ -639,6 +651,10 @@ class QtShell:
             if own:
                 parts.append(" · ".join(own))
                 tips.append(_("Eigene Einstellungen dieser Map: {what}", what=", ".join(own)))
+            note = mapnotes.get(notes, mid)              # 1.8.54: a pen on tiles with an own note
+            if note:
+                parts.append("✎")
+                tips.append(_("Eigene Notiz: {note}", note=note))
             if parts or own:
                 out[(mid, v)] = (" · ".join(parts), "\n".join([" · ".join(parts)] + tips), bool(own))
         return out
