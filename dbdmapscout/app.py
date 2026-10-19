@@ -358,8 +358,10 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         self._test_map = False                   # a real/manual choice replaces the test picture
         self._clear_unsure()                     # another map on display: the doubt was about the old one
         self._layout_unsure = False
-        self.current = (map_id, shown)
+        prev, self.current = self.current, (map_id, shown)
         self.source = source
+        if prev is not None:                     # 1.8.39: another map/layout in the same round – the round follows
+            self._hist_follow(map_id, m.label(shown))
         self.overlay.set_map(path, m.label(shown), rotation, realm=self._realm_name(m))
         if not same_map:                         # a new map/round starts as set, the same one keeps its floor
             self._floor = None if self.settings["overlay"].get("floor_auto", True) else 0
