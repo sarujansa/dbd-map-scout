@@ -142,6 +142,7 @@ DEFAULTS = {
     "rec_pre": False,                   # save OBS's replay buffer at the banner (1.5.5: off – it holds the lobby)
     "rec_tail_s": 5,                    # 1.4.1: seconds recorded after the detected end (result screen)
     "rec_buffer_auto": True,            # 1.4.1: start/stop OBS's replay buffer with DBD
+    "rec_obs_start": False,             # 1.8.47: start OBS when DBD starts (OBS stays open afterwards)
     "rec_window": False,                # 1.8.41: our window capture of DBD in OBS instead of the monitor
     "rec_merge": False,                 # 1.4.2: pre-roll + round → one file (1.5.5: off – played too fast at the user's PC)
     "rec_farming_days": 7,              # 1.8.23: farming recordings go after this many days (0 = never)

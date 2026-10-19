@@ -80,6 +80,13 @@ WINDOW_SOURCE = "DbD Map Scout – DBD-Fenster"
 WINDOW_PRIORITY_CLASS = 0              # OBS: 0 title, else same type · 1 title only · 2 title, else same program
 WINDOW_METHOD_WGC = 2                  # OBS window capture: 0 automatic · 1 BitBlt · 2 Windows 10 (1903 and up)
 RECHECK_S = 30.0                       # 1.8.41: while DBD runs, OBS is set up again this often if it was not ready
+# 1.8.47 (user: "OBS autostart" – when DBD starts, OBS keeps running after it): OBS started by the program, once per
+# DBD start, only when no OBS window is open; then looked for every OBS_START_POLL_S up to OBS_START_WAIT_S
+OBS_EXE = "obs64.exe"
+OBS_ARGS = ("--minimize-to-tray",)
+OBS_START_POLL_S = 3.0
+OBS_START_WAIT_S = 60.0
+OBS_TITLE = re.compile(r"^OBS \d+\.\d+")         # the main window ("OBS 31.0.2 - Profil: … - Szenen: …")
 TAILS_S = (0, 3, 5, 8, 10)      # 1.4.1: seconds recorded after the detected end (the result screen)
 DEFAULT_TAIL_S = 5
 MIN_FILE_BYTES = 1024 * 1024    # 1.4.1: a recording smaller than this is reported as broken/empty
@@ -848,10 +855,55 @@ class Config:
     clip_sources: tuple = DEFAULT_CLIP_SOURCES   # 1.8.6: what the F8 clip keeps when the buffer file has the tracks
     farming_days: int = DEFAULT_FARMING_DAYS     # 1.8.23: farming recordings go after this many days (0 = never)
     window: bool = False             # 1.8.41: our window capture of DBD in OBS (WINDOW_SOURCE) instead of the monitor
+    obs_start: bool = False          # 1.8.47: start OBS when DBD starts and OBS cannot be reached
 
     @property
     def wants_buffer(self) -> bool:
         return self.pre or self.instant
+
+
+def obs_window_open(windows) -> bool:
+    """1.8.47 (pure): an OBS main window among ``windows`` [(title, class)] – also hidden in the tray (EnumWindows
+    lists hidden windows too). A second start would only open OBS's "already running" question."""
+    return any(OBS_TITLE.match(t or "") and (c or "").startswith("Qt") for t, c in windows)
+
+
+def obs_exe(registry=None, env=None) -> str | None:
+    """1.8.47: obs64.exe – the folder the OBS installer stores in HKLM\\SOFTWARE\\OBS Studio, else the usual one in
+    Program Files. Absolute paths only (the program runs as administrator), never PATH or the current folder.
+    ``registry``/``env`` for tests."""
+    env = os.environ if env is None else env
+    folders = list(registry if registry is not None else _obs_registry())
+    for var in ("ProgramW6432", "ProgramFiles"):
+        if env.get(var):
+            folders.append(os.path.join(env[var], "obs-studio"))
+    for folder in folders:
+        if folder and os.path.isabs(folder):
+            exe = os.path.join(folder, "bin", "64bit", OBS_EXE)
+            if os.path.isfile(exe):
+                return exe
+    return None
+
+
+def _obs_registry() -> list:
+    if sys.platform != "win32":
+        return []
+    import winreg
+    out = []
+    for view in (winreg.KEY_WOW64_64KEY, winreg.KEY_WOW64_32KEY):
+        try:
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\OBS Studio", 0, winreg.KEY_READ | view) as k:
+                value, kind = winreg.QueryValueEx(k, "")
+                if kind in (winreg.REG_SZ, winreg.REG_EXPAND_SZ) and value:
+                    out.append(os.path.expandvars(value))
+        except OSError:
+            pass
+    return out
+
+
+def _top_windows() -> list:
+    from .capture import top_windows                # Win32 only; capture never opens a process
+    return top_windows()
 
 
 def profile_hint(mode: str, rec_tracks: str) -> str:
@@ -907,6 +959,11 @@ class Recorder(threading.Thread):
         self._buffer_tried = False   # 1.8.42: we asked OBS to start its replay buffer (once per DBD/OBS session)
         self._buffer_check = False   # … and look on the next round whether it really runs
         self._next_check = 0.0
+        self._obs_started = False    # 1.8.47: we started OBS for this DBD session (never a second time)
+        self._obs_wait = 0.0         # … and look for it often until then
+        self._obs_late = False       # … "started, but not reachable" said
+        self._obs_open = False       # … an OBS window was open when we looked (its WebSocket server is off)
+        self.start_obs = self._start_obs_process       # tests replace it
 
     @property
     def recording(self) -> bool:
@@ -1261,6 +1318,7 @@ class Recorder(threading.Thread):
         self._game = on
         self._ready = False
         self._buffer_tried = self._buffer_check = False
+        self._obs_started = self._obs_late = False
         if not on:
             self._flush()                               # DBD closed: the round is over
             if self._buffer_ours:
@@ -1283,7 +1341,8 @@ class Recorder(threading.Thread):
         replay buffer stopped). A silent retry: the warning came once already."""
         if not self._game or not self.cfg.on or time.time() < self._next_check:
             return
-        self._next_check = time.time() + RECHECK_S
+        now = time.time()
+        self._next_check = now + (OBS_START_POLL_S if now < self._obs_wait and not self._ready else RECHECK_S)
         if not self._ready:
             self._setup(quiet=True)
             return
@@ -1311,6 +1370,41 @@ class Recorder(threading.Thread):
         finally:
             c.close()
 
+    def _launch_obs(self) -> bool:
+        """1.8.47: OBS not reachable when DBD starts – start it (once per DBD start, never next to an open OBS) and
+        look for it every OBS_START_POLL_S. True = started now (no warning yet)."""
+        self._obs_open = False
+        if not self.cfg.obs_start or self._obs_started:
+            return False
+        try:
+            if obs_window_open(_top_windows()):
+                self._obs_open = True                   # OBS runs, only its WebSocket server is off/elsewhere
+                return False
+        except Exception:
+            log.debug("OBS-Fenster nicht geprüft", exc_info=True)
+            return False
+        exe = obs_exe()
+        self._obs_started = True
+        if exe is None:
+            self._warn(_("OBS nicht gefunden – bitte OBS selbst starten (gesucht unter Programme\\obs-studio)."))
+            return False
+        try:
+            self.start_obs(exe)
+        except OSError as e:
+            self._warn(_("OBS konnte nicht gestartet werden: {error}", error=e))
+            return False
+        self._obs_wait = time.time() + OBS_START_WAIT_S
+        self._next_check = time.time() + OBS_START_POLL_S
+        self._say(_("OBS wird gestartet …"), True)
+        log.info("OBS gestartet: %s", exe)
+        return True
+
+    @staticmethod
+    def _start_obs_process(exe: str):
+        """OBS in its own folder (it finds its data there), minimised to the tray, detached from this program."""
+        flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        subprocess.Popen([exe, *OBS_ARGS], cwd=os.path.dirname(exe), close_fds=True, creationflags=flags)
+
     def _start_buffer(self, c: ObsClient):
         """StartReplayBuffer at most once per DBD start and OBS session (1.8.42): when OBS cannot start the output
         (encoder, driver), every request opens an error dialog in OBS – 1.8.41 asked again every RECHECK_S."""
@@ -1333,7 +1427,18 @@ class Recorder(threading.Thread):
         try:
             c = self._client()
         except ObsError as e:
-            if not quiet:
+            if self._launch_obs():
+                return
+            if self._obs_open and not quiet:
+                self._warn(_("OBS ist offen, aber nicht erreichbar – in OBS unter Werkzeuge → "
+                             "WebSocket-Servereinstellungen den Server aktivieren und Port/Passwort prüfen. ({error})",
+                             error=e))
+            elif self._obs_started and not self._obs_late and time.time() >= self._obs_wait:
+                self._obs_late = True
+                self._warn(_("OBS wurde gestartet, ist aber nicht erreichbar – in OBS unter Werkzeuge → "
+                             "WebSocket-Servereinstellungen den Server aktivieren und Port/Passwort prüfen. ({error})",
+                             error=e))
+            elif not quiet and not self._obs_started:
                 self._warn(_("OBS läuft nicht – die Runden werden nicht aufgenommen. ({error})", error=e))
             return
         self._ready = True

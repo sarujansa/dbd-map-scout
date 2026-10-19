@@ -442,3 +442,14 @@ def test_start_bat_restarts_itself_in_a_folder_with_and_and_percent(tmp_path):
     env = {k: v for k, v in os.environ.items() if k != "DBDMS_AGAIN"}
     subprocess.run([_cmd(), "/c", r".\t.bat", "tray"], cwd=folder, env=env, timeout=60)
     assert _read_when_there(folder / "again.txt", wait=5) == "again tray"
+
+
+def test_the_window_list_and_the_obs_lookup_work_on_windows():
+    """1.8.47: before starting OBS the program looks for an open OBS window (EnumWindows, no process opened) and
+    for obs64.exe (registry, Program Files) – both must run on a real Windows, with or without OBS installed."""
+    from dbdmapscout import capture, obsrec
+    wins = capture.top_windows()
+    assert wins and all(isinstance(t, str) and isinstance(c, str) for t, c in wins)
+    assert isinstance(obsrec.obs_window_open(wins), bool)
+    exe = obsrec.obs_exe()
+    assert exe is None or (os.path.isabs(exe) and exe.endswith(obsrec.OBS_EXE))
