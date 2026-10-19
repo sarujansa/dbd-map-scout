@@ -203,12 +203,24 @@ def flush_dns() -> bool:
         return False
 
 
+# 1.8.45: the helper runs as a standalone elevated script without the program's i18n – it answers in German and
+# names the text with its values; regions.HELPER_TEXTS (same texts) shows them in the UI language
+BAD_NAME = "Ungültiger Servername im Auftrag: {name}"
+CHANGED_AFTER = ("Die hosts-Datei wurde direkt nach dem Schreiben wieder verändert (Virenschutz oder ein anderes "
+                 "Programm?).")
+NO_RIGHTS = "Keine Schreibrechte auf die hosts-Datei (Administratorrechte?)."
+
+
+def _failed(text: str, **args) -> dict:
+    return {"ok": False, "error": text.format(**args), "error_text": text, "error_args": args}
+
+
 def apply_job(job: dict) -> dict:
     """job = {"block": [server names], "allowed": [region codes] (comment only), "remove_foreign": bool}"""
     block = [str(n).lower() for n in job.get("block", [])]
     bad = [n for n in block if n not in MANAGED_SET]
     if bad:
-        return {"ok": False, "error": f"Ungültiger Servername im Auftrag: {bad[0]!r}"}
+        return _failed(BAD_NAME, name=repr(bad[0]))
     allowed = [c for c in job.get("allowed", []) if c in ALL_CODES]
     note = ("allowed: " + ", ".join(allowed)) if allowed else ""
     path = hosts_path()
@@ -228,8 +240,7 @@ def apply_job(job: dict) -> dict:
         if was_ro:
             _set_readonly(path, True)
     if read_text(path) != new:
-        return {"ok": False, "error": "Die hosts-Datei wurde direkt nach dem Schreiben wieder verändert "
-                                      "(Virenschutz oder ein anderes Programm?)."}
+        return _failed(CHANGED_AFTER)
     flushed = flush_dns()
     return {"ok": True, "changed": True, "backup": backup, "dns_flushed": flushed}
 
@@ -243,7 +254,7 @@ def main(argv):
             job = json.load(fh)
         res = apply_job(job)
     except PermissionError:
-        res = {"ok": False, "error": "Keine Schreibrechte auf die hosts-Datei (Administratorrechte?)."}
+        res = _failed(NO_RIGHTS)
     except Exception as e:  # report everything to the program
         res = {"ok": False, "error": f"{type(e).__name__}: {e}"}
     try:

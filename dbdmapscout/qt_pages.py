@@ -41,6 +41,10 @@ SETUP = (
     (N_("Overlay"), (
         ("note", N_("Die Karte erscheint beim Match-Start von selbst und verschwindet nach der Runde. „automatisch“ "
                     "legt sie in den schwarzen Rand neben dem Spielbild (Ultrawide) bzw. neben das DBD-Fenster.")),
+        # 1.8.45: in exclusive fullscreen no window can show above the game – said only in the README before
+        ("note", N_("Wichtig: In DBD unter Einstellungen → Grafik den Anzeigemodus „Fenster-Vollbild“ wählen. Im "
+                    "exklusiven Vollbild kann Windows kein Fenster über dem Spiel zeigen – die Karte bliebe "
+                    "unsichtbar.")),
         ("preview", "ov.preview"),                   # 1.2.19: the live preview of the overlay page here too
         ("row", (("label", "ov.anchor.label"), ("combo", "ov.anchor"), ("stretch",))),
         ("slider", "ov.size"),
