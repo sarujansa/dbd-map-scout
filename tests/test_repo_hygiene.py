@@ -41,3 +41,16 @@ def test_no_tracked_text_file_holds_a_key_or_token():
                 if SECRET.search(line):
                     found.append(f"{p}:{n}")                # the place only, never the value
     assert found == []
+
+
+def test_every_package_is_pinned_to_a_tested_version():
+    """1.8.53 (user: pin the packages): start.bat installs with administrator rights – a new release of a package
+    must never come in by itself, only after it was tested and written here."""
+    loose = []
+    for name in ("requirements.txt", "requirements-extra.txt"):
+        with open(os.path.join(ROOT, name), encoding="utf-8") as fh:
+            for n, line in enumerate(fh, 1):
+                spec = line.split("#", 1)[0].split(";", 1)[0].strip()
+                if spec and not re.fullmatch(r"[A-Za-z0-9_.\-]+==[0-9][0-9A-Za-z.\-]*", spec):
+                    loose.append(f"{name}:{n}: {spec}")
+    assert loose == []
