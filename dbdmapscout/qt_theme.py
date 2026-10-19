@@ -226,6 +226,7 @@ QTabWidget#formtabs[found="true"]::pane {{ border: 1px solid {c['accent']}; }}
 QTabWidget#formtabs QWidget#page {{ background: {c['card']}; }}
 QTabWidget#formtabs > QTabBar::tab {{ font-weight: 600; padding: 8px 16px; }}
 QTabBar::tab {{ background: transparent; color: {c['dim']}; padding: 7px 14px; border: none; }}
+QTabBar[dense="true"]::tab {{ padding: 7px 11px; }}  /* 1.8.46: rows with many tabs (statistics) */
 QTabBar::tab:selected {{ color: {c['accent']}; border-bottom: 2px solid {c['accent']}; }}
 QTabBar::tab:hover:!selected {{ color: {c['fg']}; }}
 QLabel[class="kpi"] {{ font-size: {px(24)}; font-weight: 700; color: {c['head']}; }}

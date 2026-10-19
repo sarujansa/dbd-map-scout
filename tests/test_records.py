@@ -74,3 +74,17 @@ def test_the_tiles_of_the_records_tab(monkeypatch):
     empty = {t.title: t for t in records.tiles([], [])}
     assert set(empty) == {"4K-Serie", "Entkommen-Serie", "Beste Woche als Killer", "Beste Woche als Survivor"}
     assert empty["4K-Serie"].value == "–"
+
+
+def test_fastest_4k_takes_the_pages_time_and_names_the_killer(monkeypatch):
+    """1.8.46: the record "Schnellste 4K" – the page's time in the match when it has one."""
+    monkeypatch.setattr(time, "localtime", lambda t=None: time.gmtime(t))
+    rs = [Round(t=_t(4, 20) + i * 1800, seconds=900, map_id="a", map=m, role="killer", killer=k)
+          for i, (m, k) in enumerate((("Coal Tower", "nurse"), ("Badham", "huntress"), ("Ormond", "nurse")))]
+    ms = [_killer_match(r.t, k) for r, k in zip(rs, (4, 4, 3))]
+    ms[0].seconds, ms[1].seconds, ms[2].seconds = 0, 420, 300        # page time missing on the first: detected 15:00
+    r, _m, seconds = records.fastest_four(list(zip(rs, ms)))
+    assert (r.map, seconds) == ("Badham", 420)                      # the 3K is quicker but no 4K
+    tiles = {t.title: t for t in records.tiles(rs, list(zip(rs, ms)), lambda k: k.title())}
+    assert tiles["Schnellste 4K"].value == "07:00" and tiles["Schnellste 4K"].sub.startswith("Huntress · Badham ·")
+    assert records.fastest_four([]) is None
