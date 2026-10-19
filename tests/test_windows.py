@@ -383,3 +383,62 @@ def test_a_second_start_asks_the_running_copy_for_its_window():
     assert answered == [1]
     assert not restart.ask_running_copy_to_show(name, wait=0.3)          # nobody takes it: "does not answer"
     assert not restart.show_requested(h)                                  # and it was taken back
+
+
+# ------------------------------------------------------------------ 1.8.45: program folder with "&" and "%"
+ODD_FOLDER = "Spiele & Tools 'x' 100%"
+
+
+def _read_when_there(path, wait=30.0):
+    end = time.time() + wait
+    while time.time() < end:
+        try:
+            text = path.read_text().strip()
+        except OSError:
+            text = ""
+        if text:
+            return text
+        time.sleep(0.2)
+    return None
+
+
+def _cmd():
+    return os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "cmd.exe")
+
+
+def test_task_and_restart_start_bat_in_a_folder_with_and_and_percent(tmp_path):
+    """The command lines of the scheduled task and of "Aktualisieren und neu starten", run by the real cmd in a
+    folder whose name holds "&", "'" and "%" – before 1.8.45 the folder was on the command line and cmd split
+    it at "&"."""
+    import re
+    import subprocess
+    from dbdmapscout import autostart, restart
+    folder = tmp_path / ODD_FOLDER
+    folder.mkdir()
+    (folder / "start.bat").write_text('@echo off\r\necho run %*> "%~dp0started.txt"\r\n')
+    marker = folder / "started.txt"
+    arg = re.search(r"-Argument '([^']*)'", autostart.task_script(str(folder), autostart.TASK_AUTO, True)).group(1)
+    subprocess.run(f'"{_cmd()}" {arg}', cwd=folder, timeout=60)      # as the task runs it: cmd.exe + argument
+    assert _read_when_there(marker) == "run tray"
+    marker.unlink()
+    subprocess.run(restart.start_command(), cwd=folder, timeout=60)
+    assert _read_when_there(marker) == "run"
+
+
+def test_start_bat_restarts_itself_in_a_folder_with_and_and_percent(tmp_path):
+    """start.bat's restart after an update (same line, see CLAUDE.md) – the very fragment of start.bat, in a
+    folder with "&", "'" and "%"."""
+    import re
+    import subprocess
+    with open(os.path.join(ROOT, "start.bat"), encoding="ascii") as fh:
+        line = next(t for t in fh if "DBDMS_UPDATED=1" in t)
+    again = re.search(r'cmd /c "[^&]*" %\*"', line).group(0)
+    folder = tmp_path / ODD_FOLDER
+    folder.mkdir()
+    (folder / "t.bat").write_text(
+        '@echo off\r\nsetlocal\r\ncd /d "%~dp0"\r\n'
+        'if defined DBDMS_AGAIN (echo again %*> "%~dp0again.txt"& exit /b 0)\r\n'
+        f'set "DBDMS_AGAIN=1" & {again} & exit /b\r\n')
+    env = {k: v for k, v in os.environ.items() if k != "DBDMS_AGAIN"}
+    subprocess.run([_cmd(), "/c", r".\t.bat", "tray"], cwd=folder, env=env, timeout=60)
+    assert _read_when_there(folder / "again.txt", wait=5) == "again tray"

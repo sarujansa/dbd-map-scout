@@ -93,6 +93,27 @@ def test_helper_only_touches_gamelift_names(tmp_path, monkeypatch):
     assert again["ok"] and not again["changed"]                   # identical re-apply: nothing written
 
 
+def test_the_helpers_errors_show_in_the_ui_language():
+    """1.8.45: the elevated helper has no i18n – it answers in German and names its text; the program shows it in
+    the UI language (before, the English UI showed these errors in German)."""
+    import json
+    from dbdmapscout import i18n
+    assert set(regions.HELPER_TEXTS) == {hostsedit.BAD_NAME, hostsedit.CHANGED_AFTER, hostsedit.NO_RIGHTS}
+    res = json.loads(json.dumps(hostsedit.apply_job({"block": ["update.microsoft.com"]})))   # as in the result file
+    assert res["error"] == "Ungültiger Servername im Auftrag: 'update.microsoft.com'"
+    try:
+        i18n.set_language("en")
+        assert regions.helper_result(res)["error"] == "Invalid server name in the job: 'update.microsoft.com'"
+        assert regions.helper_result(json.loads(json.dumps(hostsedit._failed(hostsedit.NO_RIGHTS))))["error"] == \
+            "No permission to write the hosts file (administrator rights?)."
+        other = {"ok": False, "error": "OSError: x", "error_text": "fremd {x}", "error_args": {}}
+        assert regions.helper_result(other)["error"] == "OSError: x"          # not one of ours: as it came
+        assert regions.helper_result([1])["ok"] is False                      # a broken result file
+    finally:
+        i18n.set_language("de")
+    assert regions.helper_result(res)["error"] == res["error"]
+
+
 def test_odd_bytes_and_missing_end_marker_keep_other_lines():
     text = "1.2.3.4 caf\x85e.local\r\n# --+ Make Your Choice +--\n0.0.0.0 gamelift.us-east-1.amazonaws.com\n" \
            "\n192.168.1.5 printer.local\r\n"
