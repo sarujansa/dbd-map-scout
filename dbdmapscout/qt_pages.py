@@ -1239,6 +1239,77 @@ class DialogWindow(QDialog):
         super().done(r)
 
 
+class MessageBox(QDialog):
+    """1.8.44: a note, an error or an OK/Cancel question (App._ask/_inform) as a small window of its own that has
+    to be answered (user: instead of the bar at the top of the window). Application-modal, but opened with show(),
+    never exec(): no second message loop, the timers keep running. OK -> post("answer", True); Cancel, Esc and X
+    -> post("answer", False) (a note has nothing to run, so that is its OK too)."""
+
+    WIDTH = 460
+
+    def __init__(self, parent, post):
+        super().__init__(parent)
+        self._post = post
+        self._open = False                        # shown and not answered yet
+        self.setObjectName("message")
+        self.setWindowTitle("DbD Map Scout")
+        self.setWindowModality(Qt.ApplicationModal)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(22, 18, 22, 16)
+        lay.setSpacing(10)
+        self.heading = _label(cls="big", wrap=True)
+        self.heading.setTextFormat(Qt.PlainText)
+        self.text = _label(wrap=True)
+        self.text.setTextFormat(Qt.PlainText)
+        self.text.setTextInteractionFlags(Qt.TextSelectableByMouse)      # an error can be copied
+        lay.addWidget(self.heading)
+        lay.addWidget(self.text)
+        row = QHBoxLayout()
+        row.addStretch(1)
+        self.ok = QPushButton(_("OK"))
+        self.ok.setObjectName("primary")
+        self.ok.setDefault(True)
+        self.ok.clicked.connect(lambda: self._answer(True))
+        self.cancel = QPushButton(_("Abbrechen"))
+        self.cancel.clicked.connect(lambda: self._answer(False))
+        row.addWidget(self.ok)
+        row.addWidget(self.cancel)
+        lay.addSpacing(6)
+        lay.addLayout(row)
+        self.setFixedWidth(self.WIDTH)
+
+    def ask(self, title: str, text: str, ask: bool, activate: bool = True):
+        """Show it; ``activate`` False = without taking the focus (DBD in front)."""
+        self.heading.setText(title)
+        self.text.setText(text)
+        self.cancel.setVisible(ask)
+        self._open = True
+        self.setAttribute(Qt.WA_ShowWithoutActivating, not activate)
+        self.adjustSize()
+        self.show()
+        self.raise_()
+        if activate:
+            self.activateWindow()
+            self.ok.setFocus()
+
+    def withdraw(self):
+        """The program took the question back: closed without an answer."""
+        self._open = False
+        self.hide()
+
+    def _answer(self, ok: bool):
+        if self._open:
+            self._open = False
+            self._post("answer", ok)
+        self.hide()
+
+    def done(self, r):                            # Esc / X
+        if self._open:
+            self._open = False
+            self._post("answer", False)
+        super().done(r)
+
+
 class SetupPage(QWidget):
     """The setup assistant (first start, or "Einrichtung starten" in the settings): SETUP's steps one at a time,
     "Zurück" / "Weiter" / "Fertig" and "Überspringen". Done or skipped: post("setup_done")."""
