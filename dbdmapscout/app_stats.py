@@ -974,6 +974,18 @@ class StatsTab:
                                   farming=bool(self._hist.get("farming"))      # 1.4.2: goes first when room is needed
                                   and not self._hist.get("custom"))
 
+    def _hist_follow(self, map_id, label):
+        """1.8.39 (QA audit): the map on display changed while a round is open – a later banner frame read the other
+        layout (Coal Tower I → II), or the user corrected it (layout button, a map picked). Before, the round and
+        its recording kept the first reading; now both follow, without a new round or a new recording."""
+        rec = self._hist
+        if rec is None or (rec.get("map_id"), rec.get("map")) == (map_id, label):
+            return
+        old = rec.get("map")
+        rec.update(map_id=map_id, map=label)
+        self.recorder.relabel(map_id=map_id, label=label)
+        self._log(_("Runde gilt jetzt für {map} (vorher {old}).", map=label, old=old), "Erkennung")
+
     def _hist_close(self, t, role=None):
         rec, self._hist = self._hist, None
         farm_region = self.settings.get("farming_region") or None       # 1.5.3: the region counts as farming too
