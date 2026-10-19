@@ -347,9 +347,12 @@ def test_the_thread_logs_in_reads_the_queue_refreshes_and_forgets_a_dead_token(f
         n_tok = len(fake.tokens)
         fake.mode = "ok"
         fake.tokens.append("expired-now")          # the fake expects the newest token: ours is now wrong -> 401
-        assert _wait(lambda: len(fake.tokens) > n_tok + 1 and link.state == "linked")
+        # the fake hands out the new refresh token before the thread has stored it (on Windows encrypted with
+        # DPAPI first) – wait for the stored one, not only for the hand-out (failed once on the Windows runner)
+        assert _wait(lambda: len(fake.tokens) > n_tok + 1 and link.state == "linked"
+                     and fake.refreshes[-1] in _saved(events))
         assert fake.grants[-1][0] == "refresh_token"
-        assert events[-1] != ("token", "") and fake.refreshes[-1] in _saved(events)
+        assert events[-1] != ("token", "")
         # too many requests: it waits and comes back
         fake.mode = "429"
         link.kick()
