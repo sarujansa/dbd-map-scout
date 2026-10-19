@@ -128,3 +128,37 @@ def test_quitting_runs_every_step_even_when_one_raises(app):
     app.quit()
     assert calls == ["save", "recorder", ("join", 8)]
     assert not app.worker.is_alive()
+
+
+def _detected(map_id, variant, p=0.9):
+    return worker.Event("detected", {"map_id": map_id, "variant": variant, "probability": p,
+                                     "variant_probability": p, "name_text": "COAL TOWER", "realm_text": "MACMILLAN"})
+
+
+def test_the_round_follows_the_layout_read_later_in_the_same_banner(app):
+    """1.8.39 (QA audit): later frames of one banner may decide another layout (Coal Tower I → II) – the overlay
+    switched, but the round and its recording kept the first reading; a correction with the layout button too."""
+    relabels = []
+    app.recorder.relabel = lambda **meta: relabels.append(meta)
+    starts = []
+    app.recorder.start_round = lambda **meta: starts.append(meta)
+    app._dispatch(_detected("coal-tower", 1))
+    assert app._hist["map"] == "Coal Tower I" and len(starts) == 1
+    t0 = app._hist["t"]
+    app._dispatch(_detected("coal-tower", 2))                  # 3 frames later: the other layout
+    assert app.current == ("coal-tower", 2)
+    assert app._hist["map"] == "Coal Tower II" and app._hist["t"] == t0       # the same round, renamed
+    assert relabels == [{"map_id": "coal-tower", "label": "Coal Tower II"}] and len(starts) == 1   # no new recording
+    app.next_variant()                                         # the user: no, it was I
+    assert app._hist["map"] == "Coal Tower I" and relabels[-1]["label"] == "Coal Tower I"
+    app._dispatch(_detected("coal-tower", 1))                  # the same again: nothing to rename
+    assert len(relabels) == 2
+
+
+def test_a_map_shown_after_the_round_ended_does_not_rename_it(app):
+    app.recorder.relabel = lambda **meta: pytest.fail("renamed a closed round")
+    app.recorder.start_round = app.recorder.stop_round = lambda **meta: None
+    app._dispatch(_detected("coal-tower", 1))
+    app._dispatch(worker.Event("match_end", {"t": time.time() + 300, "reason": "Ergebnisbildschirm"}))
+    assert app._hist is None
+    app.next_variant()                                         # looking at the other layout in the lobby

@@ -897,6 +897,11 @@ class Recorder(threading.Thread):
     def start_round(self, **meta):
         self.cmds.put(("start", meta))
 
+    def relabel(self, **meta):
+        """1.8.39: the round on record is another map/layout (later banner frames, the user's correction): the
+        running recording takes its name and map from ``meta`` (map_id, label) – nothing restarts."""
+        self.cmds.put(("relabel", meta))
+
     def start_early(self, **meta):
         """1.6: the loading screen ended – record from the spawn on; the banner (start_round) names the round."""
         self.cmds.put(("early", meta))
@@ -982,6 +987,9 @@ class Recorder(threading.Thread):
                     self._begin(arg)
                 elif cmd == "early":
                     self._begin_early(arg)
+                elif cmd == "relabel":
+                    if self.active is not None:
+                        self.active.update({k: v for k, v in arg.items() if k in ("map_id", "label") and v})
                 elif cmd == "clip":
                     self._instant_clip(arg)
                 elif cmd == "audio":
