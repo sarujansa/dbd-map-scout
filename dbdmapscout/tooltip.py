@@ -211,6 +211,8 @@ TIPS = {
         "zeigt (in der Vorschau schraffiert). Das Programm liest nichts aus Discord – die Flächen sind fest.",
     "Grenzen zurücksetzen": "Setzt alle vier Linien auf 8 % vom Rand zurück.",
     "Clip abspielen": "Spielt den markierten Clip im Standard-Player von Windows ab.",
+    "Clip im Editor öffnen …": "Öffnet den markierten Clip (auch Sofort-Clips von F8) im Clip-Editor: kürzen, "
+                               "zensieren, Ton mischen. Gespeichert wird ein neuer Clip, der alte bleibt.",
     "Clip im Explorer zeigen": "Öffnet den Explorer mit dem markierten Clip.",
     "Clip löschen": "Löscht den markierten Clip von der Platte – nach Rückfrage. Nur Dateien, die das Programm "
                     "selbst angelegt hat.",

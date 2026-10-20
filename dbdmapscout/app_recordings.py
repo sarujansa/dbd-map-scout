@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import subprocess
 import time
+from types import SimpleNamespace
 
 from . import history, obsrec, uimodel as ui
 from .app_stats import STATS_PERIODS
@@ -63,6 +64,7 @@ class RecordingsTab:
         self.rec_nb.pack(fill="both", expand=True, pady=(8, 0))
         rp = ui.Frame(self.rec_nb, padding=6)
         self.rec_nb.add(rp, text=_("Runden"))
+        self.rec_rounds_tab = rp
         cp = ui.Frame(self.rec_nb, padding=6)
         self.rec_nb.add(cp, text=_("Clips"))
         f = rp
@@ -167,6 +169,9 @@ class RecordingsTab:
         row.pack(fill="x", pady=(0, 6))
         self.clip_play_btn = ui.Button(row, text=_("Clip abspielen"), command=self._clip_play, state="disabled")
         self.clip_play_btn.pack(side="left")
+        self.clip_edit_btn = ui.Button(row, text=_("Clip im Editor öffnen …"), command=self._clip_edit,
+                                       state="disabled")                   # 1.8.60
+        self.clip_edit_btn.pack(side="left", padx=(6, 0))
         self.clip_show_btn = ui.Button(row, text=_("Clip im Explorer zeigen"), command=self._clip_explorer,
                                        state="disabled")
         self.clip_show_btn.pack(side="left", padx=(6, 0))
@@ -338,15 +343,20 @@ class RecordingsTab:
         state = "normal" if self._clip_selected() is not None else "disabled"
         for b in (self.clip_play_btn, self.clip_show_btn, self.clip_delete_btn):
             b.configure(state=state)
+        c = self._clip_selected()
+        self.clip_edit_btn.configure(state="normal" if c is not None and c.kind != "still" else "disabled")
 
     def _clip_menu_items(self):
         if self._clip_selected() is None:
             return []
-        return [("play", _("Abspielen"), True), ("explorer", _("Im Explorer zeigen"), True), None,
-                ("delete", _("Clip löschen"), True)]
+        c = self._clip_selected()
+        return [("play", _("Abspielen"), True), ("edit", _("Im Editor öffnen …"), c.kind != "still"),
+                ("explorer", _("Im Explorer zeigen"), True), ("copy", _("Datei kopieren (zum Einfügen)"), True),
+                ("round", _("Zur Runde springen"), bool(c.source)), None, ("delete", _("Clip löschen"), True)]
 
     def _clip_menu_act(self, ident):
-        act = {"play": self._clip_play, "explorer": self._clip_explorer, "delete": self._clip_delete}.get(ident)
+        act = {"play": self._clip_play, "edit": self._clip_edit, "explorer": self._clip_explorer,
+               "copy": self._clip_copy, "round": self._clip_round_show, "delete": self._clip_delete}.get(ident)
         if act is not None:
             act()
 
@@ -358,6 +368,61 @@ class RecordingsTab:
             self._log(_("Clip fehlt: {file}", file=os.path.basename(path)), "Fehler")
             return
         self._open(path)
+
+    def _clip_edit(self):
+        """1.8.60 (user: "Clip soll auch bearbeitbar sein"): a clip – editor clip or F8 instant clip – opens in the
+        same editor as a recording. What it saves is a new clip of the round the clip came from; the clip itself
+        stays as it is."""
+        c = self._clip_selected()
+        path = self._clip_path(c)
+        if path is None or c.kind == "still":
+            return
+        if not os.path.exists(path):
+            self._log(_("Clip fehlt: {file}", file=c.file), "Fehler")
+            return
+        if obsrec.ffmpeg_exe() is None:
+            self._log(_("ffmpeg fehlt (Paket imageio-ffmpeg) – start.bat installiert es beim nächsten Start."),
+                      "Fehler")
+            return
+        win = self._clip_window(clip_round(c, obsrec.load_index(self.recorder.folder())), path)
+        self._clip_windows = [w for w in self._clip_windows if w.isVisible()] + [win]
+        win.show()
+        win.raise_()
+        win.activateWindow()
+
+    def _copy_file(self, path, name):
+        """1.8.60: the file onto the clipboard – Ctrl+V in Discord or Explorer pastes it."""
+        if path is None:
+            return
+        if not os.path.exists(path):
+            self._log(_("Datei fehlt: {file}", file=name), "Fehler")
+            return
+        self.root.clipboard_files([path])
+        self._log(_("{file} kopiert – mit Strg+V z. B. in Discord einfügen.", file=os.path.basename(path)), "System")
+
+    def _clip_copy(self):
+        c = self._clip_selected()
+        if c is not None:
+            self._copy_file(self._clip_path(c), c.file)
+
+    def _clip_round_show(self):
+        """1.8.60: from a clip to the recording of its round – sub-tab Runden, filters opened up if they hide it."""
+        c = self._clip_selected()
+        if c is None or not c.source:
+            return
+        iid = repr(c.source)
+        if not self.rec_table.exists(iid):
+            for var, opts in ((self.rec_period_var, self._rec_periods), (self.rec_map_var, self._rec_maps),
+                              (self.rec_role_var, self._rec_roles), (self.rec_only_var, self._rec_onlys)):
+                var.set(opts[0][1])
+            self._rec_render()
+        if not self.rec_table.exists(iid):
+            self._log(_("Die Aufnahme dieser Runde gibt es nicht mehr."), "System")
+            return
+        self.rec_nb.select(self.rec_rounds_tab)
+        self.rec_table.selection_set(iid)
+        self.rec_table.see(iid)
+        self._rec_buttons()
 
     def _clip_explorer(self):
         path = self._clip_path(self._clip_selected())
@@ -431,13 +496,14 @@ class RecordingsTab:
         if r is None:
             return []
         return [("play", _("Abspielen"), True), ("clip", _("Clip bearbeiten …"), True),
-                ("explorer", _("Im Explorer zeigen"), True), None,
-                ("keep", _("Behalten"), True, bool(r.keep)), None,
-                ("delete", _("Aufnahme löschen"), True)]
+                ("explorer", _("Im Explorer zeigen"), True), ("copy", _("Datei kopieren (zum Einfügen)"), True), None,
+                ("keep", _("Behalten"), True, bool(r.keep)), ("farming", _("Farming-Runde"), True, bool(r.farming)),
+                None, ("delete", _("Aufnahme löschen"), True)]
 
     def _rec_menu_act(self, ident):
         act = {"play": self._rec_play, "clip": self._rec_clip, "explorer": self._rec_explorer,
-               "keep": self._rec_keep, "delete": self._rec_delete}.get(ident)
+               "copy": self._rec_copy, "keep": self._rec_keep, "farming": self._rec_farming,
+               "delete": self._rec_delete}.get(ident)
         if act is not None:
             act()
 
@@ -480,6 +546,19 @@ class RecordingsTab:
         r = self._rec_selected()
         if r is not None:
             self.recorder.set_keep(r.t, not r.keep)
+
+    def _rec_copy(self):
+        r = self._rec_selected()
+        if r is not None:
+            self._copy_file(self._rec_path(r), r.file)
+
+    def _rec_farming(self):
+        """1.8.60: the round of the recording as a farming round (or not) – the same as in Statistik → Letzte
+        Runden: the statistics and the recording's folder follow."""
+        r = self._rec_selected()
+        if r is not None:
+            self._stats_toggle_farming([r.t])
+            self._rec_dirty = True
 
     def _rec_delete(self):
         r = self._rec_selected()
@@ -589,3 +668,12 @@ class RecordingsTab:
         if d.get("what") == "keep":
             self._log(_("Aufnahme wird behalten: {file}", file=d.get("file", "")) if d.get("on")
                       else _("Aufnahme wird nicht mehr behalten: {file}", file=d.get("file", "")), "System")
+
+
+def clip_round(c, recs) -> SimpleNamespace:
+    """1.8.60: what the clip editor needs of a round, for clip ``c``: the round it came from (``c.source``), its
+    map/role/killer, the sources OBS had on their own tracks then (from the recording, if still in ``recs``).
+    No marks – they count from the start of the recording, not of the clip."""
+    rec = next((r for r in recs if c.source and r.t == c.source), None)
+    return SimpleNamespace(t=c.source, marks=[], extra={"sources": (rec.extra or {}).get("sources")} if rec else {},
+                           map_id=c.map_id, label=c.label, role=c.role, killer=c.killer, farming=c.farming)

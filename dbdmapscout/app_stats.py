@@ -910,10 +910,11 @@ class StatsTab:
             self._log(_("Rolle für {n} Runden auf {role} geändert.", n=len(done), role=name), "System")
         self._stats_render()
 
-    def _stats_toggle_farming(self):
-        """1.2.20: mark / unmark the rounds marked in "Letzte Runden" as farming rounds – all of them become
-        farming unless every one already is (then all become normal). The recording follows (1.5.4)."""
-        ts = self._stats_selected_ts()
+    def _stats_toggle_farming(self, ts=None):
+        """1.2.20: mark / unmark the rounds marked in "Letzte Runden" (or the rounds ``ts``, 1.8.60: a recording's
+        right click) as farming rounds – all of them become farming unless every one already is (then all become
+        normal). The recording follows (1.5.4)."""
+        ts = ts or self._stats_selected_ts()
         if not ts:
             return
         rounds = {r.t: r for r in history.load(self._hist_path())}
