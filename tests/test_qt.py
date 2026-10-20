@@ -1054,7 +1054,32 @@ def test_today_rows_for_the_black_bar():
               history.Round(history.period_start("day", now) - 3600, 600, "coal", "Coal Tower", role="killer")]
     rows = today_rows(SimpleNamespace(rounds=rounds, off={}), now)
     text = ["".join(t for t, _c in row) for row in rows]
-    assert text == ["HEUTE 1 RUNDEN · 10:00"]                 # yesterday's round does not count
+    assert text == ["HEUTE 1 RUNDEN · 10:00", "NORMAL 1"]     # yesterday's round does not count
+
+
+def test_today_tells_normal_and_farming_rounds_apart():
+    """1.8.56 (user): normal rounds with their escape rate and count, farming rounds (cross-play off) with their
+    count and Ø bloodpoints – in the card "today" and on the overview page."""
+    from dbdmapscout import official
+    from dbdmapscout.app_sysinfo import today_rows
+    now = time.time()
+    day = history.period_start("day", now)
+    rs = [history.Round(day + 60 * i, 600, "coal", "Coal Tower", role="survivor") for i in range(4)] \
+        + [history.Round(day + 600 + 60 * i, 600, "coal", "Coal Tower", role="killer", farming=True) for i in range(2)]
+    off = {id(rs[0]): official.Match(day, "Coal Tower", role="survivor", status="ESCAPED", bp=20000),
+           id(rs[1]): official.Match(day, "Coal Tower", role="survivor", status="SACRIFICED", bp=10000),
+           id(rs[4]): official.Match(day, "Coal Tower", role="killer", bp=30000),
+           id(rs[5]): official.Match(day, "Coal Tower", role="killer", bp=40000)}
+    j = SimpleNamespace(rounds=rs, off=off, matches=list(off.values()))
+    text = ["".join(t for t, _c in row) for row in today_rows(j, now)]
+    assert text == ["HEUTE 6 RUNDEN · 1:00:00", "NORMAL 4 · ENTKOMMEN 50%", "FARMING 2 · Ø BP 35k"]
+    only_normal = SimpleNamespace(rounds=rs[2:4], off={}, matches=[])
+    assert ["".join(t for t, _c in row) for row in today_rows(only_normal, now)][1:] == ["NORMAL 2"]
+    app = SimpleNamespace(_joined=lambda: j, settings={})
+    facts, _note = overview.today(app, now)
+    farm = [f for f in facts if f.title == "Farming"]
+    assert farm and farm[0].value == "35k" and farm[0].sub.startswith("2 Farming-Runden")
+    assert [f for f in facts if f.title == "Entkommen"][0].sub == "2 Survivor-Runden · 4 normal"
 
 
 def test_old_oled_theme_becomes_the_switch(tmp_path):

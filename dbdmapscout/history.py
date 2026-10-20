@@ -185,13 +185,18 @@ def summary(rounds) -> dict:
 
 def today(rounds, now: float) -> dict:
     """Today at a glance (calendar day, all filters off): rounds, killer/survivor, play time, average wait,
-    most played killer, median ping."""
-    rs = select(rounds, since=period_start("day", now))
+    most played killer, median ping; 1.8.56 ``normal`` / ``farming`` = public rounds / farming rounds (cross-play
+    off) apart."""
+    since = period_start("day", now)
+    farming = select(rounds, since=since, role="farming")     # 1.8.56: select() leaves them out otherwise
+    rs = select(rounds, since=since)
     waits = [r.wait for r in rs if r.wait is not None and normal(r)]
     killers = killers_used(rs)
-    return {"count": len(rs), "total": sum(r.seconds for r in rs),
+    return {"count": len(rs) + len(farming), "total": sum(r.seconds for r in rs + farming),
             "killer": sum(1 for r in rs if r.role == "killer" and normal(r)),
             "survivor": sum(1 for r in rs if r.role == "survivor" and normal(r)),
+            "normal": sum(1 for r in rs if normal(r)),
+            "farming": len(farming),
             "wait": sum(waits) / len(waits) if waits else None,
             "top_killer": killers[0] if killers else "",
             "ping": median([r.ping for r in rs if r.ping is not None])}
