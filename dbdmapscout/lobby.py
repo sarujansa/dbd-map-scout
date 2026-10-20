@@ -51,7 +51,8 @@ KILLERS = ("The Trapper", "The Wraith", "The Hillbilly", "The Nurse", "The Shape
 # killer is confirmed (official news / wiki); anything else the user assigns once in the statistics.
 SKINS = {"Murderous Grizzly": "The Oni", "The Minotaur": "The Oni", "Ferryman of the Underworld": "The Blight",
          "Naughty Bear": "The Trapper", "Frank Stone": "The Trapper", "Were-Elk": "The Huntress",
-         "Hunk": "The Legion", "William Afton": "The Animatronic"}
+         "Hunk": "The Legion", "William Afton": "The Animatronic",
+         "Lilith": "The Artist", "Belial": "The Dredge", "Mephisto": "The Nurse"}   # 1.8.58: Diablo collection
 KILLER_OK = -3.0          # listed killers fit about +1, a killer missing from the list -22 and worse
 FUZZY_OK, FUZZY_GAP = 0.88, 0.12   # text as read vs a listed name (without "The"): this alike, and clearly the best
 KILLER_CATEGORIES = ("BRUTALITY", "DEVIOUSNESS", "HUNTER", "SACRIFICE")
