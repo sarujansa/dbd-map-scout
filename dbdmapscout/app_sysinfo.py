@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 import time
 
-from . import history, layout, media, official, qt_theme, skin, spotify, sysinfo
+from . import dashboard, history, layout, media, official, qt_theme, skin, spotify, sysinfo
 from .capture import IS_WIN
 from .i18n import N_, _
 from .textnorm import fmt_duration
@@ -27,19 +27,28 @@ HUD_ROW_LABELS = [("cpu", N_("Zeile CPU (Temperatur, Last)")), ("gpu", N_("Zeile
 
 
 def today_rows(j, now: float) -> list:
-    """HUD rows of today (pure apart from the clock): [[(text, colour), ...], ...]."""
+    """HUD rows of today (pure apart from the clock): [[(text, colour), ...], ...]. 1.8.56 (user: tell normal and
+    farming rounds apart): normal rounds with their escape rate (and Ø kills), farming rounds with their Ø
+    bloodpoints – each only when played today."""
     d = history.today(j.rounds, now)
     day = history.period_start("day", now)
-    s = official.summary([j.off[id(r)] for r in j.rounds if r.t >= day and id(r) in j.off and history.normal(r)])   # 1.8.36: farming out too
+    mine = [r for r in j.rounds if r.t >= day and id(r) in j.off]
+    s = official.summary([j.off[id(r)] for r in mine if history.normal(r)])   # 1.8.36: farming out too
+    f = official.summary([j.off[id(r)] for r in mine if r.farming and not r.custom])
     rows = [[(_("HEUTE "), sysinfo.DIM),
              (_("{n} RUNDEN · {time}", n=d["count"], time=fmt_duration(d["total"])), sysinfo.WHITE)]]
-    res = []
-    if s["killer"]:
-        res += [(_("Ø KILLS "), sysinfo.DIM), (f"{s['kills']:.1f}", sysinfo.WHITE)]
-    if s["survivor"]:
-        res += ([(" · ", sysinfo.DIM)] if res else []) + [(_("ENTKOMMEN "), sysinfo.DIM),
-                                                         (f"{s['escaped']:.0%}", sysinfo.WHITE)]
-    if res:
+    if d["normal"]:
+        res = [(_("NORMAL "), sysinfo.DIM), (str(d["normal"]), sysinfo.WHITE)]
+        if s["survivor"]:
+            res += [(" · ", sysinfo.DIM), (_("ENTKOMMEN "), sysinfo.DIM), (f"{s['escaped']:.0%}", sysinfo.WHITE)]
+        if s["killer"]:
+            res += [(" · ", sysinfo.DIM), (_("Ø KILLS "), sysinfo.DIM), (f"{s['kills']:.1f}", sysinfo.WHITE)]
+        rows.append(res)
+    if d["farming"]:
+        res = [(_("FARMING "), sysinfo.DIM), (str(d["farming"]), sysinfo.WHITE)]
+        if f["bp_matches"]:
+            res += [(" · ", sysinfo.DIM), (_("Ø BP "), sysinfo.DIM),
+                    (dashboard._bp(f["bp"] / f["bp_matches"]), sysinfo.WHITE)]
         rows.append(res)
     return rows
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 
-from . import history, obsrec, official, sysinfo, theme
+from . import dashboard, history, obsrec, official, sysinfo, theme
 from .connwatch import UNKNOWN, region_name
 from .i18n import _
 from .lobby import killer_label
@@ -121,9 +121,15 @@ def today(app, now: float) -> tuple[list, str]:
     j = app._joined()
     d = history.today(j.rounds, now)
     day = history.period_start("day", now)
-    s = official.summary([j.off[id(r)] for r in j.rounds if r.t >= day and id(r) in j.off and history.normal(r)])
+    mine = [r for r in j.rounds if r.t >= day and id(r) in j.off]
+    s = official.summary([j.off[id(r)] for r in mine if history.normal(r)])
     rounds = Fact(_("Runden"), str(d["count"]),
                   _("{k} Killer / {s} Survivor", k=d["killer"], s=d["survivor"]) if d["count"] else "")
+    farm = None
+    if d["farming"]:                           # 1.8.56: farming rounds apart, with their Ø bloodpoints
+        f = official.summary([j.off[id(r)] for r in mine if r.farming and not r.custom])
+        farm = Fact(_("Farming"), dashboard._bp(f["bp"] / f["bp_matches"]) if f["bp_matches"] else "–",
+                    _("{n} Farming-Runden · Ø BP", n=d["farming"]))
     if s["killer"]:
         kills = Fact(_("Ø Kills"), _num(s["kills"]), _("4K: {n} von {total}", n=s["four"], total=s["killer"]),
                      frac=s["kills"] / 4)
@@ -133,7 +139,8 @@ def today(app, now: float) -> tuple[list, str]:
         kills = Fact(_("Ø Kills"), sub=_("Kills und Entkommen kommen von der Stats-Seite"),
                      action="official_setup", action_label=_("Match-Daten einrichten …"))
     if s["survivor"]:
-        esc = Fact(_("Entkommen"), f"{s['escaped']:.0%}", _("{n} Survivor-Runden", n=s["survivor"]),
+        esc = Fact(_("Entkommen"), f"{s['escaped']:.0%}",
+                   _("{n} Survivor-Runden", n=s["survivor"]) + " · " + _("{n} normal", n=d["normal"]),
                    frac=s["escaped"])
     else:
         esc = Fact(_("Entkommen"), sub=_("noch keine Stats-Daten"))
@@ -141,7 +148,7 @@ def today(app, now: float) -> tuple[list, str]:
                 _("Ping {ms} ms", ms=f"{d['ping']:.0f}") if d["ping"] is not None else "")
     note = _("Spielzeit heute: {time}", time=fmt_duration(d["total"])) if d["count"] else ""
     rec = recordings(app)
-    return [rounds, kills, esc, wait] + ([rec] if rec else []), note
+    return [rounds, kills, esc] + ([farm] if farm else []) + [wait] + ([rec] if rec else []), note
 
 
 def _gb(n: float) -> str:
