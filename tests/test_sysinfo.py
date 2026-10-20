@@ -30,7 +30,7 @@ def _hwinfo(readings, poll=1000, sig=0x53695748, sensors=()):
     return head + body
 
 
-NONE = {"cpu_power": None, "core_max": None, "cpu_throttle": "", "fps": None}
+NONE = {"cpu_power": None, "core_max": None, "cpu_throttle": "", "fps": None, "fps_rows": ()}
 
 
 def test_hwinfo_picks_cpu_package_and_gpu_temperature():
@@ -271,6 +271,12 @@ def test_frame_rate_from_hwinfo_and_the_slowest_seconds_of_a_round():
             (8, "Frame Time", "ms", 7.0)]
     assert sysinfo.parse_hwinfo(_hwinfo(rows), now=1000)["fps"] == 143.5
     assert sysinfo.parse_hwinfo(_hwinfo([(8, "Framerate", "FPS", 0.0)]), now=1000)["fps"] is None
+    # 1.8.59 (user: FPS always empty): another label for the frame rate counts, lows / times never; every frame
+    # reading is kept for the diagnosis
+    other = [(8, "Framerate 1% Low", "FPS", 60.0), (8, "Frame Time", "ms", 8.0), (8, "FPS", "FPS", 120.0)]
+    hw = sysinfo.parse_hwinfo(_hwinfo(other), now=1000)
+    assert hw["fps"] == 120.0 and hw["fps_rows"] == ("Framerate 1% Low=60", "Frame Time=8", "FPS=120")
+    assert sysinfo.parse_hwinfo(_hwinfo(other[:2] + rows[1:]), now=1000)["fps"] == 143.5     # the listed one first
     rec = SysRecorder()
     for i in range(200):
         rec.add(Snapshot(t=i + 1, fps=40.0 if i < 2 else 140.0 if i % 2 else None))
