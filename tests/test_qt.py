@@ -1082,6 +1082,36 @@ def test_today_tells_normal_and_farming_rounds_apart():
     assert [f for f in facts if f.title == "Entkommen"][0].sub == "2 Survivor-Runden · 4 normal"
 
 
+def test_today_follows_what_is_played_now():
+    """1.8.57 (user): while farming the card shows only farming, else only normal – the open round decides, then
+    the lobby / search with cross-play read, then the last round; the row stays even with no round of that kind."""
+    from dbdmapscout.app_sysinfo import today_mode, today_rows
+    from dbdmapscout.lobby import Found
+    now = time.time()
+    day = history.period_start("day", now)
+    normal = history.Round(day + 60, 600, "coal", "Coal Tower", role="survivor")
+    farm = history.Round(day + 900, 600, "coal", "Coal Tower", role="killer", farming=True)
+    idle = {"state": "idle"}
+    assert today_mode(None, idle, None, True) == "normal"
+    assert today_mode(None, idle, farm, True) == "farming"                  # between rounds: the last one
+    assert today_mode(None, idle, farm, False) == "normal"                  # setting off: never farming
+    assert today_mode({"farming": False}, idle, farm, True) == "normal"     # the open round decides
+    assert today_mode({"farming": True, "custom": True}, idle, normal, True) == "farming"   # instant lobby
+    lobby = {"state": "lobby", "found": Found(t=now, wait=None, role="killer", killer="", custom=True,
+                                              crossplay_off=True)}
+    assert today_mode(None, lobby, normal, True) == "farming"               # cross-play off in the new lobby
+    unread = {"state": "lobby", "found": Found(t=now, wait=None, role="killer", killer="", crossplay_off=None)}
+    assert today_mode(None, unread, farm, True) == "farming"                # unread: the last round still
+    assert today_mode(None, {"state": "search", "crossplay_off": False}, farm, True) == "normal"
+    j = SimpleNamespace(rounds=[normal, farm], off={})
+    text = lambda mode: ["".join(t for t, _c in row) for row in today_rows(j, now, mode)]
+    assert text("farming") == ["HEUTE 2 RUNDEN · 20:00", "FARMING 1"]
+    assert text("normal") == ["HEUTE 2 RUNDEN · 20:00", "NORMAL 1"]
+    assert text(None)[1:] == ["NORMAL 1", "FARMING 1"]
+    assert ["".join(t for t, _c in row) for row in today_rows(SimpleNamespace(rounds=[normal], off={}), now,
+                                                               "farming")][1:] == ["FARMING 0"]
+
+
 def test_old_oled_theme_becomes_the_switch(tmp_path):
     """1.62.0 had OLED as a theme: it becomes gold + the OLED switch (1.62.1)."""
     import json

@@ -26,25 +26,44 @@ HUD_ROW_LABELS = [("cpu", N_("Zeile CPU (Temperatur, Last)")), ("gpu", N_("Zeile
                   ("ram", N_("Zeile RAM"))]
 
 
-def today_rows(j, now: float) -> list:
+def today_mode(hist, queue: dict, last, farm_on: bool) -> str:
+    """1.8.57 (user: while farming only farming, and the other way round): "farming" or "normal" – what is played
+    now. The open round decides; between rounds a lobby / search whose cross-play was read; else the last round.
+    Cross-play off counts as farming in a lobby that looks like a custom game too (the instant lobby when farming,
+    see _hist_open); unread cross-play counts as normal; without the setting "cross-play off = farming" always
+    normal. ``last`` = the latest stored round or None."""
+    if not farm_on:
+        return "normal"
+    if hist is not None:
+        return "farming" if hist.get("farming") else "normal"
+    f = queue.get("found")
+    if f is not None and f.crossplay_off is not None:
+        return "farming" if f.crossplay_off else "normal"
+    if queue.get("state") == "search" and queue.get("crossplay_off") is not None:
+        return "farming" if queue["crossplay_off"] else "normal"
+    return "farming" if last is not None and last.farming and not last.custom else "normal"
+
+
+def today_rows(j, now: float, mode: str | None = None) -> list:
     """HUD rows of today (pure apart from the clock): [[(text, colour), ...], ...]. 1.8.56 (user: tell normal and
     farming rounds apart): normal rounds with their escape rate (and Ø kills), farming rounds with their Ø
-    bloodpoints – each only when played today."""
+    bloodpoints. ``mode`` (1.8.57, today_mode): only that kind, its row even with no round yet; None = each kind
+    played today."""
     d = history.today(j.rounds, now)
     day = history.period_start("day", now)
     mine = [r for r in j.rounds if r.t >= day and id(r) in j.off]
-    s = official.summary([j.off[id(r)] for r in mine if history.normal(r)])   # 1.8.36: farming out too
-    f = official.summary([j.off[id(r)] for r in mine if r.farming and not r.custom])
     rows = [[(_("HEUTE "), sysinfo.DIM),
              (_("{n} RUNDEN · {time}", n=d["count"], time=fmt_duration(d["total"])), sysinfo.WHITE)]]
-    if d["normal"]:
+    if mode == "normal" or (mode is None and d["normal"]):
+        s = official.summary([j.off[id(r)] for r in mine if history.normal(r)])   # 1.8.36: farming out too
         res = [(_("NORMAL "), sysinfo.DIM), (str(d["normal"]), sysinfo.WHITE)]
         if s["survivor"]:
             res += [(" · ", sysinfo.DIM), (_("ENTKOMMEN "), sysinfo.DIM), (f"{s['escaped']:.0%}", sysinfo.WHITE)]
         if s["killer"]:
             res += [(" · ", sysinfo.DIM), (_("Ø KILLS "), sysinfo.DIM), (f"{s['kills']:.1f}", sysinfo.WHITE)]
         rows.append(res)
-    if d["farming"]:
+    if mode == "farming" or (mode is None and d["farming"]):
+        f = official.summary([j.off[id(r)] for r in mine if r.farming and not r.custom])
         res = [(_("FARMING "), sysinfo.DIM), (str(d["farming"]), sysinfo.WHITE)]
         if f["bp_matches"]:
             res += [(" · ", sysinfo.DIM), (_("Ø BP "), sysinfo.DIM),
@@ -222,11 +241,16 @@ class SysInfo:
 
     def _today_rows(self, now: float) -> list:
         """Block "today" below the system values (1.62, user: the black bars are big): rounds and play time,
-        average kills / escaped from the stats page, the clock. Recomputed once a minute."""
+        average kills / escaped from the stats page, the clock. Recomputed once a minute and when the mode
+        (normal / farming, 1.8.57) changes."""
         cache = getattr(self, "_today_cache", None)
         j = self._joined()
-        if cache is None or cache[0] is not j or cache[1] != int(now // 60):
-            self._today_cache = cache = (j, int(now // 60), today_rows(j, now))
+        last = getattr(self, "_today_last", None)
+        if last is None or last[0] is not j:              # the latest round, once per joined history
+            self._today_last = last = (j, max(j.rounds, key=lambda r: r.t, default=None))
+        mode = today_mode(self._hist, self._queue, last[1], bool(self.settings.get("farming_crossplay", True)))
+        if cache is None or cache[0] is not j or cache[1] != int(now // 60) or cache[3] != mode:
+            self._today_cache = cache = (j, int(now // 60), today_rows(j, now, mode), mode)
         return cache[2] + [[(_("UHR "), sysinfo.DIM), (time.strftime("%H:%M", time.localtime(now)), sysinfo.WHITE)]]
 
     def _cards_measure(self) -> dict:

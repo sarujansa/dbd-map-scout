@@ -1554,5 +1554,11 @@ def test_a_farming_lobby_that_looked_custom_and_the_pages_role_and_killer_win(ap
         rows = app_sysinfo.today_rows(j, time.time())
         kills = [t for row in rows for t, _c in row if "." in t and t.replace(".", "").isdigit()]
         assert kills == ["2.0"]                                   # Ø kills of the normal killer round only
+        heads = lambda: [row[0][0] for row in app._today_rows(time.time())]
+        app._hist, app._queue = None, {"state": "idle"}
+        assert heads() == ["HEUTE ", "NORMAL ", "UHR "]               # 1.8.57: the last round (t3) was normal
+        app._hist = {"t": time.time(), "farming": True}
+        assert heads() == ["HEUTE ", "FARMING ", "UHR "]              # a farming round is open: farming only
+        app._hist = None
     finally:
         app.quit()
