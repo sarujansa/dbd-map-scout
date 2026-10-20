@@ -49,6 +49,11 @@ CPU_THROTTLE_WORDS = ("thermal throttling", "prochot", "thermal event", "critica
 # 1.2.2 (user's decision): frame rate as HWiNFO measures it – PresentMon (Windows events, no hook) or RivaTuner, read
 # only from HWiNFO's shared memory like every other value. HWiNFO averages it per second; 0 = no 3D picture.
 FPS_LABELS = ("framerate (presented)", "framerate (displayed)", "framerate")
+# 1.8.59 (user: "FPS ist immer null"): a frame rate under another label ("FPS", "Framerate [Avg]") counts after the
+# listed ones; lows, frame times and minima/maxima never do. Every frame reading is kept for the diagnosis.
+FPS_WORDS = ("framerate", "fps")
+FPS_NOT = ("low", "%", "time", "min", "max")
+FPS_ROWS_KEPT = 8
 FPS_LOW_SHARE = 0.01        # "FPS low" of a round = the slowest 1 % of its seconds (not a per-frame 1 % low)
 # thresholds (°C): green up to the first, amber up to the second, red above
 CPU_WARM, CPU_HOT = 80, 90
@@ -107,16 +112,21 @@ def parse_hwinfo(buf: bytes, now: float | None = None) -> dict | None:
                 break
             if _cstr(HWINFO_SENSOR.unpack_from(buf, at)[2]).lower().startswith("cpu"):
                 cpu_sensors.add(i)
-    temps, cpu, usage, threads, throttled, fps = {}, {}, {}, [], False, {}
+    temps, cpu, usage, threads, throttled, fps, other_fps, fps_rows = {}, {}, {}, [], False, {}, [], []
     for i in range(r_num):
         at = r_off + i * r_size
         if at + HWINFO_READING.size > len(buf):
             break
         kind, sensor, _rid, label, _user, unit, value, *_ = HWINFO_READING.unpack_from(buf, at)
         name = _cstr(label).lower()
+        if ("fram" in name or "fps" in name) and len(fps_rows) < FPS_ROWS_KEPT:
+            fps_rows.append(f"{_cstr(label)}={value:g}")
         if name in FPS_LABELS:
             if 0 < value < 1000:                          # 0 = no 3D picture (or HWiNFO's every-other-zero)
                 fps.setdefault(name, value)
+        elif any(w in name for w in FPS_WORDS) and not any(w in name for w in FPS_NOT):
+            if 0 < value < 1000:
+                other_fps.append(value)
         elif kind == TEMP:
             if "f" in _cstr(unit).lower():
                 value = (value - 32) * 5 / 9              # user switched HWiNFO to Fahrenheit
@@ -137,7 +147,9 @@ def parse_hwinfo(buf: bytes, now: float | None = None) -> dict | None:
             "cpu_power": None if power is None else float(power),
             "core_max": None if core_max is None else max(0.0, min(100.0, float(core_max))),
             "cpu_throttle": "thermal" if throttled else "",
-            "fps": next((float(fps[k]) for k in FPS_LABELS if k in fps), None)}
+            "fps": next((float(fps[k]) for k in FPS_LABELS if k in fps),
+                        float(other_fps[0]) if other_fps else None),
+            "fps_rows": tuple(fps_rows)}
 
 
 def _pick(temps: dict, labels) -> float | None:
@@ -419,6 +431,7 @@ class SysMonitor:
         self.snapshot = Snapshot()
         self.nvml_error = ""
         self.hwinfo_seen = False
+        self.fps_rows = None               # 1.8.59: HWiNFO's frame readings as last read (None = HWiNFO not read)
         self._stop = threading.Event()
         self._thread = None
 
@@ -457,6 +470,7 @@ class SysMonitor:
                     snap.cpu_power, snap.core_max = hw["cpu_power"], hw["core_max"]
                     snap.cpu_throttle = hw["cpu_throttle"]
                     snap.fps = hw["fps"]
+                    self.fps_rows = hw["fps_rows"]
                     if snap.gpu_temp is None:
                         snap.gpu_temp = hw["gpu_temp"]           # AMD/Intel: GPU temperature from HWiNFO
             except Exception as e:                               # never kill the thread over one reading
@@ -472,4 +486,5 @@ class SysMonitor:
                 f"CPU={s.cpu_temp}°C/{s.cpu_load}% GPU={s.gpu_temp}°C/{s.gpu_load}% "
                 f"Hotspot={s.gpu_hot} Mem={s.gpu_mem} drosselt={s.throttle or 'nein'} "
                 f"CPU-Leistung={s.cpu_power}W Kern max={s.core_max}% CPU drosselt={s.cpu_throttle or 'nein'} "
-                f"FPS={s.fps}")
+                f"FPS={s.fps} FPS-Zeilen von HWiNFO="
+                + ("–" if self.fps_rows is None else ", ".join(self.fps_rows) or "keine"))
