@@ -681,7 +681,7 @@ def test_the_clips_sub_tab_lists_filters_and_deletes_the_programs_clips(app_root
         assert app.clip_delete_btn.cget("state") == "normal"
         ui_act = __import__("dbdmapscout.app_qt", fromlist=["ui_act"]).ui_act
         ui_act(t, ("menu", (1, 2)))
-        assert [i[0] for i in shown[-1] if i] == ["play", "explorer", "delete"]
+        assert [i[0] for i in shown[-1] if i] == ["play", "edit", "explorer", "copy", "round", "delete"]
         app._confirmed = True
         app._menu_act("delete")                                # → recorder thread
         deadline = time.time() + 5
@@ -1151,6 +1151,56 @@ def test_the_opponents_tab_shows_how_the_survivors_matches_ended(app_root):
         app.quit()
 
 
+def test_recording_and_clip_menus_copy_mark_farming_and_go_to_the_round(app_root):
+    """1.8.60 (user: "Contextactions wären da auch noch praktisch bei Aufnahmen und Clips"): copy the file for
+    Discord, a recording's round as farming (statistics and folder follow), from a clip to its round's recording."""
+    import json
+    from dbdmapscout import history, obsrec
+    from dbdmapscout.app import App
+    from PySide6.QtGui import QGuiApplication
+    folder = app_root / "rec"
+    (folder / "Clips").mkdir(parents=True)
+    (folder / "one.mkv").write_bytes(b"\0" * 2048)
+    t1 = time.time() - 3600
+    obsrec.save_index(str(folder), [obsrec.Recording(t=t1, file="one.mkv", label="Coal Tower", end=t1 + 600,
+                                                     size=2048)])
+    (folder / "Clips" / "c.mp4").write_bytes(b"\0" * 512)
+    obsrec.save_clips(str(folder / "Clips"), [obsrec.Clip(file="c.mp4", t=t1 + 700, kind="instant", source=t1,
+                                                          label="Coal Tower")])
+    history.append(str(app_root / "rounds.jsonl"), history.Round(t1, 600, "coal_tower", "Coal Tower", role="killer"))
+    (app_root / "settings.json").write_text(json.dumps({"rec_on": True, "rec_folder": str(folder),
+                                                        "welcome_seen": True}), encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        app._rec_render()
+        app.rec_table.selection_set(repr(t1))
+        app.rec_table.event_generate("<<TreeviewSelect>>")
+        app._rec_menu_act("copy")
+        urls = QGuiApplication.clipboard().mimeData().urls()
+        assert [u.toLocalFile() for u in urls] == [str(folder / "one.mkv")]
+        app._rec_menu_act("farming")
+        assert history.load(str(app_root / "rounds.jsonl"))[0].farming
+        deadline = time.time() + 5
+        while time.time() < deadline and not (folder / obsrec.FARMING_DIR / "one.mkv").exists():
+            time.sleep(0.05)
+        assert (folder / obsrec.FARMING_DIR / "one.mkv").exists()        # the recording followed
+
+        app.rec_map_var.set("Coal Tower")
+        app.rec_only_var.set(app._rec_onlys[1][1])                          # "Mit Marke" hides it
+        app._rec_render()
+        assert not app.rec_table.exists(repr(t1))
+        app.clip_table.selection_set("c.mp4")
+        app.clip_table.event_generate("<<TreeviewSelect>>")
+        items = app._clip_menu_items()
+        assert dict((i[0], i[2]) for i in items if i)["round"] is True
+        app._clip_menu_act("round")
+        assert app.rec_nb.select() == str(app.rec_rounds_tab)
+        assert list(app.rec_table.selection()) == [repr(t1)]
+    finally:
+        QGuiApplication.clipboard().clear()     # files left on Qt's clipboard crash the interpreter's exit (offscreen)
+        app.quit()
+
+
 def test_right_click_menus_of_recordings_last_rounds_and_the_overlay_preview(app_root):
     """1.8.10 (user: "context actions"): a right click on a recording / a last round / an element of the overlay
     preview opens a menu with the actions of the buttons nearby; a picked line does the same as the button."""
@@ -1177,7 +1227,8 @@ def test_right_click_menus_of_recordings_last_rounds_and_the_overlay_preview(app
         app.rec_table.event_generate("<<TreeviewSelect>>")
         ui_act(app.rec_table, ("menu", (5, 6)))
         items, pos = shown[-1]
-        assert pos == (5, 6) and [i[0] for i in items if i] == ["play", "clip", "explorer", "keep", "delete"]
+        assert pos == (5, 6) and [i[0] for i in items if i] == ["play", "clip", "explorer", "copy", "keep", "farming",
+                                                                  "delete"]
         assert dict((i[0], i) for i in items if i)["keep"][3] is False          # a tick: not kept yet
         app._menu_act("keep")                                                   # → recorder thread
         deadline = time.time() + 5

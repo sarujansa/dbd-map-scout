@@ -1858,6 +1858,20 @@ EN = {
     'Alle Arten': 'All kinds',
     'Art': 'Kind',
     'Clip abspielen': 'Play clip',
+    'Clip im Editor öffnen …': 'Open clip in editor …',
+    'Im Editor öffnen …': 'Open in editor …',
+    'Datei kopieren (zum Einfügen)': 'Copy file (to paste)',
+    'Zur Runde springen': 'Go to the round',
+    'Farming-Runde': 'Farming round',
+    'Datei fehlt: {file}': 'File missing: {file}',
+    '{file} kopiert – mit Strg+V z. B. in Discord einfügen.': '{file} copied – paste it with Ctrl+V, e.g. in Discord.',
+    'Die Aufnahme dieser Runde gibt es nicht mehr.': 'The recording of this round is gone.',
+    'ffmpeg fehlt (Paket imageio-ffmpeg) – start.bat installiert es beim nächsten Start.':
+        'ffmpeg missing (package imageio-ffmpeg) – start.bat installs it on the next start.',
+    'Öffnet den markierten Clip (auch Sofort-Clips von F8) im Clip-Editor: kürzen, zensieren, Ton mischen. '
+    'Gespeichert wird ein neuer Clip, der alte bleibt.':
+        'Opens the marked clip (F8 instant clips too) in the clip editor: trim, censor, mix the sound. '
+        'It saves a new clip, the old one stays.',
     'Clip fehlt: {file}': 'Clip missing: {file}',
     'Clip gelöscht: {file}': 'Clip deleted: {file}',
     'Clip im Explorer zeigen': 'Show clip in Explorer',

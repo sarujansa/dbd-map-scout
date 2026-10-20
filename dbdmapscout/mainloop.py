@@ -73,6 +73,13 @@ class MainLoop:
     def clipboard_set(self, text: str):
         QGuiApplication.clipboard().setText(text)
 
+    def clipboard_files(self, paths):
+        """1.8.60: files onto the clipboard, as Explorer's "Copy" does – Ctrl+V in Discord or Explorer pastes them."""
+        from PySide6.QtCore import QMimeData, QUrl
+        data = QMimeData()
+        data.setUrls([QUrl.fromLocalFile(p) for p in paths])
+        QGuiApplication.clipboard().setMimeData(data)
+
     def bell(self):
         if IS_WIN:
             try:
