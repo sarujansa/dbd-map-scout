@@ -1195,8 +1195,9 @@ def test_recording_and_clip_menus_copy_mark_farming_and_go_to_the_round(app_root
         assert dict((i[0], i[2]) for i in items if i)["round"] is True
         app._clip_menu_act("round")
         assert app.rec_nb.select() == str(app.rec_rounds_tab)
-        assert app.rec_table.selection() == (repr(t1),) or list(app.rec_table.selection()) == [repr(t1)]
+        assert list(app.rec_table.selection()) == [repr(t1)]
     finally:
+        QGuiApplication.clipboard().clear()     # files left on Qt's clipboard crash the interpreter's exit (offscreen)
         app.quit()
 
 
