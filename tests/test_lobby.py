@@ -310,6 +310,9 @@ def test_killer_name_read_with_a_slip_is_still_found():
     assert r.fuzzy_killer("TRAPPER") == "The Trapper"
     assert r.fuzzy_killer("THE HUNTER") is None             # a new killer is not taken for the Huntress
     assert r.fuzzy_killer("THE NEW ONE") is None and r.fuzzy_killer("NURS") is None
+    # 1.8.58 (user: the Diablo outfits rename the killer): Lilith / Belial / Mephisto count for their killer
+    assert [lobby.resolve_killer(n, {}) for n in ("Lilith", "BELIAL", "MEPHSTO")] == \
+        ["The Artist", "The Dredge", "The Nurse"]
 
 
 def test_old_rounds_read_with_a_slip_count_for_the_killer():
