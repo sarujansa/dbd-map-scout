@@ -766,6 +766,44 @@ def test_the_recordings_tab_lists_the_index_and_acts_on_the_marked_row(app_root)
         app.quit()
 
 
+def test_farming_rounds_have_a_tab_of_their_own_whatever_the_role_filter(app_root):
+    """1.8.64 (user: "ich finde es bei letzten Runden nicht" → "wir haben so viele Kategorien, warum keine für
+    Farming"): with "Alle Rollen" the farming rounds are left out of every evaluation – the tab "Farming" lists them
+    anyway, with tiles; the other filters (map) still apply."""
+    from dbdmapscout import history
+    from dbdmapscout.app import App
+    t1, t2, t3 = time.time() - 7200, time.time() - 3600, time.time() - 1800
+    path = str(app_root / "rounds.jsonl")
+    history.append(path, history.Round(t=t1, seconds=600, map_id="coal", map="Coal Tower", role="killer",
+                                       killer="The Nurse", farming=True))
+    history.append(path, history.Round(t=t2, seconds=500, map_id="mine", map="Ormond Lake Mine", role="survivor",
+                                       farming=True))
+    history.append(path, history.Round(t=t3, seconds=700, map_id="coal", map="Coal Tower", role="killer"))
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        app.stats_nb.select(str(app.stats_last.master.master))
+        app._stats_render()
+        assert list(app.stats_last.get_children()) == [repr(t3)]      # "Alle Rollen": the normal round only
+        farm_tab = app.stats_farm.master.master
+        assert app.stats_nb.tab(str(farm_tab), "text") == "Farming"
+        app.stats_nb.select(str(farm_tab))
+        app._stats_render()
+        assert list(app.stats_farm.get_children()) == [repr(t2), repr(t1)]   # newest first
+        row = app.stats_farm.item(repr(t1), "values")
+        assert row[1] == "Coal Tower" and "Nurse" in row[4] and row[5] == "–"   # no official match: no BP
+        tiles = {x.title: x for x in app.stats_farm_tiles.data}
+        assert tiles["Farming-Runden"].value == "2" and "1 als Killer · 1 als Survivor" in tiles["Farming-Runden"].sub
+        app.stats_map_var.set("Coal Tower")
+        app._stats_render()
+        assert list(app.stats_farm.get_children()) == [repr(t1)]
+        app.stats_map_var.set("Ormond Lake Mine")
+        app.stats_role_var.set("Killer")
+        app._stats_render()
+        assert list(app.stats_farm.get_children()) == [repr(t2)]       # the role filter does not hide them here
+    finally:
+        app.quit()
+
+
 def test_several_rounds_can_be_marked_as_farming_at_once_and_the_recordings_follow(app_root):
     """1.5.4 (user: "mehrere Zeilen markieren und als Farming markieren", "in der Statistik markiert, bei den
     Aufnahmen nicht"): Ctrl-selection in "Letzte Runden", one click sets every marked round; the recorder moves
@@ -1008,7 +1046,8 @@ def test_the_statistics_tabs_keep_their_meaning_when_moved(app_root):
 def test_the_statistics_tabs_are_short_and_the_last_rounds_come_second(app_root):
     """1.8.2: "Letzte Runden" is the second sub-tab (the most used after the overview), the tab names are short
     enough for all of them to fit side by side, and the second tab draws the rounds table (1.8.46: eleven, the new
-    "Gegner" last – the saved order of moved tabs keeps its meaning; 1.8.48: twelve with "Builds")."""
+    "Gegner" last – the saved order of moved tabs keeps its meaning; 1.8.48: twelve with "Builds"; 1.8.64: thirteen
+    with "Farming")."""
     import json
     from dbdmapscout import history
     from dbdmapscout.app import App
@@ -1017,8 +1056,8 @@ def test_the_statistics_tabs_are_short_and_the_last_rounds_come_second(app_root)
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
         texts = [app.stats_nb.tab(t, "text") for t in app.stats_nb.tabs()]
-        assert texts[:3] == ["Übersicht", "Letzte Runden", "Maps"] and texts[-3:] == ["Wartezeit", "Gegner", "Builds"]
-        assert len(texts) == 12
+        assert texts[:3] == ["Übersicht", "Letzte Runden", "Maps"] and texts[-3:] == ["Gegner", "Builds", "Farming"]
+        assert len(texts) == 13
         app._stats_render()
         app._stats_render_tab(1)
         assert len(app.stats_last.get_children()) == 1
@@ -1118,7 +1157,7 @@ def test_a_saved_tab_order_survives_a_new_tab(app_root):
         tabs_id, tw, ids = page._tabsets[0]
         old = ["1", "0"] + [str(i) for i in range(2, 10)] + ["99"]          # ten known ids and a vanished one
         page.apply_tab_order({tabs_id: old})
-        assert page._tab_ids(tw, ids) == ["1", "0"] + [str(i) for i in range(2, 12)]
+        assert page._tab_ids(tw, ids) == ["1", "0"] + [str(i) for i in range(2, len(ids))]   # new tabs at the end
         assert tw.tabBar().property("dense") is True                         # eleven tabs and more: less padding
     finally:
         app.quit()

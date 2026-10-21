@@ -342,6 +342,19 @@ class StatsTab:
                                  "Iri (4); „voll“ = Kategorie mit {max} Punkten.", n=builds.BUILD_MIN,
                                  max=f"{builds.SCORE_MAX:,}".replace(",", ".")),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
+        # 1.8.64 (user: "wir haben so viele Kategorien, warum keine für Farming"): the farming rounds on a tab of
+        # their own – whatever the role filter says (it keeps them out of every other evaluation). Last tab: the
+        # saved tab order (tab_order) counts the tabs by position
+        box_f = self._stats_page(_("Farming"))
+        self.stats_farm_note = ui.StringVar(value="")
+        ui.Label(box_f, textvariable=self.stats_farm_note, wraplength=520).pack(anchor="w")
+        self.stats_farm_tiles = ui.Tiles(box_f)
+        self.stats_farm_tiles.pack(fill="x", pady=(0, 6))
+        self.stats_farm = self._stats_tree(box_f, (("when", _("Wann"), 120, "w"), ("map", _("Map"), 130, "w"),
+                                                   ("dur", _("Dauer"), 60, "e"), ("wait", _("Warten"), 65, "e"),
+                                                   ("role", _("Rolle/Killer"), 115, "w"), ("bp", _("BP"), 70, "e"),
+                                                   ("srv", _("Server"), 100, "w")), 8)
+        ui.Label(box_f, text=_("Alle Farming-Runden der Auswahl (Zeitraum, Region, Map, Modus) – unabhängig vom Rollen-Filter, der sie sonst aus den übrigen Auswertungen heraushält. Farming = Crossplay war in der Lobby aus (oder die eingestellte Farming-Region); korrigieren unter „Letzte Runden“ mit „Farming an/aus“. Aufnahmen liegen im Unterordner „Farming“ des Aufnahmeordners."), style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         self._stats_sort = ("n", True)
         return outer
 
@@ -464,8 +477,11 @@ class StatsTab:
         self.stats_mode_var.set(dict(self._stats_modes)[wmode])
         if len(self._stats_modes) > 1 and not self.stats_mode_cb.winfo_manager():
             self.stats_mode_cb.pack(side="left", padx=(8, 0), after=self.stats_map_cb)
+        # 1.8.64: the farming tab's rounds – the same filters, but always the farming rounds (no role/killer)
+        farm = history.select(all_rounds, since=since, region=wanted, role="farming", map_label=wmap)
         if wmode is not None:        # a round without the page's mode is not known to be in it
             rounds = [r for r in rounds if official.mode_key(off.get(id(r))) == wmode]
+            farm = [r for r in farm if official.mode_key(off.get(id(r))) == wmode]
         fkey = (period, wanted, role, killer, wmap, wmode)
         if fkey != self._stats_filter_key:                 # other filters: the round list starts short again
             self._stats_filter_key, self._stats_last_limit = fkey, LAST_ROUNDS_STEP
@@ -490,7 +506,7 @@ class StatsTab:
         # 1.3.5: only the sub-tab on display is drawn now, the others when they are opened – with 5000 rounds all
         # of them together took 360 ms per filter click (system and trend alone 170 ms)
         self._stats_ctx = SimpleNamespace(rounds=rounds, pairs=pairs, off=off, period=period, notes=notes,
-                                          all_rounds=all_rounds)
+                                          all_rounds=all_rounds, farm=farm)
         self._stats_dirty = set(range(len(self.stats_nb.tabs())))
         self._stats_render_tab()
 
@@ -505,7 +521,8 @@ class StatsTab:
                 self._stats_part_bp, self._stats_part_records, self._stats_part_trend,
                 self._stats_part_sys, self._stats_part_regions, self._stats_part_wait,      # tab order (1.8.2)
                 self._stats_part_opponents,                                                 # 1.8.46
-                self._stats_part_builds)                                                    # 1.8.48
+                self._stats_part_builds,                                                    # 1.8.48
+                self._stats_part_farming)                                                   # 1.8.64
         if i < len(part):
             part[i](c)
 
@@ -598,6 +615,33 @@ class StatsTab:
             "ticks": [(v, dashboard._bp(v)) for v in range(0, hi + 1, step)],
             "last": dashboard._bp(values[-1]) if values else "",
             "empty": _("Keine Runden mit Bloodpoints in dieser Auswahl.")}})
+
+    def _stats_part_farming(self, c):
+        """1.8.64: the farming rounds of the selection – tiles (rounds, play time, bloodpoints) and the list."""
+        farm, off = c.farm, c.off
+        pairs = [(r, off[id(r)]) for r in farm if id(r) in off]
+        self.stats_farm_note.set("" if farm else _("Keine Farming-Runden in dieser Auswahl."))
+        tiles = []
+        if farm:
+            kills = [r for r in farm if r.role == "killer"]
+            tiles = [Tile(_("Farming-Runden"), str(len(farm)),
+                          _("{n} als Killer · {m} als Survivor", n=len(kills),
+                            m=sum(1 for r in farm if r.role == "survivor"))),
+                     Tile(_("Spielzeit"), dashboard.play_time(sum(r.seconds for r in farm)),
+                          _("vom Map-Banner bis zum Rundenende"))]
+            tiles += dashboard.bp_tiles(pairs, self._role_name)
+        self.stats_farm_tiles.data = tiles
+        t = self.stats_farm
+        t.delete(*t.get_children())
+        for r in sorted(farm, key=lambda r: r.t, reverse=True)[:self._stats_last_limit]:
+            m = off.get(id(r))
+            role = killer_label(r.killer) if r.role == "killer" and r.killer else self._role_name(r.role) or "–"
+            t.insert("", "end", iid=repr(r.t), values=(
+                time.strftime("%d.%m.%y %H:%M", time.localtime(r.t)), r.map, fmt_duration(r.seconds),
+                fmt_duration(r.wait) if r.wait is not None else "–", role,
+                _bp(m.bp) if m is not None and m.bp > 0 else "–",
+                (_(regions.NAMES.get(r.region, r.region)) + (f" · {r.ping:.0f} ms" if r.ping is not None else ""))
+                if r.region else "–"))
 
     def _stats_part_records(self, c):
         self.stats_records_var.set("" if c.rounds else _("Noch keine Runden in dieser Auswahl."))

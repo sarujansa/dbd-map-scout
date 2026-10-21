@@ -1275,6 +1275,12 @@ EN = {
     'Läuft DBD in einem kleinen Fenster (Bild kleiner als 1920×1080 oder schmaler als 16:9), zeigt das Programm im Spiel nichts – wie der Hauptschalter. Map-Erkennung, Statistik und OBS-Aufnahmen laufen weiter. Wird das Fenster wieder gross, erscheint das Overlay von selbst.': 'If DBD runs in a small window (picture smaller than 1920×1080 or narrower than 16:9), the program shows nothing in the game – like the master switch. Map detection, statistics and OBS recordings go on. When the window is big again, the overlay comes back by itself.',
     'Kleines DBD-Fenster ({w}×{h}) – Overlay ausgeblendet, Runden werden weiter gezählt und aufgenommen.': 'Small DBD window ({w}×{h}) – overlay hidden, rounds are still counted and recorded.',
     'Update gesperrt: eine Runde läuft. Nach dem Rundenende noch einmal auf „Aktualisieren und neu starten“ klicken.': 'Update locked: a round is running. Click “Update and restart” again after the round ends.',
+    'Alle Farming-Runden der Auswahl (Zeitraum, Region, Map, Modus) – unabhängig vom Rollen-Filter, der sie sonst aus den übrigen Auswertungen heraushält. Farming = Crossplay war in der Lobby aus (oder die eingestellte Farming-Region); korrigieren unter „Letzte Runden“ mit „Farming an/aus“. Aufnahmen liegen im Unterordner „Farming“ des Aufnahmeordners.': 'All farming rounds of the selection (period, region, map, mode) – whatever the role filter says, which otherwise keeps them out of the other evaluations. Farming = cross-play was off in the lobby (or the farming region you set); correct it under “Last rounds” with “Farming on/off”. Recordings are in the “Farming” subfolder of the recordings folder.',
+    'Keine Farming-Runden in dieser Auswahl.': 'No farming rounds in this selection.',
+    '{n} als Killer · {m} als Survivor': '{n} as killer · {m} as survivor',
+    'Spielzeit': 'Play time',
+    'vom Map-Banner bis zum Rundenende': 'from the map banner to the end of the round',
+    'BP': 'BP',
     'DBD-Fenster wieder gross genug – Overlay wieder an.': 'DBD window big enough again – overlay back on.',
     'Overlay anzeigen (aus: nichts im Spiel, Erkennung läuft weiter)': 'Show the overlay (off: nothing in the game, detection goes on)',
     'Hauptschalter: aus = das Programm zeigt im Spiel nichts (Karte, Systemwerte, Heute, Musik). Erkennung, '
