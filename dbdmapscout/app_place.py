@@ -16,13 +16,37 @@ SMALL_PICTURE = 1080      # 16:9 picture lines below which detection gets less r
 MAX_HEIGHT = 0.9          # overlay at most this share of the game height (room for the timer below)
 
 
+def narrower_than_16_9(w, h) -> bool:
+    return w * 9 < h * 16 - 32
+
+
+def small_window(w, h) -> bool:
+    """A DBD window too small for the overlay (1.8.62): its 16:9 picture below 1080 lines, or narrower than 16:9
+    (the trial letterboxed – user screenshot 1714×1360: an 860 px picture)."""
+    return min(h, w * 9 / 16) < SMALL_PICTURE or narrower_than_16_9(w, h)
+
+
 class OverlayPlacement:
     """Where the map (and what hangs on it) goes on screen, every tick (App._tick_overlay → _place_overlay)."""
 
     def _overlay_off(self) -> bool:
-        """The master switch is off – "Overlay testen" and moving show it all the same."""
-        return (not self.settings.get("overlay_on", True) and not self.overlay.editing
-                and time.time() >= getattr(self, "_force_until", 0))
+        """The master switch is off, or (1.8.62) DBD runs in a small window – "Overlay testen" and moving show it
+        all the same. Detection, statistics and recordings go on either way."""
+        off = not self.settings.get("overlay_on", True) or self._small_off()
+        return off and not self.overlay.editing and time.time() >= getattr(self, "_force_until", 0)
+
+    def _small_off(self) -> bool:
+        """1.8.62 (user: "wenn das Fenster so klein ist, soll das Overlay automatisch aus sein, aber die Runden soll
+        es zählen und aufnehmen"): the box is on and the DBD window is small (small_window)."""
+        g = self.game
+        small = bool(self.settings.get("overlay_small_off", True) and g is not None and not g.minimized
+                     and g.client and small_window(g.width, g.height))
+        if small != getattr(self, "_small_told", False):
+            self._small_told = small
+            self._log(_("Kleines DBD-Fenster ({w}×{h}) – Overlay ausgeblendet, Runden werden weiter gezählt und "
+                        "aufgenommen.", w=g.width, h=g.height) if small
+                      else _("DBD-Fenster wieder gross genug – Overlay wieder an."), "Overlay")
+        return small
 
     def _overlay_all_off(self):
         o = self.settings["overlay"]
@@ -274,7 +298,7 @@ class OverlayPlacement:
         g = self.game
         if g is None or g.minimized or not g.client:
             return
-        flags = (min(g.height, g.width * 9 / 16) < SMALL_PICTURE, g.width * 9 < g.height * 16 - 32)
+        flags = (min(g.height, g.width * 9 / 16) < SMALL_PICTURE, narrower_than_16_9(g.width, g.height))
         told = getattr(self, "_window_told", (False, False))
         if flags[0] and not told[0]:
             self._log(_("DBD läuft mit {w}×{h}, kleiner als 1920×1080: die Erkennung ist unsicherer (vor allem "

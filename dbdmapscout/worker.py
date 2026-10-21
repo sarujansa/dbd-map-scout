@@ -339,7 +339,11 @@ class DetectionWorker(threading.Thread):
                     else:
                         if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect or self.today_rect or self.info_rect or self.guide_rects or self.toast_rect):
                             self._mask_overlay(img, origin[0] + box[0], origin[1] + box[1])
-                        sep, res = reader.read(img, fw, fh, letterboxed=self._letterboxed(fw, fh))
+                        boxed = self._letterboxed(fw, fh)
+                        # 1.8.62: without a line, read at the banner's spot – not well into a round (game world)
+                        mid = self.map_on_screen and tracker.in_trial and tick - trial_since >= MID_MATCH_AFTER
+                        bars = self._vbar_looks[-1][:2] if boxed and not mid else None
+                        sep, res = reader.read(img, fw, fh, letterboxed=boxed, bars=bars)
                     if sep is not None:
                         if not session:
                             session, session_frames, session_t, session_saved = True, [], tick, None

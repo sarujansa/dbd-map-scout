@@ -86,6 +86,10 @@ TIPS = {
     "Overlay anzeigen (aus: nichts im Spiel, Erkennung läuft weiter)":
         "Hauptschalter: aus = das Programm zeigt im Spiel nichts (Karte, Systemwerte, Heute, Musik). Erkennung, "
         "Statistik und Aufnahmen laufen weiter. Auch als Knopf in der Übersicht.",
+    "Overlay in kleinen DBD-Fenstern ausblenden (Runden werden weiter gezählt und aufgenommen)":
+        "Läuft DBD in einem kleinen Fenster (Bild kleiner als 1920×1080 oder schmaler als 16:9), zeigt das Programm "
+        "im Spiel nichts – wie der Hauptschalter. Map-Erkennung, Statistik und OBS-Aufnahmen laufen weiter. Wird "
+        "das Fenster wieder gross, erscheint das Overlay von selbst.",
     "Weich ein- und ausblenden (Karte, Systemwerte, Heute)":
         "Karte, Systemwerte und „Heute“ blenden in einer Drittelsekunde ein und aus, statt hart zu erscheinen. "
         "Die Musik hat ihr eigenes Häkchen.",

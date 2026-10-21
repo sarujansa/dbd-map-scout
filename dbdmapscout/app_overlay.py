@@ -153,6 +153,10 @@ class OverlayTab:
         self._reg("ov.master", ui.Checkbutton(pos, text=_("Overlay anzeigen (aus: nichts im Spiel, Erkennung läuft weiter)"),
                                               variable=self.master_var,
                                               command=lambda: self.set_overlay_on(self.master_var.get())))
+        self.small_off_var = ui.BooleanVar(value=bool(self.settings.get("overlay_small_off", True)))   # 1.8.62
+        self._reg("ov.small_off", ui.Checkbutton(
+            pos, text=_("Overlay in kleinen DBD-Fenstern ausblenden (Runden werden weiter gezählt und aufgenommen)"),
+            variable=self.small_off_var, command=self._small_off_changed))
         self.per_size_var = ui.BooleanVar(value=self.settings.get("layout_per_size", True))
         self._reg("ov.per_size", ui.Checkbutton(pos, text=_("Position und Grösse je DBD-Fenstergrösse merken"),
                                                 variable=self.per_size_var, command=self._per_size_changed)
@@ -363,6 +367,11 @@ class OverlayTab:
                                                              "Einstellungen → Mehr → Spotify."),
                                                  style="Dim.TLabel", wraplength=420)).pack(anchor="w")
         return outer
+
+    def _small_off_changed(self):
+        self.settings.set("overlay_small_off", bool(self.small_off_var.get()))
+        self._save_soon()
+        self._tick_overlay(reschedule=False)
 
     def _look_flags_changed(self):
         self.settings["overlay"]["show_today"] = bool(self.today_var.get())

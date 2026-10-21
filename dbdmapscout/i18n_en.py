@@ -1271,6 +1271,10 @@ EN = {
         'Puts map, system values, "Today" and music into the chosen arrangement at once. "Undo" brings the '
         'previous one back.',
     'Weich ein- und ausblenden (Karte, Systemwerte, Heute)': 'Fade in and out smoothly (map, system values, Today)',
+    'Overlay in kleinen DBD-Fenstern ausblenden (Runden werden weiter gezählt und aufgenommen)': 'Hide the overlay in small DBD windows (rounds are still counted and recorded)',
+    'Läuft DBD in einem kleinen Fenster (Bild kleiner als 1920×1080 oder schmaler als 16:9), zeigt das Programm im Spiel nichts – wie der Hauptschalter. Map-Erkennung, Statistik und OBS-Aufnahmen laufen weiter. Wird das Fenster wieder gross, erscheint das Overlay von selbst.': 'If DBD runs in a small window (picture smaller than 1920×1080 or narrower than 16:9), the program shows nothing in the game – like the master switch. Map detection, statistics and OBS recordings go on. When the window is big again, the overlay comes back by itself.',
+    'Kleines DBD-Fenster ({w}×{h}) – Overlay ausgeblendet, Runden werden weiter gezählt und aufgenommen.': 'Small DBD window ({w}×{h}) – overlay hidden, rounds are still counted and recorded.',
+    'DBD-Fenster wieder gross genug – Overlay wieder an.': 'DBD window big enough again – overlay back on.',
     'Overlay anzeigen (aus: nichts im Spiel, Erkennung läuft weiter)': 'Show the overlay (off: nothing in the game, detection goes on)',
     'Hauptschalter: aus = das Programm zeigt im Spiel nichts (Karte, Systemwerte, Heute, Musik). Erkennung, '
     'Statistik und Aufnahmen laufen weiter. Auch als Knopf in der Übersicht.':

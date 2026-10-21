@@ -162,6 +162,7 @@ SPECS = {
                 ("slider", "ov.media_next_n"), ("hint", "ov.media_next_hint"))),
             ("ov.pos", N_("Allgemein"), (
                 ("check", "ov.master"),                                                          # 1.8.18
+                ("check", "ov.small_off"),                                                       # 1.8.62
                 ("row", (("label", "ov.style.label"), ("combo", "ov.style"), ("stretch",))),     # 1.3
                 ("slider", "ov.gap"),
                 ("row", (("label", "ov.bar_align.label"), ("combo", "ov.bar_align"), ("stretch",))),
