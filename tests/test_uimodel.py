@@ -1283,6 +1283,29 @@ def test_right_click_menus_of_recordings_last_rounds_and_the_overlay_preview(app
         app.quit()
 
 
+def test_no_update_restart_while_a_round_runs(app_root, monkeypatch):
+    """1.8.63 (user: "mach eine Sperre rein, dass wenn es in einer Runde ist, kein Update stattfinden kann"):
+    "Aktualisieren und neu starten" restarts the program – not while a round is open or OBS records."""
+    from dbdmapscout import restart
+    from dbdmapscout.app import App
+    spawned = []
+    monkeypatch.setattr(restart, "spawn_helper", lambda root: spawned.append(root) or False)   # False: no quit
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        app._hist = {"t": time.time(), "map_id": "x", "map": "X"}
+        app.apply_update()
+        assert spawned == [] and "gesperrt" in app.upd_status.get()
+        app._hist = None
+        monkeypatch.setattr(type(app.recorder), "recording", property(lambda self: True))
+        app.apply_update()
+        assert spawned == []                                            # the recording runs on (Nachlauf)
+        monkeypatch.setattr(type(app.recorder), "recording", property(lambda self: False))
+        app.apply_update()
+        assert spawned == [str(app_root)]                               # between rounds: as before
+    finally:
+        app.quit()
+
+
 def test_a_small_dbd_window_hides_the_overlay_and_the_round_still_counts(app_root):
     """1.8.62 (user: "wenn das Fenster so klein ist, soll das Overlay automatisch aus sein, aber die Runden soll es
     zählen und aufnehmen"): DBD at 1714×1360 hides every overlay window like the master switch; the detected round
