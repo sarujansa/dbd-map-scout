@@ -38,6 +38,12 @@ ROI = (0.0, 0.52, 0.64, 0.99)
 # on a dark map instead of > 105. Unknown text still never maps to a wrong map (lexicon scoring).
 SEPARATOR_PASSES = ((12, 105), (25, 40))
 SMALL_PICTURE_H = 1200       # the second pass only for pictures below this height (1440p reads fine with the first)
+# 1.8.62: where the banner sits in a letterboxed picture when no line is found at all (user screenshot 1714×1360,
+# RPD East Wing: the hairline is a grey ~95 over a tiled floor of ~97 – neither pass sees it). Same spot in the
+# older Badham screenshot 1718×1359: separator at 0.903 of the picture between the bars, text from 0.05 of the
+# width. (x0, y, length) – x0/length in widths, y in picture heights; a long length so long names fit the crop.
+ANCHOR = (0.05, 0.903, 0.5)
+ANCHOR_FIT = -3.0            # read at the anchor only counts as a banner when the name fits this well (real ≈ 0)
 
 
 # --------------------------------------------------------------------------
@@ -371,13 +377,36 @@ class BannerReader:
         res.ms = (time.perf_counter() - t0) * 1000
         return res
 
-    def read(self, img: np.ndarray, frame_w: int, frame_h: int, letterboxed: bool = False):
-        """Full pipeline on one captured ROI. Returns (Separator|None, FrameResult|None)."""
+    def read(self, img: np.ndarray, frame_w: int, frame_h: int, letterboxed: bool = False, bars=None):
+        """Full pipeline on one captured ROI. Returns (Separator|None, FrameResult|None).
+        ``bars``: (top, bottom) black bars of a letterboxed trial – without a line the name is read where the banner
+        sits (``anchored_separator``) and counts only when it fits a known name cleanly."""
         sep = find_separator(img, frame_w, frame_h, letterboxed)
         if sep is None:
-            return None, None
+            sep = anchored_separator(frame_w, frame_h, bars) if letterboxed else None
+            if sep is None:
+                return None, None
+            res = self.score_lines(locate_text(img, sep))
+            if res is None or res.name_fit < ANCHOR_FIT:
+                return None, None
+            return sep, res
         lines = locate_text(img, sep)
         return sep, self.score_lines(lines)
+
+
+def anchored_separator(frame_w: int, frame_h: int, bars) -> Separator | None:
+    """The banner line where it sits in a letterboxed small picture (ROI coordinates), or None."""
+    if not bars or min(frame_h, frame_w * 9 / 16) >= SMALL_PICTURE_H:
+        return None
+    top, bottom = bars
+    pic = frame_h - top - bottom
+    if pic <= 0:
+        return None
+    wn = min(frame_w, frame_h * 16 / 9)
+    x0, y, length = ANCHOR
+    sy = int(top + y * pic) - int(ROI[1] * frame_h)
+    sx0 = int(x0 * wn)
+    return Separator(y=sy, x0=sx0, x1=sx0 + int(length * wn), frac=length, thickness=1.0)
 
 
 # --------------------------------------------------------------------------

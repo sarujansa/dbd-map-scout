@@ -100,6 +100,7 @@ DEFAULTS = {
         "mark_clip": "f8",              # 1.4.2: a mark in the running OBS recording (single key: only while DBD is in front)
     },
     "overlay_on": True,               # 1.8.18: master switch – off hides every overlay window, detection goes on
+    "overlay_small_off": True,        # 1.8.62: a small DBD window (app_place.small_window) hides it the same way
     "ui_language": "auto",            # auto (Windows language) | de | en
     "dark_mode": True,
     "color_theme": "gold",              # control window: qt_theme.THEMES (accent colour)

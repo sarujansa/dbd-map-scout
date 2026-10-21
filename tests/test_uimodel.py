@@ -1283,6 +1283,52 @@ def test_right_click_menus_of_recordings_last_rounds_and_the_overlay_preview(app
         app.quit()
 
 
+def test_a_small_dbd_window_hides_the_overlay_and_the_round_still_counts(app_root):
+    """1.8.62 (user: "wenn das Fenster so klein ist, soll das Overlay automatisch aus sein, aber die Runden soll es
+    zählen und aufnehmen"): DBD at 1714×1360 hides every overlay window like the master switch; the detected round
+    is saved and OBS starts and stops; a big window or the box off shows it again; the change is logged once."""
+    from dbdmapscout import history
+    from dbdmapscout.app import App
+    from dbdmapscout.app_place import small_window
+    from dbdmapscout.capture import GameWindow
+    from dbdmapscout.worker import Event
+    assert small_window(1714, 1360) and small_window(1600, 900) and not small_window(3440, 1440)
+    assert not small_window(1920, 1080) and not small_window(2560, 1440)
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    calls = []
+    app.recorder.start_round = lambda **k: calls.append("start")
+    app.recorder.stop_round = lambda **k: calls.append("stop")
+    logs = []
+    log = app._log
+    app._log = lambda text, *a, **k: (logs.append(text), log(text, *a, **k))
+    try:
+        app.settings["overlay"]["fade"] = False
+        app.game = GameWindow(1, "DeadByDaylight", 0, 0, 1714, 1360, client=(0, 0, 1714, 1360))
+        app._game_checked = time.time() + 3600                          # keep the fake window
+        mid = list(app.catalog.maps)[2]
+        app._dispatch(Event("detected", {"map_id": mid, "variant": 1, "probability": .9, "variant_probability": 1.0,
+                                         "name_text": "x", "realm_text": "y"}))
+        app._place_overlay()
+        assert app._overlay_off() and not app.overlay.shown and app.worker.overlay_rect is None
+        assert app.worker.map_on_screen and app._hist is not None and calls == ["start"]
+        app._place_overlay()
+        assert sum("Kleines DBD-Fenster" in t for t in logs) == 1           # once, not every tick
+        app._hist["t"] -= 600
+        app._dispatch(Event("match_end", {"reason": "x", "gen": app._watch_gen, "t": time.time()}))
+        assert calls == ["start", "stop"] and len(history.load(str(app_root / "rounds.jsonl"))) == 1
+        app.show_map(mid, 1, "manual")
+        app.small_off_var.set(False)
+        app._small_off_changed()                                            # the box on the overlay page
+        assert app.settings["overlay_small_off"] is False and not app._overlay_off()
+        app.small_off_var.set(True)
+        app._small_off_changed()
+        assert app._overlay_off()
+        app.game = GameWindow(1, "DeadByDaylight", 0, 0, 3440, 1440, client=(0, 0, 3440, 1440))
+        assert not app._overlay_off() and any("wieder gross genug" in t for t in logs)
+    finally:
+        app.quit()
+
+
 def test_the_master_switch_hides_every_overlay_window_and_detection_goes_on(app_root):
     """1.8.18 (user: "eine Einstellung, dass man das Overlay deaktiviert, evtl. im Overview"): a button on the
     overview and a box on the overlay page – off hides the map and every card, the detection keeps watching the

@@ -85,3 +85,32 @@ def test_empty_read_is_no_evidence():
     ok = FrameResult(scores={("the-game", 1): -1.0, ("coal-tower", 1): -60.0}, best=("the-game", 1),
                      name_text="THE GAME", realm_text="GIDEON MEAT PLANT", name_fit=-0.2, realm_fit=-0.5, ms=1.0)
     assert acc.add(ok) is not None
+
+
+RPD = os.path.join(ROOT, "tests", "data", "banner", "letterbox_rpd_east.jpg")   # ROI of the 1714×1360 frame
+RPD_FRAME, RPD_BARS = (1714, 1360), (251, 250)
+
+
+def test_banner_without_a_visible_line_is_read_where_it_sits():
+    """1.8.62 (user screenshot 1714×1360, RPD East Wing over a tiled floor): the hairline is grey ~95 on a floor of
+    ~97 – no pass finds it. In a letterboxed small picture the name is read where the banner sits; it counts only
+    when it fits a known name cleanly, so a frame without a banner stays nothing."""
+    pytest.importorskip("onnxruntime")
+    from dbdmapscout.catalog import Catalog
+    from dbdmapscout.ocr import Recognizer
+    img = cv2.imread(RPD)
+    assert find_separator(img, *RPD_FRAME, letterboxed=True) is None
+    reader = BannerReader(Recognizer(os.path.join(ROOT, "models", "ch_PP-OCRv4_rec_infer.onnx")), Catalog(ROOT))
+    sep, res = reader.read(img, *RPD_FRAME, letterboxed=True, bars=RPD_BARS)
+    assert sep is not None and res.best == ("rpd-east", 1) and res.name_fit > detector.ANCHOR_FIT
+    assert reader.read(img, *RPD_FRAME, letterboxed=True) == (None, None)           # mid-match: no bars given
+    assert reader.read(img, *RPD_FRAME, bars=RPD_BARS) == (None, None)              # not letterboxed: never
+    blurred = img.copy()
+    blurred[250:360] = cv2.GaussianBlur(blurred[250:360], (0, 0), 25)               # the same frame, no banner
+    assert reader.read(blurred, *RPD_FRAME, letterboxed=True, bars=RPD_BARS) == (None, None)
+    # the anchor holds for the older Badham screenshot (1718×1359) too, and never for 1080p and bigger
+    s = detector.anchored_separator(*FRAME, RPD_BARS)
+    assert abs(s.y - find_separator(cv2.imread(CROP), *FRAME, letterboxed=True).y) <= 3
+    assert reader.score_lines(detector.locate_text(cv2.imread(CROP), s)).best == ("badham-preschool", 1)
+    assert detector.anchored_separator(2560, 1440, (100, 100)) is None
+    assert detector.anchored_separator(1714, 1360, None) is None
