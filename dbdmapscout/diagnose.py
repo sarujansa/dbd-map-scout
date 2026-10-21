@@ -173,8 +173,41 @@ def collect(app) -> str:
         lines.append(tt.line())
     errs = getattr(app, "_errors_seen", set())
     lines.append(f"Fehler seit Start: {sorted(errs) if errs else 'keine'}")
+    if getattr(app, "root_dir", None):
+        lines.extend(crash_lines(app.root_dir))
     lines.extend(lag_lines(getattr(getattr(app, "root", None), "slow", ())))
     return "\n".join(lines)
+
+
+CRASH_FILE = "dbdmapscout-crash.txt"            # 1.8.66: faulthandler of the running program (empty = no crash)
+CRASH_LAST = "dbdmapscout-crash-last.txt"       # what the run before this one left there: it crashed hard
+CRASH_LINES = 30
+
+
+def keep_crash(root: str):
+    """At start: a non-empty crash file is the last run's hard crash – kept as CRASH_LAST (the previous one goes)."""
+    path = os.path.join(root, CRASH_FILE)
+    try:
+        if os.path.getsize(path) > 0:
+            os.replace(path, os.path.join(root, CRASH_LAST))
+    except OSError:
+        pass
+
+
+def crash_lines(root: str) -> list:
+    """1.8.66 (user: "das Programm crasht ab und zu, wenn ich Videos öffne" – a hard crash left nothing in the log):
+    the start of the last hard crash's thread stacks, written by faulthandler."""
+    path = os.path.join(root, CRASH_LAST)
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            text = fh.read().strip().splitlines()
+        when = time.strftime("%d.%m.%y %H:%M", time.localtime(os.path.getmtime(path)))
+    except OSError:
+        return ["Letzter harter Absturz: keiner aufgezeichnet"]
+    if not text:
+        return ["Letzter harter Absturz: keiner aufgezeichnet"]
+    more = [f"  … {len(text) - CRASH_LINES} Zeilen mehr in {CRASH_LAST}"] if len(text) > CRASH_LINES else []
+    return [f"Letzter harter Absturz ({when}, {CRASH_LAST}):"] + ["  " + t for t in text[:CRASH_LINES]] + more
 
 
 def lag_lines(slow) -> list:
