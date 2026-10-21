@@ -66,6 +66,21 @@ def test_zones_are_inside_the_window_and_scale():
     assert reader_free_empty()
 
 
+def test_a_window_narrower_than_16_9_reads_the_lobby_at_the_bottom(reader):
+    """1.8.61 (user screenshot, DBD windowed 1714×1360, a custom lobby with Mephisto): the menus scale to the window
+    width and stay at the bottom edge – the zones measured as shares of the full height looked 200 px too high and
+    found no button. Now from the bottom in 16:9 heights; 16:9 and wider unchanged."""
+    w, h = 1714, 1360
+    v = reader.read(cv2.imread(os.path.join(DATA, "narrow_custom_cancel.jpg")), w, h)
+    assert (v.button, v.killer, v.kind) == ("cancel", "The Nurse", "lobby") and "03" in v.time_text
+    assert lobby.crossplay_off(cv2.imread(os.path.join(DATA, "narrow_crossplay_off.png")), w, h) is True
+    x, y, bw, bh = lobby.corner_box(w, h)
+    assert y > 1200 and y + bh <= h and x + bw <= w
+    for size in ((3440, 1440), (2560, 1440), (1920, 1080)):           # no lift where the picture is 16:9 or wider
+        vw = min(size[0], size[1] * 16 / 9)
+        assert lobby.corner_box(*size)[1] == int(lobby.BUTTON_ZONE[2] * size[1]) and vw * 9 / 16 == size[1]
+
+
 def reader_free_empty():
     r = lobby.LobbyReader.__new__(lobby.LobbyReader)
     return r.read(np.zeros((0, 0, 3), np.uint8), W, H).button is None
