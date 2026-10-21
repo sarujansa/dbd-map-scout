@@ -26,6 +26,7 @@ log = logging.getLogger("dbdmapscout")
 END_CHECK_INTERVAL = 0.5          # seconds between two looks for result screen / lobby / loading screen …
 END_IDLE_INTERVAL = 1.0           # … and while nothing points to the end yet (whole-screen grab: ~14 MB each)
 IN_MATCH_RATE = 1.0               # scans per second while a detected map is being played (banner only at the start)
+VBAR_STRIP_S = 1.0                # 1.8.65: without a map, a look at the bars above/below at most this often
 VBAR_LOOKS = 5                    # looks (1/s) whose smallest black bar above/below counts (dark scenes at the edge)
 MID_MATCH_AFTER = 30.0            # s after the map appeared: a "banner" now is in the game world -> strict reading
 MID_MATCH_SPAN = 2.0              # … and it must stay on screen this long (a real banner stands still for ~5 s,
@@ -101,6 +102,7 @@ class DetectionWorker(threading.Thread):
         self.toast_rect = None           # … and of the notification window (1.8.13: F8 clip, lobby found)
         self.vbars = None                # (top, bottom, time, (w, h)): black bars above/below the picture
         self._vbar_looks = collections.deque(maxlen=VBAR_LOOKS)
+        self._vbar_strip_t = 0.0
         self.watch_status = _("keine Map angezeigt")
         self.capture_info = "Bildschirm"                     # where the pictures come from (diagnosis)
         self.end_history = collections.deque(maxlen=80)     # for the diagnosis
@@ -339,6 +341,8 @@ class DetectionWorker(threading.Thread):
                     else:
                         if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect or self.today_rect or self.info_rect or self.guide_rects or self.toast_rect):
                             self._mask_overlay(img, origin[0] + box[0], origin[1] + box[1])
+                        if not self.map_on_screen:
+                            self._vbar_strip(grab, fw, fh, tick, origin, lambda: source is None and via["screen"])
                         boxed = self._letterboxed(fw, fh)
                         # 1.8.62: without a line, read at the banner's spot – not well into a round (game world)
                         mid = self.map_on_screen and tracker.in_trial and tick - trial_since >= MID_MATCH_AFTER
@@ -605,6 +609,23 @@ class DetectionWorker(threading.Thread):
         self._vbar_looks.append((top, bottom, (fw, fh)))
         self.vbars = (min(t for t, _b, _s in self._vbar_looks), min(b for _t, b, _s in self._vbar_looks),
                       time.time(), (fw, fh))
+
+    def _vbar_strip(self, grab, fw, fh, tick, origin=(0, 0), from_screen=lambda: False):
+        """1.8.65 (user's diagnosis 1718×1360: "Letzte Banner: keine"): the bars were measured only in the round-end
+        looks, i.e. while a map is on display – before a round's banner there is none, so the picture never counted
+        as letterboxed and neither the tolerant line pass nor the banner's fixed spot (1.8.62) ran. Now, in a window
+        narrower than 16:9 and without a map, a quarter-wide strip from the middle at most every VBAR_STRIP_S.
+        ``from_screen()``: the strip came from the screen (at ``origin``) – our own windows are blacked out first."""
+        if fw * 9 >= fh * 16 - 32 or tick - self._vbar_strip_t < VBAR_STRIP_S:
+            return
+        self._vbar_strip_t = tick
+        box = (fw * 3 // 8, 0, max(1, fw // 4), fh)
+        strip = grab(box)
+        if strip is None:
+            return
+        if from_screen():
+            self._mask_overlay(strip, origin[0] + box[0], origin[1] + box[1])
+        self._note_vbars(strip, fw, fh)
 
     def _letterboxed(self, fw, fh) -> bool:
         """The last whole-screen look (≤ ~1 s old) showed black bars above and below: a trial in a narrow window."""

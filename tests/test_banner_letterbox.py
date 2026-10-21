@@ -114,3 +114,52 @@ def test_banner_without_a_visible_line_is_read_where_it_sits():
     assert reader.score_lines(detector.locate_text(cv2.imread(CROP), s)).best == ("badham-preschool", 1)
     assert detector.anchored_separator(2560, 1440, (100, 100)) is None
     assert detector.anchored_separator(1714, 1360, None) is None
+
+
+def test_the_worker_reads_a_letterboxed_banner_with_no_map_on_display(tmp_path, monkeypatch):
+    """1.8.65 (user's diagnosis 1718×1360, 1.8.62: "Letzte Banner: keine"): the bars above/below were measured only
+    while a map was on display (round-end looks) – before a round's banner there is none, so the worker never took
+    the picture for letterboxed and the banner's fixed spot never ran. The real worker loop, in simulation, with the
+    RPD frame rebuilt around its ROI crop (bars 251/250 px) and no map on display."""
+    pytest.importorskip("onnxruntime")
+    import queue
+    import time
+    import numpy as np
+    from dbdmapscout import config, worker
+    from dbdmapscout.catalog import Catalog
+    w, h = RPD_FRAME
+    frame = np.zeros((h, w, 3), np.uint8)
+    frame[RPD_BARS[0]:h - RPD_BARS[1]] = 60                       # the picture between the bars
+    crop = cv2.imread(RPD)
+    y0, x0 = int(detector.ROI[1] * h), int(detector.ROI[0] * w)
+    frame[y0:y0 + crop.shape[0], x0:x0 + crop.shape[1]] = crop
+    assert detector.letterbox_rows(frame) == RPD_BARS
+
+    class Source:
+        def __init__(self, *_a, **_k):
+            pass
+
+        def current(self):
+            return frame
+
+    monkeypatch.setattr(worker, "ImageSource", Source)
+    events = queue.Queue()
+    wk = worker.DetectionWorker(ROOT, config.Settings(str(tmp_path / "settings.json")), Catalog(ROOT, ["en"]),
+                                events, simulate=str(tmp_path))
+    assert not wk.map_on_screen
+    wk.start()
+    found = None
+    try:
+        deadline = time.time() + 60                                # generous: shared CI runners
+        while found is None and time.time() < deadline:
+            try:
+                ev = events.get(timeout=0.5)
+            except queue.Empty:
+                continue
+            if ev.kind == "detected":
+                found = ev.data
+    finally:
+        wk.stop()
+        wk.join(timeout=10)
+    assert found is not None and found["map_id"] == "rpd-east"
+    assert wk._letterboxed(w, h)
