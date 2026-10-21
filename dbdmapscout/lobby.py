@@ -68,6 +68,9 @@ RESULT_ZONE = (0.05, 0.42, 0.198, 0.232)
 CROSSPLAY_ZONE = (0.075, 0.030, 0.825, 0.878)
 GLOBE_W = (0.009, 0.020)      # width of the globe in 16:9 widths (measured 0.0128)
 GLYPH_H = (0.004, 0.010)      # 1.6.2: height of the "x1.00" digits in 16:9 widths (measured 0.0067)
+# 1.8.61: window narrower than 16:9 – the rows below the button sit higher by this share of the height beyond 16:9
+# (user screenshot 1714×1360: 10–22 px read everything, 0.04 × 396 px ≈ 16 px is the middle)
+NARROW_LIFT = 0.04
 
 
 def _vw(W, H):
@@ -75,10 +78,17 @@ def _vw(W, H):
 
 
 def _right_box(zone, W, H):
+    """Zone at the lower right of the window: x from the right edge in 16:9 widths, y in 16:9 heights from the
+    bottom – a window narrower than 16:9 (user screenshot 1714×1360) scales DBD's menus to the width and keeps
+    the lobby button at the bottom edge, a little higher than the width alone says (NARROW_LIFT); 16:9 and
+    wider: the same as fractions of H."""
     r0, r1, y0, y1 = zone
     vw = _vw(W, H)
+    vh = vw * 9 / 16
     x0, x1 = int(W - r0 * vw), int(W - r1 * vw)
-    return x0, int(y0 * H), max(1, x1 - x0), max(1, int(y1 * H) - int(y0 * H))
+    lift = NARROW_LIFT * max(0.0, H - vh)
+    top, bottom = int(H - (1 - y0) * vh - lift), int(H - (1 - y1) * vh - lift)
+    return x0, top, max(1, x1 - x0), max(1, bottom - top)
 
 
 def plain_name(text: str) -> str:
