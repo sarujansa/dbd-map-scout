@@ -829,7 +829,17 @@ class SettingsTab:
         if state == "available" and can_apply:
             self.upd_apply_btn.pack(side="left", padx=6)
 
+    def _round_running(self) -> bool:
+        """1.8.63: a round is open (map detected, no end yet) or OBS records – no restart for an update now."""
+        return self._hist is not None or self.recorder.recording
+
     def apply_update(self):
+        # 1.8.63 (user: "mach eine Sperre rein, dass wenn es in einer Runde ist, kein Update stattfinden kann"): the
+        # update restarts the program (start.bat installs it) – that would end the round's record and recording
+        if self._round_running():
+            self.upd_status.set(_("Update gesperrt: eine Runde läuft. Nach dem Rundenende noch einmal auf „Aktualisieren und neu starten“ klicken."))
+            self._log(_("Update gesperrt: eine Runde läuft. Nach dem Rundenende noch einmal auf „Aktualisieren und neu starten“ klicken."), "System")
+            return
         from . import restart
         try:
             ok = restart.spawn_helper(self.root_dir)
