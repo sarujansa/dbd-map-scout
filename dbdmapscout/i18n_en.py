@@ -1965,8 +1965,8 @@ EN = {
     'Geopfert': 'Sacrificed',
     'Getötet': 'Killed',
     'Aufgegeben': 'Abandoned',
-    'Laut Stats-Seite: als Killer die Survivor gegen dich und wie ihr Match endete, als Survivor der Killer und wie dein Match endete. „Getötet“ = vom Killer direkt getötet (z. B. Mori), „Aufgegeben“ schließt verlassene Matches ein. „Ø Kills ohne Aufgaben“ zählt nur Matches, in denen kein Survivor aufgab oder ging.':
-        'From the stats page: as killer the survivors against you and how their match ended, as survivor the killer and how your match ended. "Killed" = killed by the killer directly (e.g. a mori), "Abandoned" includes matches left. "Clean Ø kills" counts only matches in which no survivor abandoned or left.',
+    'Laut Stats-Seite: als Killer die Survivor gegen dich und wie ihr Match endete, als Survivor der Killer und wie dein Match endete. „Getötet“ = vom Killer direkt getötet (z. B. Mori), „Aufgegeben“ schließt verlassene Matches ein. „Ø Kills ohne Aufgaben“ zählt nur Matches, in denen kein Survivor aufgab oder ging. „Farming“ = Begegnungen in Farming-Runden, die „Begegnungen“ nicht zählen.':
+        'From the stats page: as killer the survivors against you and how their match ended, as survivor the killer and how your match ended. "Killed" = killed by the killer directly (e.g. a mori), "Abandoned" includes matches left. "Clean Ø kills" counts only matches in which no survivor abandoned or left. "Farming" = encounters in farming rounds, which "Encounters" leave out.',
     'Noch keine Runden mit Daten der Stats-Seite in dieser Auswahl.': 'No rounds with stats-page data in this selection yet.',
     'Schnellste 4K': 'Fastest 4K',
     '{n} von {total} Runden': '{n} of {total} rounds',

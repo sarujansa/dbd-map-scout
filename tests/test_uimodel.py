@@ -1967,12 +1967,15 @@ def test_rounds_with_a_farming_partner_count_as_farming_by_a_right_click_on_the_
         assert app.settings.get("farming_opponents") == ["Slasher"]
         j = app._joined()
         assert [r.farming for r in j.rounds] == [True, False]
-        assert rows() == ["Nurse"]                                         # the partner's rounds are farming now
+        # 1.8.81: the partner stays listed – its rounds move from "Begegnungen" into the column "Farming"
+        vals = lambda: {c.split("\t")[1]: app.stats_opp.item(c, "values") for c in app.stats_opp.get_children()}  # noqa: E731
+        assert rows() == ["Slasher", "Nurse"] and vals()["Slasher"][2] == 0 and vals()["Slasher"][7] == 1
+        assert vals()["The Nurse"][2] == 1 and vals()["The Nurse"][7] == "–"
         assert any("„Slasher“ gilt jetzt als Farming-Gegner – 1 Runden" in e[2] for e in app._log_entries)
         assert "Slasher" in app.farm_opp_var.get()
         app.stats_role_var.set("Farming")
         app._stats_render()
-        assert rows() == ["Slasher"]
+        assert rows() == ["Slasher"] and vals()["Slasher"][2] == 1 and vals()["Slasher"][7] == "–"   # not twice
         app.stats_role_var.set("Alle Rollen")
         app._stats_render()
         app.stats_opp.selection_set("killer\tThe Nurse")
