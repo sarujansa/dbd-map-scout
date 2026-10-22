@@ -30,6 +30,9 @@ BUILD_KINDS = {"perk": N_("Perk"), "addon": N_("Add-on"), "offering": N_("Opferg
 MODE_LABELS = {"Online": N_("Öffentlich"), "SeasonalEvent": N_("Event-Modus")}
 QUALITY_LABELS = (N_("keins"), N_("Bronze"), N_("Silber"), N_("Gold"), N_("Iri"))   # builds.QUALITIES, worst first
 STATS_WAIT_GROUPS = [("weekday", N_("nach Wochentag")), ("hour", N_("nach Uhrzeit")), ("region", N_("nach Region"))]
+# 1.8.76 (user review: thirteen sub-tabs in one row were not to be found): the parts of the statistics in four groups
+STATS_GROUPS = [("rounds", N_("Runden")), ("foes", N_("Gegner & Builds")), ("maps", N_("Maps & Server")),
+                ("other", N_("Sonstiges"))]
 WEEKDAYS = [N_("Montag"), N_("Dienstag"), N_("Mittwoch"), N_("Donnerstag"), N_("Freitag"), N_("Samstag"),
             N_("Sonntag")]
 STATS_SYS_GROUPS = [("map", N_("nach Map")), ("hour", N_("nach Uhrzeit")), ("weekday", N_("nach Wochentag")),
@@ -128,13 +131,23 @@ class StatsTab:
         self._stats_last_limit = LAST_ROUNDS_STEP
         self._stats_filter_key = None
         # one thing at a time: the dashboard and each table on a sub-tab of its own, filling the window's height
-        # (1.58.1 – before, dashboard and buttons stood above the tables and left them a few rows)
+        # (1.58.1 – before, dashboard and buttons stood above the tables and left them a few rows). 1.8.76 (user
+        # review: thirteen tabs in one row): four groups, each a notebook of its own with three or four parts
         self.stats_nb = ui.Notebook(f)
         self.stats_nb.pack(fill="both", expand=True)
         self.stats_nb.bind("<<NotebookTabChanged>>", lambda e: self._stats_render_tab())
+        self._stats_groups = {}                  # group key -> the notebook with its parts
+        for gkey, label in STATS_GROUPS:
+            frame = ui.Frame(self.stats_nb)
+            self.stats_nb.add(frame, text=_(label))
+            nb = ui.Notebook(frame)
+            nb.pack(fill="both", expand=True)
+            nb.bind("<<NotebookTabChanged>>", lambda e: self._stats_render_tab())
+            self._stats_groups[gkey] = nb
+        self._stats_parts = {}                   # page path -> (title, name of the method that draws it)
         self._stats_ctx = None                   # 1.3.5: the selection, worked out once per filter change
-        self._stats_dirty = set()                # sub-tabs (index) not drawn for it yet
-        box_d = self._stats_page(_("Übersicht"))
+        self._stats_dirty = set()                # pages (path) not drawn for it yet
+        box_d = self._stats_page(_("Übersicht"), "rounds", "_stats_part_dash")
         self.stats_dash = ui.Dashboard(box_d, command=self._dash_clicked)   # 1.58: key figures, maps, killer × map
         self.stats_dash.pack(fill="x")
         self.stats_lost_var = ui.StringVar(value="")
@@ -151,7 +164,7 @@ class StatsTab:
                                 "zugeordnet ist."),
                   style="Dim.TLabel", wraplength=540).pack(anchor="w", pady=(6, 0))
         self._stats_alias_choices = sorted(KILLERS, key=killer_label)
-        box2 = self._stats_page(_("Letzte Runden"))      # 1.8.2: second tab – the most used after the overview
+        box2 = self._stats_page(_("Letzte Runden"), "rounds", "_stats_part_last")      # 1.8.2: second tab – the most used after the overview
         self.stats_last = self._stats_tree(box2, (("when", _("Wann"), 120, "w"), ("map", _("Map"), 130, "w"),
                                                   ("dur", _("Dauer"), 60, "e"), ("wait", _("Warten"), 65, "e"),
                                                   ("role", _("Rolle/Killer"), 115, "w"), ("res", _("Ergebnis"), 75, "w"),
@@ -186,12 +199,12 @@ class StatsTab:
                                                  state="disabled")
         self.stats_round_killer_btn.pack(side="left", padx=(6, 0))
         ui.Button(kr, text=_("Als CSV exportieren …"), command=self._stats_export_csv).pack(side="right")
-        box = self._stats_page(_("Maps"))
+        box = self._stats_page(_("Maps"), "maps", "_stats_part_maps")
         self.stats_maps = self._stats_tree(box, (("map", _("Map"), 130, "w"), ("n", _("Runden"), 62, "e"),
                                                  ("k", _("Killer"), 58, "e"), ("kills", _("Ø Kills"), 62, "e"),
                                                  ("s", _("Survivor"), 75, "e"), ("esc", _("Entkommen"), 90, "e"),
                                                  ("avg", _("Ø Dauer"), 70, "e"), ("bp", _("Ø BP"), 62, "e")), 9)
-        box_k = self._stats_page(_("Killer"))
+        box_k = self._stats_page(_("Killer"), "foes", "_stats_part_killers")
         self.stats_kill = self._stats_tree(box_k, (("killer", _("Killer"), 130, "w"), ("n", _("Runden"), 60, "e"),
                                                    ("kills", _("Ø Kills"), 60, "e"), ("four", _("4K"), 40, "e"),
                                                    ("avg", _("Ø Dauer"), 65, "e"), ("map", _("Häufigste Map"), 150, "w")),
@@ -210,7 +223,7 @@ class StatsTab:
         ui.Label(box_k, text=_("Ein Skin oder neuer Killer steht unter seinem eigenen Namen? Zeile markieren, Killer "
                                 "wählen, „Zuordnen“ – gilt auch rückwirkend."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
-        box_b = self._stats_page(_("Bloodpoints"))   # 1.6.3: with the role filter "Farming" = the farming evaluation
+        box_b = self._stats_page(_("Bloodpoints"), "other", "_stats_part_bp")   # 1.6.3: with the role filter "Farming" = the farming evaluation
         self.stats_bp_tiles = ui.Tiles(box_b)          # 1.7.1: a small dashboard above the table
         self.stats_bp_tiles.pack(fill="x", pady=(0, 6))
         self.bp_trend = TrendChart(box_b, bool(self.settings.get("dark_mode", True)), panels=("bp",))
@@ -221,7 +234,7 @@ class StatsTab:
         ui.Label(box_b, text=_("Bloodpoints laut Stats-Seite. BP/h = je Stunde im Match; mit Wartezeit = je Stunde aus "
                                 "Match und Suche zusammen. Mit dem Rollen-Filter „Farming“ steht hier, was das Farmen "
                                 "bringt."), style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
-        box_rk = self._stats_page(_("Rekorde"))    # 1.7: streaks, best week, busiest day, longest session
+        box_rk = self._stats_page(_("Rekorde"), "rounds", "_stats_part_records")    # 1.7: streaks, best week, busiest day, longest session
         self.stats_records_var = ui.StringVar(value="")
         ui.Label(box_rk, textvariable=self.stats_records_var, wraplength=400).pack(anchor="w")
         self.stats_records = ui.Tiles(box_rk)
@@ -230,12 +243,12 @@ class StatsTab:
                                  "ist die Serie der neuesten Runden der Auswahl. Beste Woche ab {n} Runden mit Ergebnis. "
                                  "Eine Sitzung endet nach 45 Minuten ohne Runde.", n=records.WEEK_MIN),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(6, 0))
-        box_v = self._stats_page(_("Verlauf"))
+        box_v = self._stats_page(_("Verlauf"), "rounds", "_stats_part_trend")
         self.trend = TrendChart(box_v, bool(self.settings.get("dark_mode", True)))
         ui.Label(box_v, text=_("Nur Runden, die einem Match auf der Stats-Seite zugeordnet sind. Die Maus über einer "
                                 "Säule zeigt Wert und Anzahl der Runden."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
-        box_s = self._stats_page(_("System"))       # 1.60: tiles, highest values, table, trend (was a text block)
+        box_s = self._stats_page(_("System"), "other", "_stats_part_sys")       # 1.60: tiles, highest values, table, trend (was a text block)
         self.stats_sys_var = ui.StringVar(value="")       # only when there are no values
         ui.Label(box_s, textvariable=self.stats_sys_var, wraplength=400).pack(anchor="w")
         self.stats_sys_tiles = ui.Tiles(box_s)
@@ -273,13 +286,13 @@ class StatsTab:
                                 "Maps oder zu welcher Tageszeit der PC am heißesten läuft. „Gedrosselt“: Sekunden, in "
                                 "denen die GPU wegen Temperatur oder Hardware langsamer lief (nur NVIDIA)."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(6, 0))
-        box_r = self._stats_page(_("Regionen"))           # 1.8.2: short names – all ten tabs fit
+        box_r = self._stats_page(_("Regionen"), "maps", "_stats_part_regions")           # 1.8.2: short names – all ten tabs fit
         self.stats_regs = self._stats_tree(box_r, (("reg", _("Region"), 190, "w"), ("n", _("Runden"), 65, "e"),
                                                    ("avg", _("Ø Dauer"), 75, "e"), ("share", _("Anteil"), 65, "e"),
                                                    ("ping", _("Ø Ping"), 70, "e")), 5)
         ui.Label(box_r, text=_("Region nur bekannt, wenn im Tab Server „Verbundener Spielserver“ an war."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
-        box_w = self._stats_page(_("Wartezeit"))
+        box_w = self._stats_page(_("Wartezeit"), "maps", "_stats_part_wait")
         self.stats_wait_tiles = ui.Tiles(box_w)          # 1.2.16: Ø / median / shortest / longest as tiles
         self.stats_wait_tiles.pack(fill="x", pady=(0, 6))
         wr = ui.Frame(box_w)
@@ -299,7 +312,7 @@ class StatsTab:
                                 "die Suche gesehen hat. Custom Games haben keine Wartezeit."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         # 1.8.46: the characters met and how the survivors' matches ended (page data that was read but unused)
-        box_o = self._stats_page(_("Gegner"))
+        box_o = self._stats_page(_("Gegner"), "foes", "_stats_part_opponents")
         self.stats_opp_var = ui.StringVar(value="")       # only when there is nothing to show
         ui.Label(box_o, textvariable=self.stats_opp_var, wraplength=400).pack(anchor="w")
         self.stats_opp_tiles = ui.Tiles(box_o)
@@ -317,7 +330,7 @@ class StatsTab:
                                 "Aufgaben“ zählt nur Matches, in denen kein Survivor aufgab oder ging."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         # 1.8.48: the own loadouts from the stats page (userscript 3) and how those matches ended
-        box_bu = self._stats_page(_("Builds"))
+        box_bu = self._stats_page(_("Builds"), "foes", "_stats_part_builds")
         self.stats_build_var = ui.StringVar(value="")
         ui.Label(box_bu, textvariable=self.stats_build_var, wraplength=520).pack(anchor="w")
         self.stats_items = self._stats_tree(box_bu, (("name", _("Name"), 190, "w"), ("kind", _("Art"), 85, "w"),
@@ -348,7 +361,7 @@ class StatsTab:
         # 1.8.64 (user: "wir haben so viele Kategorien, warum keine für Farming"): the farming rounds on a tab of
         # their own – whatever the role filter says (it keeps them out of every other evaluation). Last tab: the
         # saved tab order (tab_order) counts the tabs by position
-        box_f = self._stats_page(_("Farming"))
+        box_f = self._stats_page(_("Farming"), "other", "_stats_part_farming")
         self.stats_farm_note = ui.StringVar(value="")
         ui.Label(box_f, textvariable=self.stats_farm_note, wraplength=520).pack(anchor="w")
         self.stats_farm_tiles = ui.Tiles(box_f)
@@ -361,10 +374,35 @@ class StatsTab:
         self._stats_sort = ("n", True)
         return outer
 
-    def _stats_page(self, title):
-        page = ui.Frame(self.stats_nb, padding=6)
-        self.stats_nb.add(page, text=title)
+    def _stats_page(self, title, group, part):
+        """A part of the statistics: a page in the notebook of ``group`` (STATS_GROUPS), drawn by method ``part``."""
+        nb = self._stats_groups[group]
+        page = ui.Frame(nb, padding=6)
+        nb.add(page, text=title)
+        self._stats_parts[str(page)] = (title, part)
         return page
+
+    def _stats_current_page(self) -> str:
+        """Path of the part on display: the open tab of the open group's notebook."""
+        group = self.stats_nb.select()
+        nb = next((nb for nb in self._stats_groups.values() if str(nb.master) == group), None)
+        return nb.select() if nb is not None else ""
+
+    def _stats_current_title(self) -> str:
+        return self._stats_parts.get(self._stats_current_page(), ("", ""))[0]
+
+    def _stats_select(self, what):
+        """Open a part by its title ("Rekorde") or page path – the group's tab and the part's tab."""
+        path = str(what)
+        if path not in self._stats_parts:
+            path = next((p for p, (title, _m) in self._stats_parts.items() if title == what), None)
+        if path is None:
+            return
+        for nb in self._stats_groups.values():
+            if path in nb.tabs():
+                self.stats_nb.select(str(nb.master))
+                nb.select(path)
+                return
 
     def _stats_tree(self, parent, cols, height, select=False, multi=False):
         tf = ui.Frame(parent)
@@ -520,27 +558,21 @@ class StatsTab:
         # of them together took 360 ms per filter click (system and trend alone 170 ms)
         self._stats_ctx = SimpleNamespace(rounds=rounds, pairs=pairs, off=off, period=period, notes=notes,
                                           all_rounds=all_rounds, farm=farm)
-        self._stats_dirty = set(range(len(self.stats_nb.tabs())))
+        self._stats_dirty = set(self._stats_parts)
         self._stats_render_tab()
 
-    def _stats_render_tab(self, index=None):
-        """Draw a sub-tab of the statistics for the current selection, if it has not been drawn for it yet."""
+    def _stats_render_tab(self, page=None):
+        """Draw a part of the statistics (``page`` = its path, default the one on display) for the current
+        selection, if it has not been drawn for it yet."""
         c = self._stats_ctx
-        i = self.stats_nb.index("current") if index is None else index
-        if c is None or i not in self._stats_dirty:
+        path = self._stats_current_page() if page is None else str(page)
+        if c is None or path not in self._stats_dirty:
             return
-        self._stats_dirty.discard(i)
-        part = (self._stats_part_dash, self._stats_part_last, self._stats_part_maps, self._stats_part_killers,
-                self._stats_part_bp, self._stats_part_records, self._stats_part_trend,
-                self._stats_part_sys, self._stats_part_regions, self._stats_part_wait,      # tab order (1.8.2)
-                self._stats_part_opponents,                                                 # 1.8.46
-                self._stats_part_builds,                                                    # 1.8.48
-                self._stats_part_farming)                                                   # 1.8.64
-        if i < len(part):
-            t0 = time.perf_counter()
-            part[i](c)
-            self.root.note("Statistik-Reiter: " + self.stats_nb.tab(self.stats_nb.tabs()[i], "text"),
-                           (time.perf_counter() - t0) * 1000)                                     # 1.8.67
+        self._stats_dirty.discard(path)
+        title, part = self._stats_parts[path]
+        t0 = time.perf_counter()
+        getattr(self, part)(c)
+        self.root.note("Statistik-Reiter: " + title, (time.perf_counter() - t0) * 1000)           # 1.8.67
 
     def _stats_part_dash(self, c):
         rounds, pairs, notes, all_rounds = c.rounds, c.pairs, c.notes, c.all_rounds

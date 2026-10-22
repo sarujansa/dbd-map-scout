@@ -2021,4 +2021,8 @@ EN = {
     '„{name}“ gilt nicht mehr als Farming-Gegner.': '"{name}" no longer counts as a farming partner.',
     'Farming-Gegner (Rechtsklick auf einen Charakter im Reiter „Gegner“): {names}':
         'Farming partners (right click on a character on the "Opponents" tab): {names}',
+    # 1.8.76: the statistics' groups
+    'Gegner & Builds': 'Opponents & builds',
+    'Maps & Server': 'Maps & servers',
+    'Sonstiges': 'Other',
 }
