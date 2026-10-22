@@ -1791,3 +1791,26 @@ def test_the_pages_are_built_when_first_needed_and_keep_the_users_order(qapp, ke
     win3 = keep(qt_window.MainWindow(lambda a, arg=None: None, None, {"log": NODE, "recordings": host_node}))
     assert win3.host(".r.host") is not None and "recordings" not in win3.pending_pages()   # built for it …
     assert "log" in win3.pending_pages()                                                  # … only that page
+
+
+def test_the_overview_lists_what_is_new_until_it_is_understood(qapp, keep):
+    """1.8.79: after an update a card "Neu seit …" with the HISTORY.md rows; "Verstanden" posts news_seen and the
+    card goes once the model has no news."""
+    from dbdmapscout import qt_window
+    posted = queue.Queue()
+    win = keep(qt_window.MainWindow(lambda a, arg=None: posted.put((a, arg))))
+    win.apply_theme(True, 1.0)
+    app = fake_app(_news=[("1.8.78", "Navigation", "UI-Durchsicht Punkt 3"), ("1.8.77", "Kurze Beschriftungen", "")],
+                   _news_since="1.8.76")
+    o = overview.overview_model(app, time.time(), is_win=True)
+    assert o.news_since == "Neu seit 1.8.76" and len(o.news) == 2
+    win.show_model(o)
+    page = win.overview
+    assert not page.news_card.isHidden() and page.news_title.text() == "NEU SEIT 1.8.76"
+    assert [h.text() for h, _b in page.news_rows] == ["1.8.78 – Navigation", "1.8.77 – Kurze Beschriftungen"]
+    assert not page.news_rows[0][1].isHidden() and page.news_rows[1][1].isHidden()     # no detail: no empty line
+    assert page.news_button.toolTip()
+    page.news_button.click()
+    assert posted.get_nowait() == ("news_seen", None)
+    win.show_model(overview.overview_model(fake_app(), time.time(), is_win=True))
+    assert page.news_card.isHidden()

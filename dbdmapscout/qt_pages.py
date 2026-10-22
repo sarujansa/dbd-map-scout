@@ -153,6 +153,24 @@ class OverviewPage(QWidget):
         card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)    # without a picture: only as tall as its text
         page.addWidget(card)
 
+        # 1.8.79: what changed since the version last run (HISTORY.md rows), until "Verstanden"
+        self.news_card = _card()
+        self.news_lay = QVBoxLayout(self.news_card)
+        self.news_lay.setContentsMargins(14, 12, 14, 12)
+        nh = QHBoxLayout()
+        self.news_title = _label(cls="h2")
+        nh.addWidget(self.news_title)
+        nh.addStretch()
+        self.news_button = QPushButton(_("Verstanden"))
+        self.news_button.setToolTip(_tip("Verstanden"))
+        self.news_button.clicked.connect(lambda _c=False: self._post("news_seen"))
+        nh.addWidget(self.news_button)
+        self.news_lay.addLayout(nh)
+        self.news_rows = []
+        self.news_lay.addWidget(_label(_("Aus HISTORY.md (Deutsch), die neuesten zuerst."), "dim"))
+        self.news_card.setVisible(False)
+        page.addWidget(self.news_card)
+
         # today
         head = QHBoxLayout()
         head.addWidget(_label(_("Heute").upper(), "h2"))
@@ -245,6 +263,25 @@ class OverviewPage(QWidget):
                 card.setVisible(i < len(o.today))
         self._show_system(o)
         self._show_rounds(o.rounds)
+        self._show_news(o)
+
+    def _show_news(self, o):
+        while len(self.news_rows) < len(o.news):
+            head, body = _label(wrap=True), _label(cls="dim", wrap=True)
+            pos = 1 + 2 * len(self.news_rows)
+            self.news_lay.insertWidget(pos, head)
+            self.news_lay.insertWidget(pos + 1, body)
+            self.news_rows.append((head, body))
+        for i, (head, body) in enumerate(self.news_rows):
+            shown = i < len(o.news)
+            head.setVisible(shown)
+            body.setVisible(shown and bool(o.news[i][2]))
+            if shown:
+                version, title, detail = o.news[i]
+                _set(head, f"{version} – {title}")
+                _set(body, detail)
+        _set(self.news_title, o.news_since.upper())
+        self.news_card.setVisible(bool(o.news))      # isVisible() lies while the window is hidden
 
     def _show_system(self, o):
         while len(self.sys_rows) < len(o.system):

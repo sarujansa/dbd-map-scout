@@ -1015,6 +1015,11 @@ EN = {
         "to past rounds.",
     "Abgleich mit der Stats-Seite": "Check against the stats page",
     "Noch keine offiziellen Daten.": "No official data yet.",
+    "Neu seit {version}": "New since {version}",
+    "Verstanden": "Got it",
+    "Aus HISTORY.md (Deutsch), die neuesten zuerst.": "From HISTORY.md (German), newest first.",
+    "Blendet die Karte „Neu seit …“ aus, bis die nächste neue Version kommt.":
+        "Hides the card \"New since …\" until the next new version arrives.",
     "Offizielle Match-Daten": "Official match data",
     "Einmal einrichten: Tampermonkey im Browser installieren, „Userscript kopieren“ und dort als neues Skript einfügen "
     "und speichern, auf stats.deadbydaylight.com anmelden. Chrome/Edge: in den Details der Erweiterung „Allow User "

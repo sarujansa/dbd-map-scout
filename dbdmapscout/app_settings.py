@@ -7,7 +7,7 @@ import logging
 import os
 import threading
 import time
-from . import __version__, i18n, obsrec, qt_theme, regions, status
+from . import __version__, i18n, obsrec, qt_theme, regions, status, whatsnew
 from . import uimodel as ui
 from .capture import IS_WIN, foreground_root, is_game_window
 from . import autostart
@@ -865,6 +865,23 @@ class SettingsTab:
     def _update_flag_changed(self):
         self.settings.set("auto_update", bool(self.update_var.get()))
         self.settings.save()                      # start.bat reads it at the next start
+
+    def _news_check(self):
+        """1.8.79: after an update the overview lists what changed since the version last run (the rows of
+        HISTORY.md after it) until "Verstanden"; a first start or nothing to tell only remembers the version."""
+        seen = str(self.settings.get("seen_version") or "")
+        self._news, self._news_since = [], seen
+        if seen and seen != __version__:
+            self._news = whatsnew.load(os.path.join(self.root_dir, "HISTORY.md"), seen)
+        if not self._news:
+            self._news_seen()
+
+    def _news_seen(self):
+        """"Verstanden" on the overview's card – and the start without anything to show."""
+        self._news, self._news_since = [], __version__
+        if self.settings.get("seen_version") != __version__:
+            self.settings.set("seen_version", __version__)
+            self._save_soon()
 
     def _show_update_status(self):
         """What start.bat / update.py did before this start (update installed, skipped, packages)."""
