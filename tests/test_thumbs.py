@@ -69,9 +69,9 @@ def test_the_loader_makes_thumbnails_in_a_thread_and_the_newest_request_wins(tmp
     loader.request(pics[3:])                                            # replaces what was still to do
     got = {}
     end = time.time() + 10
-    while len(got) < 3 and time.time() < end:
-        for path, w, h, data in loader.take():
-            got[path] = (w, h, len(data))
+    while not set(got) >= set(pics[3:]) and time.time() < end:    # 1.8.74: all three of the second request – the
+        for path, w, h, data in loader.take():                     # one picture the thread had in hand from the
+            got[path] = (w, h, len(data))                          # first may come first (the test waited for 3)
         time.sleep(0.01)
     assert set(got) >= set(pics[3:]) and all(v == (126, 89, 126 * 89 * 4) for v in got.values())
     assert not (set(got) - set(pics)) and len(got) <= 4                 # at most one of the first request
