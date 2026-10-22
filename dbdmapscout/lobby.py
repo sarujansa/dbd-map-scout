@@ -368,6 +368,7 @@ class QueueTracker:
     REMIND: float = 15                # lobby countdown at/below this and READY not pressed -> remind once
     MAX_SEARCH: float = 3 * 3600      # a "search" older than this is stale (DBD closed meanwhile …)
     QUICK_LOBBY_S: float = 3.0        # 1.5.5: READY with nothing below at most this long after PLAY / a search look
+    UNCONFIRMED_S: float = 300.0      # 1.8.71: a search/lobby look at most this old stands in for an unconfirmed lobby
     state: str = "idle"               # idle | search | lobby | custom
     role: str | None = None
     search_start: float | None = None
@@ -380,6 +381,7 @@ class QueueTracker:
     _cross_last: bool | None = None                # … and the last look that could tell (PLAY screen too)
     _last_button: tuple | None = None              # (kind, t) of the last look that showed a lobby button
     _cross_run: dict = field(default_factory=dict)   # cross-play looks since _pending was last restarted
+    _round_t: float | None = None                  # 1.8.71: when the last match began (round_started)
 
     @property
     def killer(self) -> str:
@@ -485,7 +487,22 @@ class QueueTracker:
             self._reset()
         return events
 
-    def round_started(self):
+    def lobby_for_round(self, t: float) -> Found | None:
+        """1.8.71 (user log: "Lobby found" → "Started searching" → banner → "lobby not seen", and rounds with no lobby
+        line at all – all farming rounds): the lobby a match now starting came from. The confirmed one if there is
+        one; else, when the last look at the lobby button since the previous match showed a search or a lobby (with
+        cross-play off it fills in seconds, the second look of a lobby never comes), what those looks told – role,
+        killer, cross-play – without a waiting time. Never for a custom game."""
+        if self.found is not None:
+            return self.found
+        lb = self._last_button
+        if (lb is None or lb[0] not in ("search", "lobby") or self.state == "custom"
+                or not 0 <= t - lb[1] <= self.UNCONFIRMED_S or (self._round_t is not None and lb[1] <= self._round_t)):
+            return None
+        return Found(lb[1], None, self.role, killer=self.killer, crossplay_off=self.crossplay_off,
+                     cross_looks=self.cross_looks)
+
+    def round_started(self, t: float | None = None):
         """1.8.43 (QA audit, user: "Custom Games mit Bots"): a match began – the lobby it came from is used up.
         After a custom match DBD goes straight back to the same custom lobby, with no PLAY screen between: the
         state stayed "custom", no second "found" came, and the next round was stored as a public one (kills,
@@ -493,6 +510,8 @@ class QueueTracker:
         lobby after PLAY vs. custom game) and the last cross-play look stay."""
         self._reset()
         self._pending, self.found, self._reminded = None, None, False
+        if t is not None:
+            self._round_t = t
 
     @staticmethod
     def _state_of(kind):

@@ -1139,9 +1139,10 @@ class StatsTab:
         self._log(_("Rundenverlauf gelöscht."), "System")
 
     # ---------------------------------------------------------- round history (tab Statistik)
-    def _hist_open(self, map_id, variant, source):
+    def _hist_open(self, map_id, variant, source, lobby=None):
         """A map was detected: a round starts. An open round whose end was never detected is dropped
-        (its length would be wrong)."""
+        (its length would be wrong). ``lobby``: what the worker saw of the lobby (1.8.71) – used when no lobby was
+        confirmed here (a "search" event after "found" drops it, a lobby that fills in seconds is never confirmed)."""
         m = self.catalog.maps.get(map_id)
         now = time.time()
         old = self._hist
@@ -1159,8 +1160,12 @@ class StatsTab:
                       "region": "", "source": source}
         self._sysrec = sysinfo.SysRecorder()          # system values during this round
         f = self._queue.get("found")                  # the lobby this match came from (once, max. 15 min old)
+        brief = f is None and lobby is not None
+        f = f or lobby
         farm_on = bool(self.settings.get("farming_crossplay", True))
         if f is not None and 0 <= now - f.t <= 900:
+            if brief:
+                self._log(_("Lobby nur kurz gesehen – Rolle und Crossplay von dort, ohne Wartezeit."), "Erkennung")
             # 1.8.36 (user: "Farming-Runden rutschen immer noch als normale Runden in die Statistik"): cross-play
             # off makes a farming round even when the lobby looked like a custom game (READY without countdown –
             # an instant lobby); the stats page decides later: a public match is farming, a custom game stays one

@@ -18,8 +18,11 @@ from .i18n import N_, _
 from .lobby import killer_label
 from .textnorm import fmt_duration
 
+# 1.8.71 (user: "Farming und normale Runden sollen bei Aufnahmen separiert werden"): "Alle Rollen" = the normal
+# rounds, as in the statistics; the farming rounds only under "Farming", both together only on request
 REC_ROLES = [("all", N_("Alle Rollen")), ("killer", N_("Killer")), ("survivor", N_("Survivor")),
-             ("farming", N_("Farming"))]
+             ("farming", N_("Farming")), ("everything", N_("Alle inkl. Farming"))]
+ROLE_ARG = {"all": "normal", "everything": None}
 REC_ONLY = [("all", N_("Alle Aufnahmen")), ("marked", N_("Mit Marke")), ("kept", N_("Behalten")),
             ("bad", N_("Beschädigt"))]
 CLIP_KINDS = [("all", N_("Alle Arten")), ("clip", N_("Clips")), ("instant", N_("Sofort-Clips (F8)")),
@@ -207,7 +210,7 @@ class RecordingsTab:
         map_label = next((m for m, lbl in self._rec_maps if lbl == self.rec_map_var.get()), None)
         role = next((k for k, lbl in self._rec_roles if lbl == self.rec_role_var.get()), "all")
         only = next((k for k, lbl in self._rec_onlys if lbl == self.rec_only_var.get()), "all")
-        return period, map_label, None if role == "all" else role, None if only == "all" else only
+        return period, map_label, ROLE_ARG.get(role, role), None if only == "all" else only
 
     def _rec_tab_tick(self):
         """From App._rec_tick (4×/s): a change from the recorder or the refresh interval re-reads the index –
@@ -302,7 +305,7 @@ class RecordingsTab:
         since = history.period_start(period, time.time()) if period != "all" else None
         for c in clips:
             c.killer = self._killer_of(c.killer) if c.killer else ""
-        shown = obsrec.select_clips(clips, since=since, role=None if role == "all" else role, killer=killer,
+        shown = obsrec.select_clips(clips, since=since, role=ROLE_ARG.get(role, role), killer=killer,
                                     kind=None if kind == "all" else kind)
         if not folder:
             self.clip_summary_var.set(_("Kein Aufnahmeordner – die Clips liegen in seinem Ordner „Clips“."))
@@ -415,6 +418,7 @@ class RecordingsTab:
             for var, opts in ((self.rec_period_var, self._rec_periods), (self.rec_map_var, self._rec_maps),
                               (self.rec_role_var, self._rec_roles), (self.rec_only_var, self._rec_onlys)):
                 var.set(opts[0][1])
+            self.rec_role_var.set(dict(self._rec_roles)["everything"])    # 1.8.71: "all" leaves farming out
             self._rec_render()
         if not self.rec_table.exists(iid):
             self._log(_("Die Aufnahme dieser Runde gibt es nicht mehr."), "System")

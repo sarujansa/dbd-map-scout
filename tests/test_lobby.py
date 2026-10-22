@@ -424,3 +424,39 @@ def test_any_multiplier_without_a_globe_means_cross_play_on():
         assert lobby.crossplay_off(draw(on, 45, text, 41), 2000, 837) is False, text
     for text in ("x2.00", "x1.25", "x1.5"):
         assert lobby.crossplay_off(draw(off, 20, text, 17), 2000, 837) is True, text
+
+
+def test_a_lobby_seen_only_briefly_still_gives_its_round_role_and_cross_play():
+    """1.8.71 (user log, farming with cross-play off: "Lobby found" → "Started searching" → banner → "No lobby for
+    this round (lobby not seen)", and rounds with no lobby line at all): the lobby fills in seconds, its second look
+    never comes – the match still gets what the looks since the previous match told (role, killer, cross-play), no
+    waiting time. Never from looks before the previous match, never for a custom game, never when too old."""
+    def off(v):
+        v.crossplay_off = True
+        return v
+
+    q = QueueTracker()
+    run(q, [(0, off(V("search", "killer", 0))), (1, off(V("search", "killer", 1))), (20, off(V("lobby", "killer")))])
+    assert q.found is None                                              # one lobby look: not confirmed
+    f = q.lobby_for_round(40)
+    assert f is not None and f.role == "killer" and f.crossplay_off and not f.custom
+    assert f.wait is None and f.t == 20
+    q.round_started(40)
+    assert q.lobby_for_round(300) is None                               # those looks belonged to that match
+    # "found", then the search came back for a moment: the confirmed lobby is still the one
+    q = QueueTracker()
+    run(q, [(0, off(V("search", "killer", 0))), (1, off(V("search", "killer", 1))), (20, off(V("lobby", "killer"))),
+            (21, off(V("lobby", "killer"))), (40, off(V("search", "killer", 0))), (41, off(V("search", "killer", 1)))])
+    f = q.lobby_for_round(60)
+    assert f is not None and f.crossplay_off and f.t == 20 and f.wait is not None
+    # too old, or a custom game: nothing
+    q = QueueTracker()
+    run(q, [(0, off(V("search", "killer", 0)))])
+    assert q.lobby_for_round(QueueTracker.UNCONFIRMED_S + 1) is None
+    q = QueueTracker()
+    run(q, [(0, V("custom")), (1, V("custom"))])
+    f = q.lobby_for_round(30)
+    assert f is not None and f.custom                                   # the confirmed custom game, as before
+    q.round_started(30)
+    run(q, [(700, V("custom"))])
+    assert q.lobby_for_round(720) is None
