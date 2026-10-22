@@ -64,11 +64,11 @@ class SettingsTab:
         st = self._reg("st.start", ui.LabelFrame(f, text=_("Start und Infobereich"), padding=8))
         st.pack(fill="x", pady=(8, 0))
         self.tray_var = ui.BooleanVar(value=self.settings.get("tray", True))
-        self._reg("st.tray", ui.Checkbutton(st, text=_("Beim Minimieren in den Infobereich (neben der Uhr)"),
+        self._reg("st.tray", ui.Checkbutton(st, text=_("Beim Minimieren in den Infobereich"),
                                              variable=self.tray_var, command=self._tray_flag_changed)).pack(anchor="w")
         self.autostart_var = ui.BooleanVar(value=False)
         self.autostart_cb = self._reg("st.autostart", ui.Checkbutton(
-            st, text=_("Mit Windows starten (im Infobereich, ohne Windows-Abfrage)"), variable=self.autostart_var,
+            st, text=_("Mit Windows starten"), variable=self.autostart_var,
             command=self._autostart_changed))
         self.autostart_cb.pack(anchor="w", pady=(2, 0))
         self.autostart_cb.state(["disabled"])
@@ -113,7 +113,7 @@ class SettingsTab:
         self.swatches.dark = bool(self.settings.get("dark_mode", True))
         self._swatch_mark()
         self.oled_var = ui.BooleanVar(value=bool(self.settings.get("oled_black", False)))
-        self._reg("st.oled", ui.Checkbutton(look, text=_("OLED-Schwarz (echtes Schwarz statt Grau im Dark Mode)"),
+        self._reg("st.oled", ui.Checkbutton(look, text=_("OLED-Schwarz"),
                                             variable=self.oled_var, command=self._theme_changed)
                   ).pack(anchor="w", pady=(4, 0))
         zr = ui.Frame(look)
@@ -136,7 +136,7 @@ class SettingsTab:
         upd = self._reg("st.updates", ui.LabelFrame(f, text=_("Updates"), padding=8))
         upd.pack(fill="x", pady=(8, 0))
         self.update_var = ui.BooleanVar(value=self.settings.get("auto_update", True))
-        self._reg("st.update", ui.Checkbutton(upd, text=_("Beim Start nach Updates suchen und installieren (GitHub)"),
+        self._reg("st.update", ui.Checkbutton(upd, text=_("Beim Start Updates installieren"),
                                                variable=self.update_var, command=self._update_flag_changed)).pack(
             anchor="w")
         self._reg("st.update_note", ui.Label(upd, text=_("nur über start.bat bzw. die Desktop-Verknüpfung; eigene "
@@ -252,7 +252,7 @@ class SettingsTab:
         cb.pack(side="left", padx=6)
         cb.bind("<<ComboboxSelected>>", lambda e: self._rec_setting())
         self.rec_pre_var = ui.BooleanVar(value=bool(self.settings.get("rec_pre", True)))
-        self._reg("st.more.rec_pre", ui.Checkbutton(rc, text=_("Vorlauf: Wiederholungspuffer von OBS beim Map-Banner sichern (Sekunden davor)"),
+        self._reg("st.more.rec_pre", ui.Checkbutton(rc, text=_("Vorlauf aus dem OBS-Wiederholungspuffer sichern"),
                                                      variable=self.rec_pre_var, command=self._rec_setting)).pack(anchor="w", pady=(4, 0))
         self.rec_buffer_var = ui.BooleanVar(value=bool(self.settings.get("rec_buffer_auto", True)))   # 1.4.1
         self._reg("st.more.rec_buffer", ui.Checkbutton(rc, text=_("Wiederholungspuffer mit DBD starten und stoppen"),
@@ -262,13 +262,13 @@ class SettingsTab:
                                                            variable=self.rec_obs_start_var,
                                                            command=self._rec_setting)).pack(anchor="w")
         self.rec_window_var = ui.BooleanVar(value=bool(self.settings.get("rec_window", False)))   # 1.8.41
-        self._reg("st.more.rec_window", ui.Checkbutton(rc, text=_("Nur das DBD-Fenster aufnehmen (Fensteraufnahme in OBS selbst einrichten)"),
+        self._reg("st.more.rec_window", ui.Checkbutton(rc, text=_("Nur das DBD-Fenster aufnehmen"),
                                                         variable=self.rec_window_var, command=self._rec_setting)).pack(anchor="w")
         self.rec_merge_var = ui.BooleanVar(value=bool(self.settings.get("rec_merge", True)))       # 1.4.2
         self._reg("st.more.rec_merge", ui.Checkbutton(rc, text=_("Vorlauf und Runde zu einer Datei zusammenfügen"),
                                                        variable=self.rec_merge_var, command=self._rec_setting)).pack(anchor="w")
         self.rec_early_var = ui.BooleanVar(value=bool(self.settings.get("rec_early", True)))      # 1.6
-        self._reg("st.more.rec_early", ui.Checkbutton(rc, text=_("Aufnahme schon am Ende des Ladebildschirms starten (mit Spawn)"),
+        self._reg("st.more.rec_early", ui.Checkbutton(rc, text=_("Aufnahme schon am Ladebildschirm starten"),
                                                        variable=self.rec_early_var, command=self._rec_setting)).pack(anchor="w")
         self.rec_instant_var = ui.BooleanVar(value=bool(self.settings.get("rec_instant", True)))  # 1.6
         ri = ui.Frame(rc)
@@ -303,7 +303,7 @@ class SettingsTab:
         self._reg("st.more.rec_audio_desktop", sound_box("desktop", _("Übriger Desktop-Ton"))).pack(side="left", padx=(0, 10))
         self._reg("st.more.rec_audio_mic", sound_box("mic", _("Mikrofon"))).pack(side="left")
         self.rec_tracks_var = ui.BooleanVar(value=bool(self.settings.get("rec_tracks", True)))      # 1.8.5
-        self._reg("st.more.rec_tracks", ui.Checkbutton(rc, text=_("Jede Tonquelle auf eine eigene OBS-Tonspur legen (1 alles, 2 nur DBD, 3 Discord, 4 Mikrofon, 5 Hintergrund) – zum Mischen im Clip-Editor"),
+        self._reg("st.more.rec_tracks", ui.Checkbutton(rc, text=_("Jede Tonquelle auf eine eigene OBS-Tonspur"),
                                                         variable=self.rec_tracks_var, command=self._rec_audio_changed)).pack(anchor="w", pady=(4, 0))
         self._reg("st.more.rec_tracks_hint", ui.Label(rc, text=_(
             "Dafür in OBS: Einstellungen → Ausgabe → Ausgabemodus „Erweitert“ → Reiter Aufnahme → Audiospur 1 bis 5 anhaken. "

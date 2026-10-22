@@ -422,7 +422,7 @@ def test_slow_steps_of_the_tick_and_the_statistics_are_named_for_the_diagnosis(a
         assert all(n.startswith("Takt: ") for n in names)                 # nothing else noted for this tick
         app.root.slow.clear()
         monkeypatch.setattr(app, "_stats_part_records", lambda c: time.sleep(0.05))
-        app.stats_nb.select(str(app.stats_records.master))
+        app._stats_select(str(app.stats_records.master))
         app._stats_render()
         names = [s[1] for s in app.root.slow]
         assert "Statistik-Reiter: Rekorde" in names and "Statistik: Auswahl berechnen" in names
@@ -828,12 +828,12 @@ def test_farming_rounds_have_a_tab_of_their_own_whatever_the_role_filter(app_roo
     history.append(path, history.Round(t=t3, seconds=700, map_id="coal", map="Coal Tower", role="killer"))
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
-        app.stats_nb.select(str(app.stats_last.master.master))
+        app._stats_select(str(app.stats_last.master.master))
         app._stats_render()
         assert list(app.stats_last.get_children()) == [repr(t3)]      # "Alle Rollen": the normal round only
         farm_tab = app.stats_farm.master.master
-        assert app.stats_nb.tab(str(farm_tab), "text") == "Farming"
-        app.stats_nb.select(str(farm_tab))
+        assert app._stats_parts[str(farm_tab)][0] == "Farming"
+        app._stats_select(str(farm_tab))
         app._stats_render()
         assert list(app.stats_farm.get_children()) == [repr(t2), repr(t1)]   # newest first
         row = app.stats_farm.item(repr(t1), "values")
@@ -872,7 +872,7 @@ def test_several_rounds_can_be_marked_as_farming_at_once_and_the_recordings_foll
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
         t = app.stats_last
-        app.stats_nb.select(str(t.master.master))             # the sub-tab "Letzte Runden" (only it is drawn)
+        app._stats_select(str(t.master.master))               # the sub-tab "Letzte Runden" (only it is drawn)
         app._stats_render()
         assert str(t.cget("selectmode")) == "extended" and len(t.get_children()) == 2
         t.selection_set(repr(t1), repr(t2))
@@ -1036,8 +1036,8 @@ def test_the_discord_state_follows_round_and_lobby_and_the_records_tab_draws(app
         app._discord_status("Discord: verbunden", True)
         assert app.dc_status_var.get() == "Discord: verbunden"
         app._stats_render()
-        i = next(i for i, tab in enumerate(app.stats_nb.tabs()) if app.stats_nb.tab(tab, "text") == "Rekorde")
-        app._stats_render_tab(i)
+        app._stats_select("Rekorde")
+        app._stats_render_tab()
         titles = [t.title for t in app.stats_records.data]
         assert titles[:2] == ["4K-Serie", "Entkommen-Serie"] and "Längste Runde" in titles
     finally:
@@ -1055,10 +1055,12 @@ def test_the_statistics_tabs_keep_their_meaning_when_moved(app_root):
         app.qt.show_page("stats")                                   # the page gets its texts when shown
         app._qt_refresh(force=True)
         page = app.qt.forms["stats"]
-        tabs_id, tw, ids = page._tabsets[0]
+        tabs_id, tw, ids = next(s for s in page._tabsets                 # 1.8.76: the group "Runden" holds "Rekorde"
+                                if "Rekorde" in [s[1].tabText(i) for i in range(s[1].count())])
         names = [tw.tabText(i) for i in range(tw.count())]
-        assert tw.tabBar().isMovable() and "Rekorde" in names and page._tab_ids(tw, ids) == [str(i) for i in range(tw.count())]
-        tw.tabBar().moveTab(0, 2)                                   # "Übersicht" behind "Killer"
+        assert tw.tabBar().isMovable() and names == ["Übersicht", "Letzte Runden", "Rekorde", "Verlauf"]
+        assert page._tab_ids(tw, ids) == [str(i) for i in range(tw.count())]
+        tw.tabBar().moveTab(0, 2)                                   # "Übersicht" behind "Rekorde"
         ev = []
         while not app.events.empty():
             ev.append(app.events.get())
@@ -1072,7 +1074,7 @@ def test_the_statistics_tabs_keep_their_meaning_when_moved(app_root):
             ev.append(app.events.get())
         assert ("ui", "act", (tabs_id, 1)) in ev
         app._qt_event("act", (tabs_id, 1))
-        assert app.stats_nb.index("current") == 1
+        assert app._stats_current_title() == "Letzte Runden"
         app._qt_refresh(force=True)
         assert [tw.tabText(i) for i in range(3)] == [names[1], names[2], names[0]] and tw.currentIndex() == 0
         tw.setCurrentIndex(2)                                        # a click on the moved "Übersicht"
@@ -1102,11 +1104,17 @@ def test_the_statistics_tabs_are_short_and_the_last_rounds_come_second(app_root)
     history.append(str(app_root / "rounds.jsonl"), history.Round(time.time() - 900, 600, "coal", "Coal Tower"))
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
-        texts = [app.stats_nb.tab(t, "text") for t in app.stats_nb.tabs()]
-        assert texts[:3] == ["Übersicht", "Letzte Runden", "Maps"] and texts[-3:] == ["Gegner", "Builds", "Farming"]
-        assert len(texts) == 13
+        groups = [app.stats_nb.tab(t, "text") for t in app.stats_nb.tabs()]      # 1.8.76: four groups
+        assert groups == ["Runden", "Gegner & Builds", "Maps & Server", "Sonstiges"]
+        parts = {g: [nb.tab(t, "text") for t in nb.tabs()] for g, nb in zip(groups, app._stats_groups.values())}
+        assert parts["Runden"] == ["Übersicht", "Letzte Runden", "Rekorde", "Verlauf"]
+        assert parts["Gegner & Builds"] == ["Killer", "Gegner", "Builds"]
+        assert parts["Maps & Server"] == ["Maps", "Regionen", "Wartezeit"]
+        assert parts["Sonstiges"] == ["Bloodpoints", "System", "Farming"]
+        assert sum(len(v) for v in parts.values()) == 13 and app._stats_current_title() == "Übersicht"
         app._stats_render()
-        app._stats_render_tab(1)
+        app._stats_select("Letzte Runden")
+        app._stats_render_tab()
         assert len(app.stats_last.get_children()) == 1
         assert "Spotify" in app.more_btn.cget("text") and "Discord" in app.more_btn.cget("text")
     finally:
@@ -1133,8 +1141,8 @@ def test_the_builds_tab_lists_the_own_loadout_with_its_results(app_root):
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
         app._stats_render()
-        i = next(i for i, tab in enumerate(app.stats_nb.tabs()) if app.stats_nb.tab(tab, "text") == "Builds")
-        app._stats_render_tab(i)
+        app._stats_select("Builds")
+        app._stats_render_tab()
         rows = {app.stats_items.item(c, "values")[0]: app.stats_items.item(c, "values")
                 for c in app.stats_items.get_children()}
         assert rows["Lethal Pursuer"][1:6] == ("Perk", "Killer", 2, "100%", "Ø 3.00")
@@ -1163,8 +1171,7 @@ def test_the_builds_hint_says_when_the_selection_leaves_the_loadouts_out(app_roo
         perks=[["P1", "Lethal Pursuer"]])])
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
-        i = next(i for i, tab in enumerate(app.stats_nb.tabs()) if app.stats_nb.tab(tab, "text") == "Builds")
-        app.stats_nb.select(app.stats_nb.tabs()[i])
+        app._stats_select("Builds")
         app._stats_render()
         assert app.stats_items.get_children() == ()
         hint = app.stats_build_var.get()
@@ -1239,11 +1246,12 @@ def test_a_saved_tab_order_survives_a_new_tab(app_root):
         app.qt.show_page("stats")
         app._qt_refresh(force=True)
         page = app.qt.forms["stats"]
-        tabs_id, tw, ids = page._tabsets[0]
-        old = ["1", "0"] + [str(i) for i in range(2, 10)] + ["99"]          # ten known ids and a vanished one
+        tabs_id, tw, ids = next(s for s in page._tabsets                 # 1.8.76: the group "Runden" (four tabs)
+                                if "Rekorde" in [s[1].tabText(i) for i in range(s[1].count())])
+        old = ["1", "0", "2", "99"]                                          # three known ids and a vanished one
         page.apply_tab_order({tabs_id: old})
-        assert page._tab_ids(tw, ids) == ["1", "0"] + [str(i) for i in range(2, len(ids))]   # new tabs at the end
-        assert tw.tabBar().property("dense") is True                         # eleven tabs and more: less padding
+        assert page._tab_ids(tw, ids) == ["1", "0", "2", "3"]                # the new tab at the end
+        assert tw.tabBar().property("dense") is not True                     # 1.8.76: no row has eleven tabs now
     finally:
         app.quit()
 
@@ -1264,8 +1272,8 @@ def test_the_opponents_tab_shows_how_the_survivors_matches_ended(app_root):
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
         app._stats_render()
-        i = next(i for i, tab in enumerate(app.stats_nb.tabs()) if app.stats_nb.tab(tab, "text") == "Gegner")
-        app._stats_render_tab(i)
+        app._stats_select("Gegner")
+        app._stats_render_tab()
         rows = [app.stats_opp.item(c, "values") for c in app.stats_opp.get_children()]
         assert rows[0][:5] == ("Meg Thomas", "Survivor", 3, "0%", "100%") and rows[1][0] == "Feng Min"
         tiles = {x.title: x for x in app.stats_opp_tiles.data}
@@ -1363,7 +1371,7 @@ def test_right_click_menus_of_recordings_last_rounds_and_the_overlay_preview(app
             time.sleep(0.05)
         assert obsrec.load_index(str(folder))[0].keep
 
-        app.stats_nb.select(str(app.stats_last.master.master))   # the sub-tab "Letzte Runden" (only it is drawn)
+        app._stats_select(str(app.stats_last.master.master))     # the sub-tab "Letzte Runden" (only it is drawn)
         app._stats_render()
         app.stats_last.selection_set(repr(t2))
         app.stats_last.event_generate("<<TreeviewSelect>>")
@@ -1852,7 +1860,7 @@ def test_a_dragged_statistics_tab_shows_its_content_at_once(app_root, monkeypatc
         try:
             tw = seen["tw"]
             assert tw.currentWidget() is seen["want"]
-            assert app.stats_nb.index("current") == 1 and len(app.stats_last.get_children()) == 2
+            assert app._stats_current_title() == "Letzte Runden" and len(app.stats_last.get_children()) == 2
             seen["rows"] = [t.topLevelItemCount() for t in tw.currentWidget().findChildren(Table)]
         except BaseException as e:
             failed.append(e)
@@ -1948,8 +1956,7 @@ def test_rounds_with_a_farming_partner_count_as_farming_by_a_right_click_on_the_
     official.merge(str(app_root / official.FILE), ms)
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
-        i = next(i for i, tab in enumerate(app.stats_nb.tabs()) if app.stats_nb.tab(tab, "text") == "Gegner")
-        app.stats_nb.select(app.stats_nb.tabs()[i])
+        app._stats_select("Gegner")
         app._stats_render()
         rows = lambda: [app.stats_opp.item(c, "values")[0] for c in app.stats_opp.get_children()]   # noqa: E731
         assert rows() == ["Slasher", "Nurse"] and app.stats_opp.get_children()[0] == "killer\tSlasher"   # by name
@@ -1996,8 +2003,7 @@ def test_the_right_click_on_an_opponent_reaches_the_menu_through_the_qt_table(ap
     try:
         qapp = app.qapp
         app.qt.show_page("stats")
-        i = next(i for i, tab in enumerate(app.stats_nb.tabs()) if app.stats_nb.tab(tab, "text") == "Gegner")
-        app.stats_nb.select(app.stats_nb.tabs()[i])
+        app._stats_select("Gegner")
         app._stats_render()
         for _n in range(3):                       # the tab row follows the model, then the table gets its rows
             app._qt_refresh(force=True)

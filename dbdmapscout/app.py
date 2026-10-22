@@ -275,7 +275,7 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         self.watch_var = ui.StringVar(value=_("Rundenende-Erkennung: {state}", state=_("keine Map angezeigt")))
         ui.Label(adv, textvariable=self.watch_var, style="Dim.TLabel", wraplength=420).pack(anchor="w", pady=(4, 6))
         self.debug_var = ui.BooleanVar(value=self.settings["save_debug_images"])
-        ui.Checkbutton(adv, text=_("Debug-Bilder speichern (Ordner debug/)"), variable=self.debug_var,
+        ui.Checkbutton(adv, text=_("Debug-Bilder speichern"), variable=self.debug_var,
                         command=self._detect_flags_changed).pack(anchor="w")
         r = ui.Frame(adv)
         r.pack(fill="x", pady=(6, 0))

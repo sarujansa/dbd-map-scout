@@ -8,7 +8,7 @@ import shutil
 import time
 
 HUD_SHOWN = ("above", "left", "right", "custom")    # settings.sysinfo values that show the system values
-SETTINGS_VERSION = 8
+SETTINGS_VERSION = 9
 
 DEFAULTS = {
     "settings_version": SETTINGS_VERSION,
@@ -301,6 +301,8 @@ def _load(raw) -> dict:
         data["rec_merge"] = False
     if ver < 8:  # 1.8.17 (user: left and right lines of their own)
         ov["bar_limits_same"] = False
+    if ver < 9:  # 1.8.76: the statistics' tabs are four groups now – a saved order of the thirteen would reorder them
+        (data.get("tab_order") or {}).pop("stats", None)
     if data.get("color_theme") == "oled":            # 1.62.0: OLED was a theme of its own
         data["color_theme"], data["oled_black"] = "gold", True
     data["settings_version"] = SETTINGS_VERSION

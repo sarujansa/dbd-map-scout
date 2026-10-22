@@ -1206,7 +1206,7 @@ class AutoPage(QWidget, _Arranged):
                     tw = w
                     ids = next((i for tid, t, i in self._tabsets if t is tw), {})
                     order = self._tab_ids(tw, ids)                   # 1.7.6: model index per shown position
-                    texts = st.get("tabs", [])
+                    texts = [t.replace("&", "&&") for t in st.get("tabs", [])]   # 1.8.76: "&" is no mnemonic
                     for qi in range(tw.count()):
                         mi = int(order[qi]) if qi < len(order) and order[qi] is not None else qi
                         if mi < len(texts) and tw.tabText(qi) != texts[mi]:
