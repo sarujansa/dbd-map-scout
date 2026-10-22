@@ -1803,3 +1803,57 @@ def test_a_farming_lobby_that_looked_custom_and_the_pages_role_and_killer_win(ap
         app._hist = None
     finally:
         app.quit()
+
+
+def test_a_dragged_statistics_tab_shows_its_content_at_once(app_root, monkeypatch):
+    """1.8.70 (user: "wenn ich drauf bleibe, passiert nichts – ich muss immer verschiedene Fenster anklicken"; the
+    diagnosis showed no hang): after the tabs were dragged into another order, AutoPage.visible_keys compared the
+    model's tab index with the position in the row – the tab on display counted as hidden and was never filled; its
+    content came only with the next page switch. A real click in the reordered row fills the table at once."""
+    import json
+    from dbdmapscout import history
+    from dbdmapscout.app import App
+    from dbdmapscout.app_qt import QtShell
+    from dbdmapscout.qt_views import Table
+    monkeypatch.setattr(QtShell, "_qt_warm", lambda self: None)       # it fills every page once – not the click
+    now = time.time()
+    for i in range(5):
+        history.append(str(app_root / "rounds.jsonl"), history.Round(t=now - 3600 * (i + 1), seconds=600,
+                                                                     map_id="coal", map="Coal Tower", role="killer",
+                                                                     killer="The Trapper" if i < 2 else "The Nurse"))
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    seen, failed = {}, []
+
+    def start():
+        try:
+            app.qt.show_page("stats")
+            app.qt.show()
+            page = app.qt.forms["stats"]
+            tabs_id, tw, ids = max(page._tabsets, key=lambda s: len(s[2]))
+            order = list(reversed(sorted(ids, key=int)))              # every tab somewhere else
+            app.qt.set_tab_order({"stats": {tabs_id: order}})
+            seen["tw"], seen["want"] = tw, ids["1"]                    # model tab 1 = "Letzte Runden"
+            app._stats_render()
+            app.stats_killer_var.set(next(lbl for k, lbl in app._stats_killers if k == "The Trapper"))
+            app._stats_render()                                        # the content changes after the build
+            tw.setCurrentIndex(tw.indexOf(ids["1"]))                   # as a click on it
+        except BaseException as e:
+            failed.append(e)
+            app.quit()
+
+    def check():
+        try:
+            tw = seen["tw"]
+            assert tw.currentWidget() is seen["want"]
+            assert app.stats_nb.index("current") == 1 and len(app.stats_last.get_children()) == 2
+            seen["rows"] = [t.topLevelItemCount() for t in tw.currentWidget().findChildren(Table)]
+        except BaseException as e:
+            failed.append(e)
+        app.quit()
+
+    app.root.after(300, start)
+    app.root.after(1500, check)
+    app.root.mainloop()
+    assert not failed, failed
+    assert seen["rows"] == [2]                                         # in the window, not only in the model
