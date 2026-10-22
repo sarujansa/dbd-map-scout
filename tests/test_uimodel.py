@@ -388,6 +388,33 @@ def test_slow_callbacks_are_noted_for_the_diagnosis():
     assert diagnose.lag_lines([]) == ["Fenster-Hänger (≥ 30 ms): keine"]
 
 
+def test_slow_steps_of_the_tick_and_the_statistics_are_named_for_the_diagnosis(app_root, monkeypatch):
+    """1.8.67 (user: "Statistik dauert ewig zum Laden, alle Felder darin"; not reproducible here – ~600 rounds and
+    matches open the page in 60 ms, the slowest tab ~130 ms – and the diagnosis only said "App._tick_overlay
+    6005 ms"): each step of the 250 ms tick and each part of the statistics that holds the window up gets a line of
+    its own in "Fenster-Hänger"; quick ones do not."""
+    from dbdmapscout import diagnose
+    from dbdmapscout.app import App
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        app.root.slow.clear()
+        monkeypatch.setattr(app, "_official_tick", lambda: time.sleep(0.05))
+        app._tick_overlay(reschedule=False)
+        names = [s[1] for s in app.root.slow]
+        assert "Takt: offizielle Daten" in names and "Takt: hotkeys" not in names
+        assert all(n.startswith("Takt: ") for n in names)                 # nothing else noted for this tick
+        app.root.slow.clear()
+        monkeypatch.setattr(app, "_stats_part_records", lambda c: time.sleep(0.05))
+        app.stats_nb.select(str(app.stats_records.master))
+        app._stats_render()
+        names = [s[1] for s in app.root.slow]
+        assert "Statistik-Reiter: Rekorde" in names and "Statistik: Auswahl berechnen" in names
+        assert "Takt: offizielle Daten" not in names
+        assert any("Statistik-Reiter: Rekorde" in line for line in diagnose.lag_lines(app.root.slow))
+    finally:
+        app.quit()
+
+
 def test_moving_without_a_map_shows_a_test_map(app_root):
     """1.64.3 (user: "die Map wird beim Verschieben nicht angezeigt"): "Mit der Maus verschieben" without a map
     shows a test map to grab – in the game too; "Fertig" hides it again, a map chosen meanwhile stays."""

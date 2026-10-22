@@ -434,6 +434,13 @@ class StatsTab:
                                phantoms=phantoms, public_custom=public_custom)
 
     def _stats_render(self):
+        t0 = time.perf_counter()
+        try:
+            self._stats_render_all()
+        finally:
+            self.root.note("Statistik: Auswahl berechnen", (time.perf_counter() - t0) * 1000)   # 1.8.67
+
+    def _stats_render_all(self):
         j = self._joined()
         all_rounds, off, rescued = j.rounds, j.off, j.rescued
         self._off_rescued = {repr(r.t) for r in rescued}   # rows in "Letzte Runden" not in rounds.jsonl
@@ -524,7 +531,10 @@ class StatsTab:
                 self._stats_part_builds,                                                    # 1.8.48
                 self._stats_part_farming)                                                   # 1.8.64
         if i < len(part):
+            t0 = time.perf_counter()
             part[i](c)
+            self.root.note("Statistik-Reiter: " + self.stats_nb.tab(self.stats_nb.tabs()[i], "text"),
+                           (time.perf_counter() - t0) * 1000)                                     # 1.8.67
 
     def _stats_part_dash(self, c):
         rounds, pairs, notes, all_rounds = c.rounds, c.pairs, c.notes, c.all_rounds
@@ -1271,7 +1281,9 @@ class StatsTab:
                 key.append(None)
         cached = getattr(self, "_joined_cache", None)
         if cached is None or cached[0] != key or cached[1] is not self.catalog:    # rebuilt catalog: may reuse the id
+            t0 = time.perf_counter()
             cached = self._joined_cache = (key, self.catalog, self._official_join())
+            self.root.note("Statistik: Runden und Matches laden", (time.perf_counter() - t0) * 1000)   # 1.8.67
         return cached[2]
 
     def _official_map_id(self, name):
