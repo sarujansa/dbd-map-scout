@@ -175,7 +175,8 @@ def collect(app) -> str:
     lines.append(f"Fehler seit Start: {sorted(errs) if errs else 'keine'}")
     if getattr(app, "root_dir", None):
         lines.extend(crash_lines(app.root_dir))
-    lines.extend(lag_lines(getattr(getattr(app, "root", None), "slow", ())))
+    root = getattr(app, "root", None)
+    lines.extend(lag_lines(getattr(root, "slow", ()), getattr(root, "worst", ())))
     return "\n".join(lines)
 
 
@@ -210,13 +211,21 @@ def crash_lines(root: str) -> list:
     return [f"Letzter harter Absturz ({when}, {CRASH_LAST}):"] + ["  " + t for t in text[:CRASH_LINES]] + more
 
 
-def lag_lines(slow) -> list:
-    """Fenster-Hänger: Timer/Ereignisse ≥ 30 ms oder ≥ 60 ms zu spät (mainloop.MainLoop.note), neueste zuerst."""
+def _lag_line(t, what, took, late) -> str:
+    return (f"  {time.strftime('%H:%M:%S', time.localtime(t))}  {what}  {took:.0f} ms"
+            + (f" / {late:.0f} ms" if late >= 1 else ""))
+
+
+def lag_lines(slow, worst=()) -> list:
+    """Fenster-Hänger: Timer/Ereignisse ≥ 30 ms oder ≥ 60 ms zu spät (mainloop.MainLoop.note), neueste zuerst;
+    seit 1.8.69 dazu die längsten seit dem Start (im Match verdrängen die Takte mit 30–48 ms sonst alles Ältere)."""
     slow = list(slow)
     if not slow:
         return ["Fenster-Hänger (≥ 30 ms): keine"]
     out = [f"Fenster-Hänger (≥ 30 ms, letzte {len(slow)}; dauerte / zu spät):"]
-    for t, what, took, late in reversed(slow):
-        out.append(f"  {time.strftime('%H:%M:%S', time.localtime(t))}  {what}  {took:.0f} ms"
-                   + (f" / {late:.0f} ms" if late >= 1 else ""))
+    out += [_lag_line(*e) for e in reversed(slow)]
+    worst = list(worst)
+    if worst:
+        out.append(f"Längste Fenster-Hänger seit dem Start ({len(worst)}; dauerte / zu spät):")
+        out += [_lag_line(*e) for e in worst]
     return out

@@ -388,6 +388,23 @@ def test_slow_callbacks_are_noted_for_the_diagnosis():
     assert diagnose.lag_lines([]) == ["Fenster-Hänger (≥ 30 ms): keine"]
 
 
+def test_the_longest_hangs_survive_a_flood_of_short_ones():
+    """1.8.69 (user: Bloodpoints takes 1–3 min, but the diagnosis copied in a match showed only the tick's 30–48 ms):
+    the last 40 are gone after ~10 s of such ticks – the longest since the start stay in a list of their own."""
+    pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
+    from dbdmapscout import diagnose, mainloop, qt_window
+    loop = mainloop.MainLoop(qt_window.application())
+    loop.note("Statistik-Reiter: Bloodpoints", 90000)
+    for i in range(mainloop.SLOW_KEPT + 5):
+        loop.note("Takt: layout", 40 + i % 5)
+    loop.note("Ereignis spät", 10, late_ms=5000)
+    assert all(e[1] != "Statistik-Reiter: Bloodpoints" for e in loop.slow)             # pushed out of the last 40
+    assert [e[1] for e in loop.worst[:2]] == ["Statistik-Reiter: Bloodpoints", "Ereignis spät"]
+    assert len(loop.worst) == mainloop.WORST_KEPT
+    text = "\n".join(diagnose.lag_lines(loop.slow, loop.worst))
+    assert "Längste Fenster-Hänger seit dem Start" in text and "Bloodpoints  90000 ms" in text
+
+
 def test_slow_steps_of_the_tick_and_the_statistics_are_named_for_the_diagnosis(app_root, monkeypatch):
     """1.8.67 (user: "Statistik dauert ewig zum Laden, alle Felder darin"; not reproducible here – ~600 rounds and
     matches open the page in 60 ms, the slowest tab ~130 ms – and the diagnosis only said "App._tick_overlay
