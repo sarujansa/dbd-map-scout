@@ -1016,6 +1016,12 @@ EN = {
     "Abgleich mit der Stats-Seite": "Check against the stats page",
     "Noch keine offiziellen Daten.": "No official data yet.",
     "Neu seit {version}": "New since {version}",
+    "Sicherung: {files} nach {folder}/ kopiert (die letzten {n} Stände bleiben).":
+        "Backup: {files} copied to {folder}/ (the last {n} copies are kept).",
+    "{n} Dateien, zuletzt {day}": "{n} files, latest {day}",
+    "noch keine": "none yet",
+    "Tägliche Kopie von rounds.jsonl und official.jsonl nach {folder}/ (nur bei Änderungen, die letzten {n} Stände je Datei; vor „Verlauf löschen“ eine zusätzliche): {state}":
+        "Daily copy of rounds.jsonl and official.jsonl to {folder}/ (only on changes, the last {n} copies per file; one more before \"Clear history\"): {state}",
     "Verstanden": "Got it",
     "Aus HISTORY.md (Deutsch), die neuesten zuerst.": "From HISTORY.md (German), newest first.",
     "Blendet die Karte „Neu seit …“ aus, bis die nächste neue Version kommt.":

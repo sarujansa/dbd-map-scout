@@ -254,7 +254,8 @@ SPECS = {
                                               ("stretch",))),
                                      ("hint", "st.more.sp_status"), ("hint", "st.more.sp_text"))),
         ("card", "st.more.backup", (("row", (("button", "st.more.export"), ("button", "st.more.import"), ("stretch",),
-                                             ("button", "st.more.clear_hist"), ("button", "st.more.reset_all"))),)),
+                                             ("button", "st.more.clear_hist"), ("button", "st.more.reset_all"))),
+                                    ("hint", "st.more.backup_hint"))),
         ("card", "st.more.folders", (("row", (("button", "st.more.dir"), ("button", "st.more.maps_dir"), ("stretch",))),)),
     ),
 }
