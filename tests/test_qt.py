@@ -1814,3 +1814,46 @@ def test_the_overview_lists_what_is_new_until_it_is_understood(qapp, keep):
     assert posted.get_nowait() == ("news_seen", None)
     win.show_model(overview.overview_model(fake_app(), time.time(), is_win=True))
     assert page.news_card.isHidden()
+
+
+def test_the_overview_compares_this_week_with_the_last_one(qapp, keep):
+    """1.8.83 (UI review idea 6): a tile row "Diese Woche" – rounds, Ø kills, escapes, Ø wait and bloodpoints of
+    Monday until now, each with last week's value and the change; hidden while neither week has a round."""
+    from dbdmapscout import official, qt_window
+    now = time.time()
+    start = history.period_start("week", now)
+    rounds, off = [], {}
+
+    def add(t, role, wait, match):
+        r = history.Round(t, 600, "coal", "Coal Tower", role=role, wait=wait)
+        rounds.append(r)
+        off[id(r)] = match
+    dead = [official.Player(role="survivor", character="Meg Thomas", status="Sacrificed") for _i in range(4)]
+    add(start + 3600, "killer", 60, official.Match(t=start + 3600 - 38, map="Coal Tower", role="killer",
+                                                   seconds=600, bp=30000, opp=dead))
+    add(start + 7200, "survivor", 120, official.Match(t=start + 7200 - 38, map="Coal Tower", role="survivor",
+                                                      seconds=600, bp=20000, status="Escaped", opp=[]))
+    add(start - 86400, "killer", 30, official.Match(t=start - 86400 - 38, map="Coal Tower", role="killer",
+                                                    seconds=600, bp=25000, opp=dead[:2] + [
+                                                        official.Player(role="survivor", character="Feng Min",
+                                                                        status="Escaped")] * 2))
+    app = fake_app(rounds=rounds)
+    app._joined = lambda: SimpleNamespace(rounds=rounds, off=off, matches=list(off.values()))
+    o = overview.overview_model(app, now, is_win=True)
+    tiles = {f.title: f for f in o.week}
+    assert list(tiles) == ["Runden", "Ø Kills", "Entkommen", "Ø Wartezeit", "Bloodpoints"]
+    assert tiles["Runden"].value == "2" and tiles["Runden"].sub == "Vorwoche 1 · ▲ 1"
+    assert tiles["Ø Kills"].value == "4.0" and tiles["Ø Kills"].sub == "Vorwoche 2.0 · ▲ 2.0"
+    assert tiles["Entkommen"].value == "100%" and tiles["Entkommen"].sub == "Vorwoche –"
+    assert tiles["Ø Wartezeit"].value == "01:30" and tiles["Ø Wartezeit"].sub == "Vorwoche 00:30 · ▲ 01:00"
+    assert tiles["Bloodpoints"].value == "50k" and tiles["Bloodpoints"].sub == "Vorwoche 25k · ▲ 25k"
+    assert "Vorwoche" in o.week_note
+    win = keep(qt_window.MainWindow(lambda a, arg=None: None))
+    win.apply_theme(True, 1.0)
+    win.show_model(o)
+    page = win.overview
+    assert not page.week_title.isHidden() and [c.isHidden() for c in page.week_cards] == [False] * 5
+    assert page.week_tiles[0].value.text() == "2" and page.week_tiles[4].sub.text() == "Vorwoche 25k · ▲ 25k"
+    assert overview.overview_model(fake_app(), now, is_win=True).week == []        # nothing: no row
+    win.show_model(overview.overview_model(fake_app(), now, is_win=True))
+    assert page.week_title.isHidden() and all(c.isHidden() for c in page.week_cards)

@@ -193,6 +193,31 @@ class OverviewPage(QWidget):
             t.setVisible(i < 4)
         page.addLayout(tiles)
 
+        # 1.8.83: this week against the last one – shown only once a week has rounds
+        head = QHBoxLayout()
+        self.week_title = _label(_("Diese Woche").upper(), "h2")
+        head.addWidget(self.week_title)
+        head.addStretch()
+        self.week_note = _label(cls="dim", wrap=True)
+        head.addWidget(self.week_note, 1)
+        page.addLayout(head)
+        wgrid = TileGrid(min_width=170, columns=5)
+        self.week_tiles, self.week_cards = [], []
+        for _i in range(5):
+            t = _card()
+            tl = QVBoxLayout(t)
+            tl.setContentsMargins(14, 12, 14, 12)
+            box = FactBox(post=post)
+            box.sub.setWordWrap(True)
+            tl.addWidget(box)
+            wgrid.addWidget(t)
+            self.week_tiles.append(box)
+            self.week_cards.append(t)
+            t.setVisible(False)
+        self.week_title.setVisible(False)
+        self.week_note.setVisible(False)
+        page.addLayout(wgrid)
+
         # system values and the last rounds
         row = TileGrid(min_width=300, columns=2)  # side by side, below each other in a narrow window
         sysc = _card()
@@ -261,6 +286,13 @@ class OverviewPage(QWidget):
                 box.show_fact(o.today[i])
             if card.isVisible() != (i < len(o.today)):
                 card.setVisible(i < len(o.today))
+        self.week_title.setVisible(bool(o.week))
+        self.week_note.setVisible(bool(o.week))
+        _set(self.week_note, o.week_note)
+        for i, (box, card) in enumerate(zip(self.week_tiles, self.week_cards)):
+            if i < len(o.week):
+                box.show_fact(o.week[i])
+            card.setVisible(i < len(o.week))
         self._show_system(o)
         self._show_rounds(o.rounds)
         self._show_news(o)
@@ -1202,6 +1234,9 @@ class AutoPage(QWidget, _Arranged):
                 else:
                     tw.addTab(pw, "")
                     ids[str(j)] = pw
+                # 1.8.82: every tab is a search hit by its name (like the hand-made pages' tabs) – the statistics'
+                # groups and parts; going there opens the tab, the App's model follows through currentChanged
+                self.controls[f"{key}#tab{j}"] = ("tab", tw, ids[str(j)])
                 pages.append(ks)
                 keys.extend(ks)
             by_widget = {w: int(i) for i, w in ids.items()}

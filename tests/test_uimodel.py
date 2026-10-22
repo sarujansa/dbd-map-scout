@@ -2111,3 +2111,29 @@ def test_the_history_is_copied_before_it_is_cleared(app_root):
         assert any("Sicherung: rounds-" in e[2] and "-vorher.jsonl" in e[2] for e in app._log_entries)
     finally:
         app.quit()
+
+
+def test_the_search_finds_statistics_tabs_and_log_categories(app_root):
+    """1.8.82 (UI review idea 5): the search field (Ctrl+F) also lists the statistics' groups and parts and the
+    log's categories; going to a statistics part opens its group and the part, and the model follows."""
+    import json
+    from dbdmapscout.app import App
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        app._qt_event("search_open")                                      # every page built and filled
+        app.qapp.processEvents()
+        app._qt_refresh(force=True)
+        app.qt.update_search_index()
+        found = app.qt._found
+        assert "Gegner  ·  Statistik" in found and "Gegner & Builds  ·  Statistik" in found
+        assert "Letzte Runden  ·  Statistik" in found and "Overlay  ·  Log" in found      # a log category
+        assert app._stats_current_title() == "Übersicht"
+        app.qt.go_to_found("Gegner  ·  Statistik")
+        for _i in range(5):
+            app.qapp.processEvents()
+            app._poll()
+        assert app.qt.current_key() == "stats" and app._stats_current_title() == "Gegner"
+        assert app.stats_nb.tab(app.stats_nb.select(), "text") == "Gegner & Builds"
+    finally:
+        app.quit()
