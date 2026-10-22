@@ -284,7 +284,9 @@ class StatsTab:
         ui.Label(box_s, text=_("Werte der Systemwerte-Anzeige (Tab Overlay) während der Runden – nur Runden, in denen "
                                 "sie eingeschaltet war. CPU-Temperatur nur mit HWiNFO. „Wann/Wo“ zeigt, auf welchen "
                                 "Maps oder zu welcher Tageszeit der PC am heißesten läuft. „Gedrosselt“: Sekunden, in "
-                                "denen die GPU wegen Temperatur oder Hardware langsamer lief (nur NVIDIA)."),
+                                "denen die GPU wegen Temperatur oder Hardware langsamer lief (nur NVIDIA). „–“: in diesen "
+                                "Runden nicht erfasst – CPU-Temperatur, -Leistung, Kerne und FPS gibt es nur, solange HWiNFO "
+                                "läuft, und jeder Wert braucht mindestens 10 Sekunden Messwerte in der Runde."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(6, 0))
         box_r = self._stats_page(_("Regionen"), "maps", "_stats_part_regions")           # 1.8.2: short names – all ten tabs fit
         self.stats_regs = self._stats_tree(box_r, (("reg", _("Region"), 190, "w"), ("n", _("Runden"), 65, "e"),
@@ -372,7 +374,7 @@ class StatsTab:
                                                    ("dur", _("Dauer"), 60, "e"), ("wait", _("Warten"), 65, "e"),
                                                    ("role", _("Rolle/Killer"), 115, "w"), ("bp", _("BP"), 70, "e"),
                                                    ("srv", _("Server"), 100, "w")), 8)
-        ui.Label(box_f, text=_("Alle Farming-Runden der Auswahl (Zeitraum, Region, Map, Modus) – unabhängig vom Rollen-Filter, der sie sonst aus den übrigen Auswertungen heraushält. Farming = Crossplay war in der Lobby aus (oder die eingestellte Farming-Region); korrigieren unter „Letzte Runden“ mit „Farming an/aus“. Aufnahmen liegen im Unterordner „Farming“ des Aufnahmeordners."), style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
+        ui.Label(box_f, text=_("Alle Farming-Runden der Auswahl (Zeitraum, Region, Map, Modus) – unabhängig vom Rollen-Filter, der sie sonst aus den übrigen Auswertungen heraushält. Farming = Crossplay war in der Lobby aus (oder die eingestellte Farming-Region); korrigieren unter „Letzte Runden“ mit „Farming an/aus“. Aufnahmen liegen im Unterordner „Farming“ des Aufnahmeordners. Wartezeit „sofort“: die Lobby war voll, bevor eine Suchzeit messbar war. Server nur, wenn „Verbunden mit“ auf der Seite Server läuft."), style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         self._stats_sort = ("n", True)
         return outer
 
@@ -666,6 +668,14 @@ class StatsTab:
             "last": dashboard._bp(values[-1]) if values else "",
             "empty": _("Keine Runden mit Bloodpoints in dieser Auswahl.")}})
 
+    @staticmethod
+    def _wait_text(r) -> str:
+        """1.8.85 (user: "Wartezeit, wenn's instant ist, kann man das hinschreiben"): the measured search time; a
+        farming round without one filled its lobby before a search time could be seen → "sofort"; else unknown."""
+        if r.wait is not None:
+            return fmt_duration(r.wait)
+        return _("sofort") if r.farming and not r.custom else "–"
+
     def _stats_part_farming(self, c):
         """1.8.64: the farming rounds of the selection – tiles (rounds, play time, bloodpoints) and the list."""
         farm, off = c.farm, c.off
@@ -688,7 +698,7 @@ class StatsTab:
             role = killer_label(r.killer) if r.role == "killer" and r.killer else self._role_name(r.role) or "–"
             t.insert("", "end", iid=repr(r.t), values=(
                 time.strftime("%d.%m.%y %H:%M", time.localtime(r.t)), r.map, fmt_duration(r.seconds),
-                fmt_duration(r.wait) if r.wait is not None else "–", role,
+                self._wait_text(r), role,
                 _bp(m.bp) if m is not None and m.bp > 0 else "–",
                 (_(regions.NAMES.get(r.region, r.region)) + (f" · {r.ping:.0f} ms" if r.ping is not None else ""))
                 if r.region else "–"))
@@ -844,7 +854,7 @@ class StatsTab:
                 role += " · " + _("Farming")
             t.insert("", "end", iid=repr(r.t), values=(time.strftime("%d.%m.%y %H:%M", time.localtime(r.t)), r.map,
                                                        fmt_duration(r.seconds),
-                                                       fmt_duration(r.wait) if r.wait is not None else "–", role,
+                                                       self._wait_text(r), role,
                                                        self._official_result(off.get(id(r))),
                                                        (_(regions.NAMES.get(r.region, r.region))
                                                         + (f" · {r.ping:.0f} ms" if r.ping is not None else ""))
