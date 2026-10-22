@@ -320,14 +320,16 @@ class StatsTab:
         self.stats_opp = self._stats_tree(box_o, (("who", _("Charakter"), 150, "w"), ("as", _("Rolle"), 75, "w"),
                                                   ("n", _("Begegnungen"), 90, "e"), ("esc", _("Entkommen"), 80, "e"),
                                                   ("sac", _("Geopfert"), 75, "e"), ("kill", _("Getötet"), 70, "e"),
-                                                  ("dc", _("Aufgegeben"), 85, "e")), 8, select=True)
+                                                  ("dc", _("Aufgegeben"), 85, "e"),
+                                                  ("farm", _("Farming"), 70, "e")), 8, select=True)   # 1.8.81
         # 1.8.73 right click; 1.8.74: the table must be selectable – the Qt view opens no row menu on a NoSelection
         # table (user: "das geht nicht")
         self._table_menu(self.stats_opp, self._stats_opp_menu_items, self._stats_opp_menu_act)
         ui.Label(box_o, text=_("Laut Stats-Seite: als Killer die Survivor gegen dich und wie ihr Match endete, als "
                                 "Survivor der Killer und wie dein Match endete. „Getötet“ = vom Killer direkt "
                                 "getötet (z. B. Mori), „Aufgegeben“ schließt verlassene Matches ein. „Ø Kills ohne "
-                                "Aufgaben“ zählt nur Matches, in denen kein Survivor aufgab oder ging."),
+                                "Aufgaben“ zählt nur Matches, in denen kein Survivor aufgab oder ging. „Farming“ = "
+                                "Begegnungen in Farming-Runden, die „Begegnungen“ nicht zählen."),
                   style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         # 1.8.48: the own loadouts from the stats page (userscript 3) and how those matches ended
         box_bu = self._stats_page(_("Builds"), "foes", "_stats_part_builds")
@@ -557,7 +559,7 @@ class StatsTab:
         # 1.3.5: only the sub-tab on display is drawn now, the others when they are opened – with 5000 rounds all
         # of them together took 360 ms per filter click (system and trend alone 170 ms)
         self._stats_ctx = SimpleNamespace(rounds=rounds, pairs=pairs, off=off, period=period, notes=notes,
-                                          all_rounds=all_rounds, farm=farm)
+                                          all_rounds=all_rounds, farm=farm, role=role)
         self._stats_dirty = set(self._stats_parts)
         self._stats_render_tab()
 
@@ -712,17 +714,26 @@ class StatsTab:
                               _("{n} von {total} Runden", n=len(clean), total=len(all_kills)),
                               frac=sum(clean) / len(clean) / 4 if clean else None))
         self.stats_opp_tiles.data = tiles
-        found = official.opponents(c.pairs)
-        self.stats_opp_var.set("" if found else _("Noch keine Runden mit Daten der Stats-Seite in dieser Auswahl."))
+        found = {(o.name, o.role): o for o in official.opponents(c.pairs)}
+        # 1.8.81 (user: "Slasher 38×, das kommt safe vom Farmen" → 1.8.73 took those rounds out of the normal
+        # count, and a character met only while farming vanished from the table): the farming rounds of the same
+        # filters in a column of their own – unless the role filter is "Farming", where the main count has them
+        farm_pairs = [(r, c.off[id(r)]) for r in c.farm if id(r) in c.off] if c.role != "farming" else []
+        farmed = {(o.name, o.role): o.n for o in official.opponents(farm_pairs)}
+        keys = list(dict.fromkeys(list(found) + list(farmed)))
+        keys.sort(key=lambda k: (-((found[k].n if k in found else 0) + farmed.get(k, 0)), k[1], k[0].lower()))
+        self.stats_opp_var.set("" if keys else _("Noch keine Runden mit Daten der Stats-Seite in dieser Auswahl."))
         t = self.stats_opp
         t.delete(*t.get_children())
-        for o in found:
+        for key in keys:
+            o = found.get(key) or official.Opponent(*key)
             name = killer_label(self._killer_of(o.name)) if o.role == "killer" else o.name
             t.insert("", "end", iid=f"{o.role}\t{o.name}",                    # 1.8.73: the right click knows the character
                      values=(name, self._role_name(o.role), o.n, pct(official.share(o.fates, "escaped")),
                                         pct(official.share(o.fates, "sacrificed")),
                                         pct(official.share(o.fates, "killed")),
-                                        pct(official.share(o.fates, "abandoned", "gone"))))
+                                        pct(official.share(o.fates, "abandoned", "gone")),
+                                        farmed.get(key) or "–"))
 
     def _stats_part_builds(self, c):
         """1.8.48: perks, add-ons, offerings and powers/items of the own loadouts, and the four-perk builds."""
