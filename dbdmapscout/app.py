@@ -989,47 +989,23 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
             return self.game.rect
         return (0, 0) + self.root.screen_size()
 
+    # the tick's steps: (name for errors and the lag list, methods) – each in its own try
+    TICK_STEPS = (("overlay", ("_tick_unsure", "_tick_timer", "_place_overlay")), ("layout", ("_layout_size_tick",)),
+                  ("verbindung", ("_conn_tick",)), ("offizielle Daten", ("_official_tick",)), ("show", ("_show_tick",)),
+                  ("hotkeys", ("_hotkeys_tick",)), ("tray", ("_tray_tick", "_rec_tick")),
+                  ("discord", ("_discord_tick",)), ("Qt", ("_qt_refresh",)))
+
     def _tick_overlay(self, reschedule=True):
-        try:
-            self._tick_unsure()
-            self._tick_timer()
-            self._place_overlay()
-        except Exception:
-            self._report_once("overlay", traceback.format_exc())
-        try:
-            self._layout_size_tick()
-        except Exception:
-            self._report_once("layout", traceback.format_exc())
-        try:
-            self._conn_tick()
-        except Exception:
-            self._report_once("verbindung", traceback.format_exc())
-        try:
-            self._official_tick()
-        except Exception:
-            self._report_once("offizielle Daten", traceback.format_exc())
-        try:
-            if restart.show_requested(getattr(self, "_show_event", None)):
-                self._show_main()
-        except Exception:
-            self._report_once("show", traceback.format_exc())
-        try:
-            self._hotkeys_tick()
-        except Exception:
-            self._report_once("hotkeys", traceback.format_exc())
-        try:
-            self._tray_tick()
-            self._rec_tick()
-        except Exception:
-            self._report_once("tray", traceback.format_exc())
-        try:
-            self._discord_tick()
-        except Exception:
-            self._report_once("discord", traceback.format_exc())
-        try:
-            self._qt_refresh()
-        except Exception:
-            self._report_once("Qt", traceback.format_exc())
+        # 1.8.67 (user: "Statistik dauert ewig zum Laden"; the diagnosis only said "App._tick_overlay 6005 ms"): each
+        # step that holds the window up gets its own line in the lag list ("Takt: Qt", "Takt: offizielle Daten" …)
+        for key, names in self.TICK_STEPS:
+            t0 = time.perf_counter()
+            try:
+                for name in names:
+                    getattr(self, name)()
+            except Exception:
+                self._report_once(key, traceback.format_exc())
+            self.root.note(f"Takt: {key}", (time.perf_counter() - t0) * 1000)
         try:
             status = _("Rundenende-Erkennung: {state}", state=self.worker.watch_status)
             if status != self.watch_var.get():
@@ -1038,6 +1014,10 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
             pass
         if reschedule:
             self.root.after(250, self._tick_overlay)
+
+    def _show_tick(self):
+        if restart.show_requested(getattr(self, "_show_event", None)):
+            self._show_main()
 
     def _report_once(self, key, text):
         """Log an unexpected error (the full text goes to the log file; the UI once per kind)."""

@@ -11,7 +11,7 @@ import logging
 import os
 import threading
 
-from PySide6.QtCore import QObject, QRectF, Qt, QTimer, Signal
+from PySide6.QtCore import QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit, QProgressBar,
                                QPushButton, QSizePolicy, QSlider, QVBoxLayout, QWidget)
@@ -44,6 +44,7 @@ KEY_HINT = N_("Leertaste Abspielen · ←/→ 1 s · Shift 5 s · Strg 1 Bild ·
 STEP_SMALL, STEP_BIG = 1.0, 5.0
 LOAD_TIMEOUT_MS = 30000           # 1.8.3: the loading screen gives up after this and frees the window
 PREVIEW_MIN = (640, 360)
+PUMP_MS = 15                      # 1.8.66: how often the window takes what its threads produced
 
 
 def _qimage(img) -> QImage:
@@ -53,17 +54,67 @@ def _qimage(img) -> QImage:
     return QImage(img.tobytes(), w, h, w * 3, QImage.Format_RGB888).copy()
 
 
-class _Bridge(QObject):
-    """Signals the worker threads use to reach the window (queued to the GUI thread)."""
-    frame = Signal(float, object)         # scrub picture (t, PIL)
-    played = Signal(float, object)        # playback picture
-    thumb = Signal(int, object)           # strip picture (index, PIL)
-    ended = Signal(object)                # the player that ended
-    saved = Signal(bool, str, str)        # ok, path, why
-    sound = Signal(object, float)         # wav path (or None) ready for a playback from t
-    strip_done = Signal()                 # 1.8.3: the thumbnail thread is through (all it could get)
-    still = Signal(bool, str)             # 1.8.10: a still picture saved (ok, path)
-    levels = Signal(object)               # 1.8.18: {track index: loudest moment in dB}
+class _Channel:
+    """One kind of message: ``emit`` from any thread only queues it, the ``connect``-ed handlers run in the GUI
+    thread when the window's pump drains the bridge (the same names as the Qt signals before)."""
+
+    def __init__(self, bridge, name):
+        self._bridge, self._name = bridge, name
+
+    def emit(self, *args):
+        self._bridge.put(self._name, args)
+
+    def connect(self, fn):
+        self._bridge.handlers.setdefault(self._name, []).append(fn)
+
+
+class _Bridge:
+    """What the worker threads hand to the window. 1.8.66 (user: "das Programm crasht ab und zu, wenn ich Videos
+    öffne"): this was a QObject whose signals the threads emitted – a window closed (another recording picked in
+    the preview, the editor shut) while a thread still sent a frame, the strip or the levels raised "Signal source
+    has been deleted", and when the deletion fell into the emit itself the whole program went down. Now the threads
+    touch no Qt object at all: they append to a plain locked queue, the window's QTimer (dies with it) drains it."""
+    NAMES = ("frame",        # scrub picture (t, PIL)
+             "played",       # playback picture (t, PIL)
+             "thumb",        # strip picture (index, PIL)
+             "ended",        # the player that ended
+             "saved",        # ok, path, why
+             "sound",        # wav path (or None) ready for a playback from t
+             "strip_done",   # 1.8.3: the thumbnail thread is through (all it could get)
+             "still",        # 1.8.10: a still picture saved (ok, path)
+             "levels")       # 1.8.18: {track index: loudest moment in dB}
+    LATEST = ("frame", "played")      # pictures: only the newest of a batch is drawn
+    AFTER_CLOSE = ("saved", "still")  # a save that ends after the window closed still reaches the clips list
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._queue = []
+        self.handlers = {}
+        for name in self.NAMES:
+            setattr(self, name, _Channel(self, name))
+
+    def put(self, name, args):
+        with self._lock:
+            self._queue.append((name, args))
+
+    def clear(self, keep=()):
+        """Drop what is queued – but the kinds in ``keep``."""
+        with self._lock:
+            self._queue = [m for m in self._queue if m[0] in keep]
+
+    def drain(self):
+        """Run the handlers of everything queued so far (GUI thread); of the pictures only the newest per kind."""
+        with self._lock:
+            batch, self._queue = self._queue, []
+        last = {name: i for i, (name, _a) in enumerate(batch) if name in self.LATEST}
+        for i, (name, args) in enumerate(batch):
+            if name in last and last[name] != i:
+                continue
+            for fn in self.handlers.get(name, ()):
+                try:
+                    fn(*args)
+                except Exception:
+                    log.exception("Clip-Editor: %s", name)
 
 
 class Timeline(QWidget):
@@ -524,6 +575,10 @@ class ClipWindow(QWidget):
         self.info = clipedit.probe(path)
         self.ffmpeg = clipedit.ffmpeg_exe()
         self.bridge = _Bridge()
+        self._pump = QTimer(self)             # 1.8.66: hands the threads' results to the window (GUI thread)
+        self._pump.setInterval(PUMP_MS)
+        self._pump.timeout.connect(self._drain)
+        self._pump.start()
         self.player = None
         self.playing = False
         self._wav = None
@@ -1333,8 +1388,14 @@ class ClipWindow(QWidget):
         else:
             super().keyPressEvent(e)
 
+    def _drain(self):
+        if self._closed:                    # closed: pictures, levels, playback go; a finished save still counts
+            self.bridge.clear(keep=_Bridge.AFTER_CLOSE)
+        self.bridge.drain()
+
     def closeEvent(self, e):
         self._closed = True
+        self.bridge.clear(keep=_Bridge.AFTER_CLOSE)
         self._stop_player()
         with self._scrub_lock:
             self._scrub_lock.notify_all()

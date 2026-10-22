@@ -17,6 +17,42 @@ def _setup_logging():
     logging.basicConfig(
         filename=os.path.join(ROOT, "dbdmapscout.log"), filemode="w", level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s", encoding="utf-8")
+    _enable_crash_log()
+
+
+_crash_fh = None
+
+
+def _enable_crash_log(root=ROOT):
+    """1.8.66: a hard crash (Qt/C level – the process just goes) leaves no line in the log; faulthandler writes
+    every thread's stack to diagnose.CRASH_FILE then. The last run's crash is kept first (diagnose.keep_crash) and
+    "Diagnose kopieren" shows it."""
+    global _crash_fh
+    import faulthandler
+    from .diagnose import CRASH_FILE, keep_crash
+    keep_crash(root)
+    try:
+        _crash_fh = open(os.path.join(root, CRASH_FILE), "w", encoding="utf-8")
+        faulthandler.enable(_crash_fh, all_threads=True)
+    except OSError:
+        _crash_fh = None
+
+
+def _crash_log_clear(root=ROOT):
+    """A normal end: nothing crashed. On Windows faulthandler also writes C++ exceptions a library catches itself
+    (Qt, pywinrt) – the file only stays when the process did not get here."""
+    import faulthandler
+    from .diagnose import CRASH_FILE
+    global _crash_fh
+    if _crash_fh is None:
+        return
+    faulthandler.disable()
+    try:
+        _crash_fh.close()
+        os.remove(os.path.join(root, CRASH_FILE))
+    except OSError:
+        pass
+    _crash_fh = None
 
 
 _mutex = None
@@ -141,6 +177,7 @@ def main():
     # process now. Settings are saved in App.quit; a thread that does not stop (tray icon, window capture)
     # or a hang while Python shuts down would keep the process – and its single-instance mutex – alive.
     logging.getLogger("dbdmapscout").info("Beendet.")
+    _crash_log_clear()
     logging.shutdown()
     os._exit(0)
 

@@ -10,6 +10,8 @@ settings.json.tmp
 settings.json.broken
 dbdmapscout.log
 diagnose.txt
+dbdmapscout-crash.txt
+dbdmapscout-crash-last.txt
 debug/
 user_maps/
 rounds.jsonl

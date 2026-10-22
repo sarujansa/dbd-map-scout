@@ -598,3 +598,71 @@ def test_a_source_obs_did_not_have_says_so_instead_of_silent(four_track, tmp_pat
     finally:
         win.close()
         app.processEvents()
+
+
+def test_threads_never_touch_qt_and_a_closed_editor_ignores_them(clip, four_track, tmp_path):
+    """1.8.66 (user: "das Programm crasht ab und zu, wenn ich Videos öffne"): the worker threads emitted Qt signals
+    of a QObject; a window closed while a thread still sent a frame, the strip or the levels gave "Signal source has
+    been deleted" (seen in a stress run: another recording picked in the preview, the editor shut), and a deletion
+    inside the emit took the whole program down. Now the threads only queue; the window's timer runs the handlers in
+    the GUI thread, a closed window runs none – the same stress (many editors opened and dropped while their strip,
+    levels, scrub and playback threads run) leaves no exception in any thread."""
+    pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
+    from PySide6.QtCore import QCoreApplication, QEvent, QObject
+    from dbdmapscout import qt_clip, qt_window
+    from dbdmapscout.qt_pages import HostView
+    app = qt_window.application()
+    win = qt_clip.ClipWindow(clip, [], str(tmp_path / "Clips"), sound=False)
+    assert not isinstance(win.bridge, QObject)                       # nothing Qt for the threads to hit
+    seen = []
+    win.bridge.handlers["levels"] = [lambda levels: seen.append((levels, threading.current_thread()))]
+    t = threading.Thread(target=lambda: win.bridge.levels.emit({1: -5.0}))
+    t.start()
+    t.join()
+    assert seen == []                                                # queued, not run in the thread
+    deadline = time.time() + 10
+    while not seen and time.time() < deadline:
+        app.processEvents()
+        time.sleep(0.01)
+    assert seen == [({1: -5.0}, threading.main_thread())]            # the window's pump ran it in the GUI thread
+    win.close()
+    win.bridge.levels.emit({1: -6.0})
+    for _ in range(10):
+        app.processEvents()
+        time.sleep(0.02)
+    assert len(seen) == 1                                            # closed: pictures, levels … run no more
+    saved = []
+    win.on_saved = saved.append                                      # a save that ends after the window closed
+    threading.Thread(target=lambda: win.bridge.saved.emit(True, str(tmp_path / "late.mp4"), "")).start()
+    deadline = time.time() + 10
+    while not saved and time.time() < deadline:
+        app.processEvents()
+        time.sleep(0.01)
+    assert saved == [str(tmp_path / "late.mp4")]                     # still reaches the clips list
+    errors = []
+    old_hook = threading.excepthook
+    threading.excepthook = lambda a: errors.append(f"{a.thread.name}: {a.exc_type.__name__}: {a.exc_value}")
+    host = HostView()
+    try:
+        host.show()
+        for n in range(12):                                           # the preview beside the recordings table
+            w = qt_clip.ClipWindow((clip, four_track)[n % 2], [], str(tmp_path / "Clips"), sound=False, compact=True)
+            host.set_content(w)
+            if n % 3 == 0:
+                w.toggle_play()
+            end = time.time() + 0.05 * (n % 4)
+            while time.time() < end:
+                app.processEvents()
+                time.sleep(0.005)
+            QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        host.set_content(None)
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        deadline = time.time() + 20                                   # let the dropped editors' threads run out
+        while time.time() < deadline and any(th.name.startswith("clip-") for th in threading.enumerate()):
+            app.processEvents()
+            time.sleep(0.05)
+    finally:
+        threading.excepthook = old_hook
+        host.close()
+        app.processEvents()
+    assert errors == []
