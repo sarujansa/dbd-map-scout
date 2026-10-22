@@ -17,6 +17,7 @@ from .status import DOT_STYLE, user_state
 from .textnorm import fmt_duration, roman
 
 LAST_ROUNDS = 5
+WEEK_S = 7 * 86400       # 1.8.83: the week before this one, for the comparison tiles
 
 
 @dataclass
@@ -50,6 +51,8 @@ class Overview:
     rounds: list = field(default_factory=list)         # [(map, right-hand text)]
     log_alert: bool = False
     news: list = field(default_factory=list)           # 1.8.79: [(version, title, detail)] since the version last run
+    week: list = field(default_factory=list)           # 1.8.83: this week against the last one (Facts); [] = no rounds
+    week_note: str = ""
     news_since: str = ""                      # the card's title
 
 
@@ -158,6 +161,50 @@ def today(app, now: float) -> tuple[list, str]:
     return [rounds, kills, esc] + ([farm] if farm else []) + [wait] + ([rec] if rec else []), note
 
 
+def _week_part(j, lo: float, hi: float) -> dict:
+    """The normal rounds of [lo, hi) with their official matches: count, Ø kills, escape share, Ø wait, bloodpoints."""
+    rs = [r for r in history.select(j.rounds, since=lo) if r.t < hi and history.normal(r)]
+    s = official.summary([j.off[id(r)] for r in rs if id(r) in j.off])
+    waits = [r.wait for r in rs if r.wait is not None]
+    return {"count": len(rs), "kills": s["kills"] if s["killer"] else None,
+            "escaped": s["escaped"] if s["survivor"] else None,
+            "wait": sum(waits) / len(waits) if waits else None, "bp": s["bp"] if s["bp_matches"] else None}
+
+
+def _delta(now, last, fmt, scale: float = 1.0) -> str:
+    """"▲ 3" / "▼ 0.3" / "±0" between two values, "" when one is missing."""
+    if now is None or last is None:
+        return ""
+    d = (now - last) * scale
+    if abs(d) < 0.05:
+        return "±0"
+    return ("▲ " if d > 0 else "▼ ") + fmt(abs(d))
+
+
+def _week_fact(title: str, now, last, fmt, delta_fmt=None, scale: float = 1.0) -> Fact:
+    sub = _("Vorwoche {value}", value=fmt(last) if last is not None else "–")
+    d = _delta(now, last, delta_fmt or fmt, scale)
+    return Fact(title, fmt(now) if now is not None else "–", sub + (" · " + d if d else ""))
+
+
+def week(app, now: float) -> tuple[list, str]:
+    """1.8.83 (UI review idea 6): this calendar week (Monday to now) against the week before, one tile per value
+    with last week's value and the change below. ([], "") while neither week has a normal round."""
+    j = app._joined()
+    start = history.period_start("week", now)
+    this, last = _week_part(j, start, now + 1), _week_part(j, start - WEEK_S, start)
+    if not this["count"] and not last["count"]:
+        return [], ""
+    pct = lambda v: f"{v:.0%}"
+    tiles = [_week_fact(_("Runden"), this["count"], last["count"], str, delta_fmt=lambda d: f"{d:.0f}"),
+             _week_fact(_("Ø Kills"), this["kills"], last["kills"], _num),
+             _week_fact(_("Entkommen"), this["escaped"], last["escaped"], pct,
+                        delta_fmt=lambda d: _("{n} Pkt.", n=f"{d:.0f}"), scale=100.0),
+             _week_fact(_("Ø Wartezeit"), this["wait"], last["wait"], fmt_duration),
+             _week_fact(_("Bloodpoints"), this["bp"], last["bp"], dashboard._bp)]
+    return tiles, _("Montag bis jetzt gegenüber der Vorwoche (Mo–So); Custom und Farming zählen nicht.")
+
+
 def _gb(n: float) -> str:
     gb = n / 1024 ** 3
     return f"{gb / 1024:.2f} TB" if gb >= 1000 else f"{gb:.0f} GB"
@@ -264,8 +311,8 @@ def overview_model(app, now: float, is_win: bool) -> Overview:
     j = app._joined()                       # today and the last rounds: again only when the files or the minute change
     cache = getattr(app, "_ov_cache", None)
     if cache is None or cache[0] is not j or cache[1] != int(now // 60):
-        cache = app._ov_cache = (j, int(now // 60), today(app, now), last_rounds(app))
-    (o.today, o.today_note), o.rounds = cache[2], cache[3]
+        cache = app._ov_cache = (j, int(now // 60), today(app, now), last_rounds(app), week(app, now))
+    (o.today, o.today_note), o.rounds, (o.week, o.week_note) = cache[2], cache[3], cache[4]
     o.system, o.system_note = system(app, now, is_win)
     o.log_alert = bool(getattr(app, "_log_alert", False))
     o.news = list(getattr(app, "_news", None) or ())

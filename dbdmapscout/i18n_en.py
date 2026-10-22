@@ -1016,6 +1016,11 @@ EN = {
     "Abgleich mit der Stats-Seite": "Check against the stats page",
     "Noch keine offiziellen Daten.": "No official data yet.",
     "Neu seit {version}": "New since {version}",
+    "Diese Woche": "This week",
+    "Vorwoche {value}": "last week {value}",
+    "{n} Pkt.": "{n} pts",
+    "Montag bis jetzt gegenüber der Vorwoche (Mo–So); Custom und Farming zählen nicht.":
+        "Monday until now against the week before (Mon–Sun); custom games and farming do not count.",
     "Sicherung: {files} nach {folder}/ kopiert (die letzten {n} Stände bleiben).":
         "Backup: {files} copied to {folder}/ (the last {n} copies are kept).",
     "{n} Dateien, zuletzt {day}": "{n} files, latest {day}",
