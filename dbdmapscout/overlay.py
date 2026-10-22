@@ -3,8 +3,11 @@
 The overlay windows themselves: overlay_win32.Win32Overlay (Windows), overlay_qt.QtOverlay (fallback)."""
 from __future__ import annotations
 
+import collections
 import ctypes
+import os
 import sys
+import threading
 
 from PIL import Image, ImageSequence
 
@@ -53,9 +56,44 @@ def _fit(img: Image.Image) -> Image.Image:
     return img.resize((max(1, round(img.width * MAX_LOAD_H / img.height)), MAX_LOAD_H), Image.BOX)
 
 
+FRAMES_KEPT = 2            # 1.8.84: decoded maps kept (the one on display and the one before it)
+_frames = collections.OrderedDict()     # (path, mtime, size, rotation) -> frames
+_frames_lock = threading.Lock()
+
+
 def load_frames(path: str, rotation: int = 0):
     """[(PIL RGBA image, duration ms)] – several for animated GIFs; ``rotation``: map turned clockwise (°).
-    Pictures taller than MAX_LOAD_H are scaled down (Midwich: 6 × 2000² px = 96 MB otherwise)."""
+    Pictures taller than MAX_LOAD_H are scaled down (Midwich: 6 × 2000² px = 96 MB otherwise). 1.8.84: the last
+    FRAMES_KEPT results are kept by path, file time, size and rotation – show_map and set_map both load, a map
+    shown again (layout, floor, the same round) is not decoded again (Midwich: 0.43 s each time). The callers
+    only read the frames; a changed file (other time or size) is read anew."""
+    try:
+        st = os.stat(path)
+        key = (os.path.abspath(path), st.st_mtime_ns, st.st_size, int(rotation))
+    except OSError:
+        key = None
+    if key is not None:
+        with _frames_lock:
+            cached = _frames.get(key)
+            if cached is not None:
+                _frames.move_to_end(key)
+                return list(cached)
+    frames = _decode(path, rotation)
+    if key is not None:
+        with _frames_lock:
+            _frames[key] = frames
+            while len(_frames) > FRAMES_KEPT:
+                _frames.popitem(last=False)
+    return list(frames)
+
+
+def clear_frames():
+    """Forget the decoded maps (tests; after a map picture was replaced in place)."""
+    with _frames_lock:
+        _frames.clear()
+
+
+def _decode(path: str, rotation: int):
     im = Image.open(path)
     frames = []
     if getattr(im, "is_animated", False):
