@@ -51,3 +51,16 @@ def test_reset_data_keeps_only_the_pc_specific_values():
     assert (data["qt_geometry"], data["setup_version"], data["setup_root"], data["official_dir"]) == ("AAAA", 3, "C:/x", "D:/dl")
     assert data["welcome_seen"] is True and data.get("layouts", {}) == config.DEFAULTS.get("layouts", {})
     assert config.reset_data({}).get("welcome_seen") in (None, False)
+
+
+def test_old_settings_forget_the_detection_page(tmp_path):
+    """1.8.78: the page "Erkennung" is gone – a saved navigation/card/tab order that names it is cleaned once."""
+    import json
+    from dbdmapscout.config import Settings, SETTINGS_VERSION
+    p = tmp_path / "settings.json"
+    p.write_text(json.dumps({"settings_version": 9, "nav_order": ["log", "detect", "overview"],
+                             "card_order": {"detect": {}, "settings": {"a": ["x"]}},
+                             "tab_order": {"detect": {}, "overlay": {"t": ["a"]}}, "hotkeys": {}}))
+    s = Settings(str(p))
+    assert s["nav_order"] == ["log", "overview"] and s["card_order"] == {"settings": {"a": ["x"]}}
+    assert s["tab_order"] == {"overlay": {"t": ["a"]}} and s["settings_version"] == SETTINGS_VERSION

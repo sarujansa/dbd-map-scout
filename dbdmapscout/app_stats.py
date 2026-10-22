@@ -1445,11 +1445,11 @@ class StatsTab:
                          "empty": _("Keine Survivor-Runden mit offiziellen Daten in dieser Auswahl.")}})
 
     def _official_check_render(self):
-        """Tab Erkennung, "Abgleich mit der Stats-Seite": how well the program's rounds fit the page (all data)."""
+        """Settings → Mehr → Match-Daten, "Abgleich mit der Stats-Seite": how well the program's rounds fit the page
+        (all data; until 1.8.77 a card of the page Erkennung)."""
         j = self._joined()
         if not j.matches:
-            self.off_check_var.set(_("Noch keine offiziellen Daten. Einrichten: Einstellungen → Mehr → Offizielle "
-                                     "Match-Daten."))
+            self.off_check_var.set(_("Noch keine offiziellen Daten."))
             return
         lines = []
         first = min((r.t for r in j.candidates), default=None)
@@ -1609,7 +1609,7 @@ class StatsTab:
                                 "Bitte melden.", status=key), "System")
             if self.nb.select() == str(self.tab_stats):
                 self._stats_render()
-            if self.nb.select() == str(self.tab_detect):
+            if self.nb.select() == str(self.tab_settings):
                 self._official_check_render()
 
     def _fresh_text(self, matches):

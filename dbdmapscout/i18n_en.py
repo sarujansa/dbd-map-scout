@@ -290,7 +290,6 @@ EN = {
     "Transparenter Rand um die Karte": "Transparent edge around the map",
 
     # ------------------------------------------------------------------ tab detection
-    "Automatik": "Automatic",
     "Map beim Match-Start automatisch erkennen": "Detect the map automatically when a match starts",
     "Overlay ausblenden, sobald ich nicht mehr in der Runde bin": "Hide the overlay as soon as I am out of the round",
     "erkennt Ergebnisbildschirm, Lobby/Menüs, Ladebildschirm und geschlossenes DBD":
@@ -1015,8 +1014,7 @@ EN = {
         "An outfit or new killer shows under its own name? Select the row, pick the killer, \"Assign\" – also applies "
         "to past rounds.",
     "Abgleich mit der Stats-Seite": "Check against the stats page",
-    "Noch keine offiziellen Daten. Einrichten: Einstellungen → Mehr → Offizielle Match-Daten.":
-        "No official data yet. Set up: Settings → More → Official match data.",
+    "Noch keine offiziellen Daten.": "No official data yet.",
     "Offizielle Match-Daten": "Official match data",
     "Einmal einrichten: Tampermonkey im Browser installieren, „Userscript kopieren“ und dort als neues Skript einfügen "
     "und speichern, auf stats.deadbydaylight.com anmelden. Chrome/Edge: in den Details der Erweiterung „Allow User "

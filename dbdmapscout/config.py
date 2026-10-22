@@ -8,7 +8,7 @@ import shutil
 import time
 
 HUD_SHOWN = ("above", "left", "right", "custom")    # settings.sysinfo values that show the system values
-SETTINGS_VERSION = 9
+SETTINGS_VERSION = 10
 
 DEFAULTS = {
     "settings_version": SETTINGS_VERSION,
@@ -118,7 +118,7 @@ DEFAULTS = {
     "log_categories": ["Erkennung", "Overlay", "System", "Fehler"],
     "ocr_threads": 2,
     "save_debug_images": False,
-    "show_advanced": False,             # detection tab: technical options unfolded
+    "show_advanced": False,             # log page (1.8.78; before: detection tab): technical options unfolded
     "tray": True,                       # minimise into the notification area
     "autostart": True,                  # start with Windows (logon task, set up as admin) unless switched off
     "lobby_notify": True,               # sound + notification when a lobby was found
@@ -303,6 +303,11 @@ def _load(raw) -> dict:
         ov["bar_limits_same"] = False
     if ver < 9:  # 1.8.76: the statistics' tabs are four groups now – a saved order of the thirteen would reorder them
         (data.get("tab_order") or {}).pop("stats", None)
+    if ver < 10:  # 1.8.78: the page "Erkennung" went into the settings and the log – nothing of it to order any more
+        if "detect" in (data.get("nav_order") or []):
+            data["nav_order"] = [k for k in data["nav_order"] if k != "detect"]
+        (data.get("card_order") or {}).pop("detect", None)
+        (data.get("tab_order") or {}).pop("detect", None)
     if data.get("color_theme") == "oled":            # 1.62.0: OLED was a theme of its own
         data["color_theme"], data["oled_black"] = "gold", True
     data["settings_version"] = SETTINGS_VERSION
