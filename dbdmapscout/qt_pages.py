@@ -1202,6 +1202,9 @@ class AutoPage(QWidget, _Arranged):
                 else:
                     tw.addTab(pw, "")
                     ids[str(j)] = pw
+                # 1.8.82: every tab is a search hit by its name (like the hand-made pages' tabs) – the statistics'
+                # groups and parts; going there opens the tab, the App's model follows through currentChanged
+                self.controls[f"{key}#tab{j}"] = ("tab", tw, ids[str(j)])
                 pages.append(ks)
                 keys.extend(ks)
             by_widget = {w: int(i) for i, w in ids.items()}
