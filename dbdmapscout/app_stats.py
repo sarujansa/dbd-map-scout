@@ -1221,6 +1221,8 @@ class StatsTab:
             return
         if not self._ask(_("Verlauf löschen"), _("Alle gespeicherten Runden löschen?"), self._stats_clear):
             return
+        from . import backups
+        self._backup_done(backups.snapshot(self.root_dir, tag="vorher"))     # 1.8.80: one more copy first
         history.clear(self._hist_path())
         self._stats_render()
         self._log(_("Rundenverlauf gelöscht."), "System")

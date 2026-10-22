@@ -7,7 +7,7 @@ import logging
 import os
 import threading
 import time
-from . import __version__, i18n, obsrec, qt_theme, regions, status, whatsnew
+from . import __version__, backups, i18n, obsrec, qt_theme, regions, status, whatsnew
 from . import uimodel as ui
 from .capture import IS_WIN, foreground_root, is_game_window
 from . import autostart
@@ -403,6 +403,9 @@ class SettingsTab:
                                                    command=self._stats_clear)).pack(side="right")   # statistics
         self._reg("st.more.reset_all", ui.Button(bk, text=_("Alle Einstellungen zurücksetzen"),   # 1.2.19
                                                   command=self._reset_all_settings)).pack(side="right", padx=(0, 6))
+        self.backup_var = ui.StringVar(value=self._backup_text())              # 1.8.80: the daily copies
+        self._reg("st.more.backup_hint", ui.Label(bk, textvariable=self.backup_var, style="Dim.TLabel",
+                                                   wraplength=420)).pack(anchor="w", pady=(6, 0))
 
         folders = self._reg("st.more.folders", ui.LabelFrame(more, text=_("Ordner"), padding=8))
         folders.pack(fill="x", pady=(8, 0))
@@ -865,6 +868,30 @@ class SettingsTab:
     def _update_flag_changed(self):
         self.settings.set("auto_update", bool(self.update_var.get()))
         self.settings.save()                      # start.bat reads it at the next start
+
+    # ------------------------------------------------------------ daily backup (1.8.80)
+    BACKUP_EVERY_MS = 24 * 3600 * 1000
+
+    def _backup_start(self):
+        """Copy rounds.jsonl/official.jsonl to backup/ once a day (backups.snapshot) – in a thread, the files can
+        be megabytes; the result comes back as the event "backup". Runs at the start and every 24 h after."""
+        threading.Thread(target=lambda: self.events.put(("backup", backups.snapshot(self.root_dir))),
+                         daemon=True, name="backup").start()
+        self.root.after(self.BACKUP_EVERY_MS, self._backup_start)
+
+    def _backup_done(self, result: dict):
+        if result.get("copied"):
+            self._log(_("Sicherung: {files} nach {folder}/ kopiert (die letzten {n} Stände bleiben).",
+                        files=", ".join(result["copied"]), folder=backups.DIR, n=backups.KEEP), "System")
+        if hasattr(self, "backup_var"):
+            self.backup_var.set(self._backup_text())
+
+    def _backup_text(self) -> str:
+        count, day = backups.status(self.root_dir)
+        state = _("{n} Dateien, zuletzt {day}", n=count, day=day) if count else _("noch keine")
+        return _("Tägliche Kopie von rounds.jsonl und official.jsonl nach {folder}/ (nur bei Änderungen, die "
+                 "letzten {n} Stände je Datei; vor „Verlauf löschen“ eine zusätzliche): {state}",
+                 folder=backups.DIR, n=backups.KEEP, state=state)
 
     def _news_check(self):
         """1.8.79: after an update the overview lists what changed since the version last run (the rows of

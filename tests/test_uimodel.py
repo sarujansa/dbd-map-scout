@@ -2081,3 +2081,30 @@ def test_an_update_shows_what_is_new_once(app_root):
         assert overview.overview_model(app, time.time(), is_win=False).news == []
     finally:
         app.quit()
+
+
+def test_the_history_is_copied_before_it_is_cleared(app_root):
+    """1.8.80: the start copies rounds.jsonl/official.jsonl to backup/ (in a thread; here the worker is run in
+    line), the settings' hint counts the copies, and "Verlauf löschen" takes one more copy first."""
+    import json
+    from dbdmapscout import backups, history
+    from dbdmapscout.app import App
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    history.append(str(app_root / "rounds.jsonl"), history.Round(time.time() - 900, 600, "coal", "Coal Tower"))
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        end = time.time() + 10
+        while time.time() < end and not os.path.isdir(app_root / "backup"):       # the start's thread
+            time.sleep(0.05)
+        app._backup_done(backups.snapshot(str(app_root)))                       # nothing new: only the hint
+        names = sorted(os.listdir(app_root / "backup"))
+        assert len(names) == 1 and names[0].startswith("rounds-") and "1 Dateien" in app.backup_var.get()
+        app._ask = lambda *a, **k: True
+        app._stats_clear()
+        names = sorted(os.listdir(app_root / "backup"))
+        assert len(names) == 2 and any(n.endswith("-vorher.jsonl") for n in names)
+        assert not os.path.exists(app_root / "rounds.jsonl")
+        assert "2 Dateien" in app.backup_var.get()
+        assert any("Sicherung: rounds-" in e[2] and "-vorher.jsonl" in e[2] for e in app._log_entries)
+    finally:
+        app.quit()
