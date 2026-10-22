@@ -173,7 +173,6 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         self.nb = ui.Notebook(self.ui_root)
         self.tab_maps = self._tab_maps()
         self.tab_overlay = self._tab_overlay()
-        self.tab_detect = self._tab_detect()
         self.tab_server = self._tab_server()
         self.tab_log = self._tab_log()
         self.tab_stats = self._tab_stats()
@@ -185,7 +184,6 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         self.nb.add(self.tab_recordings, text=_("Aufnahmen"))
         self.nb.add(self.tab_server, text=_("Server"))
         self.nb.add(self.tab_settings, text=_("Einstellungen"))
-        self.nb.add(self.tab_detect, text=_("Erkennung"))
         self.nb.add(self.tab_log, text="Log")
         self.nb.bind("<<NotebookTabChanged>>", lambda e: self._tab_changed())
         self._apply_theme()
@@ -226,25 +224,31 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         return val
 
 
-    # ------------------------------------------------------- tab: detection
-    def _tab_detect(self):
-        outer, f = self._scroll_tab()
-        auto = ui.LabelFrame(f, text=_("Automatik"), padding=8)
-        auto.pack(fill="x")
+    # ------------------------------------------- detection (1.8.78: cards of the settings and the log page)
+    def _detect_cards(self, f):
+        """The detection's cards on the settings page (until 1.8.77 a page "Erkennung" of its own): the automatic
+        mode and the game languages. The technical part is "Erweitert" on the log page (_advanced_card)."""
+        auto = self._reg("st.detect", ui.LabelFrame(f, text=_("Erkennung"), padding=8))
+        auto.pack(fill="x", pady=(8, 0))
         self.auto_var = ui.BooleanVar(value=self.settings["auto_detect"])
         self.hide_var = ui.BooleanVar(value=self.settings["hide_after_match"])
-        ui.Checkbutton(auto, text=_("Map beim Match-Start automatisch erkennen"), variable=self.auto_var,
-                        command=self._detect_flags_changed).pack(anchor="w", pady=1)
-        ui.Checkbutton(auto, text=_("Overlay ausblenden, sobald ich nicht mehr in der Runde bin"),
-                        variable=self.hide_var, command=self._detect_flags_changed).pack(anchor="w", pady=1)
-        ui.Label(auto, text=_("erkennt Ergebnisbildschirm, Lobby/Menüs, Ladebildschirm und geschlossenes DBD"),
-                  style="Dim.TLabel", wraplength=400).pack(anchor="w", padx=(22, 0))
+        self._reg("st.det_auto", ui.Checkbutton(auto, text=_("Map beim Match-Start automatisch erkennen"),
+                                                 variable=self.auto_var,
+                                                 command=self._detect_flags_changed)).pack(anchor="w", pady=1)
+        self._reg("st.det_hide", ui.Checkbutton(auto, text=_("Overlay ausblenden, sobald ich nicht mehr in der Runde bin"),
+                                                 variable=self.hide_var,
+                                                 command=self._detect_flags_changed)).pack(anchor="w", pady=1)
+        self._reg("st.det_hide_hint", ui.Label(
+            auto, text=_("erkennt Ergebnisbildschirm, Lobby/Menüs, Ladebildschirm und geschlossenes DBD"),
+            style="Dim.TLabel", wraplength=400)).pack(anchor="w", padx=(22, 0))
         self.menu_var = ui.BooleanVar(value=self.settings.get("pause_in_menus", True))
-        ui.Checkbutton(auto, text=_("Overlay pausieren, solange ein DBD-Menü offen ist"),
-                        variable=self.menu_var, command=self._detect_flags_changed).pack(anchor="w", pady=(4, 1))
-        ui.Label(auto, text=_("erkannt am sichtbaren Mauszeiger (ESC-Menü, Ergebnisbildschirm, Lobby)"),
-                  style="Dim.TLabel", wraplength=400).pack(anchor="w", padx=(22, 0))
-        lang = ui.LabelFrame(f, text=_("Spielsprache (Map-Namen)"), padding=8)
+        self._reg("st.det_menu", ui.Checkbutton(auto, text=_("Overlay pausieren, solange ein DBD-Menü offen ist"),
+                                                 variable=self.menu_var,
+                                                 command=self._detect_flags_changed)).pack(anchor="w", pady=(4, 1))
+        self._reg("st.det_menu_hint", ui.Label(
+            auto, text=_("erkannt am sichtbaren Mauszeiger (ESC-Menü, Ergebnisbildschirm, Lobby)"),
+            style="Dim.TLabel", wraplength=400)).pack(anchor="w", padx=(22, 0))
+        lang = self._reg("st.langs", ui.LabelFrame(f, text=_("Spielsprache (Map-Namen)"), padding=8))
         lang.pack(fill="x", pady=(8, 0))
         grid = ui.Frame(lang)
         grid.pack(anchor="w")
@@ -255,12 +259,9 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
             self._reg(f"det.lang.{code}", ui.Checkbutton(grid, text=label, variable=v, command=self._langs_changed)).grid(
                 row=i // 5, column=i % 5, sticky="w", padx=(0, 12), pady=1)
 
-        chk = ui.LabelFrame(f, text=_("Abgleich mit der Stats-Seite"), padding=8)
-        chk.pack(fill="x", pady=(8, 0))
-        self.off_check_var = ui.StringVar(value="")         # filled when the tab is opened (_official_check_render)
-        ui.Label(chk, textvariable=self.off_check_var, wraplength=420, justify="left").pack(anchor="w")
-
-        # technical options: folded away, only needed when something does not work
+    def _advanced_card(self, f):
+        """"Erweitert" at the foot of the log page: technical options, folded away – only needed when something
+        does not work (window capture, scan rate, the live state of the end-of-round watcher, debug pictures)."""
         self.adv_open = ui.BooleanVar(value=bool(self.settings.get("show_advanced", False)))
         self.adv_btn = ui.Button(f, command=self._toggle_advanced)
         self.adv_btn.pack(anchor="w", pady=(10, 0))
@@ -280,9 +281,7 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         r = ui.Frame(adv)
         r.pack(fill="x", pady=(6, 0))
         ui.Button(r, text=_("Bildschirm jetzt scannen"), command=self.scan_now).pack(side="left")
-        ui.Button(r, text=_("Diagnose kopieren"), command=self.show_diagnose).pack(side="left", padx=6)
         self._show_advanced()
-        return outer
 
     def _toggle_advanced(self):
         self.adv_open.set(not self.adv_open.get())
@@ -323,6 +322,7 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
         ui.Button(bottom, text=_("Leeren"), command=self._clear_log).pack(side="left")
         ui.Button(bottom, text=_("Log-Datei öffnen"), command=self._open_logfile).pack(side="left", padx=6)
         ui.Button(bottom, text=_("Diagnose kopieren"), command=self.show_diagnose).pack(side="left")
+        self._advanced_card(f)                       # 1.8.78: the technical options, folded (was: page Erkennung)
         return outer
 
     # ----------------------------------------------------------- map list
@@ -1461,8 +1461,8 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
             self._rec_preview_stop()                   # 1.8.8: the clip preview does not play on in the background
         if self.nb.select() == str(self.tab_stats):
             self._stats_render()
-        if self.nb.select() == str(self.tab_detect):
-            self._official_check_render()
+        if self.nb.select() == str(self.tab_settings):
+            self._official_check_render()             # 1.8.78: "Abgleich mit der Stats-Seite" under Mehr
         if self.nb.select() == str(self.tab_recordings):
             self._rec_render()
         if self.nb.select() == str(self.tab_log):

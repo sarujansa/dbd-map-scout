@@ -2022,3 +2022,35 @@ def test_the_right_click_on_an_opponent_reaches_the_menu_through_the_qt_table(ap
         assert [r.farming for r in app._joined().rounds] == [True]
     finally:
         app.quit()
+
+
+def test_the_detection_page_went_into_the_settings_and_the_log(app_root):
+    """1.8.78 (UI review point 3: nine pages, "Erkennung" held three check boxes, the game languages and the
+    technical part): the detection's cards are on the settings page, "Erweitert" at the foot of the log page
+    (folded, as before), the stats check in the card "Offizielle Match-Daten" and filled when the settings open."""
+    import json
+    from dbdmapscout import qt_window
+    from dbdmapscout.app import App
+    from dbdmapscout.app_qt import ui_layout, ui_shown
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        assert not hasattr(app, "tab_detect") and "detect" not in dict(qt_window.PAGES)
+        assert "detect" not in qt_window.AUTO_PAGES and len(app.nb.tabs()) == len(qt_window.PAGES) - 1   # no overview tab
+        keys = qt_window.page_keys("settings")
+        assert {"st.detect", "st.det_auto", "st.det_hide", "st.det_menu", "st.langs", "det.lang.en", "det.lang.tr",
+                "st.more.off_check"} <= keys
+        assert all(k in app._qt_reg for k in keys)                       # every key names a widget the App made
+        # the technical options: in the log tab's model, hidden until "Erweitert" is unfolded
+        reg = {}
+        ui_layout(app.tab_log, reg)
+        assert str(app.adv_frame) in reg and not ui_shown(app.adv_frame)
+        app._toggle_advanced()
+        assert ui_shown(app.adv_frame) and app.settings["show_advanced"] is True
+        # opening the settings fills the stats check (no data: one line, no pointer to a page that is gone)
+        assert app.off_check_var.get() == ""
+        app.nb.select(app.tab_settings)
+        app._tab_changed()
+        assert app.off_check_var.get() == "Noch keine offiziellen Daten."
+    finally:
+        app.quit()

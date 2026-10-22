@@ -141,9 +141,9 @@ def test_window_shows_the_model_and_posts_clicks(qapp, keep):
     assert page.thumb.pixmap() is not None and not page.thumb.pixmap().isNull()
     assert page.buttons["layout"].isHidden() and page.buttons["scan"].toolTip() == "tip scan"
     page.buttons["rotate"].click()
-    win.nav.setCurrentRow([k for k, _l in qt_window.PAGES].index("detect"))   # another page: the App fills it
+    win.nav.setCurrentRow([k for k, _l in qt_window.PAGES].index("server"))   # another page: the App fills it
     win.close()                                                      # closing = quitting, through the App
-    assert [posted.get_nowait() for _i in range(3)] == [("rotate", None), ("page", "detect"), ("quit", None)]
+    assert [posted.get_nowait() for _i in range(3)] == [("rotate", None), ("page", "server"), ("quit", None)]
     text = win.geometry_b64()
     assert text and win.restore_b64(text) and not win.restore_b64("kein base64")
     o.log_alert = True

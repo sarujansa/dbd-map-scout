@@ -92,7 +92,7 @@ __all__ = (
 # key, label (the navigation's icons are drawn by nav_icon: same size and place for all)
 PAGES = (("overview", N_("Übersicht")), ("maps", "Maps"), ("overlay", N_("Overlay")), ("stats", N_("Statistik")),
          ("recordings", N_("Aufnahmen")), ("server", N_("Server")), ("settings", N_("Einstellungen")),
-         ("detect", N_("Erkennung")), ("log", "Log"))
+         ("log", "Log"))          # 1.8.78: "Erkennung" went into the settings (cards) and the log ("Erweitert")
 
 
 NAV_ICON = 18                     # px (logical): every icon of the navigation in the same box
@@ -104,7 +104,7 @@ NAV_W, NAV_COMPACT_W = 190, 62    # px (logical): navigation with names / only i
 NAV_COMPACT_BELOW = 960           # px (logical) window width from which the navigation shows only icons
 
 
-AUTO_PAGES = ("stats", "recordings", "server", "detect", "log")   # built from the tab's structure (app_qt.ui_layout)
+AUTO_PAGES = ("stats", "recordings", "server", "log")   # built from the tab's structure (app_qt.ui_layout)
 
 
 FOUND_MS = 1800                   # ms a search hit's card stays lit
@@ -182,6 +182,10 @@ SPECS = {
             ("check", "st.oled"),
             ("row", (("label", "st.zoom.label"), ("combo", "st.zoom"), ("stretch",))),
             ("row", (("button", "st.card_reset"), ("hint", "st.card_hint"))))),
+        # 1.8.78: the page "Erkennung" is gone – its cards live here, "Erweitert" on the log page
+        ("card", "st.detect", (("check", "st.det_auto"), ("check", "st.det_hide"), ("hint", "st.det_hide_hint"),
+                               ("check", "st.det_menu"), ("hint", "st.det_menu_hint"))),
+        ("card", "st.langs", (("grid", 5, tuple(("check", f"det.lang.{code}") for code in GAME_LANGS)),)),
         ("card", "st.notify", (
             ("check", "st.lobby_notify"), ("check", "st.lobby_remind"), ("check", "st.notify_background_only"),
             ("hint", "st.notify_text"), ("row", (("button", "st.notify_test"), ("stretch",))))),
@@ -201,7 +205,8 @@ SPECS = {
         ("card", "st.more.own", (("row", (("hint", "st.more.aliases"), ("button", "st.more.aliases_clear"))),)),
         ("card", "st.more.official", (("check", "st.more.off_open"), ("check", "st.more.off_notify"),
                                       ("row", (("button", "st.more.script"), ("button", "st.more.resave"),
-                                               ("button", "st.more.structure"), ("stretch",))), ("hint", "st.more.off_text"))),
+                                               ("button", "st.more.structure"), ("stretch",))), ("hint", "st.more.off_text"),
+                                      ("label", "st.more.off_check.label"), ("hint", "st.more.off_check"))),
         ("card", "st.more.farming", (("check", "st.more.farm_cross"),                       # 1.2.20
                                      ("row", (("label", "st.more.farm_region.label"), ("combo", "st.more.farm_region"),
                                               ("stretch",))),
@@ -375,13 +380,6 @@ def nav_icon(key: str, colour: str, ratio: float = 1.0, alert: bool = False) -> 
         p.drawLine(QPointF(m, m + 5.5), QPointF(size - m, m + 5.5))
         p.setBrush(col)
         p.drawEllipse(QPointF(c, c + 2.2), 2.4, 2.4)
-    elif key == "detect":                      # scan frame: four corners + a dot
-        k = 4.0
-        for (x, y, dx, dy) in ((m, m, 1, 1), (size - m, m, -1, 1), (m, size - m, 1, -1), (size - m, size - m, -1, -1)):
-            p.drawLine(QPointF(x, y), QPointF(x + dx * k, y))
-            p.drawLine(QPointF(x, y), QPointF(x, y + dy * k))
-        p.setBrush(col)
-        p.drawEllipse(QPointF(c, c), 2.2, 2.2)
     elif key == "search":                      # magnifier
         p.drawEllipse(QPointF(c - 1.5, c - 1.5), 5.0, 5.0)
         p.drawLine(QPointF(c + 2.2, c + 2.2), QPointF(size - m, size - m))

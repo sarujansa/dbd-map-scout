@@ -23,6 +23,7 @@ class SettingsTab:
     # --------------------------------------------------------- tab: settings
     def _tab_settings(self):
         outer, f = self._scroll_tab()
+        self._detect_cards(f)                        # 1.8.78: Erkennung + Spielsprache (app.py)
         hk = self._reg("st.hotkeys", ui.LabelFrame(f, text=_("Hotkeys"), padding=8))
         hk.pack(fill="x")
         self.hk_buttons = {}
@@ -189,6 +190,12 @@ class SettingsTab:
                              "Download-Ordner; das Programm liest die Datei und löscht sie. Es geht dafür selbst nicht "
                              "ins Internet."),
                   style="Dim.TLabel", wraplength=420)).pack(anchor="w", pady=(4, 0))
+        # 1.8.78: how well the program's own rounds fit the page (was a card of the page Erkennung)
+        self._reg("st.more.off_check.label", ui.Label(om, text=_("Abgleich mit der Stats-Seite"))).pack(
+            anchor="w", pady=(10, 0))
+        self.off_check_var = ui.StringVar(value="")         # filled when the page is opened (_official_check_render)
+        self._reg("st.more.off_check", ui.Label(om, textvariable=self.off_check_var, style="Dim.TLabel",
+                                                 wraplength=420, justify="left")).pack(anchor="w")
 
         fm = self._reg("st.more.farming", ui.LabelFrame(more, text=_("Farming-Runden"), padding=8))   # 1.2.20
         fm.pack(fill="x", pady=(8, 0))
