@@ -485,7 +485,7 @@ def prune(folder: str, recs: list[Recording], limit: int, reserve: int = RESERVE
 def select_recordings(recs: list[Recording], since: float | None = None, map_label: str | None = None,
                       role: str | None = None, only: str | None = None) -> list[Recording]:
     """1.5, tab "Aufnahmen": the index filtered – ``since`` (banner time ≥), map label, role ("killer" /
-    "survivor" / "farming"), ``only`` "marked" / "kept" / "bad". Newest first."""
+    "survivor" / "farming" / "normal" = not farming), ``only`` "marked" / "kept" / "bad". Newest first."""
     out = []
     for r in recs:
         if since is not None and r.t < since:
@@ -494,6 +494,9 @@ def select_recordings(recs: list[Recording], since: float | None = None, map_lab
             continue
         if role == "farming":
             if not r.farming:
+                continue
+        elif role == "normal":              # 1.8.71: every role, no farming
+            if r.farming:
                 continue
         elif role and (r.role != role or r.farming):
             continue
@@ -647,6 +650,9 @@ def select_clips(clips: list[Clip], since: float | None = None, role: str | None
             continue
         if role == "farming":
             if not c.farming:
+                continue
+        elif role == "normal":              # 1.8.71: every role, no farming
+            if c.farming:
                 continue
         elif role and (c.role != role or c.farming):
             continue

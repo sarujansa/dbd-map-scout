@@ -801,6 +801,7 @@ def test_select_recordings_filters_the_index():
     assert files(obsrec.select_recordings(recs, map_label="Gas Heaven")) == ["b.mkv"]
     assert files(obsrec.select_recordings(recs, role="killer")) == ["d.mkv", "a.mkv"]          # farming not a killer round
     assert files(obsrec.select_recordings(recs, role="farming")) == ["c.mkv"]
+    assert files(obsrec.select_recordings(recs, role="normal")) == ["d.mkv", "b.mkv", "a.mkv"]    # 1.8.71
     assert files(obsrec.select_recordings(recs, only="marked")) == ["b.mkv"]
     assert files(obsrec.select_recordings(recs, only="kept")) == ["c.mkv"]
     assert files(obsrec.select_recordings(recs, only="bad")) == ["d.mkv"]

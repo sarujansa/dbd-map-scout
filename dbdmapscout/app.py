@@ -859,7 +859,7 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
             if restarted:
                 self._log(_("Rundentimer gestartet."), "Erkennung")
             if restarted or self._hist is None:
-                self._hist_open(d["map_id"], d["variant"], "auto")
+                self._hist_open(d["map_id"], d["variant"], "auto", lobby=d.get("lobby"))
             if self._unsure and not d.get("unsure") and same:
                 self._clear_unsure(confirmed=True)  # later frames of the banner read it cleanly
             if not same:

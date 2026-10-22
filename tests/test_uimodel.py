@@ -770,6 +770,9 @@ def test_the_recordings_tab_lists_the_index_and_acts_on_the_marked_row(app_root)
     try:
         app._rec_render()
         t = app.rec_table
+        assert [t.item(i, "values")[1] for i in t.get_children()] == ["Coal Tower"]     # 1.8.71: no farming here
+        app.rec_role_var.set("Alle inkl. Farming")
+        app._rec_render()
         rows = [t.item(i, "values") for i in t.get_children()]
         assert [r[1] for r in rows] == ["Gas Heaven", "Coal Tower"]                     # newest first
         assert rows[1][2] == "Nurse" and rows[1][4] == "10:00" and rows[1][6] == "2" and rows[0][2].endswith("Farming")
@@ -1310,6 +1313,9 @@ def test_recording_and_clip_menus_copy_mark_farming_and_go_to_the_round(app_root
         app.rec_only_var.set(app._rec_onlys[1][1])                          # "Mit Marke" hides it
         app._rec_render()
         assert not app.rec_table.exists(repr(t1))
+        assert not app.clip_table.exists("c.mp4")                         # 1.8.71: its round is farming now …
+        app.clip_role_var.set("Alle inkl. Farming")                       # … so only with farming
+        app._rec_render()
         app.clip_table.selection_set("c.mp4")
         app.clip_table.event_generate("<<TreeviewSelect>>")
         items = app._clip_menu_items()
@@ -1857,3 +1863,43 @@ def test_a_dragged_statistics_tab_shows_its_content_at_once(app_root, monkeypatc
     app.root.mainloop()
     assert not failed, failed
     assert seen["rows"] == [2]                                         # in the window, not only in the model
+
+
+def test_a_round_from_a_briefly_seen_lobby_with_cross_play_off_is_a_farming_round(app_root):
+    """1.8.71 (user log: farming rounds stored as normal rounds, "No lobby for this round (lobby not seen)"): the
+    worker sends what it saw of the lobby with the banner; with no confirmed lobby here the round takes role and
+    cross-play from it. A confirmed lobby still wins."""
+    from dbdmapscout.app import App
+    from dbdmapscout.lobby import Found
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        now = time.time()
+        brief = Found(now - 20, None, "survivor", crossplay_off=True, cross_looks=(1, 0))
+        app._hist_open("coal", 1, "auto", lobby=brief)
+        assert app._hist["farming"] and app._hist["role"] == "survivor" and app._hist["wait"] is None
+        app._hist = None
+        confirmed = Found(now - 60, 30.0, "killer", killer="The Nurse", crossplay_off=False)
+        app._queue = {"state": "lobby", "found": confirmed}
+        app._hist_open("coal", 1, "auto", lobby=brief)
+        assert not app._hist["farming"] and app._hist["role"] == "killer" and app._hist["wait"] == 30.0
+        app._hist = None
+        app._hist_open("coal", 1, "auto")                                # no lobby at all: as before
+        assert not app._hist.get("farming") and "role" not in app._hist
+    finally:
+        app.quit()
+
+
+def test_recordings_keep_farming_and_normal_rounds_apart(app_root):
+    """1.8.71 (user: "Farming und normale Runden sollen bei Aufnahmen separiert werden"): in the tab "Aufnahmen"
+    "Alle Rollen" means the normal rounds (as in the statistics), "Farming" the farming rounds, both together only
+    with "Alle inkl. Farming" – for the recordings and the clips."""
+    from dbdmapscout.app import App
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        assert app.rec_role_var.get() == "Alle Rollen" and app._rec_filters()[2] == "normal"
+        for label, arg in (("Farming", "farming"), ("Alle inkl. Farming", None), ("Killer", "killer")):
+            app.rec_role_var.set(label)
+            assert app._rec_filters()[2] == arg
+        assert app.clip_role_var.get() == "Alle Rollen"
+    finally:
+        app.quit()

@@ -158,6 +158,8 @@ EN = {
     "Suche abgebrochen.": "Search cancelled.",
     "Lobby gefunden nach {time}{role}.": "Lobby found after {time}{role}.",
     "Lobby gefunden{role}.": "Lobby found{role}.",
+    "Alle inkl. Farming": "All incl. farming",
+    "Lobby nur kurz gesehen – Rolle und Crossplay von dort, ohne Wartezeit.": "Lobby seen only briefly – role and cross-play from there, no waiting time.",
     "Wartezeit {time}": "waited {time}",
     "Ergebnisbildschirm: gespielt als {role}.": "Results screen: played as {role}.",
     "Wartezeit": "Waiting time",
