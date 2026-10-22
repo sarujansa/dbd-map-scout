@@ -454,6 +454,28 @@ def _open_tabs(w):
         tw.setCurrentWidget(body)
 
 
+def _node_has(node: dict, key: str) -> bool:
+    """Whether a layout node (app_qt.ui_layout) or one below it carries ``key``."""
+    if node.get("key") == key:
+        return True
+    return any(_node_has(c, key) for c in node.get("children", ()))
+
+
+class _Forms(dict):
+    """page key -> FormPage/AutoPage (1.8.72): ``forms[key]`` builds the page on first access, ``get``, ``in`` and
+    ``items`` only know the pages built so far."""
+
+    def __init__(self, build):
+        super().__init__()
+        self._build = build
+
+    def __missing__(self, key):
+        page = self._build(key)
+        if page is None:
+            raise KeyError(key)
+        return page
+
+
 class _NavList(QListWidget):
     """The navigation. Qt's list view makes the first row current as soon as it gets the keyboard focus while no
     row is current – on the first start that threw the user out of the setup assistant about a second after it
@@ -468,7 +490,7 @@ class _NavList(QListWidget):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, post, icon_path: str | None = None, layouts: dict | None = None):
+    def __init__(self, post, icon_path: str | None = None, layouts: dict | None = None, thumb_cache: str | None = None):
         super().__init__()
         self._post = post
         self.allow_close = False          # closing = quitting the program, through the App
@@ -489,18 +511,22 @@ class MainWindow(QMainWindow):
         self.nav.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.stack = QStackedWidget()
         self.overview = OverviewPage(post)
-        self.maps = MapsPage(post)
-        self.forms = {key: FormPage(post, _(label), SPECS[key], key) for key, label in PAGES if key in SPECS}
-        for key, label in PAGES:
-            if key in AUTO_PAGES and (layouts or {}).get(key):
-                self.forms[key] = AutoPage(post, _(label), layouts[key], key)
+        self.maps = MapsPage(post, thumb_cache)
+        # 1.8.72: the hand-made and the model-built pages are made when first needed (a visit, the search, the
+        # idle warm-up – app_qt._qt_warm) instead of all before the window shows (measured: 11 pages ≈ 250 ms of
+        # the 400 ms App() took); ``forms[key]`` builds on access, ``forms.get``/``items`` see the built ones
+        self._layouts = dict(layouts or {})
+        self._card_orders, self._tab_orders, self._hidden_cols = {}, {}, {}
+        self._qss = ""                    # the style sheet, set per part (_style_lazily)
+        self._stale = []                  # pages still waiting for it
+        self.forms = _Forms(self._build_form)
         self.nav.setIconSize(QSize(NAV_ICON, NAV_ICON))
         self._pages = {}                   # page key -> its widget in the stack (the nav rows can be reordered)
         for key, label in PAGES:
             item = QListWidgetItem(_(label))
             item.setData(Qt.UserRole, key)
             self.nav.addItem(item)
-            page = {"overview": self.overview, "maps": self.maps}.get(key) or self.forms.get(key) or QWidget()
+            page = {"overview": self.overview, "maps": self.maps}.get(key) or QWidget()   # a stand-in until built
             self._pages[key] = page
             self.stack.addWidget(page)
         self.setup = SetupPage(post)
@@ -571,12 +597,76 @@ class MainWindow(QMainWindow):
         self._style_timer.setInterval(STYLE_IDLE_MS)
         self._style_timer.timeout.connect(self._style_next)
 
+    # ------------------------------------------------------------- pages built when first needed (1.8.72)
+    def _form_kind(self, key):
+        if key in SPECS:
+            return "form"
+        if key in AUTO_PAGES and self._layouts.get(key):
+            return "auto"
+        return None
+
+    def _build_form(self, key):
+        """The FormPage/AutoPage ``key`` – built now, put into the stack in place of its stand-in, with the
+        user's card/tab order, hidden columns and the style sheet; None for a key that is no such page."""
+        if dict.__contains__(self.forms, key):
+            return dict.__getitem__(self.forms, key)
+        kind = self._form_kind(key)
+        if kind is None:
+            return None
+        label = _(dict(PAGES)[key])
+        page = FormPage(self._post, label, SPECS[key], key) if kind == "form" \
+            else AutoPage(self._post, label, self._layouts[key], key)
+        dict.__setitem__(self.forms, key, page)
+        page.apply_order(self._card_orders.get(key, {}))
+        page.apply_tab_order(self._tab_orders.get(key, {}))
+        if self._hidden_cols:
+            from .qt_views import Table
+            for t in page.findChildren(Table):
+                t.set_hidden_map(self._hidden_cols)
+        if self._qss:
+            page.setStyleSheet(self._qss)
+        old = self._pages.get(key)
+        if old is not None and old is not page:
+            i = self.stack.indexOf(old)
+            self.stack.removeWidget(old)
+            self.stack.insertWidget(i, page)
+            if old in self._stale:
+                self._stale.remove(old)
+            old.deleteLater()
+        self._pages[key] = page
+        return page
+
+    def _form(self, key):
+        """The page ``key`` built (None: not a form page)."""
+        return self._build_form(key)
+
+    def _page(self, key):
+        """The stack widget of page ``key`` – a form page is built here if it is not yet."""
+        return self._form(key) or self._pages.get(key)
+
+    def pending_pages(self) -> list:
+        """The form pages not built yet, in navigation order."""
+        return [k for k in self.nav_keys() if self._form_kind(k) and not dict.__contains__(self.forms, k)]
+
+    def build_next(self) -> bool:
+        """Build one more page (the idle warm-up); False when all are there."""
+        todo = self.pending_pages()
+        if not todo:
+            return False
+        self._build_form(todo[0])
+        return True
+
+    def build_all(self):
+        """Every page now (the search reads them all)."""
+        while self.build_next():
+            pass
+
     def _page_changed(self, row):
         self._setup_on = False                                     # the navigation leaves the assistant
         if row < 0:
             return
         key = self.nav.item(row).data(Qt.UserRole)
-        page = self._pages.get(key)
+        page = self._page(key)
         if page is not None:
             self._style_page(page)
             self.stack.setCurrentWidget(page)
@@ -614,9 +704,11 @@ class MainWindow(QMainWindow):
         self._nav_texts()
 
     def set_tab_order(self, orders: dict):
-        """1.7.6: the user's order of the tab rows ({page: {tabs id: [ids]}}, setting tab_order)."""
+        """1.7.6: the user's order of the tab rows ({page: {tabs id: [ids]}}, setting tab_order) – the pages
+        built later get it when they are built."""
+        self._tab_orders = dict(orders or {})
         for key, page in self.forms.items():
-            page.apply_tab_order((orders or {}).get(key, {}))
+            page.apply_tab_order(self._tab_orders.get(key, {}))
 
     def current_key(self) -> str:
         if self._setup_on:
@@ -637,7 +729,7 @@ class MainWindow(QMainWindow):
         else:
             if self.nav.currentRow() < 0:
                 self.nav.setCurrentRow(0)              # posts "page" → the App fills the overview
-            page = self._pages.get(self.current_key(), self.stack.widget(0))
+            page = self._page(self.current_key()) or self.stack.widget(0)
             self._style_page(page)
             self.stack.setCurrentWidget(page)
 
@@ -738,7 +830,7 @@ class MainWindow(QMainWindow):
     def reveal(self, page: str, key: str):
         """1.2.15: open ``page``, scroll to the control ``key`` of a hand-made page and light up its card (the
         overview's "Match-Daten einrichten" leads to the card under "Mehr")."""
-        form = self.forms.get(page)
+        form = self._form(page)
         ctl = form.controls.get(key) if form is not None else None
         if ctl is None:
             return
@@ -771,11 +863,13 @@ class MainWindow(QMainWindow):
     def show_states(self, page, states):
         if page == "setup":
             self.setup.show_states(states)
-        elif page in self.forms:
-            self.forms[page].show_states(states)
+        else:
+            form = self._form(page)
+            if form is not None:
+                form.show_states(states)
 
     def visible_keys(self, page) -> set:
-        f = self.forms.get(page)
+        f = self._form(page)
         return f.visible_keys() if isinstance(f, AutoPage) else set()
 
     def open_dialog(self, key, title, node):
@@ -834,16 +928,19 @@ class MainWindow(QMainWindow):
         """1.3.6: the columns the user hid, per table ({column ids joined by "|": [hidden ids]}, setting
         hidden_columns)."""
         from .qt_views import Table
+        self._hidden_cols = dict(hidden or {})
         for t in self.findChildren(Table):
             t.set_hidden_map(hidden)
 
     def set_card_order(self, orders: dict):
-        """The user's order of the cards ({page: {run: [ids]}}, setting card_order); {} = as built."""
+        """The user's order of the cards ({page: {run: [ids]}}, setting card_order); {} = as built. The pages
+        built later get it when they are built."""
+        self._card_orders = dict(orders or {})
         for key, page in self.forms.items():
-            page.apply_order((orders or {}).get(key, {}))
+            page.apply_order(self._card_orders.get(key, {}))
 
-    def show_maps(self, items, current, preview=None, thumbs=None, recent=None, marks=None, style=None):
-        self.maps.show_maps(items, current, thumbs, recent, marks, style)
+    def show_maps(self, items, current, preview=None, thumbs=None, recent=None, marks=None, style=None, found=None):
+        self.maps.show_maps(items, current, thumbs, recent, marks, style, found)
         self.maps.show_preview(preview)
 
     def warm_pages(self):
@@ -895,17 +992,24 @@ class MainWindow(QMainWindow):
         return menu
 
     def host(self, key: str):
-        """1.8.8: the HostView of a model Host (recordings tab: the clip preview), None if not built."""
+        """1.8.8: the HostView of a model Host (recordings tab: the clip preview), None if no page holds it.
+        1.8.72: the page that holds it is built for it when it is not yet (only that one)."""
         for page in self.findChildren(AutoPage):
             ctl = page.controls.get(key)
             if ctl is not None and ctl[0] == "host":
                 return ctl[1]
+        for page_key, node in self._layouts.items():
+            if _node_has(node, key):
+                form = self._form(page_key)
+                ctl = form.controls.get(key) if form is not None else None
+                if ctl is not None and ctl[0] == "host":
+                    return ctl[1]
         return None
 
     def open_tab(self, page: str, frame: str):
         """1.2.12 (analysis point 10): open the tab of a hand-made page that holds ``frame`` (an element picked in
         the overlay preview opens its settings)."""
-        form = self.forms.get(page)
+        form = self._form(page)
         ctl = form.controls.get(frame) if form is not None else None
         if ctl is not None and ctl[0] == "tab" and ctl[1].currentWidget() is not ctl[2]:
             ctl[1].setCurrentWidget(ctl[2])                 # 1.7.6: by widget – the tabs can be reordered

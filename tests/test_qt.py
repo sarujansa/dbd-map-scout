@@ -249,14 +249,15 @@ def test_maps_page_lists_by_realm_and_posts_the_pick(qapp, keep, tmp_path):
     rows = [page.realms.item(i).text() for i in range(page.realms.count())]
     assert rows == ["Alle Maps\t3", "Zuletzt gespielt\t1", "MacMillan\t2", "Autohaven\t1"]
     assert page.realms.currentItem().data(Qt.UserRole) == "MacMillan"           # the realm of the shown map
-    assert set(page._tiles) == {("coal", 1), ("pit", 1)} and page._tiles[("pit", 1)].property("current")
-    while page._todo:
-        page._load_some()
+    shown = lambda: {t.key for t in page.visible_tiles()}                               # noqa: E731
+    assert shown() == {("coal", 1), ("pit", 1)} and page._tiles[("pit", 1)].property("current")
+    assert set(page._tiles) == {("coal", 1), ("pit", 1), ("azarov", 1)}       # 1.8.72: every map has its tile
+    page.load_all()
     assert not page._tiles[("coal", 1)].pic.pixmap().isNull()
     page.realms.setCurrentRow(1)
-    assert set(page._tiles) == {("azarov", 1)}
+    assert shown() == {("azarov", 1)} and page.visible_tiles()[0] is not page._tiles[("azarov", 1)]  # own tile
     page.realms.setCurrentRow(0)
-    assert len(page._tiles) == 3
+    assert len(page.visible_tiles()) == 3
     page.search.setText("coal")
     page.show_in_game(("coal", 1))
     page._pick_first()
@@ -1632,3 +1633,160 @@ def test_the_preview_draws_the_limiter_lines_and_drags_them_in_moving_mode(qapp,
     QTest.mousePress(view, Qt.LeftButton, Qt.NoModifier, at(1700, 147))      # over the game picture: no line
     assert view._limit is None
     QTest.mouseRelease(view, Qt.LeftButton, Qt.NoModifier, at(1700, 147))
+
+
+# ------------------------------------------------------------------ maps page 1.8.72: one grid, pictures from a thread, keys
+def _grid_items(realms=4, maps=7):
+    return [(f"Realm {r}", f"Map {r}-{i}", f"m{r}_{i}", 1) for r in range(realms) for i in range(maps)]
+
+
+def test_the_grid_is_laid_out_right_while_its_pictures_still_load(qapp, keep, tmp_path):
+    """1.8.72 (seen in a screenshot of the first visit: the tiles piled up on the headings until a resize): a tile
+    added to the visible grid was shown by Qt's queued show, so the first layout pass counted it as hidden and
+    the scroll area sized the grid to its viewport – with the pictures loading, nothing laid it out again."""
+    from PIL import Image
+    from dbdmapscout import qt_theme, qt_window
+    from dbdmapscout.qt_maps import TILE_H
+    pics = []
+    for i in range(3):
+        p = tmp_path / f"{i}.png"
+        Image.new("RGBA", (600, 400), (40 * i, 0, 0, 255)).save(p)
+        pics.append(str(p))
+    items = _grid_items()
+    page = keep(qt_window.MapsPage(lambda a, arg=None: None))
+    page.setStyleSheet(qt_theme.stylesheet(True))
+    page.resize(1090, 760)
+    page.show()
+    page.show_maps(items, None, {(m, v): pics[hash(m) % 3] for _r, _l, m, v in items}, [], {}, "classic")
+    for _i in range(5):
+        qapp.processEvents()
+    rows = sorted({t.geometry().y() for t in page.visible_tiles()})
+    assert len(rows) == 8 and all(b - a >= TILE_H for a, b in zip(rows, rows[1:]))   # two rows per realm
+    assert page.grid_scroll.widget().height() >= 8 * TILE_H
+    page.load_all()
+    assert all(not t.pic.pixmap().isNull() for t in page.visible_tiles())
+    pm = page._tiles[("m0_0", 1)].pic.pixmap()
+    assert pm.width() / pm.devicePixelRatio() <= 126 and pm.height() / pm.devicePixelRatio() <= 116
+
+
+def test_the_search_and_the_realm_list_show_and_hide_the_tiles_instead_of_building_them_anew(qapp, keep):
+    """1.8.72 (measured: a cleared search built 56 tiles anew – 336 ms until the grid stood still, now 19 ms):
+    the tiles stay, with their pictures; the realm list keeps every realm while a search runs."""
+    from PySide6.QtCore import Qt
+    from dbdmapscout import qt_window
+    posted = []
+    page = keep(qt_window.MapsPage(lambda a, arg=None: posted.append((a, arg))))
+    items = _grid_items(3, 2)
+    page.show_maps(items, ("m1_0", 1), {}, ["m2_1", "m0_0"], {}, "classic")
+    tiles = dict(page._tiles)
+    assert len(tiles) == 6 and page.realms.currentItem().data(Qt.UserRole) == "Realm 1"
+    assert [t.key for t in page.visible_tiles()] == [("m1_0", 1), ("m1_1", 1)]
+    page.show_maps(items, ("m1_0", 1), {}, ["m2_1", "m0_0"], {}, "classic", found={("m0_1", 1), ("m2_0", 1)})
+    assert [t.key for t in page.visible_tiles()] == [("m0_1", 1), ("m2_0", 1)]     # every realm, the hits only
+    assert page._tiles == tiles                                                      # the same widgets
+    assert [page.realms.item(i).text() for i in range(page.realms.count())] == \
+        ["Alle Maps\t6", "Zuletzt gespielt\t2", "Realm 0\t2", "Realm 1\t2", "Realm 2\t2"]
+    page._pick_first()                                                               # Enter: the first hit
+    assert posted[-1] == ("show_map", ("m0_1", 1))
+    page.show_maps(items, ("m1_0", 1), {}, ["m2_1", "m0_0"], {}, "classic", found=None)
+    assert [t.key for t in page.visible_tiles()] == [("m1_0", 1), ("m1_1", 1)] and page._tiles == tiles
+    page.realms.setCurrentRow(1)                                                     # "Zuletzt gespielt": own tiles
+    assert [t.key for t in page.visible_tiles()] == [("m2_1", 1), ("m0_0", 1)]
+    assert not any(t in tiles.values() for t in page.visible_tiles()) and page._tiles == tiles
+    page.show_maps(items, ("m1_0", 1), {}, ["m0_0"], {}, "classic")                  # the list changed: made anew
+    assert [t.key for t in page.visible_tiles()] == [("m0_0", 1)] and page._tiles == tiles
+    page.realms.setCurrentRow(0)
+    assert len(page.visible_tiles()) == 6
+    page.show_maps(items + [("Realm 3", "Map 3-0", "m3_0", 1)], None, {}, [], {}, "classic")   # a new map: rebuilt
+    assert len(page._tiles) == 7 and page._tiles[("m0_0", 1)] is not tiles[("m0_0", 1)]
+
+
+def test_the_tiles_are_walked_with_the_keyboard(qapp, keep):
+    """1.8.72: the arrows move between the tiles on display, Enter shows a map big, Ctrl+Enter in the game."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QKeyEvent
+    from PySide6.QtCore import QEvent
+    from dbdmapscout import qt_window
+    posted = []
+    page = keep(qt_window.MapsPage(lambda a, arg=None: posted.append((a, arg))))
+    page.resize(1090, 760)
+    page.show()
+    items = _grid_items(2, 7)
+    page.show_maps(items, None, {}, [], {}, "classic")
+    for _i in range(5):
+        qapp.processEvents()
+
+    def key(tile, k, mod=Qt.NoModifier):
+        tile.keyPressEvent(QKeyEvent(QEvent.KeyPress, k, mod))
+    first = page._tiles[("m0_0", 1)]
+    first.setFocus(Qt.OtherFocusReason)
+    key(first, Qt.Key_Right)
+    assert qapp.focusWidget() is page._tiles[("m0_1", 1)]
+    key(page._tiles[("m0_1", 1)], Qt.Key_Down)
+    below = qapp.focusWidget()
+    assert below.key[0] in ("m0_5", "m0_6", "m1_0", "m1_1") and below.geometry().y() > first.geometry().y()
+    key(below, Qt.Key_Up)
+    assert qapp.focusWidget().geometry().y() == first.geometry().y()
+    key(first, Qt.Key_Left)                                              # nothing before the first: stays
+    key(page._tiles[("m0_2", 1)], Qt.Key_Return)
+    assert posted[-1] == ("map_preview", ("m0_2", 1)) and page.stack.currentIndex() == 1
+    page.close_big()
+    key(page._tiles[("m0_3", 1)], Qt.Key_Return, Qt.ControlModifier)
+    assert posted[-1] == ("show_map", ("m0_3", 1))
+    page.realms.setCurrentRow(2)                                         # a realm without the focused tile
+    key(first, Qt.Key_Right)                                             # hidden: no move, no error
+    assert page._tiles[("m1_0", 1)] in page.visible_tiles()
+
+
+def test_the_window_shows_the_keyboard_focus():
+    """1.8.72: a focused button, tick box or tile looked exactly like an unfocused one."""
+    css = qt_theme.stylesheet(True)
+    for rule in ("QPushButton:focus", "QPushButton#primary:focus", 'QFrame[class="tile"]:focus',
+                 "QCheckBox::indicator:focus"):
+        assert rule in css
+
+
+def test_the_pages_are_built_when_first_needed_and_keep_the_users_order(qapp, keep):
+    """1.8.72 (measured: the eleven pages took ~250 ms of the 400 ms App() before the window showed): only the
+    overview and the maps are made with the window; a form page comes with its first visit, ``forms[key]``, the
+    search (build_all) or the idle warm-up (build_next) – with the card/tab order and the style sheet given
+    meanwhile, in place of its stand-in in the stack."""
+    from dbdmapscout import qt_window
+    from dbdmapscout.qt_pages import FormPage
+    posted = []
+    win = keep(qt_window.MainWindow(lambda a, arg=None: posted.append((a, arg)), None, {"log": NODE}))
+    assert dict(win.forms) == {} and "overlay" not in win.forms and win.forms.get("overlay") is None
+    pending = win.pending_pages()
+    assert pending[:2] == ["overlay", "settings"] and "log" in pending and "stats" not in pending   # no layout
+    first = []                                                                # the first column's cards
+    for item in qt_window.SPECS["settings"]:
+        if item[0] != "card":
+            break
+        first.append(item[1])
+    assert len(first) >= 2
+    win.set_card_order({"settings": {"0": list(reversed(first))}})
+    win.apply_theme(True, 1.0)
+    stand_in = win._pages["settings"]
+    win.show_page("settings")                                                 # the visit builds it
+    page = win.forms["settings"]
+    assert isinstance(page, FormPage) and win.stack.currentWidget() is page and win._pages["settings"] is page
+    assert win.stack.indexOf(page) == win.stack.indexOf(stand_in) or win.stack.indexOf(stand_in) == -1
+    assert page.columns[0].ids() == list(reversed(first)) and page.styleSheet() == win._qss
+    assert posted[-1] == ("page", "settings") and "settings" not in win.pending_pages()
+    assert win.forms["overlay"] is win.forms["overlay"] and win.stack.indexOf(win.forms["overlay"]) >= 0
+    n = len(win.pending_pages())
+    assert n and win.build_next() and len(win.pending_pages()) == n - 1
+    win.build_all()
+    assert win.pending_pages() == [] and not win.build_next() and isinstance(win.forms["log"], qt_window.AutoPage)
+    assert set(win.forms) == {k for k, _l in qt_window.PAGES if k in qt_window.SPECS} | {"log"}
+    win._style_next()                                                         # no stand-in left in the queue
+    assert all(w in win._pages.values() or w is win.setup for w in win._stale)
+    win.show_states("server", {})                                             # a page without layout: nothing
+    assert isinstance(win.visible_keys("log"), set)
+    win2 = keep(qt_window.MainWindow(lambda a, arg=None: None, None, {"log": NODE}))
+    assert win2.host(".nowhere") is None and "log" in win2.pending_pages()         # no page holds it: not built
+    host_node = {"kind": "box", "key": ".r", "side": "top", "row": False, "children": [
+        {"kind": "host", "key": ".r.host", "side": "top"}]}
+    win3 = keep(qt_window.MainWindow(lambda a, arg=None: None, None, {"log": NODE, "recordings": host_node}))
+    assert win3.host(".r.host") is not None and "recordings" not in win3.pending_pages()   # built for it …
+    assert "log" in win3.pending_pages()                                                  # … only that page
