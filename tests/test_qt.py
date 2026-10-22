@@ -55,10 +55,11 @@ def test_overview_without_a_map():
     assert o.actions["rotate"] is None and o.actions["toggle"] is None and o.actions["reject"] is None
     assert o.actions["confirm"] is None and o.actions["layout"] is None
     assert [f.title for f in o.facts] == ["Rundenzeit", "Server", "Ping", "Rolle"]
-    assert o.today[0].value == "0" and o.rounds == []
+    assert o.today[0].value == "0" and o.today[0].sub == "Noch keine Runden heute" and o.rounds == []
     # 1.2.15: dead ends get a button – "Server aus" leads to the server tab, no stats data ever to the setup
     assert (o.facts[1].action, o.facts[1].action_label) == ("server_page", "Server-Tab öffnen")
-    assert o.today[1].action == "official_setup" and o.today[2].action == ""
+    # 1.8.75: without a round today only this line and the setup tile – not four tiles with "–"
+    assert o.today[1].action == "official_setup" and len(o.today) == 2 and o.today_note == ""
     assert "aus" in o.system_note                                   # system values switched off
 
 

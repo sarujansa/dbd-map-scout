@@ -123,8 +123,14 @@ def today(app, now: float) -> tuple[list, str]:
     day = history.period_start("day", now)
     mine = [r for r in j.rounds if r.t >= day and id(r) in j.off]
     s = official.summary([j.off[id(r)] for r in mine if history.normal(r)])
-    rounds = Fact(_("Runden"), str(d["count"]),
-                  _("{k} Killer / {s} Survivor", k=d["killer"], s=d["survivor"]) if d["count"] else "")
+    rec = recordings(app)
+    if not d["count"]:                         # 1.8.75: one line instead of four tiles with "–" (user review)
+        tiles = [Fact(_("Runden"), "0", _("Noch keine Runden heute"))]
+        if not getattr(j, "matches", None):    # never set up – say where (it hides under "Mehr")
+            tiles.append(Fact(_("Stats-Seite"), "–", _("nicht eingerichtet"), action="official_setup",
+                              action_label=_("Match-Daten einrichten …")))
+        return tiles + ([rec] if rec else []), ""
+    rounds = Fact(_("Runden"), str(d["count"]), _("{k} Killer / {s} Survivor", k=d["killer"], s=d["survivor"]))
     farm = None
     if d["farming"]:                           # 1.8.56: farming rounds apart, with their Ø bloodpoints
         f = official.summary([j.off[id(r)] for r in mine if r.farming and not r.custom])
@@ -136,7 +142,7 @@ def today(app, now: float) -> tuple[list, str]:
     elif getattr(j, "matches", None):
         kills = Fact(_("Ø Kills"), sub=_("noch keine Stats-Daten"))
     else:                                      # 1.2.15: never set up – say where (it hides under "Mehr")
-        kills = Fact(_("Ø Kills"), sub=_("Kills und Entkommen kommen von der Stats-Seite"),
+        kills = Fact(_("Ø Kills"), sub=_("Stats-Seite nicht eingerichtet"),
                      action="official_setup", action_label=_("Match-Daten einrichten …"))
     if s["survivor"]:
         esc = Fact(_("Entkommen"), f"{s['escaped']:.0%}",
@@ -146,8 +152,7 @@ def today(app, now: float) -> tuple[list, str]:
         esc = Fact(_("Entkommen"), sub=_("noch keine Stats-Daten"))
     wait = Fact(_("Ø Wartezeit"), fmt_duration(d["wait"]) if d["wait"] is not None else "–",
                 _("Ping {ms} ms", ms=f"{d['ping']:.0f}") if d["ping"] is not None else "")
-    note = _("Spielzeit heute: {time}", time=fmt_duration(d["total"])) if d["count"] else ""
-    rec = recordings(app)
+    note = _("Spielzeit heute: {time}", time=fmt_duration(d["total"]))
     return [rounds, kills, esc] + ([farm] if farm else []) + [wait] + ([rec] if rec else []), note
 
 

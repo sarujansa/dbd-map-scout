@@ -1456,7 +1456,10 @@ EN = {
                                                         'of the stats page is tied.',
     'Server-Tab öffnen': 'Open the server tab',
     'Match-Daten einrichten …': 'Set up match data …',
-    'Kills und Entkommen kommen von der Stats-Seite': 'Kills and escapes come from the stats page',
+    'Stats-Seite nicht eingerichtet': 'Stats page not set up',          # 1.8.75
+    'Noch keine Runden heute': 'No rounds yet today',
+    'Stats-Seite': 'Stats page',
+    'nicht eingerichtet': 'not set up',
     'Match-Daten': 'Match data',
     'Kills, Entkommen und Bloodpoints deiner Runden kommen von stats.deadbydaylight.com – geladen von deinem '
     'Browser, nicht vom Programm. Lässt sich auch später einrichten (Einstellungen → Mehr → Offizielle Match-Daten).':
