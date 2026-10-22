@@ -307,8 +307,10 @@ class StatsTab:
         self.stats_opp = self._stats_tree(box_o, (("who", _("Charakter"), 150, "w"), ("as", _("Rolle"), 75, "w"),
                                                   ("n", _("Begegnungen"), 90, "e"), ("esc", _("Entkommen"), 80, "e"),
                                                   ("sac", _("Geopfert"), 75, "e"), ("kill", _("Getötet"), 70, "e"),
-                                                  ("dc", _("Aufgegeben"), 85, "e")), 8)
-        self._table_menu(self.stats_opp, self._stats_opp_menu_items, self._stats_opp_menu_act)      # 1.8.73
+                                                  ("dc", _("Aufgegeben"), 85, "e")), 8, select=True)
+        # 1.8.73 right click; 1.8.74: the table must be selectable – the Qt view opens no row menu on a NoSelection
+        # table (user: "das geht nicht")
+        self._table_menu(self.stats_opp, self._stats_opp_menu_items, self._stats_opp_menu_act)
         ui.Label(box_o, text=_("Laut Stats-Seite: als Killer die Survivor gegen dich und wie ihr Match endete, als "
                                 "Survivor der Killer und wie dein Match endete. „Getötet“ = vom Killer direkt "
                                 "getötet (z. B. Mori), „Aufgegeben“ schließt verlassene Matches ein. „Ø Kills ohne "

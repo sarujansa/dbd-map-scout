@@ -1975,3 +1975,44 @@ def test_rounds_with_a_farming_partner_count_as_farming_by_a_right_click_on_the_
         assert rows() == ["Slasher", "Nurse"] and "(keine)" in app.farm_opp_var.get()
     finally:
         app.quit()
+
+
+def test_the_right_click_on_an_opponent_reaches_the_menu_through_the_qt_table(app_root):
+    """1.8.74 (user: "das geht nicht"): the opponents table was not selectable, and the Qt table opens no row menu
+    on a NoSelection table – the right click of 1.8.73 never reached the App. The whole chain: Qt row menu →
+    events → the model's marking → the App's menu → the picked entry marks the farming partner."""
+    import json
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QTreeWidget
+    from dbdmapscout import history, official
+    from dbdmapscout.app import App
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    t = time.time() - 7200
+    history.append(str(app_root / "rounds.jsonl"), history.Round(t, 600, "coal", "Coal Tower", role="survivor"))
+    official.merge(str(app_root / official.FILE), [official.Match(
+        t=t - 38, map="Coal Tower", role="survivor", seconds=560, status="Escaped",
+        opp=[official.Player(role="killer", character="Slasher", status="Escaped")])])
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        qapp = app.qapp
+        app.qt.show_page("stats")
+        i = next(i for i, tab in enumerate(app.stats_nb.tabs()) if app.stats_nb.tab(tab, "text") == "Gegner")
+        app.stats_nb.select(app.stats_nb.tabs()[i])
+        app._stats_render()
+        for _n in range(3):                       # the tab row follows the model, then the table gets its rows
+            app._qt_refresh(force=True)
+            qapp.processEvents()
+        kind, table, _extra = app.qt.forms["stats"].controls[str(app.stats_opp)]
+        assert kind == "table" and table.selectionMode() != QTreeWidget.NoSelection
+        item = next(table.topLevelItem(k) for k in range(table.topLevelItemCount())
+                    if table.topLevelItem(k).data(0, Qt.UserRole) == "killer\tSlasher")
+        menus = []
+        app.qt.popup_menu = lambda items, pos: menus.append(items)
+        table._row_menu(table.visualItemRect(item).center())            # the right click on the row
+        app._poll()                                                       # the events it posted
+        assert menus and [it[0] for it in menus[-1]] == ["opp_on:Slasher"]
+        app._menu_act("opp_on:Slasher")                                   # the entry picked in the menu
+        assert app.settings.get("farming_opponents") == ["Slasher"]
+        assert [r.farming for r in app._joined().rounds] == [True]
+    finally:
+        app.quit()
