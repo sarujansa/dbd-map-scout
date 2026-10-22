@@ -838,6 +838,12 @@ def test_farming_rounds_have_a_tab_of_their_own_whatever_the_role_filter(app_roo
         assert list(app.stats_farm.get_children()) == [repr(t2), repr(t1)]   # newest first
         row = app.stats_farm.item(repr(t1), "values")
         assert row[1] == "Coal Tower" and "Nurse" in row[4] and row[5] == "–"   # no official match: no BP
+        # 1.8.85 (user: "Wartezeit, wenn's instant ist, kann man das hinschreiben"): a farming round without a
+        # measured search time filled its lobby at once; a normal round without one stays unknown
+        assert row[3] == "sofort" and row[6] == "–"
+        assert app._wait_text(history.Round(0, 1, "coal", "Coal Tower", wait=12.0, farming=True)) == "00:12"
+        assert app._wait_text(history.Round(0, 1, "coal", "Coal Tower", farming=True, custom=True)) == "–"
+        assert app._wait_text(history.Round(0, 1, "coal", "Coal Tower")) == "–"
         tiles = {x.title: x for x in app.stats_farm_tiles.data}
         assert tiles["Farming-Runden"].value == "2" and "1 als Killer · 1 als Survivor" in tiles["Farming-Runden"].sub
         app.stats_map_var.set("Coal Tower")

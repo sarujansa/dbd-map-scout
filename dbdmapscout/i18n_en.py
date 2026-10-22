@@ -1016,7 +1016,7 @@ EN = {
     "Abgleich mit der Stats-Seite": "Check against the stats page",
     "Noch keine offiziellen Daten.": "No official data yet.",
     "Neu seit {version}": "New since {version}",
-    "Diese Woche": "This week",
+    "sofort": "instant",
     "Vorwoche {value}": "last week {value}",
     "{n} Pkt.": "{n} pts",
     "Montag bis jetzt gegenüber der Vorwoche (Mo–So); Custom und Farming zählen nicht.":
@@ -1113,10 +1113,14 @@ EN = {
     "{when}: Ø {avg} °C · max {max} °C · {n} Runden": "{when}: avg. {avg} °C · max {max} °C · {n} rounds",
     "Werte der Systemwerte-Anzeige (Tab Overlay) während der Runden – nur Runden, in denen sie eingeschaltet war. "
     "CPU-Temperatur nur mit HWiNFO. „Wann/Wo“ zeigt, auf welchen Maps oder zu welcher Tageszeit der PC am heißesten "
-    "läuft. „Gedrosselt“: Sekunden, in denen die GPU wegen Temperatur oder Hardware langsamer lief (nur NVIDIA).":
+    "läuft. „Gedrosselt“: Sekunden, in denen die GPU wegen Temperatur oder Hardware langsamer lief (nur NVIDIA). „–“: in diesen "
+    "Runden nicht erfasst – CPU-Temperatur, -Leistung, Kerne und FPS gibt es nur, solange HWiNFO "
+    "läuft, und jeder Wert braucht mindestens 10 Sekunden Messwerte in der Runde.":
         "Values of the system values display (Overlay tab) during the rounds – only rounds in which it was on. CPU "
         "temperature only with HWiNFO. \"When/Where\" shows on which maps or at what time of day the PC runs hottest. "
-        "\"Throttled\": seconds in which the GPU ran slower because of temperature or hardware (NVIDIA only).",
+        "\"Throttled\": seconds in which the GPU ran slower because of temperature or hardware (NVIDIA only). "
+        "\"–\": not recorded in those rounds – CPU temperature, power, cores and FPS exist only while HWiNFO runs, "
+        "and every value needs at least 10 seconds of readings in the round.",
     # system values: own position
     "Eigene Position (mit der Maus verschieben)": "Own position (drag with the mouse)",
     "SYSTEMWERTE": "SYSTEM VALUES",
@@ -1285,7 +1289,7 @@ EN = {
     'Läuft DBD in einem kleinen Fenster (Bild kleiner als 1920×1080 oder schmaler als 16:9), zeigt das Programm im Spiel nichts – wie der Hauptschalter. Map-Erkennung, Statistik und OBS-Aufnahmen laufen weiter. Wird das Fenster wieder gross, erscheint das Overlay von selbst.': 'If DBD runs in a small window (picture smaller than 1920×1080 or narrower than 16:9), the program shows nothing in the game – like the master switch. Map detection, statistics and OBS recordings go on. When the window is big again, the overlay comes back by itself.',
     'Kleines DBD-Fenster ({w}×{h}) – Overlay ausgeblendet, Runden werden weiter gezählt und aufgenommen.': 'Small DBD window ({w}×{h}) – overlay hidden, rounds are still counted and recorded.',
     'Update gesperrt: eine Runde läuft. Nach dem Rundenende noch einmal auf „Aktualisieren und neu starten“ klicken.': 'Update locked: a round is running. Click “Update and restart” again after the round ends.',
-    'Alle Farming-Runden der Auswahl (Zeitraum, Region, Map, Modus) – unabhängig vom Rollen-Filter, der sie sonst aus den übrigen Auswertungen heraushält. Farming = Crossplay war in der Lobby aus (oder die eingestellte Farming-Region); korrigieren unter „Letzte Runden“ mit „Farming an/aus“. Aufnahmen liegen im Unterordner „Farming“ des Aufnahmeordners.': 'All farming rounds of the selection (period, region, map, mode) – whatever the role filter says, which otherwise keeps them out of the other evaluations. Farming = cross-play was off in the lobby (or the farming region you set); correct it under “Last rounds” with “Farming on/off”. Recordings are in the “Farming” subfolder of the recordings folder.',
+    'Alle Farming-Runden der Auswahl (Zeitraum, Region, Map, Modus) – unabhängig vom Rollen-Filter, der sie sonst aus den übrigen Auswertungen heraushält. Farming = Crossplay war in der Lobby aus (oder die eingestellte Farming-Region); korrigieren unter „Letzte Runden“ mit „Farming an/aus“. Aufnahmen liegen im Unterordner „Farming“ des Aufnahmeordners. Wartezeit „sofort“: die Lobby war voll, bevor eine Suchzeit messbar war. Server nur, wenn „Verbunden mit“ auf der Seite Server läuft.': 'All farming rounds of the selection (period, region, map, mode) – whatever the role filter says, which otherwise keeps them out of the other evaluations. Farming = cross-play was off in the lobby (or the farming region you set); correct it under “Last rounds” with “Farming on/off”. Recordings are in the “Farming” subfolder of the recordings folder. Wait "instant": the lobby was full before a search time could be measured. Server only while "Connected to" runs on the Server page.',
     'Keine Farming-Runden in dieser Auswahl.': 'No farming rounds in this selection.',
     '{n} als Killer · {m} als Survivor': '{n} as killer · {m} as survivor',
     'Spielzeit': 'Play time',
