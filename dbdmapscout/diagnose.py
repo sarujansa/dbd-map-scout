@@ -119,6 +119,8 @@ def collect(app) -> str:
     lines.append(f"Einstellungen Erkennung: auto={app.settings.get('auto_detect')} "
                  f"nach_runde_aus={app.settings.get('hide_after_match')} menü_pause={app.settings.get('pause_in_menus')} "
                  f"sprachen={app.settings.get('languages')}")
+    moved = sorted(app.settings.get("tab_order") or {})          # 1.8.70: dragged tabs (AutoPage.visible_keys)
+    lines.append(f"Reiter umsortiert: {', '.join(moved) if moved else 'nein'}")
     w = getattr(app, "worker", None)
     if w is not None:
         lines.append(f"Rundenende-Erkennung: {w.watch_status}  (Menü pausiert={getattr(app, 'menu_paused', None)}, "

@@ -1037,7 +1037,7 @@ class AutoPage(QWidget, _Arranged):
         self._post = post
         self._page_key = page_key
         self.controls = {}                 # key -> (kind, widget, extra)
-        self._tabs = []                    # (QTabWidget, [keys of each page])
+        self._tabs = []                    # (key, QTabWidget, [keys of each page], [widget of each page])
         self._tabsets = []
         self._all = []
         self.columns = []
@@ -1171,7 +1171,7 @@ class AutoPage(QWidget, _Arranged):
             tw.currentChanged.connect(lambda i, k=key, t=tw, b=by_widget: self._post("act", (k, b.get(t.widget(i), i))))
             self._movable(key, tw, ids, self._page_key)
             lay.addWidget(tw, 1 if fill else 0)
-            self._tabs.append((key, tw, pages))
+            self._tabs.append((key, tw, pages, [ids[str(j)] for j in range(len(pages))]))
             self.controls[key] = ("tabs", tw, None)
             return
         w, extra = make_control(kind, key, self._post)
@@ -1187,11 +1187,14 @@ class AutoPage(QWidget, _Arranged):
         self.controls[key] = (kind, w, extra)
 
     def visible_keys(self) -> set:
-        """Keys to read now: everything except the pages of tabs that are not on display."""
+        """Keys to read now: everything except the pages of tabs that are not on display. 1.8.70: by the page's
+        widget – after a tab was dragged (tab_order) the position in the row is not the model's index; comparing them
+        left the tab on display out, its content came only with the next page switch."""
         hidden = set()
-        for _key, tw, pages in self._tabs:
-            for i, ks in enumerate(pages):
-                if i != tw.currentIndex():
+        for _key, tw, pages, widgets in self._tabs:
+            shown = tw.currentWidget()
+            for ks, w in zip(pages, widgets):
+                if w is not shown:
                     hidden.update(ks)
         return set(self._all) - hidden
 
