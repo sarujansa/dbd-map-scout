@@ -1927,3 +1927,51 @@ def test_a_search_on_the_maps_page_filters_at_once_without_building_the_tiles_an
         assert len(page.visible_tiles()) == len(tiles) and page._tiles == tiles
     finally:
         app.quit()
+
+
+def test_rounds_with_a_farming_partner_count_as_farming_by_a_right_click_on_the_opponent(app_root):
+    """1.8.73 (user: the opponents tab showed "Slasher 38×" – "das kommt safe vom Farmen"): a character picked in
+    "Gegner" as farming partner makes every match with that character a farming round (older ones too, display
+    only like the farming region) – out of the normal statistics, into the filter "Farming"."""
+    import json
+    from dbdmapscout import history, official
+    from dbdmapscout.app import App
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    t = time.time() - 7200
+    ms = []
+    for i, killer in enumerate(("Slasher", "The Nurse")):
+        history.append(str(app_root / "rounds.jsonl"), history.Round(t + i * 1800, 600, "coal", "Coal Tower",
+                                                                     role="survivor"))
+        ms.append(official.Match(t=t + i * 1800 - 38, map="Coal Tower", role="survivor", seconds=560,
+                                 status="Escaped", opp=[official.Player(role="killer", character=killer,
+                                                                        status="Escaped")]))
+    official.merge(str(app_root / official.FILE), ms)
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        i = next(i for i, tab in enumerate(app.stats_nb.tabs()) if app.stats_nb.tab(tab, "text") == "Gegner")
+        app.stats_nb.select(app.stats_nb.tabs()[i])
+        app._stats_render()
+        rows = lambda: [app.stats_opp.item(c, "values")[0] for c in app.stats_opp.get_children()]   # noqa: E731
+        assert rows() == ["Slasher", "Nurse"] and app.stats_opp.get_children()[0] == "killer\tSlasher"   # by name
+        app.stats_opp.selection_set("killer\tSlasher")
+        items = app._stats_opp_menu_items()
+        assert [it[0] for it in items] == ["opp_on:Slasher"] and "Farming" in items[0][1]
+        app._stats_opp_menu_act("opp_on:Slasher")
+        assert app.settings.get("farming_opponents") == ["Slasher"]
+        j = app._joined()
+        assert [r.farming for r in j.rounds] == [True, False]
+        assert rows() == ["Nurse"]                                         # the partner's rounds are farming now
+        assert any("„Slasher“ gilt jetzt als Farming-Gegner – 1 Runden" in e[2] for e in app._log_entries)
+        assert "Slasher" in app.farm_opp_var.get()
+        app.stats_role_var.set("Farming")
+        app._stats_render()
+        assert rows() == ["Slasher"]
+        app.stats_role_var.set("Alle Rollen")
+        app._stats_render()
+        app.stats_opp.selection_set("killer\tThe Nurse")
+        assert [it[0] for it in app._stats_opp_menu_items()] == ["opp_on:The Nurse"]
+        app._stats_opp_menu_act("opp_off:Slasher")                        # not marked: taken off again
+        assert app.settings.get("farming_opponents") == [] and [r.farming for r in app._joined().rounds] == [False, False]
+        assert rows() == ["Slasher", "Nurse"] and "(keine)" in app.farm_opp_var.get()
+    finally:
+        app.quit()

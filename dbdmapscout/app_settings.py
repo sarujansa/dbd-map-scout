@@ -212,6 +212,9 @@ class SettingsTab:
             "rotem Kreuz neben dem Lobby-Knopf; Runden auf der gewählten Region zählen immer als Farming, auch "
             "ältere. Einzelne Runden: „Farming an/aus“ unter „Letzte Runden“."),
             style="Dim.TLabel", wraplength=420)).pack(anchor="w", pady=(4, 0))
+        self.farm_opp_var = ui.StringVar(value=self._farming_opponents_text())      # 1.8.73: partners by character
+        self._reg("st.more.farm_opp", ui.Label(fm, textvariable=self.farm_opp_var, style="Dim.TLabel",
+                                                wraplength=420)).pack(anchor="w", pady=(4, 0))
 
         # 1.4: round recordings with OBS (obs-websocket on this PC) on the user's external drive
         rc = self._reg("st.more.rec", ui.LabelFrame(more, text=_("Aufnahmen mit OBS"), padding=8))

@@ -205,7 +205,7 @@ SPECS = {
         ("card", "st.more.farming", (("check", "st.more.farm_cross"),                       # 1.2.20
                                      ("row", (("label", "st.more.farm_region.label"), ("combo", "st.more.farm_region"),
                                               ("stretch",))),
-                                     ("hint", "st.more.farm_text"))),
+                                     ("hint", "st.more.farm_text"), ("hint", "st.more.farm_opp"))),
         ("card", "st.more.rec", (("check", "st.more.rec_on"),                              # 1.4: OBS recordings
                                  ("row", (("label", "st.more.rec_port.label"), ("entry", "st.more.rec_port"),
                                           ("label", "st.more.rec_pw.label"), ("entry", "st.more.rec_pw"),
