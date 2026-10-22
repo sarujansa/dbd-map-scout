@@ -182,6 +182,8 @@ def ui_icon(name: str, colour: str) -> str:
             if name == "check":
                 d.line([(3.5 * u, 8.5 * u), (6.5 * u, 11.5 * u), (12.5 * u, 4.5 * u)], fill=rgb + (255,),
                        width=round(2.2 * u), joint="curve")
+            elif name == "dash":                               # 1.8.75: a group with some regions ticked
+                d.line([(4 * u, 8 * u), (12 * u, 8 * u)], fill=rgb + (255,), width=round(2.2 * u))
             else:                                              # arrow: a chevron pointing down
                 d.line([(4 * u, 6 * u), (8 * u, 10 * u), (12 * u, 6 * u)], fill=rgb + (255,), width=round(1.8 * u),
                        joint="curve")
@@ -265,6 +267,12 @@ QTreeWidget {{ border: 1px solid {c['border']}; border-radius: 8px; padding: 4px
 QTreeWidget::item {{ padding: 3px 6px; }}
 QHeaderView::section {{ padding: 3px 6px; }}
 QTreeWidget::item:selected {{ background: {c['select']}; color: #ffffff; }}
+QTreeView::indicator {{ width: 16px; height: 16px; border: 1px solid {c['dim']}; border-radius: 4px;
+    background: {c['field']}; }}  /* 1.8.75: the server regions' tick boxes like the page's (were Fusion's glyphs) */
+QTreeView::indicator:hover {{ border-color: {c['accent']}; }}
+QTreeView::indicator:checked {{ background: {c['accent']}; border-color: {c['accent']};
+    image: url("{ui_icon('check', c['on_accent'])}"); }}
+QTreeView::indicator:indeterminate {{ border-color: {c['accent']}; image: url("{ui_icon('dash', c['accent'])}"); }}
 QLineEdit {{ border: 1px solid {c['border']}; border-radius: 6px; padding: 5px 8px; }}
 QLineEdit:focus {{ border-color: {c['accent']}; }}
 QComboBox {{ background: {c['btn']}; border: 1px solid {c['border']}; border-radius: 6px; padding: 5px 28px 5px 10px; }}

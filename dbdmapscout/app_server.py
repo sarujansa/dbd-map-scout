@@ -147,8 +147,7 @@ class ServerTab:
             text = _("Warte auf Windows (Administratorrechte) …")
         elif self._conn_idle.paused:
             text = _("pausiert, bis DBD läuft")
-        if not text and not self.conn_show_var.get():
-            text = _("Aus")                              # the explanation is its own (small) line below
+        # 1.8.75: off = nothing here (the unticked box says it; the bold "Aus" read like a heading)
         self.conn_tab_var.set(_("Verbunden mit: {server}", server=text) if text and self.conn.running else text)
         show = self.settings["overlay"].get("show_server", True)
         self.overlay.set_server(connwatch.region_name(srv["region"]) if srv and show else "",
@@ -182,7 +181,8 @@ class ServerTab:
                 ms = p.get("ms") if p else None
                 ping = "…" if self._srv_busy and p is None else ("–" if ms is None else f"{ms:.0f} ms")
                 tag = ("p_na" if ms is None else "p_good" if ms < 80 else "p_mid" if ms < 130 else "p_bad")
-                t.item(f"r:{c}", text=_(regions.NAMES[c]), values=(ping, _(states.get(c, "?"))),
+                state = states.get(c)
+                t.item(f"r:{c}", text=_(regions.NAMES[c]), values=(ping, _(state) if state else "–"),   # 1.8.75: no "?"
                        tags=(tag, ui.CHECK_ON if c in self.srv_sel else ui.CHECK_OFF))
 
     def _srv_refresh(self, log_summary=False):
