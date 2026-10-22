@@ -18,6 +18,7 @@ from PySide6.QtGui import QGuiApplication
 IS_WIN = sys.platform == "win32"
 SLOW_MS = 30                # a timer callback this long, or this late, is noted for the diagnosis (window lag)
 SLOW_KEPT = 40
+WORST_KEPT = 10            # 1.8.69: the longest since the start – in a match the tick's 30–48 ms push out the rest
 
 
 def _name(fn) -> str:
@@ -37,6 +38,7 @@ class MainLoop:
         self._jobs = set()                  # running single-shot timers (a QTimer without a reference is lost)
         # (time, what, took ms, late ms) of slow or late callbacks – "Diagnose kopieren" shows them
         self.slow = collections.deque(maxlen=SLOW_KEPT)
+        self.worst = []                     # the WORST_KEPT longest of them since the start, longest first
 
     def after(self, ms, fn):
         t = QTimer()
@@ -50,7 +52,11 @@ class MainLoop:
     def note(self, what: str, took_ms: float, late_ms: float = 0.0):
         """Remember something that held up the window (also used for the App's events)."""
         if took_ms >= SLOW_MS or late_ms >= 2 * SLOW_MS:
-            self.slow.append((time.time(), what, took_ms, late_ms))
+            entry = (time.time(), what, took_ms, late_ms)
+            self.slow.append(entry)
+            self.worst.append(entry)
+            self.worst.sort(key=lambda e: -max(e[2], e[3]))
+            del self.worst[WORST_KEPT:]
 
     def after_cancel(self, job):
         if job is not None:
