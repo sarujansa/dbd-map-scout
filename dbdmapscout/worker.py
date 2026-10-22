@@ -124,6 +124,14 @@ class DetectionWorker(threading.Thread):
         self.running = False
         self.commands.put(("stop",))
 
+    def _nap(self, seconds: float):
+        """1.8.84: wait like time.sleep, but a command (stop, scan, catalog) ends the wait at once – the
+        command stays queued for the top of the next loop. Quitting no longer waits for a sleep to end."""
+        try:
+            self.commands.put(self.commands.get(timeout=max(0.0, seconds)))
+        except queue.Empty:
+            pass
+
     def request_scan(self):
         self.commands.put(("scan",))
 
@@ -238,7 +246,7 @@ class DetectionWorker(threading.Thread):
                 if source is not None:
                     frame = source.current()
                     if frame is None:
-                        time.sleep(0.5)
+                        self._nap(0.5)
                         continue
                     fh, fw = frame.shape[:2]
                     status = f"Simulation: {os.path.basename(self.simulate)}"
@@ -248,7 +256,7 @@ class DetectionWorker(threading.Thread):
                     if window is not None and window.minimized:
                         self._status(_("DBD ist minimiert"), last_status)
                         last_status = _("DBD ist minimiert")
-                        time.sleep(0.5)
+                        self._nap(0.5)
                         continue
                     if window is not None and window.width > 100 and window.height > 100:
                         origin = (window.left, window.top)
@@ -325,7 +333,7 @@ class DetectionWorker(threading.Thread):
                         warn = _("Bildschirmaufnahme fehlgeschlagen: {error}", error=e)
                         self._status(warn, last_status)
                         last_status = warn
-                        time.sleep(1.0)
+                        self._nap(1.0)
                         continue
                     if img is not None and img.size and float(img.mean()) < 1.0 and window is not None:
                         black_since = black_since or tick

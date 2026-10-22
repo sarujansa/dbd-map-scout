@@ -265,3 +265,40 @@ def test_names_with_an_apostrophe_show_it_in_the_picture():
             assert marks, f"{rel}: no apostrophe in the drawn name"
             seen += 1
     assert seen >= 6
+
+
+def test_a_map_is_decoded_once_until_its_file_changes(tmp_path, monkeypatch):
+    """1.8.84 (idea 8 of the UI review, measured: show_map + set_map decoded Midwich twice per call, 0.43 s each):
+    load_frames keeps the last FRAMES_KEPT results by path, file time, size and rotation; a changed file or
+    another rotation is decoded anew; callers get their own list."""
+    from dbdmapscout import overlay
+    overlay.clear_frames()
+    paths = []
+    for i in range(3):
+        p = tmp_path / f"m{i}.png"
+        Image.new("RGBA", (40 + i, 30), (i, 0, 0, 255)).save(p)
+        paths.append(str(p))
+    decoded = []
+    real = overlay._decode
+    monkeypatch.setattr(overlay, "_decode", lambda path, rotation: decoded.append((path, rotation)) or real(path, rotation))
+    a = overlay.load_frames(paths[0])
+    b = overlay.load_frames(paths[0])
+    assert len(decoded) == 1 and a == b and a is not b and a[0][0].size == (40, 30)
+    overlay.load_frames(paths[0], 90)
+    assert len(decoded) == 2                                            # another rotation: its own entry
+    os.utime(paths[0], (1, 1))                                          # the file changed: read anew
+    overlay.load_frames(paths[0])
+    assert len(decoded) == 3
+    overlay.load_frames(paths[1])
+    overlay.load_frames(paths[2])                                       # only FRAMES_KEPT stay
+    assert len(overlay._frames) == overlay.FRAMES_KEPT
+    overlay.load_frames(paths[0])
+    assert len(decoded) == 6
+    try:
+        overlay.load_frames(str(tmp_path / "missing.png"))
+    except OSError:
+        pass
+    else:
+        raise AssertionError("a missing file must raise")
+    overlay.clear_frames()
+    assert not overlay._frames
