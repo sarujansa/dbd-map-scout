@@ -1126,6 +1126,44 @@ def test_the_builds_tab_lists_the_own_loadout_with_its_results(app_root):
         app.quit()
 
 
+def test_the_builds_hint_says_when_the_selection_leaves_the_loadouts_out(app_root):
+    """1.8.68 (user: "Statistik → Perk funktioniert nicht", screenshot: Builds empty with the userscript-3 hint and
+    "All roles"): the hint blamed the userscript even when the saved matches have loadouts and only the selection
+    leaves them out (farming / custom games count only with their role filter). Now it says which; the diagnosis
+    counts the userscript 3 fields of the saved matches."""
+    import json
+    from dbdmapscout import history, official
+    from dbdmapscout.app import App
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    t = time.time() - 3600
+    history.append(str(app_root / "rounds.jsonl"), history.Round(t, 600, "coal", "Coal Tower", role="killer",
+                                                                 farming=True))
+    official.merge(str(app_root / official.FILE), [official.Match(
+        t=t - 38, map="Coal Tower", role="killer", character="The Nurse", seconds=560, mode=["Online", "Online"],
+        perks=[["P1", "Lethal Pursuer"]])])
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        i = next(i for i, tab in enumerate(app.stats_nb.tabs()) if app.stats_nb.tab(tab, "text") == "Builds")
+        app.stats_nb.select(app.stats_nb.tabs()[i])
+        app._stats_render()
+        assert app.stats_items.get_children() == ()
+        hint = app.stats_build_var.get()
+        assert hint.startswith("1 gespeicherte Matches haben ein Loadout") and "Farming" in hint
+        app.stats_role_var.set("Farming")
+        app._stats_render()
+        assert [app.stats_items.item(c, "values")[0] for c in app.stats_items.get_children()] == ["Lethal Pursuer"]
+        assert app.stats_build_var.get() == ""
+        lines = app._official_diag()
+        assert any(x.strip().startswith("Felder ab Userscript 3: Modus 1, Loadout 1, Embleme 0, Punkte 0 von 1")
+                   for x in lines)
+        official.clear(str(app_root / official.FILE))                     # no loadout saved anywhere: as before
+        official.merge(str(app_root / official.FILE), [official.Match(t=t - 38, map="Coal Tower", role="killer")])
+        app._stats_render()
+        assert "Userscript" in app.stats_build_var.get()
+    finally:
+        app.quit()
+
+
 def test_the_mode_filter_appears_with_known_modes_and_filters_the_rounds(app_root):
     """1.8.49: the game mode of the stats page as a filter – hidden while no match names one, "Alle Modi" by default
     (nothing changes on its own), a picked mode keeps only its rounds."""

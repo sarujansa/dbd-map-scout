@@ -693,9 +693,19 @@ class StatsTab:
             return f"Ø {v:.2f}" if role == "killer" else f"{v:.0%}"
 
         n = builds.with_loadout(c.pairs)
-        self.stats_build_var.set("" if n else _("Noch keine Matches mit Loadout in dieser Auswahl – die Stats-Seite "
-                                                 "liefert es ab Userscript Version 3 (Einstellungen → Mehr → Offizielle "
-                                                 "Match-Daten → „Userscript kopieren“)."))
+        # 1.8.68 (user: "Statistik → Perk funktioniert nicht", screenshot: the hint with "All roles"): the hint said
+        # "userscript 3" even when the saved matches have loadouts and only the selection leaves them out
+        total = sum(1 for m in self._joined().matches if builds.has_loadout(m))
+        if n:
+            hint = ""
+        elif total:
+            hint = _("{n} gespeicherte Matches haben ein Loadout, aber keines davon ist in dieser Auswahl. Custom Games "
+                     "und Farming-Runden zählen nur mit dem Rollen-Filter „Custom Games“ bzw. „Farming“, Matches "
+                     "ohne erkannte Runde gar nicht.", n=total)
+        else:
+            hint = _("Noch keine Matches mit Loadout in dieser Auswahl – die Stats-Seite liefert es ab Userscript "
+                     "Version 3 (Einstellungen → Mehr → Offizielle Match-Daten → „Userscript kopieren“).")
+        self.stats_build_var.set(hint)
         t = self.stats_items
         t.delete(*t.get_children())
         for it in builds.items(c.pairs):
@@ -1548,6 +1558,13 @@ class StatsTab:
         lines = [f"Offizielle Daten: {len(matches)} Matches, {len(tied)} von {len(rounds)} Runden zugeordnet, "
                  f"andere Map {len(other)}, Lücken {len(official.load_gaps(self._official_path()))}, "
                  f"Userscript {getattr(self, '_off_script', 0)}/{bundled}, Ordner {self._official_folder()}"]
+        if matches:                                       # 1.8.68: what the userscript 3+ fields hold
+            with_lo = [m for m in matches if builds.has_loadout(m)]
+            lines.append(f"  Felder ab Userscript 3: Modus {sum(1 for m in matches if m.mode)}, Loadout {len(with_lo)}, "
+                         f"Embleme {sum(1 for m in matches if m.emblems)}, Punkte {sum(1 for m in matches if m.score)} "
+                         f"von {len(matches)}; neuestes Match {time.strftime('%d.%m.%y', time.localtime(matches[-1].t))}"
+                         + (f", neuestes mit Loadout {time.strftime('%d.%m.%y', time.localtime(with_lo[-1].t))}"
+                            if with_lo else ""))
         if offs:
             lines.append(f"  Banner minus Start: Median {history.median(offs):+.0f} s, {offs[0]:+.0f} … {offs[-1]:+.0f} s")
         for role, e in sorted(ends.items()):
