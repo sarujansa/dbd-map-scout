@@ -1281,6 +1281,7 @@ EN = {
     'Spielzeit': 'Play time',
     'vom Map-Banner bis zum Rundenende': 'from the map banner to the end of the round',
     'BP': 'BP',
+    '{n} gespeicherte Matches haben ein Loadout, aber keines davon ist in dieser Auswahl. Custom Games und Farming-Runden zählen nur mit dem Rollen-Filter „Custom Games“ bzw. „Farming“, Matches ohne erkannte Runde gar nicht.': '{n} saved matches have a loadout, but none of them is in this selection. Custom games and farming rounds only count with the role filter “Custom games” or “Farming”, matches without a detected round not at all.',
     'DBD-Fenster wieder gross genug – Overlay wieder an.': 'DBD window big enough again – overlay back on.',
     'Overlay anzeigen (aus: nichts im Spiel, Erkennung läuft weiter)': 'Show the overlay (off: nothing in the game, detection goes on)',
     'Hauptschalter: aus = das Programm zeigt im Spiel nichts (Karte, Systemwerte, Heute, Musik). Erkennung, '
