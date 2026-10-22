@@ -33,7 +33,7 @@ TIPS = {
     "Position und Grösse je DBD-Fenstergrösse merken":
         "Merkt Position und Grösse aller Elemente getrennt für jede Grösse des DBD-Fensters (z. B. Vollbild "
         "3440×1440 und ein kleineres Fenster) und lädt sie automatisch, sobald DBD in dieser Grösse läuft.",
-    "Karte darf grösser als der Balken werden (ragt dann ins Spielbild)":
+    "Karte darf grösser als der Balken werden":
         "Erlaubt jede Kartengrösse: Ist die Karte breiter als der schwarze Balken, bleibt sie an dessen Aussenrand "
         "und ragt ins Spielbild. Aus: Die Karte wird nie breiter als der Balken (auf 3440×1440 etwa 31 % der "
         "Bildhöhe).",
@@ -45,14 +45,14 @@ TIPS = {
         "Solange DBD läuft und keine Karte eingeblendet ist, zeigt das Overlay eine kleine Karte: „Warte auf "
         "Map“, darunter Suche/Lobby (z. B. „Suche läuft: 02:13 · Nurse“) oder die letzte Runde. Gilt nicht, "
         "wenn du die Karte selbst ausgeblendet hast.",
-    "Etagen (Midwich) untereinander zeigen (aus: nur die untere)":
+    "Etagen untereinander zeigen":
         "An: Karten mit Etagen (Midwich) zeigen alle Etagen untereinander, oben über unten – jede so groß wie "
         "eine normale Karte, soweit der Platz reicht. Aus: Sie starten mit der unteren Etage. Der Knopf „Etage“ "
         "oder der Hotkey schaltet jederzeit um.",
-    "Eigene Bilanz auf der Map unter dem Timer (Stats-Seite)":
+    "Eigene Bilanz unter dem Timer":
         "Zeigt unter dem Rundentimer, wie es dir auf dieser Map bisher ging: als Killer Ø Kills, als Survivor den "
         "Anteil Escapes – aus den Runden mit Daten der Stats-Seite, ab 3 Runden.",
-    "Eigene Notiz zur Map unter dem Timer (Seite Maps)":
+    "Eigene Notiz unter dem Timer":
         "Zeigt deine eigene Notiz zur Map unter dem Rundentimer – geschrieben auf der Seite Maps (Map anklicken "
         "oder Rechtsklick → „Notiz bearbeiten …“), höchstens vier Zeilen.",
     "Eigene Notiz": "Deine Notiz zu dieser Map – wird beim Tippen gespeichert und im Spiel unter dem Timer "
@@ -65,10 +65,10 @@ TIPS = {
         "Grössenregler („Heute“ wählen).",
     "Dunkle Fläche hinter „Heute“":
         "Eine halb durchsichtige dunkle Fläche mit runden Ecken hinter „Heute“.",
-    "„Läuft gerade“: Titel, Interpret und Cover der Musik (Spotify, Browser … – nur während sie spielt)":
+    "„Läuft gerade“: Titel, Interpret und Cover":
         "Liest Titel und Interpret aus der Windows-Mediensteuerung (dieselbe Liste wie beim Lautstärkeregler von "
         "Windows) – nur Anzeige, das Programm steuert nichts und speichert nichts.",
-    "Fortschritt des Lieds zeigen (Zeit und Balken)":
+    "Fortschritt des Lieds zeigen":
         "Unter Titel und Künstler: wie weit das Lied ist, mit Balken und Länge – wie in Spotify.",
     "Zeile CPU (Temperatur, Last)":
         "Zeile in den Systemwerten an/aus. Die Warnungen „CPU/GPU DROSSELT“ erscheinen immer.",
@@ -83,14 +83,14 @@ TIPS = {
     "Vorlage anwenden":
         "Setzt Karte, Systemwerte, „Heute“ und Musik auf einmal auf die gewählte Anordnung. „Rückgängig“ holt "
         "die vorherige zurück.",
-    "Overlay anzeigen (aus: nichts im Spiel, Erkennung läuft weiter)":
+    "Overlay anzeigen":
         "Hauptschalter: aus = das Programm zeigt im Spiel nichts (Karte, Systemwerte, Heute, Musik). Erkennung, "
         "Statistik und Aufnahmen laufen weiter. Auch als Knopf in der Übersicht.",
-    "Overlay in kleinen DBD-Fenstern ausblenden (Runden werden weiter gezählt und aufgenommen)":
+    "In kleinen DBD-Fenstern ausblenden":
         "Läuft DBD in einem kleinen Fenster (Bild kleiner als 1920×1080 oder schmaler als 16:9), zeigt das Programm "
         "im Spiel nichts – wie der Hauptschalter. Map-Erkennung, Statistik und OBS-Aufnahmen laufen weiter. Wird "
         "das Fenster wieder gross, erscheint das Overlay von selbst.",
-    "Weich ein- und ausblenden (Karte, Systemwerte, Heute)":
+    "Weich ein- und ausblenden":
         "Karte, Systemwerte und „Heute“ blenden in einer Drittelsekunde ein und aus, statt hart zu erscheinen. "
         "Die Musik hat ihr eigenes Häkchen.",
     "Dunkle Fläche hinter Karte und Infos":
@@ -114,7 +114,7 @@ TIPS = {
         "ein Video nicht.",
     "Albumcover zeigen":
         "Das Bild zum Lied links neben Titel und Interpret – Windows liefert es mit; es bleibt nur im Speicher.",
-    "OLED-Schwarz (echtes Schwarz statt Grau im Dark Mode)":
+    "OLED-Schwarz":
         "Hintergründe in echtem Schwarz statt Dunkelgrau – passt zu OLED-Bildschirmen und geht mit jeder "
         "Akzentfarbe. Im hellen Modus ohne Wirkung.",
     "Anordnung zurücksetzen": "Stellt die Kästen auf allen Seiten, die Reiter-Reihen (Statistik, Overlay) und die "
@@ -166,7 +166,7 @@ TIPS = {
         "Startet DBD und ist OBS nicht erreichbar, startet das Programm OBS einmal minimiert im Infobereich – nur, "
         "wenn kein OBS-Fenster offen ist. OBS bleibt offen, wenn DBD beendet wird. OBS läuft dann mit denselben "
         "Rechten wie das Programm (Administrator).",
-    "Nur das DBD-Fenster aufnehmen (Fensteraufnahme in OBS selbst einrichten)":
+    "Nur das DBD-Fenster aufnehmen":
         "Das Programm legt in OBS eine Fensteraufnahme „DbD Map Scout – DBD-Fenster“ an (oben in der laufenden Szene, "
         "auf die Leinwand eingepasst) und stellt sie auf Steam, Epic oder Store um. Aufgenommen wird dann nur das "
         "Spiel – ohne Discord, Benachrichtigungen und ohne das Overlay dieses Programms. OBS nimmt über Windows auf "
@@ -175,7 +175,7 @@ TIPS = {
     "Wiederholungspuffer mit DBD starten und stoppen": "Das Programm startet den Wiederholungspuffer in OBS, sobald "
                                                        "DBD läuft, und stoppt ihn, wenn DBD zu ist – so kostet er "
                                                        "ausserhalb des Spiels nichts und du musst nicht daran denken.",
-    "Vorlauf: Wiederholungspuffer von OBS beim Map-Banner sichern (Sekunden davor)":
+    "Vorlauf aus dem OBS-Wiederholungspuffer sichern":
         "Läuft in OBS der Wiederholungspuffer, wird er beim Map-Banner gespeichert – der Anfang (Spawn) fehlt dann "
         "nicht, aber die Datei enthält auch Lobby und Ladebildschirm. Seit 1.5.5 standardmässig aus (Wunsch des "
         "Nutzers: nur die Runde). Die Datei liegt als „(Vorlauf)“ neben der Runde.",
@@ -204,13 +204,13 @@ TIPS = {
                                                        "dazwischen – z. B. frei für eine FPS-Anzeige oder "
                                                        "Benachrichtigungen. Die Karte wird bei Bedarf kleiner.",
     "Links und rechts gleich": "Eine Linie ziehen bewegt die gleiche Linie im anderen Balken mit.",
-    "Karten im selben Balken gleich breit (Systemwerte, Heute, Musik)":
+    "Karten im selben Balken gleich breit":
         "Die Karten, die im selben schwarzen Balken stehen, werden so breit gezeichnet wie die breiteste von ihnen – "
         "untereinander ergeben sie eine Spalte mit bündigen Rändern.",
     "Zu einer Spalte zusammenführen":
         "Heute unter die Systemwerte, die Musik unter Heute, alle gleich breit – eine Spalte im Balken der "
         "Systemwerte. Rückgängig mit Strg+Z.",
-    "Discord-Overlay freihalten (Sprach-Widget unten links, Benachrichtigungen oben rechts, Text-Chat rechts)":
+    "Discord-Overlay freihalten":
         "Karte, Infos, Systemwerte, Heute und Musik weichen den Stellen aus, an denen Discords Overlay seine Widgets "
         "zeigt (in der Vorschau schraffiert). Das Programm liest nichts aus Discord – die Flächen sind fest.",
     "Grenzen zurücksetzen": "Setzt alle vier Linien auf 8 % vom Rand zurück.",
@@ -255,10 +255,10 @@ TIPS = {
     "Für diese Map zurücksetzen": "Entfernt eigene Grösse und Drehung der angezeigten Map – danach gilt wieder "
                                   "der Schieberegler für alle Maps.",
     "Zurücksetzen": "Position wieder auf „automatisch“ stellen (auf Ultrawide im linken schwarzen Rand).",
-    "Karte im schwarzen Rand halten (Ultrawide: nie ins Spielbild ragen)":
+    "Karte im schwarzen Rand halten":
         "Auf breiten Monitoren bleibt die Karte im schwarzen Balken, in dem sie liegt, und wird bei Bedarf "
         "verkleinert. Mitten über dem Spiel platziert gilt keine Begrenzung.",
-    "Karte anzeigen (aus: nur Timer, Ort und Ping)": "Aus: Das Overlay zeigt nur Rundentimer, Serverregion und Ping – "
+    "Karte anzeigen": "Aus: Das Overlay zeigt nur Rundentimer, Serverregion und Ping – "
                                                      "ohne Karte. Erkennung, Rundenende und Statistik laufen wie "
                                                      "gewohnt.",
     "Nur zeigen, wenn DBD das aktive Fenster ist": "Karte ausblenden, solange ein anderes Fenster "
@@ -266,7 +266,7 @@ TIPS = {
     "Map-Namen über der Karte anzeigen": "Zusätzliche Namenszeile über der Karte – die meisten Kartenbilder "
                                         "tragen den Namen schon selbst.",
     "Rundentimer unter der Karte anzeigen": "Zeit seit dem Einblenden der Karte, gross unter der Karte.",
-    "Verbundenen Server unter der Karte anzeigen (Tab Server)":
+    "Verbundenen Server unter der Karte":
         "Region und Ping des Spielservers unter der Karte. Braucht „Verbundener Spielserver“ im Tab Server.",
     "Transparenter Rand um die Karte": "Aus: Karte liegt auf einem dunklen Rechteck – besser lesbar über hellen "
                                        "Spielszenen.",
@@ -281,7 +281,7 @@ TIPS = {
     "Auch erkennen, wenn andere Fenster über DBD liegen":
         "Fensteraufnahme wie bei OBS: erkennt das Banner auch, wenn DBD verdeckt ist. Nur solange DBD im "
         "Hintergrund ist.",
-    "Debug-Bilder speichern (Ordner debug/)": "Speichert gelesene Banner und verkleinerte Bilder der Runde – "
+    "Debug-Bilder speichern": "Speichert gelesene Banner und verkleinerte Bilder der Runde im Ordner debug/ – "
                                               "nur zur Fehlersuche, kostet Speicherplatz.",
     "Bildschirm jetzt scannen": "Sucht sofort auf dem ganzen Bildschirm nach einem Map- oder Realm-Namen.",
     "Diagnose kopieren": "Kopiert technische Infos (Fenster, Overlay, letzte Rundenende-Prüfungen) in die "
@@ -301,11 +301,11 @@ TIPS = {
     # settings tab
     "Dark Mode": "Dunkle oder helle Darstellung des Steuerfensters.",
     "Standard": "Alle Hotkeys auf die Voreinstellung zurücksetzen.",
-    "Beim Minimieren in den Infobereich (neben der Uhr)":
+    "Beim Minimieren in den Infobereich":
         "Minimieren versteckt das Fenster im Infobereich; Doppelklick auf das Symbol holt es zurück.",
-    "Mit Windows starten (im Infobereich, ohne Windows-Abfrage)":
+    "Mit Windows starten":
         "Startet das Programm bei der Anmeldung im Infobereich. Nur als Administrator änderbar.",
-    "Beim Start nach Updates suchen und installieren (GitHub)":
+    "Beim Start Updates installieren":
         "Holt beim Start über die Verknüpfung den neuen Stand von GitHub. Eigene Änderungen werden nie "
         "überschrieben.",
     "Jetzt nach Updates suchen": "Fragt GitHub, ob es eine neue Version gibt (nur bei diesem Klick). Installiert "
@@ -348,7 +348,7 @@ TIPS = {
     "Eigenes Bild löschen": "Löscht dein Bild für die gewählte Map – danach gilt wieder das mitgelieferte.",
     "Speichern": "Bild umwandeln und speichern; die Karte wird sofort angezeigt.",
     "Abbrechen": "Schliessen, ohne etwas zu ändern.",
-    'Aufnahme schon am Ende des Ladebildschirms starten (mit Spawn)': 'Das Map-Banner kommt erst einige Sekunden nach dem Spawn. Mit diesem Häkchen startet OBS schon, wenn der Ladebildschirm nach der Lobby endet – ohne Lobby, mit Spawn. Das Banner benennt die Aufnahme danach. Kommt 3 Minuten lang kein Banner, endet die Aufnahme und heisst „Unbekannte Map“.',
+    "Aufnahme schon am Ladebildschirm starten": 'Das Map-Banner kommt erst einige Sekunden nach dem Spawn. Mit diesem Häkchen startet OBS schon, wenn der Ladebildschirm nach der Lobby endet – ohne Lobby, mit Spawn. Das Banner benennt die Aufnahme danach. Kommt 3 Minuten lang kein Banner, endet die Aufnahme und heisst „Unbekannte Map“.',
     'F8 speichert die letzten Sekunden als Sofort-Clip': 'F8 sichert den Wiederholungspuffer von OBS und legt die letzten Sekunden als MP4 in den Ordner „Clips“ – ohne Neukodierung, in Sekunden. Der Wiederholungspuffer muss in OBS eingerichtet sein. Die Marke in der Rundenaufnahme setzt F8 weiterhin.',
     'Ton in OBS einstellen, sobald DBD startet:': 'Das Programm legt in der aktuellen OBS-Szene je eine Anwendungs-Audioaufnahme für DBD und Discord an (einmalig) und schaltet die Tonquellen wie gewählt stumm oder laut – beim Start von DBD und bei jeder Änderung hier, auch mitten in der Runde. Aufnehmen tut OBS, das Programm fasst DBD nicht an. Braucht OBS 28 oder neuer.',
     'DBD': 'Ton des Spiels in der Aufnahme.',
@@ -356,7 +356,7 @@ TIPS = {
     'Übriger Desktop-Ton': 'Alles andere, was am PC zu hören ist (Musik, Browser, Systemtöne) – die Quelle „Desktop-Audio“ in OBS.',
     'Mikrofon': 'Dein Mikrofon – die Quelle „Mikrofon/AUX“ in OBS bzw. seine Spur im Sofort-Clip.',
     'Hintergrund': 'Andere Programme mit eigener Tonquelle in OBS (z. B. Spotify, Browser) im Sofort-Clip – OBS-Spur 5.',
-    'Jede Tonquelle auf eine eigene OBS-Tonspur legen (1 alles, 2 nur DBD, 3 Discord, 4 Mikrofon, 5 Hintergrund) – zum Mischen im Clip-Editor': 'Wie bei Medal: Das Programm weist in OBS jede Tonquelle der Spur 1 (alles – spielt in jedem Player) und ihrer eigenen Spur zu: nur DBD 2, Discord 3, Mikrofon 4, alle anderen Tonquellen in OBS (z. B. Spotify, Browser) 5 = Hintergrund. Der Desktop-Ton von Windows enthält auch DBD und Discord und liegt deshalb nur auf Spur 1. Im Clip-Editor schaltest du jede Quelle an oder aus und regelst ihre Lautstärke; beim Speichern mischt ffmpeg sie zusammen. OBS schreibt die Spuren nur im Ausgabemodus „Erweitert“ mit Audiospur 1 bis 5 angehakt (MKV oder MP4, nicht FLV); das Programm prüft das beim DBD-Start und meldet es, ändert aber nichts am OBS-Profil. Aus = Spuren bleiben, wie sie in OBS stehen.',
+    "Jede Tonquelle auf eine eigene OBS-Tonspur": 'Wie bei Medal: Das Programm weist in OBS jede Tonquelle der Spur 1 (alles – spielt in jedem Player) und ihrer eigenen Spur zu: nur DBD 2, Discord 3, Mikrofon 4, alle anderen Tonquellen in OBS (z. B. Spotify, Browser) 5 = Hintergrund. Der Desktop-Ton von Windows enthält auch DBD und Discord und liegt deshalb nur auf Spur 1. Im Clip-Editor schaltest du jede Quelle an oder aus und regelst ihre Lautstärke; beim Speichern mischt ffmpeg sie zusammen. OBS schreibt die Spuren nur im Ausgabemodus „Erweitert“ mit Audiospur 1 bis 5 angehakt (MKV oder MP4, nicht FLV); das Programm prüft das beim DBD-Start und meldet es, ändert aber nichts am OBS-Profil. Aus = Spuren bleiben, wie sie in OBS stehen.',
     'Spiel': 'Nur der Ton von DBD im Sofort-Clip.',
     'Als Farming markieren': 'Markiert alle genannten Runden als Farming-Runden (und nicht mehr als Custom Game); ihre Aufnahmen wandern in den Ordner „Farming“. Einzeln zurück: „Farming an/aus“ unter „Letzte Runden“.',
     'Ignorieren': 'Diese Runden nicht mehr vorschlagen – sie bleiben, wie sie sind.',

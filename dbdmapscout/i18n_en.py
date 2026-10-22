@@ -80,11 +80,10 @@ EN = {
     "Mit der Maus verschieben": "Move with the mouse",
     "Fertig": "Done",
     "0 % = links/oben, 100 % = rechts/unten": "0 % = left/top, 100 % = right/bottom",
-    "Karte im schwarzen Rand halten (Ultrawide: nie ins Spielbild ragen)":
-        "Keep the map in the black bar (ultrawide: never over the game picture)",
+    "Karte im schwarzen Rand halten": "Keep the map in the black bar",
     "Darstellung": "Appearance",
     "Grösse": "Size",
-    "Karte anzeigen (aus: nur Timer, Ort und Ping)": "Show the map (off: only timer, location and ping)",
+    "Karte anzeigen": "Show the map",
     "Karte im Overlay eingeblendet.": "Map shown in the overlay.",
     "Karte im Overlay aus – es werden nur Timer, Ort und Ping angezeigt.":
         "Map in the overlay off – only timer, location and ping are shown.",
@@ -265,8 +264,7 @@ EN = {
     "bis zur nächsten Map.":
         "Switches what maps with floors (Midwich) show: both one below the other → bottom → top → both. Lasts "
         "until the next map.",
-    "Etagen (Midwich) untereinander zeigen (aus: nur die untere)":
-        "Show the floors (Midwich) one below the other (off: only the bottom one)",
+    "Etagen untereinander zeigen": "Show floors one below the other",
     "An: Karten mit Etagen (Midwich) zeigen alle Etagen untereinander, oben über unten – jede so groß wie "
     "eine normale Karte, soweit der Platz reicht. Aus: Sie starten mit der unteren Etage. Der Knopf „Etage“ "
     "oder der Hotkey schaltet jederzeit um.":
@@ -288,7 +286,7 @@ EN = {
     "Nur zeigen, wenn DBD das aktive Fenster ist": "Only show while DBD is the active window",
     "Map-Namen über der Karte anzeigen": "Show the map name above the map",
     "Rundentimer unter der Karte anzeigen": "Show the round timer below the map",
-    "Verbundenen Server unter der Karte anzeigen (Tab Server)": "Show the connected server below the map (Server tab)",
+    "Verbundenen Server unter der Karte": "Connected server below the map",
     "Transparenter Rand um die Karte": "Transparent edge around the map",
 
     # ------------------------------------------------------------------ tab detection
@@ -308,7 +306,7 @@ EN = {
         "window capture like OBS, only while DBD is in the background",
     "Scans/Sek.": "Scans/sec.",
     "Rundenende-Erkennung: {state}": "End-of-round detection: {state}",
-    "Debug-Bilder speichern (Ordner debug/)": "Save debug pictures (folder debug/)",
+    "Debug-Bilder speichern": "Save debug pictures",
     "Bildschirm jetzt scannen": "Scan the screen now",
     "Diagnose kopieren": "Copy diagnostics",
 
@@ -485,8 +483,8 @@ EN = {
     "Killer: Ø {kills} Kills, {four}× 4K ({n})": "Killer: avg. {kills} kills, {four}× 4K ({n})",
     "Survivor: {share} entkommen ({n})": "Survivor: {share} escaped ({n})",
     "{share} entkommen · {n} Runden": "{share} escaped · {n} rounds",
-    "Eigene Bilanz auf der Map unter dem Timer (Stats-Seite)": "Own record on the map below the timer (stats page)",
-    "Eigene Notiz zur Map unter dem Timer (Seite Maps)": "Own note on the map below the timer (Maps page)",
+    "Eigene Bilanz unter dem Timer": "Own record below the timer",
+    "Eigene Notiz unter dem Timer": "Own note below the timer",
     "Zeigt deine eigene Notiz zur Map unter dem Rundentimer – geschrieben auf der Seite Maps (Map anklicken "
     "oder Rechtsklick → „Notiz bearbeiten …“), höchstens vier Zeilen.":
         "Shows your own note on the map below the round timer – written on the Maps page (click a map or right "
@@ -535,11 +533,10 @@ EN = {
     "Standard": "Defaults",
     "Zum Ändern anklicken und die neue Tastenkombination drücken.": "Click to change, then press the new key combination.",
     "Start und Infobereich": "Start and notification area",
-    "Beim Minimieren in den Infobereich (neben der Uhr)": "Minimise to the notification area (next to the clock)",
-    "Mit Windows starten (im Infobereich, ohne Windows-Abfrage)":
-        "Start with Windows (in the notification area, without a Windows prompt)",
+    "Beim Minimieren in den Infobereich": "Minimise to the notification area",
+    "Mit Windows starten": "Start with Windows",
     "Updates": "Updates",
-    "Beim Start nach Updates suchen und installieren (GitHub)": "Check for updates at start and install them (GitHub)",
+    "Beim Start Updates installieren": "Install updates at start",
     "nur über start.bat bzw. die Desktop-Verknüpfung; eigene Änderungen werden nie überschrieben":
         "only via start.bat or the desktop shortcut; your own changes are never overwritten",
     "Eigene Map-Zuordnungen": "Own map assignments",
@@ -652,7 +649,7 @@ EN = {
     "Verschieben aktiv – ziehen (rastet ein, Alt = frei), Pfeiltasten = fein, Ecke/Strg+Mausrad = Grösse":
         "Moving is on – drag (snaps, Alt = free), arrow keys = fine, corner/Ctrl+wheel = size",
     "Rückgängig": "Undo",
-    "Karte darf grösser als der Balken werden (ragt dann ins Spielbild)": "The map may grow bigger than the bar (it then reaches into the game picture)",
+    "Karte darf grösser als der Balken werden": "The map may grow bigger than the bar",
     "Erlaubt jede Kartengrösse: Ist die Karte breiter als der schwarze Balken, bleibt sie an dessen Aussenrand und ragt ins Spielbild. Aus: Die Karte wird nie breiter als der Balken (auf 3440×1440 etwa 31 % der Bildhöhe).":
         "Allows any map size: when the map is wider than the black bar it stays at the bar's outer edge and reaches into the game picture. Off: the map is never wider than the bar (about 31 % of the height on 3440×1440).",
     "Nimmt die letzte Änderung an Position oder Grösse zurück (Karte, Systemwerte, Musik) – auch mit Strg+Z auf dieser Seite. Ein ganzes Ziehen zählt als ein Schritt.":
@@ -877,8 +874,7 @@ EN = {
     "Fensteraufnahme wie bei OBS: erkennt das Banner auch, wenn DBD verdeckt ist. Nur solange DBD im Hintergrund "
     "ist.":
         "Window capture like OBS: detects the banner even when DBD is covered. Only while DBD is in the background.",
-    "Speichert gelesene Banner und verkleinerte Bilder der Runde – nur zur Fehlersuche, kostet Speicherplatz.":
-        "Saves the banners read and small pictures of the round – for troubleshooting only, uses disk space.",
+    "Speichert gelesene Banner und verkleinerte Bilder der Runde im Ordner debug/ – nur zur Fehlersuche, kostet Speicherplatz.": "Saves the banners read and small pictures of the round in the folder debug/ – only for troubleshooting, takes disk space.",
     "Sucht sofort auf dem ganzen Bildschirm nach einem Map- oder Realm-Namen.":
         "Searches the whole screen for a map or realm name right away.",
     "Kopiert technische Infos (Fenster, Overlay, letzte Rundenende-Prüfungen) in die Zwischenablage – zum "
@@ -1218,8 +1214,7 @@ EN = {
         "and apply. Without it there are no instant clips (F8) and no pre-roll.",
     "Wiederholungspuffer in OBS nicht aktiviert (Einstellungen → Ausgabe → Wiederholungspuffer)":
         "Replay buffer not enabled in OBS (Settings → Output → Replay Buffer)",
-    "Karten im selben Balken gleich breit (Systemwerte, Heute, Musik)":
-        "Cards in the same bar at one width (system values, today, music)",
+    "Karten im selben Balken gleich breit": "Cards in the same bar equally wide",
     "Zu einer Spalte zusammenführen": "Merge into one column",
     "Die Karten, die im selben schwarzen Balken stehen, werden so breit gezeichnet wie die breiteste von ihnen – "
     "untereinander ergeben sie eine Spalte mit bündigen Rändern.":
@@ -1230,8 +1225,7 @@ EN = {
         "Today below the system values, the music below today, all at one width – one column in the bar of the "
         "system values. Undo with Ctrl+Z.",
     "Cover": "Cover",
-    "Discord-Overlay freihalten (Sprach-Widget unten links, Benachrichtigungen oben rechts, Text-Chat rechts)":
-        "Keep Discord's overlay free (voice widget bottom left, notifications top right, text chat right)",
+    "Discord-Overlay freihalten": "Keep Discord's overlay free",
     "Karte, Infos, Systemwerte, Heute und Musik weichen den Stellen aus, an denen Discords Overlay seine Widgets "
     "zeigt (in der Vorschau schraffiert). Das Programm liest nichts aus Discord – die Flächen sind fest.":
         "Map, info, system values, today and music stay clear of the places where Discord's overlay shows its widgets "
@@ -1272,8 +1266,8 @@ EN = {
     'die vorherige zurück.':
         'Puts map, system values, "Today" and music into the chosen arrangement at once. "Undo" brings the '
         'previous one back.',
-    'Weich ein- und ausblenden (Karte, Systemwerte, Heute)': 'Fade in and out smoothly (map, system values, Today)',
-    'Overlay in kleinen DBD-Fenstern ausblenden (Runden werden weiter gezählt und aufgenommen)': 'Hide the overlay in small DBD windows (rounds are still counted and recorded)',
+    "Weich ein- und ausblenden": "Fade in and out smoothly",
+    "In kleinen DBD-Fenstern ausblenden": "Hide in small DBD windows",
     'Läuft DBD in einem kleinen Fenster (Bild kleiner als 1920×1080 oder schmaler als 16:9), zeigt das Programm im Spiel nichts – wie der Hauptschalter. Map-Erkennung, Statistik und OBS-Aufnahmen laufen weiter. Wird das Fenster wieder gross, erscheint das Overlay von selbst.': 'If DBD runs in a small window (picture smaller than 1920×1080 or narrower than 16:9), the program shows nothing in the game – like the master switch. Map detection, statistics and OBS recordings go on. When the window is big again, the overlay comes back by itself.',
     'Kleines DBD-Fenster ({w}×{h}) – Overlay ausgeblendet, Runden werden weiter gezählt und aufgenommen.': 'Small DBD window ({w}×{h}) – overlay hidden, rounds are still counted and recorded.',
     'Update gesperrt: eine Runde läuft. Nach dem Rundenende noch einmal auf „Aktualisieren und neu starten“ klicken.': 'Update locked: a round is running. Click “Update and restart” again after the round ends.',
@@ -1285,7 +1279,7 @@ EN = {
     'BP': 'BP',
     '{n} gespeicherte Matches haben ein Loadout, aber keines davon ist in dieser Auswahl. Custom Games und Farming-Runden zählen nur mit dem Rollen-Filter „Custom Games“ bzw. „Farming“, Matches ohne erkannte Runde gar nicht.': '{n} saved matches have a loadout, but none of them is in this selection. Custom games and farming rounds only count with the role filter “Custom games” or “Farming”, matches without a detected round not at all.',
     'DBD-Fenster wieder gross genug – Overlay wieder an.': 'DBD window big enough again – overlay back on.',
-    'Overlay anzeigen (aus: nichts im Spiel, Erkennung läuft weiter)': 'Show the overlay (off: nothing in the game, detection goes on)',
+    "Overlay anzeigen": "Show the overlay",
     'Hauptschalter: aus = das Programm zeigt im Spiel nichts (Karte, Systemwerte, Heute, Musik). Erkennung, '
     'Statistik und Aufnahmen laufen weiter. Auch als Knopf in der Übersicht.':
         'Master switch: off = the program shows nothing in the game (map, system values, Today, music). Detection, '
@@ -1318,7 +1312,7 @@ EN = {
     'FARMING ': 'FARMING ',
     'Ø BP ': 'AVG. BP ',
     # 1.62.1: OLED black with every accent
-    'OLED-Schwarz (echtes Schwarz statt Grau im Dark Mode)': 'OLED black (true black instead of grey in dark mode)',
+    "OLED-Schwarz": "OLED black",
     'Hintergründe in echtem Schwarz statt Dunkelgrau – passt zu OLED-Bildschirmen und geht mit jeder Akzentfarbe. Im hellen Modus ohne Wirkung.':
         'Backgrounds in true black instead of dark grey – suits OLED screens and goes with every accent colour. No effect in light mode.',
     # 1.63: colour palette + own colour
@@ -1327,8 +1321,7 @@ EN = {
     'Beliebige Farbe wählen – das Programm passt die Helligkeit an, bis alles lesbar ist.':
         'Pick any colour – the program adjusts its brightness until everything is readable.',
     # 1.64: music in the black bar
-    '„Läuft gerade“: Titel, Interpret und Cover der Musik (Spotify, Browser … – nur während sie spielt)':
-        '"Now playing": title, artist and cover of the music (Spotify, browser … – only while it plays)',
+    "„Läuft gerade“: Titel, Interpret und Cover": '"Now playing": title, artist and cover',
     'Liest Titel und Interpret aus der Windows-Mediensteuerung (dieselbe Liste wie beim Lautstärkeregler von Windows) – nur Anzeige, das Programm steuert nichts und speichert nichts.':
         'Reads title and artist from the Windows media controls (the same list as the Windows volume flyout) – display only, the program controls nothing and stores nothing.',
     # 1.64: music card of its own
@@ -1373,7 +1366,7 @@ EN = {
     'Stil': 'Style',
     'Gross – Cover oben, Titel darunter': 'Large – cover on top, title below',
     'Kompakt – Cover links': 'Compact – cover left',
-    'Fortschritt des Lieds zeigen (Zeit und Balken)': "Show the song's progress (time and bar)",
+    "Fortschritt des Lieds zeigen": "Show the song's progress",
     'Unter Titel und Künstler: wie weit das Lied ist, mit Balken und Länge – wie in Spotify.':
         'Below title and artist: how far the song is, with a bar and its length – like in Spotify.',
     # 1.64.7: names while moving
@@ -1499,7 +1492,7 @@ EN = {
     '(kein Ordner gewählt)': '(no folder chosen)',
     'Platz für Aufnahmen': 'Room for recordings',
     'Ganze Platte (Älteste weg, wenn sie voll wird)': 'Whole drive (oldest go when it fills up)',
-    'Vorlauf: Wiederholungspuffer von OBS beim Map-Banner sichern (Sekunden davor)': 'Pre-roll: save OBS\'s replay buffer at the map banner (the seconds before it)',
+    "Vorlauf aus dem OBS-Wiederholungspuffer sichern": "Keep a lead-in from OBS's replay buffer",
     'OBS nimmt auf, das Programm sagt nur wann: Start beim Map-Banner, Stopp beim erkannten Rundenende, Datei nach Datum, Map und Killer benannt. Dafür in OBS unter Werkzeuge → WebSocket-Servereinstellungen den Server einschalten und das Passwort hier eintragen; Verbindung nur auf diesem PC (127.0.0.1). Empfohlen: Aufnahmeformat MKV oder Hybrid-MP4 (bleibt bei Abbruch lesbar), Fenster- oder Bildschirmaufnahme statt Spielaufnahme. Der Ordner wird über sein Laufwerk gemerkt – ist die Platte nicht angeschlossen, wird nicht aufgenommen.':
         'OBS records, the program only says when: start at the map banner, stop at the detected end of the round, file named after date, map and killer. In OBS enable the server under Tools → WebSocket Server Settings and enter its password here; the connection stays on this PC (127.0.0.1). Recommended: recording format MKV or hybrid MP4 (stays readable after a crash), window or display capture rather than game capture. The folder is remembered by its drive – with the drive unplugged nothing is recorded.',
     'Ordner für die Aufnahmen (z. B. auf der externen Platte)': 'Folder for the recordings (e.g. on the external drive)',
@@ -1537,8 +1530,7 @@ EN = {
     'Läuft in OBS der Wiederholungspuffer, wird er beim Map-Banner gespeichert – der Anfang (Spawn) fehlt dann nicht, aber die Datei enthält auch Lobby und Ladebildschirm. Seit 1.5.5 standardmässig aus (Wunsch des Nutzers: nur die Runde). Die Datei liegt als „(Vorlauf)“ neben der Runde.': 'If OBS\'s replay buffer is running, it is saved at the map banner – the start (spawn) is not missing then, but the file also holds the lobby and the loading screen. Off by default since 1.5.5 (user\'s wish: the round only). The file lies next to the round as "(Vorlauf)".',
     # 1.4.1
     'Wiederholungspuffer mit DBD starten und stoppen': "Start and stop the replay buffer with DBD",
-    "Nur das DBD-Fenster aufnehmen (Fensteraufnahme in OBS selbst einrichten)":
-        "Record only the DBD window (set up a window capture in OBS)",
+    "Nur das DBD-Fenster aufnehmen": "Record only the DBD window",
     "Bildquelle angelegt: {name} (Szene „{scene}“)": "Picture source created: {name} (scene \"{scene}\")",
     "Bildquelle in der Szene „{scene}“ ausgeblendet: {name}": "Picture source hidden in the scene \"{scene}\": {name}",
     "Bildquelle zur Szene „{scene}“ hinzugefügt: {name}": "Picture source added to the scene \"{scene}\": {name}",
@@ -1675,7 +1667,7 @@ EN = {
     'Clip gespeichert: {file}': 'Clip saved: {file}',
     'Clip nicht gespeichert: {why}': 'Clip not saved: {why}',
     '(Sofort-Clip)': '(instant clip)',
-    'Aufnahme schon am Ende des Ladebildschirms starten (mit Spawn)': 'Start recording at the end of the loading screen (with the spawn)',
+    "Aufnahme schon am Ladebildschirm starten": "Start recording at the loading screen",
     'Aufnahme-Laufwerk nicht angeschlossen': 'Recording drive not connected',
     'Clip': 'Clip',
     'DBD': 'DBD',
@@ -1693,7 +1685,7 @@ EN = {
     'Ton in OBS nicht eingestellt: {error}': 'Sound in OBS not set: {error}',
     'OBS bereit – Runden werden aufgenommen. {problem}': 'OBS ready – rounds are recorded. {problem}',
     'Für die Tonmischung im Clip-Editor in OBS: Einstellungen → Ausgabe → Ausgabemodus „Erweitert“ → Reiter Aufnahme → Audiospur 1 bis 5 anhaken (1 alles, 2 Spiel, 3 Discord, 4 Mikrofon, 5 Hintergrund)': 'For the sound mix in the clip editor, in OBS: Settings → Output → Output mode "Advanced" → tab Recording → tick audio tracks 1 to 5 (1 everything, 2 game, 3 Discord, 4 microphone, 5 background)',
-    'Jede Tonquelle auf eine eigene OBS-Tonspur legen (1 alles, 2 nur DBD, 3 Discord, 4 Mikrofon, 5 Hintergrund) – zum Mischen im Clip-Editor': 'Put every sound source on its own OBS audio track (1 everything, 2 DBD only, 3 Discord, 4 microphone, 5 background) – for mixing in the clip editor',
+    "Jede Tonquelle auf eine eigene OBS-Tonspur": "Each sound source on an OBS track of its own",
     'Dafür in OBS: Einstellungen → Ausgabe → Ausgabemodus „Erweitert“ → Reiter Aufnahme → Audiospur 1 bis 5 anhaken. Das Programm prüft das beim DBD-Start und meldet es im Status unten; es ändert nichts am OBS-Profil.': 'For this, in OBS: Settings → Output → Output mode "Advanced" → tab Recording → tick audio tracks 1 to 5. The program checks this when DBD starts and reports it in the status below; it changes nothing in the OBS profile.',
     'Sofort-Clip (F8) mit Ton von:': 'Instant clip (F8) with sound from:',
     'Wie bei Medal: Das Programm weist in OBS jede Tonquelle der Spur 1 (alles – spielt in jedem Player) und ihrer eigenen Spur zu: nur DBD 2, Discord 3, Mikrofon 4, alle anderen Tonquellen in OBS (z. B. Spotify, Browser) 5 = Hintergrund. Der Desktop-Ton von Windows enthält auch DBD und Discord und liegt deshalb nur auf Spur 1. Im Clip-Editor schaltest du jede Quelle an oder aus und regelst ihre Lautstärke; beim Speichern mischt ffmpeg sie zusammen. OBS schreibt die Spuren nur im Ausgabemodus „Erweitert“ mit Audiospur 1 bis 5 angehakt (MKV oder MP4, nicht FLV); das Programm prüft das beim DBD-Start und meldet es, ändert aber nichts am OBS-Profil. Aus = Spuren bleiben, wie sie in OBS stehen.': 'Like Medal: the program assigns every sound source in OBS to track 1 (everything – plays in any player) and to its own track: DBD only 2, Discord 3, microphone 4, every other sound source in OBS (e.g. Spotify, browser) 5 = background. Windows\' desktop sound holds DBD and Discord too and therefore sits on track 1 only. In the clip editor you switch each source on or off and set its level; ffmpeg mixes them when saving. OBS writes the tracks only in the output mode "Advanced" with audio tracks 1 to 5 ticked (MKV or MP4, not FLV); the program checks this when DBD starts and reports it, but changes nothing in the OBS profile. Off = the tracks stay as set in OBS.',

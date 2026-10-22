@@ -98,16 +98,14 @@ class OverlayTab:
                                              style="Dim.TLabel", wraplength=520)).pack(anchor="w")
         # 1.8.25 (user's screenshots with Discord's overlay open): keep its widgets free
         self.keep_out_var = ui.BooleanVar(value=bool(o.get("keep_out_on", True)))
-        self._reg("ov.keep_out", ui.Checkbutton(pos, text=_("Discord-Overlay freihalten (Sprach-Widget unten links, "
-                                                            "Benachrichtigungen oben rechts, Text-Chat rechts)"),
+        self._reg("ov.keep_out", ui.Checkbutton(pos, text=_("Discord-Overlay freihalten"),
                                                 variable=self.keep_out_var, command=self._keep_out_changed)
                   ).pack(anchor="w", pady=(4, 0))
         # 1.8.29 (user: "rechts sind die Felder nicht untereinander … zusammenführen"): one column per bar
         cw = ui.Frame(pos)
         cw.pack(fill="x", pady=(4, 0))
         self.same_width_var = ui.BooleanVar(value=bool(o.get("cards_same_width", True)))
-        self._reg("ov.same_width", ui.Checkbutton(cw, text=_("Karten im selben Balken gleich breit (Systemwerte, "
-                                                              "Heute, Musik)"),
+        self._reg("ov.same_width", ui.Checkbutton(cw, text=_("Karten im selben Balken gleich breit"),
                                                   variable=self.same_width_var, command=self._same_width_changed)
                   ).pack(side="left")
         self._reg("ov.merge_column", ui.Button(cw, text=_("Zu einer Spalte zusammenführen"),
@@ -150,12 +148,12 @@ class OverlayTab:
         self.undo_btn.pack(side="left", padx=(6, 0))
         self.undo_btn.state(["disabled"])
         self.master_var = ui.BooleanVar(value=bool(self.settings.get("overlay_on", True)))     # 1.8.18
-        self._reg("ov.master", ui.Checkbutton(pos, text=_("Overlay anzeigen (aus: nichts im Spiel, Erkennung läuft weiter)"),
+        self._reg("ov.master", ui.Checkbutton(pos, text=_("Overlay anzeigen"),
                                               variable=self.master_var,
                                               command=lambda: self.set_overlay_on(self.master_var.get())))
         self.small_off_var = ui.BooleanVar(value=bool(self.settings.get("overlay_small_off", True)))   # 1.8.62
         self._reg("ov.small_off", ui.Checkbutton(
-            pos, text=_("Overlay in kleinen DBD-Fenstern ausblenden (Runden werden weiter gezählt und aufgenommen)"),
+            pos, text=_("In kleinen DBD-Fenstern ausblenden"),
             variable=self.small_off_var, command=self._small_off_changed))
         self.per_size_var = ui.BooleanVar(value=self.settings.get("layout_per_size", True))
         self._reg("ov.per_size", ui.Checkbutton(pos, text=_("Position und Grösse je DBD-Fenstergrösse merken"),
@@ -209,28 +207,28 @@ class OverlayTab:
         self.record_var = ui.BooleanVar(value=o.get("show_record", True))
         self.notes_var = ui.BooleanVar(value=o.get("show_notes", True))
         self._reg("ov.keep_bar", ui.Checkbutton(
-            pos, text=_("Karte im schwarzen Rand halten (Ultrawide: nie ins Spielbild ragen)"),
+            pos, text=_("Karte im schwarzen Rand halten"),
             variable=self.keep_bar_var, command=self._overlay_flags_changed)).pack(anchor="w", pady=(4, 0))
         self.grow_var = ui.BooleanVar(value=o.get("grow_past_bar", False))
         self._reg("ov.grow", ui.Checkbutton(
-            pos, text=_("Karte darf grösser als der Balken werden (ragt dann ins Spielbild)"),
+            pos, text=_("Karte darf grösser als der Balken werden"),
             variable=self.grow_var, command=self._overlay_flags_changed)).pack(anchor="w", pady=(2, 0))
-        for key, text, var in (("show_map", N_("Karte anzeigen (aus: nur Timer, Ort und Ping)"), self.show_map_var),
+        for key, text, var in (("show_map", N_("Karte anzeigen"), self.show_map_var),
                                ("focus", N_("Nur zeigen, wenn DBD das aktive Fenster ist"), self.focus_var),
                                ("caption", N_("Map-Namen über der Karte anzeigen"), self.caption_var),
                                ("timer", N_("Rundentimer unter der Karte anzeigen"), self.timer_show_var),
-                               ("server", N_("Verbundenen Server unter der Karte anzeigen (Tab Server)"),
+                               ("server", N_("Verbundenen Server unter der Karte"),
                                 self.server_show_var),
                                ("waiting", N_("Ohne Karte: „Warte auf Map“ und Lobby-Status anzeigen"), self.waiting_var),
-                               ("floors", N_("Etagen (Midwich) untereinander zeigen (aus: nur die untere)"),
+                               ("floors", N_("Etagen untereinander zeigen"),
                                 self.floor_auto_var),
-                               ("record", N_("Eigene Bilanz auf der Map unter dem Timer (Stats-Seite)"), self.record_var),
-                               ("notes", N_("Eigene Notiz zur Map unter dem Timer (Seite Maps)"), self.notes_var),
+                               ("record", N_("Eigene Bilanz unter dem Timer"), self.record_var),
+                               ("notes", N_("Eigene Notiz unter dem Timer"), self.notes_var),
                                ("transparent", N_("Transparenter Rand um die Karte"), self.transp_var)):
             self._reg(f"ov.{key}", ui.Checkbutton(look, text=_(text), variable=var,
                                                    command=self._overlay_flags_changed)).pack(anchor="w", pady=1)
         self.fade_var = ui.BooleanVar(value=o.get("fade", True))
-        self._reg("ov.fade", ui.Checkbutton(look, text=_("Weich ein- und ausblenden (Karte, Systemwerte, Heute)"),
+        self._reg("ov.fade", ui.Checkbutton(look, text=_("Weich ein- und ausblenden"),
                                             variable=self.fade_var, command=self._look_flags_changed)
                   ).pack(anchor="w", pady=1)
         self.map_backdrop_var = ui.BooleanVar(value=o.get("map_backdrop", False))
@@ -295,8 +293,7 @@ class OverlayTab:
         mf = self._reg("ov.music_f", ui.LabelFrame(f, text=_("Musik"), padding=8))
         mf.pack(fill="x", pady=(8, 0))
         self.media_var = ui.BooleanVar(value=o.get("show_media", True))
-        self._reg("ov.media", ui.Checkbutton(mf, text=_("„Läuft gerade“: Titel, Interpret und Cover der Musik "
-                                                           "(Spotify, Browser … – nur während sie spielt)"),
+        self._reg("ov.media", ui.Checkbutton(mf, text=_("„Läuft gerade“: Titel, Interpret und Cover"),
                                              variable=self.media_var, command=self._look_flags_changed)
                   ).pack(anchor="w", pady=(2, 0))
         mr = ui.Frame(mf)
@@ -333,7 +330,7 @@ class OverlayTab:
         self._reg("ov.media_cover", ui.Checkbutton(mf, text=_("Albumcover zeigen"), variable=self.media_cover_var,
                                                    command=self._look_flags_changed)).pack(anchor="w", pady=(2, 0))
         self.media_progress_var = ui.BooleanVar(value=o.get("media_progress", True))
-        self._reg("ov.media_progress", ui.Checkbutton(mf, text=_("Fortschritt des Lieds zeigen (Zeit und Balken)"),
+        self._reg("ov.media_progress", ui.Checkbutton(mf, text=_("Fortschritt des Lieds zeigen"),
                                                       variable=self.media_progress_var,
                                                       command=self._look_flags_changed)).pack(anchor="w", pady=(2, 0))
         self.media_look_vars = {}
