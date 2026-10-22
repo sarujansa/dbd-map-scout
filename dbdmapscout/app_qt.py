@@ -500,6 +500,8 @@ class QtShell:
             self.qt.show_page("server")
         elif action == "official_setup":             # 1.2.15: "noch keine Stats-Daten" → the card under "Mehr"
             self._reveal_official()
+        elif action == "news_seen":                  # 1.8.79: "Verstanden" on the card "Neu seit …"
+            self._news_seen()
         elif action == "rec_setup":                  # 1.4.2: tile "Aufnahmen" without a folder/drive
             self._reveal_rec()
         else:

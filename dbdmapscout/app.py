@@ -150,6 +150,7 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
                         "settings.json.broken daneben.", error=self.settings.load_error), "Fehler")
         self._srv_refresh(log_summary=True)
         self._show_update_status()
+        self._news_check()                      # 1.8.79: "Neu seit …" on the overview after an update
         if self.settings.get("show_connection"):
             self.root.after(1500, self._conn_start)
         if not IS_WIN and not simulate:

@@ -128,6 +128,7 @@ DEFAULTS = {
     "user_aliases": {},                 # own assignments of unknown banner texts: {map_id: [text, ...]}
     "map_notes": {},                    # 1.8.54: own notes per map, shown with the map: {map_id: text}
     "welcome_seen": False,              # the setup assistant of the first start was finished or skipped
+    "seen_version": "",                 # 1.8.79: the version last run – the overview lists what is new since
     "killer_aliases": {},               # killer names as read (skins, new killers): {fold(name): "The Nurse"}
     "stats_mode": "",                   # 1.8.51: game-mode filter of the statistics, "" = all modes
     "official_open_after_dbd": False,   # open stats.deadbydaylight.com once DBD was closed (userscript saves the matches)
@@ -221,7 +222,7 @@ def export_settings(data: dict, path: str) -> None:
 
 # per-PC values that must not come along from a backup (other folder / other machine)
 LOCAL_KEYS = ("setup_version", "setup_root", "qt_geometry", "official_dir", "layouts", "layout_key",
-              "rec_volume", "rec_rel", "rec_folder", "rec_password", "spotify_token")
+              "rec_volume", "rec_rel", "rec_folder", "rec_password", "spotify_token", "seen_version")
 
 
 def reset_data(current: dict) -> dict:

@@ -231,6 +231,7 @@ TIPS = {
                     "Match übernimmt die automatische Erkennung wieder.",
     "Bild hinzufügen …": "Eigenes Kartenbild für diese unbekannte Map anlegen – Name und Realm sind schon "
                          "eingetragen, der Hintergrund wird automatisch entfernt.",
+    "Verstanden": "Blendet die Karte „Neu seit …“ aus, bis die nächste neue Version kommt.",
     "Zuordnen …": "Der gelesene Name gehört zu einer vorhandenen Map (z. B. anders geschrieben)? Einmal "
                   "zuordnen – danach wird er automatisch erkannt.",
     "✕": "Hinweis ausblenden.",

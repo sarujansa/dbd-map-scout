@@ -2054,3 +2054,30 @@ def test_the_detection_page_went_into_the_settings_and_the_log(app_root):
         assert app.off_check_var.get() == "Noch keine offiziellen Daten."
     finally:
         app.quit()
+
+
+def test_an_update_shows_what_is_new_once(app_root):
+    """1.8.79: the first start only remembers the version; a start with another version remembered lists the
+    HISTORY.md rows after it on the overview until "Verstanden"."""
+    import json
+    from dbdmapscout import __version__, overview
+    from dbdmapscout.app import App
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        assert app.settings["seen_version"] == __version__ and app._news == []
+    finally:
+        app.quit()
+    (app_root / "HISTORY.md").write_text("| A 1.0.1 (alt) | x |\n| B 1.0.2 (neu) | x |\n", encoding="utf-8")
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True, "seen_version": "1.0.1"}),
+                                            encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        assert app._news == [("1.0.2", "B", "neu")] and app.settings["seen_version"] == "1.0.1"
+        o = overview.overview_model(app, time.time(), is_win=False)
+        assert o.news == [("1.0.2", "B", "neu")] and o.news_since == "Neu seit 1.0.1"
+        app._qt_event("news_seen")
+        assert app._news == [] and app.settings["seen_version"] == __version__
+        assert overview.overview_model(app, time.time(), is_win=False).news == []
+    finally:
+        app.quit()

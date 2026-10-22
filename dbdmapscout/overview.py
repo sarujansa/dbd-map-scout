@@ -49,6 +49,8 @@ class Overview:
     system_note: str = ""
     rounds: list = field(default_factory=list)         # [(map, right-hand text)]
     log_alert: bool = False
+    news: list = field(default_factory=list)           # 1.8.79: [(version, title, detail)] since the version last run
+    news_since: str = ""                      # the card's title
 
 
 def _num(v: float, digits: int = 1) -> str:
@@ -266,4 +268,7 @@ def overview_model(app, now: float, is_win: bool) -> Overview:
     (o.today, o.today_note), o.rounds = cache[2], cache[3]
     o.system, o.system_note = system(app, now, is_win)
     o.log_alert = bool(getattr(app, "_log_alert", False))
+    o.news = list(getattr(app, "_news", None) or ())
+    if o.news:
+        o.news_since = _("Neu seit {version}", version=getattr(app, "_news_since", ""))
     return o
