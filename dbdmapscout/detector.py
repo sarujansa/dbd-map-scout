@@ -216,7 +216,7 @@ def _chains(comps, h_lo: float, h_hi: float, start_limit: float, min_letters: in
         if n_letters >= min_letters:
             tops.sort()
             bots.sort()
-            chains.append(_Chain(x0=sx, x1=right, top=tops[len(tops) // 2],
+            chains.append(_Chain(x0=_reach_left(comps[:i], sx, sy, sh), x1=right, top=tops[len(tops) // 2],
                                  bottom=bots[len(bots) // 2], n=n_letters))
     # the same line is found from several seeds -> keep the longest per row
     chains.sort(key=lambda c: (-c.n, c.x0))
@@ -225,6 +225,26 @@ def _chains(comps, h_lo: float, h_hi: float, start_limit: float, min_letters: in
         if all(abs(c.top - u.top) > 0.5 * u.h for u in uniq):
             uniq.append(c)
     return uniq
+
+
+def _reach_left(left_comps, x0: int, top: int, h: int) -> int:
+    """1.8.72 (user log: "ASHEAVEN" for GAS HEAVEN, "4OTHER'S DWELLING"): the first letter touching background
+    clutter is no letter-shaped component, the line started at the second one and the crop cut the first in half.
+    Parts right before the line's start at the line's height (not much wider or taller than a letter) belong to it."""
+    for _ in range(3):
+        moved = False
+        for bx, by, bw, bh, _a in left_comps:
+            overlap = min(top + h, by + bh) - max(top, by)
+            if (bx < x0 and bx + bw >= x0 - LEFT_GAP * h and overlap >= 0.6 * h
+                    and bh <= 1.6 * h and bw <= LEFT_WIDE * h):
+                x0, moved = bx, True
+        if not moved:
+            break
+    return x0
+
+
+LEFT_GAP = 0.6                         # 1.8.72: gap (letter heights) to a part still counted as the line's start
+LEFT_WIDE = 3.5                        # … and its width at most (a letter with clutter, not a background blob)
 
 
 def _crop_chain(region: np.ndarray, c: _Chain) -> np.ndarray:
@@ -251,6 +271,13 @@ class TextLines:
     name: np.ndarray | None          # map name (two lines already joined)
     realm: np.ndarray | None
     name_lines: int = 0
+
+
+# 1.8.72 (user log: "ASHEAVEN", "4OTHER'S DWELLING", "OLDWINDFARM", realm "MOND"; test picture: "PRINGWOOD"): the
+# fixed crop used when no letters are found starts this far left of the line – the line fades out at its left end,
+# its found start lies right of the text (Badham: line from x 98, "S" from x 81 = 0.04 L); before 0.01 L cut the
+# first letter. Dark background on the left costs the reader nothing.
+FALLBACK_LEFT = 0.06
 
 
 def locate_text(img: np.ndarray, sep: Separator) -> TextLines:
@@ -294,7 +321,7 @@ def locate_text(img: np.ndarray, sep: Separator) -> TextLines:
             # low contrast (fog/snow): fall back to where the name normally sits
             ry0 = int(sep.y - 0.080 * L) - ay0
             ry1 = int(sep.y - 0.008 * L) - ay0
-            rx0 = max(0, int(sep.x0 - cx0 - 0.01 * L))
+            rx0 = max(0, int(sep.x0 - cx0 - FALLBACK_LEFT * L))
             crop = above[max(0, ry0):max(0, ry1), rx0:min(above.shape[1], rx0 + int(1.0 * L))]
             if crop.size:
                 name_img, n_lines = crop, 0
@@ -313,7 +340,7 @@ def locate_text(img: np.ndarray, sep: Separator) -> TextLines:
             if realm_img.size == 0:
                 realm_img = None
         if realm_img is None:
-            rx0 = max(0, int(sep.x0 - cx0 - 0.01 * L))
+            rx0 = max(0, int(sep.x0 - cx0 - FALLBACK_LEFT * L))
             crop = below[0:min(below.shape[0], int(0.058 * L)), rx0:min(below.shape[1], rx0 + int(0.85 * L))]
             realm_img = crop if crop.size else None
     return TextLines(name=name_img, realm=realm_img, name_lines=n_lines)

@@ -336,6 +336,7 @@ class LobbyReader:
         if img is None or img.size == 0:
             return None
         text = fold(self.rec.text(self.rec.probs(img)))
+        self.last_result_text = text                 # 1.8.72: shown in the diagnosis when no role came out
         killer = sum(w in text for w in KILLER_CATEGORIES)
         survivor = sum(w in text for w in SURVIVOR_CATEGORIES)
         if killer >= 2 and survivor == 0:

@@ -1243,9 +1243,11 @@ class PictureOverlay:
         self._keep_on_top()
 
     # ------------------------------------------------------------ content
-    def set_map(self, path, caption: str = "", rotation: int = 0, realm: str = ""):
+    def set_map(self, path, caption: str = "", rotation: int = 0, realm: str = "", frames=None):
+        """``frames``: load_frames(path, rotation) when the caller has them already (1.8.72: App.show_map decoded
+        every map twice – ~80 ms of the 290 ms the window stood when a banner was detected)."""
         self._stop_anim()
-        self._frames = load_frames(path, rotation) if path else []
+        self._frames = (frames if frames is not None else load_frames(path, rotation)) if path else []
         self._floor = self._view = None
         self._caption = caption
         self.realm = realm or ""
