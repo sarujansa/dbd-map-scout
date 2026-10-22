@@ -1903,3 +1903,27 @@ def test_recordings_keep_farming_and_normal_rounds_apart(app_root):
         assert app.clip_role_var.get() == "Alle Rollen"
     finally:
         app.quit()
+
+
+def test_a_search_on_the_maps_page_filters_at_once_without_building_the_tiles_anew(app_root):
+    """1.8.72: the page's search went into the event queue and showed its hits with the next overlay tick
+    (≤ 250 ms later) by building every tile anew; now the App filters the one grid as soon as the event is in."""
+    import json
+    from dbdmapscout.app import App
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        app.qt.show_page("maps")
+        app._qt_refresh(force=True)
+        page = app.qt.maps
+        tiles = dict(page._tiles)
+        assert len(tiles) == len(app._qt_map_items(search=False)) and len(page.visible_tiles()) == len(tiles)
+        app._qt_event("search", "coal")                      # what _poll does with the page's ("search", text)
+        shown = [t.key for t in page.visible_tiles()]
+        assert shown and all("coal" in app.catalog.maps[m].name.lower() for m, _v in shown)
+        assert page._tiles == tiles                           # filtered, not rebuilt
+        assert app._list_items[0] == shown[0]                 # the hotkeys walk the hits
+        app._qt_event("search", "")
+        assert len(page.visible_tiles()) == len(tiles) and page._tiles == tiles
+    finally:
+        app.quit()

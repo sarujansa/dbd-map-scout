@@ -1394,8 +1394,10 @@ EN = {
     'Alle Maps': 'All maps',
     'Zuletzt gespielt': 'Played last',
     'Suchen: Name, Realm, Abkürzung …': 'Search: name, realm, abbreviation …',
-    'Klick = groß ansehen · Doppelklick = jetzt anzeigen. Die Erkennung übernimmt beim nächsten Match wieder.':
-        'Click = view big · double click = show now. Detection takes over again at the next match.',
+    'Klick oder Enter = groß ansehen · Doppelklick oder Strg+Enter = jetzt anzeigen. Die Erkennung übernimmt beim '
+    'nächsten Match wieder.':
+        'Click or Enter = view big · double click or Ctrl+Enter = show now. Detection takes over again at the next '
+        'match.',
     'Zurück zu den Karten des Realms (Esc).': "Back to the realm's maps (Esc).",
     'Allgemein': 'General',
     'Alle Einstellungen zurücksetzen': 'Reset all settings',

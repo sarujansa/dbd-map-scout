@@ -235,6 +235,7 @@ QLabel[class="note"] {{ color: {DOT['warn']}; }}
 QLabel#thumb {{ background: {DARK['field']}; border-radius: 8px; }}  /* map pictures need a dark backdrop */
 QFrame[class="tile"] {{ background: {c['card']}; border: 1px solid {c['border']}; border-radius: 8px; }}
 QFrame[class="tile"]:hover {{ background: {c['hover']}; }}
+QFrame[class="tile"]:focus {{ background: {c['hover']}; border: 1px solid {c['accent']}; }}  /* 1.8.72: arrows walk the tiles */
 QFrame[class="tile"][current="true"] {{ border: 2px solid {c['accent']}; }}
 QFrame[class="tile"] QLabel {{ background: transparent; border: none; }}
 QFrame[class="tile"] QLabel#tilepic {{ background: {DARK['field']}; border-radius: 6px; }}
@@ -249,8 +250,10 @@ QPushButton {{ background: {c['btn']}; border: 1px solid {c['border']}; border-r
 QPushButton:hover {{ background: {c['btn_hover']}; }}
 QPushButton:pressed {{ background: {c['press']}; }}
 QPushButton:disabled {{ background: transparent; color: {c['fg_dis']}; border-color: {c['border']}; }}  /* keeps its shape */
+QPushButton:focus {{ border-color: {c['accent']}; }}  /* 1.8.72: the keyboard focus is visible (was: like unfocused) */
 QPushButton#primary {{ background: {c['accent']}; color: {c['on_accent']}; border: 1px solid {c['accent']}; font-weight: 700; }}
 QPushButton#primary:hover {{ background: {c['accent_hover']}; }}
+QPushButton#primary:focus {{ border-color: {c['head']}; }}
 QPushButton[class="seg"]:checked {{ background: {c['accent']}; color: {c['on_accent']}; border-color: {c['accent']}; font-weight: 700; }}  /* 1.3.3 */
 QProgressBar {{ background: {c['bar']}; border: none; border-radius: 3px; max-height: 6px; min-height: 6px; }}
 QProgressBar::chunk {{ background: {c['accent']}; border-radius: 3px; }}
@@ -276,7 +279,7 @@ QComboBox QAbstractItemView {{ background: {c['panel']}; border: 1px solid {c['b
 QCheckBox {{ spacing: 8px; }}
 QCheckBox::indicator {{ width: 16px; height: 16px; border: 1px solid {c['dim']}; border-radius: 4px;
     background: {c['field']}; }}
-QCheckBox::indicator:hover {{ border-color: {c['accent']}; }}
+QCheckBox::indicator:hover, QCheckBox::indicator:focus {{ border-color: {c['accent']}; }}
 QCheckBox::indicator:checked {{ background: {c['accent']}; border-color: {c['accent']};
     image: url("{ui_icon('check', c['on_accent'])}"); }}
 QCheckBox::indicator:disabled {{ border-color: {c['fg_dis']}; background: transparent; }}

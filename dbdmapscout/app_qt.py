@@ -22,10 +22,12 @@ from .mainloop import MainLoop
 
 log = logging.getLogger("dbdmapscout")
 
-WARM_AFTER_MS = 1500                 # 1.3.4: pages laid out once after the start
+WARM_AFTER_MS = 300                  # 1.3.4: pages laid out once after the start (1.8.72: built here, so sooner)
+WARM_STEP_MS = 40                    # 1.8.72: pause between building two pages in the warm-up (each 20–70 ms)
 GEOMETRY_DELAY = 1.0          # s after the last move/resize before the size is saved
 QT_HOTKEYS = {"scan": "scan_now", "reject": "reject_map"}
 PREVIEW_PX = 900              # map preview on the maps page: picture scaled to fit this box first
+THUMB_CACHE = os.path.join("cache", "thumbs")     # 1.8.72: the tiles' small pictures (thumbs.py), gitignored
 
 
 def ui_shown(w) -> bool:
@@ -265,7 +267,8 @@ class QtShell:
         ico = os.path.join(self.root_dir, "dbdmapscout.ico")
         self._qt_auto = {}
         layouts = {key: ui_layout(getattr(self, f"tab_{key}"), self._qt_auto) for key in self._qt_mod.AUTO_PAGES}
-        self.qt = self._qt_mod.MainWindow(self._qt_post, ico if os.path.exists(ico) else None, layouts)
+        self.qt = self._qt_mod.MainWindow(self._qt_post, ico if os.path.exists(ico) else None, layouts,
+                                          os.path.join(self.root_dir, THUMB_CACHE))
         self.qt.setWindowTitle(f"DbD Map Scout {__version__}")
         self._qt_theme()
         # first start: the setup assistant (language, overlay, keys) instead of the overview
@@ -286,10 +289,14 @@ class QtShell:
 
     def _qt_warm(self):
         """1.3.4: every page filled and laid out once while nothing happens, so the first visit is as quick as the
-        next ones (measured: settings 112 → ~11 ms)."""
+        next ones (measured: settings 112 → ~11 ms). 1.8.72: the pages are built here too, one per step with a
+        pause between (WARM_STEP_MS) – the window showed only after all of them were built before."""
         if self.qt is None or self._quitting:
             return
         try:
+            if self.qt.build_next():
+                self.root.after(WARM_STEP_MS, self._qt_warm)
+                return
             reg, auto = self.__dict__.get("_qt_reg", {}), self._qt_auto
             for page, form in self.qt.forms.items():
                 src = auto if page in self._qt_mod.AUTO_PAGES else reg
@@ -410,10 +417,12 @@ class QtShell:
             self._qt_search = str(arg or "")
             self._qt_maps_rev = getattr(self, "_qt_maps_rev", 0) + 1
             self._fill_list()
+            self._qt_refresh()                       # 1.8.72: the hits now, not with the next overlay tick (≤ 250 ms)
         elif action == "more_open":                  # 1.8.38: a search hit under "Mehr" – open it, never shut it
             if not self._more_open:
                 self._toggle_more()
         elif action == "search_open":                # the search reads the texts of all pages: fill them now
+            self.qt.build_all()                      # 1.8.72: the pages not visited yet
             reg, auto = self.__dict__.get("_qt_reg", {}), self._qt_auto
             for page, form in self.qt.forms.items():
                 src = auto if page in self._qt_mod.AUTO_PAGES else reg
@@ -556,9 +565,10 @@ class QtShell:
                    self.settings["overlay"].get("map_style", "classic"))
             if force or rev != getattr(self, "_qt_maps_shown", None):
                 self._qt_maps_shown = rev
-                items = self._qt_map_items()
+                items = self._qt_map_items(search=False)      # 1.8.72: all maps, the search only as a filter
+                found = {(mid, v) for _r, _l, mid, v in self._qt_map_items()} if self._qt_search_text() else None
                 q.show_maps(items, self.current, self._qt_preview(sel), self._qt_thumbs(items), self._qt_recent(),
-                            self._qt_marks(items), self.settings["overlay"].get("map_style", "classic"))
+                            self._qt_marks(items), self.settings["overlay"].get("map_style", "classic"), found)
         reg = self.__dict__.get("_qt_reg", {})
         keys = self._qt_mod.page_keys(page)
         if keys:
@@ -669,10 +679,13 @@ class QtShell:
                     break
         return out
 
-    def _qt_map_items(self):
-        """[(realm, label, map_id, variant)] (search with the catalog's own matching)."""
+    def _qt_search_text(self) -> str:
+        return getattr(self, "_qt_search", "") or ""
+
+    def _qt_map_items(self, search=True):
+        """[(realm, label, map_id, variant)] (search with the catalog's own matching; ``search`` False: all)."""
         out = []
-        for m in self.catalog.search(getattr(self, "_qt_search", "")):
+        for m in self.catalog.search(self._qt_search_text() if search else ""):
             realm = self.catalog.realm_display(m) or _("Eigene Bilder")
             for v in [v for v in sorted(m.variants) if m.variants[v]]:
                 out.append((realm, m.label(v) if len(m.variants) > 1 else m.name, m.id, v))
