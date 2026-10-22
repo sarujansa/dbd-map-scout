@@ -2007,4 +2007,15 @@ EN = {
         'No matches with a loadout in this selection yet – the stats page sends it from userscript version 3 (Settings → More → Official match data → "Copy userscript").',
     # 1.8.49
     'Alle Modi': 'All modes',
+    # 1.8.73: farming partners by character (right click in "Gegner")
+    '„{name}“ nicht mehr als Farming-Gegner': '"{name}" no longer a farming partner',
+    '„{name}“ als Farming-Gegner (Runden mit diesem Charakter zählen als Farming)':
+        '"{name}" as farming partner (rounds with this character count as farming)',
+    '„{name}“ gilt jetzt als Farming-Gegner – {n} Runden zählen als Farming (auch ältere; Aufnahmen bleiben, wo sie '
+    'sind).':
+        '"{name}" now counts as a farming partner – {n} rounds count as farming (older ones too; recordings stay '
+        'where they are).',
+    '„{name}“ gilt nicht mehr als Farming-Gegner.': '"{name}" no longer counts as a farming partner.',
+    'Farming-Gegner (Rechtsklick auf einen Charakter im Reiter „Gegner“): {names}':
+        'Farming partners (right click on a character on the "Opponents" tab): {names}',
 }

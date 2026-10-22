@@ -681,3 +681,12 @@ def test_modes_seen_most_played_first_and_unknown_left_out():
           enumerate((["Online", "Public Match"], ["Online", "Public Match"], ["2v8", "2v8 Mode"], [], ["", "Event"]))]
     assert o.modes_seen(ms) == [("Online", "Public Match"), ("2v8", "2v8 Mode"), ("Event", "Event")]
     assert o.mode_key(ms[3]) == "" and o.mode_key(None) == ""
+
+
+def test_opponent_names_are_the_other_players_characters():
+    """1.8.73: the setting farming_opponents names farming partners by character."""
+    m = o.Match(t=T0, map="Coal Tower", role="survivor", opp=[
+        o.Player(role="killer", character="Slasher", status="Escaped"),
+        o.Player(role="survivor", character="Meg Thomas"), o.Player(role="survivor", character="")])
+    assert o.opponent_names(m) == {"Slasher", "Meg Thomas"}
+    assert o.opponent_names(o.Match(t=T0, map="Coal Tower")) == set()

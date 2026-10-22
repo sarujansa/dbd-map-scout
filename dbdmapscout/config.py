@@ -136,6 +136,7 @@ DEFAULTS = {
     "farming_crossplay": True,          # 1.2.20: a round whose lobby showed cross-play off is a farming round
     "farming_region": "ap-southeast-1",  # … and every round on this server region ("" = none)
     "farming_ignored": [],              # 1.6.1: rounds (repr of the start) not to offer as farming again
+    "farming_opponents": [],            # 1.8.73: characters (as the stats page names them) you only meet while farming
     "rec_on": False,                    # 1.4: round recordings with OBS (obs-websocket on this PC)
     "rec_port": 4455,
     "rec_password": "",

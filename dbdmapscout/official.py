@@ -427,6 +427,12 @@ def survivors(m: Match) -> list:
     return [p for p in m.opp if p.role == "survivor"]
 
 
+def opponent_names(m: Match) -> set:
+    """1.8.73: the characters of the other players of ``m`` as the page names them ("" left out) – the setting
+    farming_opponents names farming partners by them."""
+    return {p.character for p in m.opp if p.character}
+
+
 def kills(m: Match):
     """Survivors that died or abandoned in a killer match (an abandon counts as a kill, like the killer's
     result in the game); None: no killer match or a status is unknown."""

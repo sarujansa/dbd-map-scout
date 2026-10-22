@@ -308,6 +308,7 @@ class StatsTab:
                                                   ("n", _("Begegnungen"), 90, "e"), ("esc", _("Entkommen"), 80, "e"),
                                                   ("sac", _("Geopfert"), 75, "e"), ("kill", _("Getötet"), 70, "e"),
                                                   ("dc", _("Aufgegeben"), 85, "e")), 8)
+        self._table_menu(self.stats_opp, self._stats_opp_menu_items, self._stats_opp_menu_act)      # 1.8.73
         ui.Label(box_o, text=_("Laut Stats-Seite: als Killer die Survivor gegen dich und wie ihr Match endete, als "
                                 "Survivor der Killer und wie dein Match endete. „Getötet“ = vom Killer direkt "
                                 "getötet (z. B. Mori), „Aufgegeben“ schließt verlassene Matches ein. „Ø Kills ohne "
@@ -392,6 +393,7 @@ class StatsTab:
         all_rounds = history.load(self._hist_path())
         lost_rounds = history.load_lost_rounds(self._hist_path())
         farm_region = self.settings.get("farming_region") or ""
+        farm_opp = set(self.settings.get("farming_opponents") or [])      # 1.8.73: farming partners by character
         for r in all_rounds + lost_rounds:           # skins / new killers: the user's assignment
             r.killer = self._killer_of(r.killer)
             if farm_region and r.region == farm_region:
@@ -415,8 +417,10 @@ class StatsTab:
                 r.seconds = seconds
                 rescued.append(r)
             off[id(r)] = m
-            if m.role:                               # the page knows it for sure (1.8.36: also over a lobby
-                r.role = m.role                      # or result screen reading – user: "Rolle nicht sauber")
+            if farm_opp and not m.custom and official.opponent_names(m) & farm_opp:
+                r.farming = True                     # 1.8.73: a match with a farming partner (display only, like
+            if m.role:                               # the region) – the page knows it for sure (1.8.36: also over
+                r.role = m.role                      # a lobby or result screen reading – user: "Rolle nicht sauber")
             if i < len(all_rounds) and r.custom and not m.custom and not r.farming:
                 public_custom.append(r)              # before 1.5.5 instant (cross-play off) lobbies looked custom
             r.custom = m.custom
@@ -680,7 +684,8 @@ class StatsTab:
         t.delete(*t.get_children())
         for o in found:
             name = killer_label(self._killer_of(o.name)) if o.role == "killer" else o.name
-            t.insert("", "end", values=(name, self._role_name(o.role), o.n, pct(official.share(o.fates, "escaped")),
+            t.insert("", "end", iid=f"{o.role}\t{o.name}",                    # 1.8.73: the right click knows the character
+                     values=(name, self._role_name(o.role), o.n, pct(official.share(o.fates, "escaped")),
                                         pct(official.share(o.fates, "sacrificed")),
                                         pct(official.share(o.fates, "killed")),
                                         pct(official.share(o.fates, "abandoned", "gone"))))
@@ -917,6 +922,54 @@ class StatsTab:
         self._save_soon()
         self._log(_("Killer-Zuordnungen gelöscht."), "System")
         self._stats_render()
+
+    # ---- 1.8.73 (user: "Opponent … Slasher 38×, das kommt safe vom Farmen"): a farming partner by character
+    def _stats_opp_selected(self) -> list:
+        """The characters of the rows marked in "Gegner" (as the page names them)."""
+        return [iid.split("\t", 1)[1] for iid in self.stats_opp.selection() if "\t" in iid]
+
+    def _stats_opp_menu_items(self):
+        """Right click in "Gegner": treat the marked characters as farming partners – every match with them
+        counts as a farming round (also older ones) – or not any more."""
+        marked = set(self.settings.get("farming_opponents") or [])
+        items = []
+        for name in self._stats_opp_selected():
+            if name in marked:
+                items.append(("opp_off:" + name, _("„{name}“ nicht mehr als Farming-Gegner", name=name), True))
+            else:
+                items.append(("opp_on:" + name, _("„{name}“ als Farming-Gegner (Runden mit diesem Charakter zählen als "
+                                                  "Farming)", name=name), True))
+        return items
+
+    def _stats_opp_menu_act(self, ident):
+        kind, _sep, name = str(ident).partition(":")
+        if kind in ("opp_on", "opp_off") and name:
+            self._stats_set_farming_opponent(name, kind == "opp_on")
+
+    def _stats_set_farming_opponent(self, name: str, on: bool):
+        """Add ``name`` to / remove it from the farming partners (setting farming_opponents); the join flags the
+        rounds anew (display only – the recordings stay where they are, like the farming region)."""
+        marked = [x for x in (self.settings.get("farming_opponents") or []) if x != name]
+        if on:
+            marked.append(name)
+        self.settings.set("farming_opponents", marked)
+        self._save_soon()
+        if hasattr(self, "farm_opp_var"):
+            self.farm_opp_var.set(self._farming_opponents_text())
+        if on:
+            j = self._joined()                       # the setting is part of its key: joined anew
+            n = sum(1 for r in j.rounds if id(r) in j.off and r.farming and not r.custom
+                    and name in official.opponent_names(j.off[id(r)]))
+            self._log(_("„{name}“ gilt jetzt als Farming-Gegner – {n} Runden zählen als Farming (auch ältere; "
+                        "Aufnahmen bleiben, wo sie sind).", name=name, n=n), "System")
+        else:
+            self._log(_("„{name}“ gilt nicht mehr als Farming-Gegner.", name=name), "System")
+        self._stats_render()
+
+    def _farming_opponents_text(self) -> str:
+        names = sorted(self.settings.get("farming_opponents") or [])
+        return _("Farming-Gegner (Rechtsklick auf einen Charakter im Reiter „Gegner“): {names}",
+                 names=", ".join(names) if names else _("(keine)"))
 
     def _stats_last_menu_items(self):
         """1.8.10: right click on "Letzte Runden" – role, farming, stats page, delete for the marked rounds."""
@@ -1287,7 +1340,8 @@ class StatsTab:
     def _joined(self):
         """_official_join() cached until rounds.jsonl / official.jsonl, the killer assignments or the catalog
         change (the Qt overview asks 4×/s; a full join of 5000 + 5000 lines takes ~100 ms)."""
-        key = [repr(sorted((self.settings.get("killer_aliases") or {}).items())), self.settings.get("farming_region")]
+        key = [repr(sorted((self.settings.get("killer_aliases") or {}).items())), self.settings.get("farming_region"),
+               sorted(self.settings.get("farming_opponents") or [])]
         for p in (self._hist_path(), self._official_path()):
             try:
                 st = os.stat(p)
