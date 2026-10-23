@@ -128,7 +128,7 @@ class Writer(threading.Thread):
         self.writes = 0
         self.last_error = ""
         self._latest = None
-        self._stop = False
+        self._stopping = False       # not _stop: Thread.join() calls self._stop() on Python 3.12
         self._cv = threading.Condition()
 
     def submit(self, elements, game_xy, key) -> bool:
@@ -144,15 +144,15 @@ class Writer(threading.Thread):
 
     def stop(self):
         with self._cv:
-            self._stop = True
+            self._stopping = True
             self._cv.notify()
 
     def run(self):
         while True:
             with self._cv:
-                while self._latest is None and not self._stop:
+                while self._latest is None and not self._stopping:
                     self._cv.wait()
-                if self._stop:
+                if self._stopping:
                     return
                 job, self._latest = self._latest, None
             try:
