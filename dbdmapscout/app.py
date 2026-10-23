@@ -37,6 +37,7 @@ from .app_qt import QtShell
 from .app_overlay import OverlayTab, anchor_label
 from .app_place import MAX_HEIGHT, OverlayPlacement
 from .app_recordings import RecordingsTab
+from .app_export import ExportDialog
 from .app_discord import DiscordPresence
 from .app_spotify import SpotifyUpNext
 
@@ -61,8 +62,8 @@ def _event_name(ev) -> str:
 log = logging.getLogger("dbdmapscout")
 
 
-class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, LobbyInfo, Hotkeys, SettingsTab, SysInfo,
-          OverlayPlacement, LayoutMemory, OverlayTab, QtShell):
+class App(ServerTab, StatsTab, ExportDialog, RecordingsTab, DiscordPresence, SpotifyUpNext, LobbyInfo, Hotkeys, SettingsTab,
+          SysInfo, OverlayPlacement, LayoutMemory, OverlayTab, QtShell):
     def __init__(self, root_dir: str, simulate: str | None = None, start_in_tray: bool = False):
         self.root_dir = root_dir
         self.simulate = simulate
@@ -525,6 +526,8 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
                               "ohne DBD. Nochmal drücken beendet den Test."))
         if w is self.adv_btn:
             return _("Technische Optionen für die Fehlersuche ein- oder ausklappen.")
+        if w in getattr(self, "_export_col_checks", ()):            # 1.8.91: the export dialog's columns
+            return lambda: _("Spalte „{name}“ mit ausgeben.", name=w.cget("text"))
         if w is self.edit_btn:
             return lambda: (_("Verschieben beenden.") if self.edit_btn.cget("text") == _("Fertig") else
                             _("Karte direkt mit der Maus ziehen, Strg+Mausrad ändert die Grösse.")

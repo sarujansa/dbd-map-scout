@@ -4,7 +4,7 @@ a tab's structure (AutoPage), dialogs and the setup assistant.
 from __future__ import annotations
 
 from PySide6.QtCore import QEvent, QRectF, QSize, Qt, QTimer
-from PySide6.QtGui import QColor, QPainter, QPalette, QPen
+from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPalette, QPen
 from PySide6.QtWidgets import (QBoxLayout, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QProgressBar,
                                QPushButton, QRadioButton, QScrollArea, QSizePolicy, QSlider, QStackedWidget,
                                QStyle, QStyleOptionSlider, QTabWidget, QVBoxLayout, QWidget)
@@ -1337,8 +1337,24 @@ class DialogWindow(QDialog):
         lay.setContentsMargins(0, 0, 0, 0)
         self.page = AutoPage(post, title, node)
         lay.addWidget(self.page)
-        # 1.8.8: as tall as its content (the "Zuordnen" dialog was mostly empty at a fixed 560 px)
-        self.resize(640, max(220, min(560, self.page.sizeHint().height() + 24)))
+        # 1.8.8: as tall as its content (the "Zuordnen" dialog was mostly empty at a fixed 560 px); 1.8.91: the content's
+        # own size up to the screen (the export dialog is 750 px tall – capped at 560 it needed a scrollbar), wider too
+        self._fit()
+        QTimer.singleShot(0, self._fit)           # once laid out (wrapped labels report their real height then)
+
+    def _fit(self):
+        """Size the window to its content, up to the screen; it only grows (the content scrolls anyway)."""
+        area = self.page.findChild(QScrollArea)
+        body = area.widget() if area is not None and area.widget() is not None else self.page
+        lay = body.layout()
+        hint = lay.sizeHint() if lay is not None else body.sizeHint()
+        screen = QGuiApplication.primaryScreen()
+        avail = screen.availableGeometry() if screen is not None else None
+        max_w, max_h = (avail.width() - 80, avail.height() - 80) if avail is not None else (1000, 900)
+        w = max(self.width(), 640, min(max_w, hint.width() + 48))
+        h = max(self.height() if self.isVisible() else 0, 220, min(max_h, hint.height() + 72))
+        if (w, h) != (self.width(), self.height()):
+            self.resize(w, h)
 
     def done(self, r):                            # Esc / X: the model's dialog goes too
         if not self.closing_from_app:
