@@ -1456,7 +1456,6 @@ EN = {
     'Alle Maps': 'All maps',
     'Rolle/Killer': 'Role/killer',
     'Weitere 100 Runden anzeigen': 'Show 100 more rounds',
-    'Als CSV exportieren …': 'Export as CSV …',
     'Runden exportieren': 'Export rounds',
     '{n} Runden exportiert: {path}': '{n} rounds exported: {path}',
     'Median': 'Median',
@@ -1464,10 +1463,6 @@ EN = {
     'Längste': 'Longest',
     'Die Liste zeigt die neuesten 100 Runden der Auswahl; jeder Klick hängt 100 ältere an.':
         'The list shows the newest 100 rounds of the selection; every click appends 100 older ones.',
-    'Speichert die Runden der aktuellen Filter als CSV (Semikolon, UTF-8) – mit Kills, Entkommen und Bloodpoints, '
-    'soweit ein Match der Stats-Seite zugeordnet ist.': 'Saves the rounds of the current filters as CSV (semicolon, '
-                                                        'UTF-8) – with kills, escapes and bloodpoints where a match '
-                                                        'of the stats page is tied.',
     'Server-Tab öffnen': 'Open the server tab',
     'Match-Daten einrichten …': 'Set up match data …',
     'Stats-Seite nicht eingerichtet': 'Stats page not set up',          # 1.8.75
@@ -1504,6 +1499,51 @@ EN = {
     'Alle Spalten zeigen': 'Show all columns',
     # 1.4: recordings with OBS
     'Aufnahmen mit OBS': 'Recordings with OBS',
+    # 1.8.91: the export dialog
+    "Exportieren …": "Export …",
+    "Runden exportieren": "Export rounds",
+    "Zeitraum": "Time range",
+    "Von": "From",
+    "Bis": "To",
+    "TT.MM.JJJJ HH:MM – auch nur ein Datum (ganzer Tag) oder nur eine Uhrzeit (heute); leer = offen.":
+        "DD.MM.YYYY HH:MM – a date alone (the whole day) or a time alone (today) works too; empty = open.",
+    "Gestern": "Yesterday",
+    "Alles": "Everything",
+    "Eigener Zeitraum": "Custom range",
+    "Filter": "Filters",
+    "Custom Games einschliessen": "Include custom games",
+    "Farming-Runden einschliessen": "Include farming rounds",
+    "Spalten": "Columns",
+    "Start": "Start",
+    "Realm": "Realm",
+    "Ping (ms)": "Ping (ms)",
+    "Kills": "Kills",
+    "Normal": "Normal",
+    "ja": "yes",
+    "nein": "no",
+    "CSV-Datei (Excel)": "CSV file (Excel)",
+    "Textliste (eine Zeile je Runde)": "Text list (one line per round)",
+    "{n} Runden, {m} Spalten": "{n} rounds, {m} columns",
+    "Zeitangabe nicht lesbar: „{text}“ – Format TT.MM.JJJJ HH:MM.": "Cannot read the time \"{text}\" – format DD.MM.YYYY HH:MM.",
+    "Nichts zu kopieren – keine Runde passt, oder keine Spalte gewählt.": "Nothing to copy – no round matches, or no column chosen.",
+    "Nichts zu speichern – keine Runde passt, oder keine Spalte gewählt.": "Nothing to save – no round matches, or no column chosen.",
+    "In Zwischenablage kopieren": "Copy to clipboard",
+    "Als Datei speichern …": "Save as file …",
+    "Schliessen": "Close",
+    "{n} Runden in die Zwischenablage kopiert.": "{n} rounds copied to the clipboard.",
+    "Spalte „{name}“ mit ausgeben.": "Include the column \"{name}\".",
+    "Öffnet das Export-Fenster: Zeitraum (auch von–bis), Rolle, Killer, Map, Region, Spalten nach Wahl – als CSV für Excel oder als Textliste in die Zwischenablage. Die Filter der Statistik sind vorbelegt.":
+        "Opens the export window: time range (from–to as well), role, killer, map, region, columns of your choice – as CSV for Excel or as a text list to the clipboard. The statistics' filters are preset.",
+    "Kopiert die Runden in der gewählten Form (CSV oder Textliste) in die Zwischenablage – zum Einfügen in Discord, Excel oder einen Editor.":
+        "Copies the rounds in the chosen form (CSV or text list) to the clipboard – to paste into Discord, Excel or an editor.",
+    "Speichert die Runden als Datei: CSV (Semikolon, UTF-8 mit BOM – Excel öffnet sie direkt) oder Textliste (.txt).":
+        "Saves the rounds as a file: CSV (semicolon, UTF-8 with BOM – Excel opens it directly) or text list (.txt).",
+    "Schliesst das Fenster.": "Closes the window.",
+    "Aus: Custom Games (eigene Lobbys, Bots) bleiben draussen.": "Off: custom games (own lobbies, bots) stay out.",
+    "Aus: Farming-Runden (Crossplay aus bzw. Farming-Region) bleiben draussen.": "Off: farming rounds (cross-play off or the farming region) stay out.",
+    "Eine Zeile je Runde, Spalten durch Semikolon getrennt, mit Kopfzeile.": "One line per round, columns separated by semicolons, with a header line.",
+    "Eine Zeile je Runde, die gewählten Spalten mit „ · “ getrennt, ohne Kopfzeile – zum Einfügen in einen Chat.":
+        "One line per round, the chosen columns separated by \" · \", no header – to paste into a chat.",
     "Verbindungen": "Connections",
     "Verbindung": "Connection",
     "Ton": "Sound",

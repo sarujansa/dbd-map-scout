@@ -253,8 +253,19 @@ TIPS = {
                                 "Browser, danach zählen Kills, Entkommen und Bloodpoints in der Statistik.",
     "Weitere 100 Runden anzeigen": "Die Liste zeigt die neuesten 100 Runden der Auswahl; jeder Klick hängt 100 "
                                    "ältere an.",
-    "Als CSV exportieren …": "Speichert die Runden der aktuellen Filter als CSV (Semikolon, UTF-8) – mit Kills, "
-                             "Entkommen und Bloodpoints, soweit ein Match der Stats-Seite zugeordnet ist.",
+    "Exportieren …": "Öffnet das Export-Fenster: Zeitraum (auch von–bis), Rolle, Killer, Map, Region, Spalten nach Wahl "
+                     "– als CSV für Excel oder als Textliste in die Zwischenablage. Die Filter der Statistik sind "
+                     "vorbelegt.",
+    "In Zwischenablage kopieren": "Kopiert die Runden in der gewählten Form (CSV oder Textliste) in die Zwischenablage – "
+                                  "zum Einfügen in Discord, Excel oder einen Editor.",
+    "Als Datei speichern …": "Speichert die Runden als Datei: CSV (Semikolon, UTF-8 mit BOM – Excel öffnet sie direkt) "
+                             "oder Textliste (.txt).",
+    "Schliessen": "Schliesst das Fenster.",
+    "Custom Games einschliessen": "Aus: Custom Games (eigene Lobbys, Bots) bleiben draussen.",
+    "Farming-Runden einschliessen": "Aus: Farming-Runden (Crossplay aus bzw. Farming-Region) bleiben draussen.",
+    "CSV-Datei (Excel)": "Eine Zeile je Runde, Spalten durch Semikolon getrennt, mit Kopfzeile.",
+    "Textliste (eine Zeile je Runde)": "Eine Zeile je Runde, die gewählten Spalten mit „ · “ getrennt, ohne Kopfzeile – "
+                                       "zum Einfügen in einen Chat.",
     "Alle Einstellungen zurücksetzen": "Setzt jede Einstellung auf die Auslieferung zurück (Overlay, Hotkeys, Erkennung, "
                                        "Server-Auswahl im Programm …). Runden, Match-Daten und eigene Bilder bleiben; "
                                        "das Programm startet danach neu. Vorher sichern: „Einstellungen exportieren“.",

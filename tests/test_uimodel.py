@@ -1097,6 +1097,73 @@ def test_the_visible_elements_go_to_obs_as_one_picture_over_the_dbd_window(app_r
         app.quit()
 
 
+def test_the_export_dialog_filters_rounds_and_writes_csv_or_a_text_list(app_root):
+    """1.8.91 (user: "ein Fenster, wo ich alles auswählen kann, Killer, Zeit etc."): Statistik → "Exportieren …"
+    opens the dialog with the statistics' filters preset; presets fill Von/Bis, typing there makes the range a
+    custom one, columns and format are remembered, the list goes to the clipboard or into a file."""
+    import json
+    from dbdmapscout import history, official, roundexport, tooltip
+    from dbdmapscout.app import App
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    day = history.period_start("day", time.time())
+    t_old, t1, t2 = day - 7200, day + 10 * 3600, day + 11 * 3600          # yesterday evening, today 10:00, 11:00
+    for t, kw in ((t_old, {"role": "killer", "killer": "The Trapper"}), (t1, {"role": "killer", "killer": "The Nurse"}),
+                  (t2, {"role": "survivor", "farming": True})):
+        history.append(str(app_root / history.FILE), history.Round(t, 600, "coal", "Coal Tower", **kw))
+    official.merge(str(app_root / official.FILE), [official.Match(t=t1 - 38, map="Coal Tower", role="killer", bp=25000,
+                                                                  opp=[official.Player(role="survivor", character="Meg Thomas",
+                                                                                       status="Sacrificed")])])
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    copied = []
+    app.root.clipboard_set = copied.append
+    try:
+        app._stats_render()
+        app._export_open()
+        assert app._export_dlg.winfo_exists() and str(app._export_dlg) in app._qt_dialogs
+        assert tooltip.missing(app.ui_root) == []                           # every button/box of the dialog has a tip
+        assert app.export_preset_var.get() == "Gesamter Zeitraum" or app.export_preset_var.get() == "Alles"
+        assert app.export_count_var.get() == "3 Runden, 8 Spalten"
+        app.export_preset_var.set("Heute")
+        app._export_preset_changed()
+        assert app.export_from_var.get() == roundexport.fmt_when(day) and app.export_to_var.get() == ""
+        assert app.export_count_var.get() == "2 Runden, 8 Spalten"
+        for key, var in app.export_col_vars.items():
+            var.set(key in ("start", "map", "killer", "kills"))
+        app.export_format_var.set("text")
+        app._export_refresh()
+        assert app.settings.get("export_columns") == ["start", "map", "killer", "kills"]
+        assert app.settings.get("export_format") == "text"
+        # the round with match data carries the page's layout ("Coal Tower I", official.correct_maps), as the tables do
+        assert app.export_preview_var.get().splitlines() == [roundexport.fmt_when(t1) + " · Coal Tower I · Nurse · 1",
+                                                             roundexport.fmt_when(t2) + " · Coal Tower"]
+        app._export_copy()
+        assert copied[-1].splitlines() == app.export_preview_var.get().splitlines()
+        assert app.export_msg_var.get() == "2 Runden in die Zwischenablage kopiert."
+        app.export_farming_var.set(False)                                    # the farming round out
+        app._export_refresh()
+        assert app.export_count_var.get() == "1 Runden, 4 Spalten"
+        app.export_farming_var.set(True)
+        app.export_from_var.set(time.strftime("%H:%M", time.localtime(t2 - 60)))   # typed: a time alone (today)
+        assert app.export_preset_var.get() == "Eigener Zeitraum"
+        assert app.export_count_var.get() == "1 Runden, 4 Spalten"
+        app.export_from_var.set("irgendwann")
+        assert app.export_count_var.get() == "" and "nicht lesbar" in app.export_msg_var.get()
+        app.export_from_var.set("")
+        app.export_format_var.set("csv")
+        app._export_refresh()
+        app._export_save(str(app_root / "out.csv"))
+        text = (app_root / "out.csv").read_text(encoding="utf-8-sig").splitlines()
+        assert text[0] == "Start;Map;Killer;Kills" and len(text) == 4 and text[2].endswith(";Coal Tower I;Nurse;1")
+        assert app.export_msg_var.get().startswith("3 Runden exportiert")
+        app._qt_event("dlg_close", str(app._export_dlg))                  # X / Esc of the window
+        assert not app._export_dlg.winfo_exists()
+        app._export_open()                                                   # remembered: columns and format
+        assert [k for k, v in app.export_col_vars.items() if v.get()] == ["start", "map", "killer", "kills"]
+        assert app.export_format_var.get() == "csv"
+    finally:
+        app.quit()
+
+
 def test_the_discord_state_follows_round_and_lobby_and_the_records_tab_draws(app_root):
     """1.7: the game state for the Rich Presence comes from the open round (map, realm, role, killer, start),
     else from the lobby, else the menu; the Discord boxes are saved and passed to the thread; the statistics'

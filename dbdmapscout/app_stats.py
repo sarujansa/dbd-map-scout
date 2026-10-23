@@ -198,7 +198,7 @@ class StatsTab:
         self.stats_round_killer_btn = ui.Button(kr, text=_("Killer setzen"), command=self._stats_set_killer,
                                                  state="disabled")
         self.stats_round_killer_btn.pack(side="left", padx=(6, 0))
-        ui.Button(kr, text=_("Als CSV exportieren …"), command=self._stats_export_csv).pack(side="right")
+        ui.Button(kr, text=_("Exportieren …"), command=self._export_open).pack(side="right")   # 1.8.91: dialog
         box = self._stats_page(_("Maps"), "maps", "_stats_part_maps")
         self.stats_maps = self._stats_tree(box, (("map", _("Map"), 130, "w"), ("n", _("Runden"), 62, "e"),
                                                  ("k", _("Killer"), 58, "e"), ("kills", _("Ø Kills"), 62, "e"),
@@ -1235,30 +1235,6 @@ class StatsTab:
     def _stats_more_rounds(self):
         self._stats_last_limit += LAST_ROUNDS_STEP
         self._stats_render()
-
-    def _stats_export_csv(self, path=None):
-        """1.2.16: the rounds of the current filters as CSV (semicolon; the official result where tied)."""
-        if path is None:
-            self._qt_file("save", _("Runden exportieren"), "dbdmapscout-runden.csv", self._stats_export_csv,
-                          pattern="CSV (*.csv)")
-            return
-        off = getattr(self._joined(), "off", {})
-        rows = []
-        for r in sorted(getattr(self, "_stats_rounds_shown", []), key=lambda r: r.t):
-            m = off.get(id(r))
-            rows.append({"start": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(r.t)), "map": r.map,
-                         "seconds": round(r.seconds), "wait_seconds": round(r.wait) if r.wait is not None else None,
-                         "role": r.role, "custom": int(bool(r.custom)), "farming": int(bool(r.farming)),
-                         "killer": r.killer, "region": r.region,
-                         "ping_ms": round(r.ping) if r.ping is not None else None,
-                         "kills": official.kills(m) if m else None, "escaped": official.escaped(m) if m else None,
-                         "bloodpoints": m.bp if m else None})
-        try:
-            n = history.export_csv(path, rows)
-        except OSError as e:
-            self._log(_("Export fehlgeschlagen: {error}", error=e), "Fehler")
-            return
-        self._log(_("{n} Runden exportiert: {path}", n=n, path=path), "System")
 
     def _stats_clear(self):
         if not os.path.exists(self._hist_path()):
