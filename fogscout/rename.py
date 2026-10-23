@@ -18,8 +18,7 @@ OLD_NAME = "DbD Map Scout"
 OLD_PACKAGE = "dbdmapscout"
 RENAME = (("dbdmapscout-crash.txt", "fogscout-crash.txt"),
           ("dbdmapscout-crash-last.txt", "fogscout-crash-last.txt"))
-REMOVE = ("dbdmapscout.log",)
-OLD_ICON = "dbdmapscout.ico"            # removed by autostart.install, after the old shortcuts
+REMOVE = ("dbdmapscout.log",)           # the old icon: icon.OLD_FILES, removed by autostart.install after the shortcuts
 
 
 def migrate(root: str) -> list:

@@ -264,12 +264,17 @@ class QtShell:
         self._qt_question = None            # (title, text, retry | None) shown as a bar in the Qt window
 
     def _qt_build(self, start_in_tray: bool):
-        ico = os.path.join(self.root_dir, "fogscout.ico")
+        from .icon import FILE as ICON_FILE
+        ico = os.path.join(self.root_dir, ICON_FILE)
         self._qt_auto = {}
         layouts = {key: ui_layout(getattr(self, f"tab_{key}"), self._qt_auto) for key in self._qt_mod.AUTO_PAGES}
         self.qt = self._qt_mod.MainWindow(self._qt_post, ico if os.path.exists(ico) else None, layouts,
                                           os.path.join(self.root_dir, THUMB_CACHE))
         self.qt.setWindowTitle(f"Fog Scout {__version__}")
+        if IS_WIN:                        # 1.9.1: the taskbar's icon, name and pin command without a shortcut
+            from . import appid, autostart
+            appid.set_window_relaunch(int(self.qt.winId()), autostart.relaunch_command(),
+                                      ico if os.path.exists(ico) else "", "Fog Scout")
         self._qt_theme()
         # first start: the setup assistant (language, overlay, keys) instead of the overview
         first = not self.settings.get("welcome_seen") and not self.settings.get("qt_geometry")

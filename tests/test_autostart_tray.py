@@ -50,7 +50,7 @@ def test_shortcut_runs_the_task():
 def test_shortcut_gets_the_program_app_id(monkeypatch, tmp_path):
     """Pinned shortcut and running window must share one AppUserModelID (one taskbar button, own icon)."""
     import fogscout.icon as icon
-    monkeypatch.setattr(icon, "save_ico", lambda path: None)
+    monkeypatch.setattr(icon, "ensure_ico", lambda root: "")
     start = r"C:\Users\Player\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Fog Scout.lnk"
     desk = r"C:\Users\Player\Desktop\Fog Scout.lnk"
 
@@ -225,7 +225,7 @@ def test_install_removes_the_old_name_s_tasks_and_shortcuts_first(monkeypatch, t
     """1.9: until 1.8.91 the tasks and shortcuts said "DbD Map Scout" – they go when the new ones are made, nothing
     else does, and a failure there never stops the setup."""
     import fogscout.icon as icon
-    monkeypatch.setattr(icon, "save_ico", lambda path: None)
+    monkeypatch.setattr(icon, "ensure_ico", lambda root: "")
     scripts = []
 
     def fake(script):
@@ -235,9 +235,10 @@ def test_install_removes_the_old_name_s_tasks_and_shortcuts_first(monkeypatch, t
         return True, r"C:\x\Fog Scout.lnk" if "CreateShortcut" in script else ""
     monkeypatch.setattr(au, "powershell", fake)
     monkeypatch.setattr(au, "set_link_app_id", lambda path: True)
-    (tmp_path / au.OLD_ICON).write_bytes(b"\0")                   # the icon only the old shortcuts showed
+    for old in icon.OLD_FILES:                                     # the icons only the old shortcuts showed
+        (tmp_path / old).write_bytes(b"\0")
     ok, _msg = au.install(str(tmp_path))
-    assert ok and len(scripts) == 4 and not (tmp_path / au.OLD_ICON).exists()
+    assert ok and len(scripts) == 4 and not any((tmp_path / old).exists() for old in icon.OLD_FILES)
     first = scripts[0]
     assert "Unregister-ScheduledTask" in first and "'DbD Map Scout'" in first and "'DbD Map Scout (Autostart)'" in first
     assert "'DbD Map Scout.lnk'" in first and "Remove-Item -LiteralPath" in first
@@ -255,4 +256,17 @@ def test_ensure_keeps_an_autostart_that_ran_under_the_old_name(monkeypatch):
     monkeypatch.setattr(au, "install", lambda root: calls.append("install") or (True, "ok"))
     monkeypatch.setattr(au, "set_autostart", lambda root, on: calls.append(("autostart", on)) or (True, ""))
     assert au.ensure(ROOT, 5, ROOT) == (True, "ok") and calls == ["install", ("autostart", True)]
-    assert au.SETUP_VERSION == 6                                  # a renewed setup for every installation
+    assert au.SETUP_VERSION == 7                                  # a renewed setup for every installation
+
+
+def test_the_shortcut_and_the_window_point_at_the_same_task_and_icon(monkeypatch, tmp_path):
+    """1.9.1 (user's screenshot: the Python icon on the taskbar after the rename): the window carries relaunch
+    properties with the task command and the versioned icon file – what the shortcuts carry too."""
+    from fogscout import icon
+    monkeypatch.setenv("SystemRoot", r"C:\Windows")
+    cmd = au.relaunch_command()
+    assert cmd == r'"C:\Windows\System32\schtasks.exe" /run /tn "Fog Scout"'
+    assert au.shortcut_script(ROOT, "", "Desktop").count("'/run /tn \"Fog Scout\"'") == 1
+    assert icon.FILE == "fogscout-2.ico" and icon.FILE not in icon.OLD_FILES
+    s = au.shortcut_script(ROOT, os.path.join(ROOT, icon.FILE))
+    assert "fogscout-2.ico,0'" in s

@@ -23,7 +23,7 @@ def test_old_runtime_files_are_renamed_or_removed_once(tmp_path):
     assert done == ["dbdmapscout-crash.txt", "dbdmapscout-crash-last.txt", "dbdmapscout.log"]
     assert (tmp_path / diagnose.CRASH_FILE).read_text(encoding="utf-8") == "boom"       # renamed
     assert (tmp_path / diagnose.CRASH_LAST).read_text(encoding="utf-8") == "new"        # the newer file stays
-    assert sorted(p.name for p in tmp_path.iterdir()) == [rename.OLD_ICON, diagnose.CRASH_LAST, diagnose.CRASH_FILE,
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["dbdmapscout.ico", diagnose.CRASH_LAST, diagnose.CRASH_FILE,
                                                           "rounds.jsonl"]                # the icon: autostart.install
     assert rename.migrate(str(tmp_path)) == []                                          # nothing left: no-op
     assert rename.migrate(str(tmp_path / "missing")) == []                              # no folder: no error

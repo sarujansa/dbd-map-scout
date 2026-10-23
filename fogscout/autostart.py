@@ -26,11 +26,11 @@ import os
 import subprocess
 import sys
 
+from . import icon as icon_mod
 from .appid import set_link_app_id
 from .i18n import _
-from .rename import OLD_ICON
 
-SETUP_VERSION = 6           # raise when task, shortcut or icon change: the program then renews them itself
+SETUP_VERSION = 7           # raise when task, shortcut or icon change: the program then renews them itself
 TASK = "Fog Scout"
 TASK_AUTO = "Fog Scout (Autostart)"
 LINK_NAME = "Fog Scout.lnk"
@@ -85,6 +85,12 @@ def remove_old_script() -> str:
         lines.append(f"$old = Join-Path ([Environment]::GetFolderPath({_q(folder)})) {_q(OLD_LINK_NAME)}")
         lines.append("if (Test-Path -LiteralPath $old) { Remove-Item -LiteralPath $old -Force }")
     return "\n".join(lines)
+
+
+def relaunch_command() -> str:
+    """1.9.1: what the taskbar runs for a pinned button of the window – the same as the shortcuts (the task)."""
+    system_root = (os.environ.get("SystemRoot") or r"C:\Windows").rstrip("\\/")
+    return f'"{system_root}\\System32\\schtasks.exe" /run /tn "{TASK}"'
 
 
 def shortcut_script(root: str, icon: str, folder: str = "Desktop") -> str:
@@ -169,17 +175,16 @@ def ensure(root: str, saved_version, saved_root):
 
 def install(root: str):
     """Icon, on-demand task, desktop and Start menu shortcut. Returns (ok, message)."""
-    from .icon import save_ico
-    icon = os.path.join(root, "fogscout.ico")
     try:
-        save_ico(icon)
+        icon = icon_mod.ensure_ico(root)
     except OSError:
         icon = ""
     powershell(remove_old_script())                 # 1.9: the old name's tasks and shortcuts (best effort) …
-    try:
-        os.remove(os.path.join(root, OLD_ICON))    # … and the icon only they showed
-    except OSError:
-        pass
+    for old in icon_mod.OLD_FILES:                  # … and the icons only they showed (1.9.1: also 1.9's file)
+        try:
+            os.remove(os.path.join(root, old))
+        except OSError:
+            pass
     ok, out = powershell(task_script(root, TASK, False))
     if not ok:
         return False, _("Aufgabe konnte nicht angelegt werden: {error}", error=out)

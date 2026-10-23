@@ -76,11 +76,10 @@ class App(ServerTab, StatsTab, ExportDialog, RecordingsTab, DiscordPresence, Spo
         self._errors_seen = set()
         self._log_entries = collections.deque(maxlen=1500)
         self._qt_init()                  # Qt application; self.root = its main loop (timers, clipboard …)
-        ico = os.path.join(root_dir, "fogscout.ico")        # also made by the shortcut setup
-        if IS_WIN and not os.path.exists(ico):
+        if IS_WIN:
             try:
-                from .icon import save_ico
-                save_ico(ico)                                  # the taskbar button shows this icon
+                from .icon import ensure_ico
+                ensure_ico(root_dir)             # the taskbar button shows this icon (1.9.1: renewed per version)
             except OSError:
                 pass
 
