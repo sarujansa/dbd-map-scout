@@ -62,6 +62,30 @@ class YouTubeUpload:
                                                  command=self._youtube_login)).pack(side="left", padx=(6, 0))
         self._reg("st.more.yt_logout", ui.Button(row2, text=_("YouTube-Verbindung trennen"),
                                                   command=self._youtube_logout)).pack(side="left", padx=(6, 0))
+        # 1.11: playlists – the login asks for the wider scope "youtube" only with this box ticked
+        row3 = ui.Frame(yc)
+        row3.pack(fill="x", pady=(4, 0))
+        self.yt_pl_var = ui.BooleanVar(value=bool(self.settings.get("youtube_playlists", False)))
+        self._reg("st.more.yt_pl_on", ui.Checkbutton(row3, text=_("Uploads in Playlists einsortieren"),
+                                                      variable=self.yt_pl_var,
+                                                      command=self._youtube_playlists_toggle)).pack(side="left")
+        self._reg("st.more.yt_pl_load", ui.Button(row3, text=_("Playlists laden"),
+                                                   command=self._youtube_playlists_load)).pack(side="left", padx=(6, 0))
+        row4 = ui.Frame(yc)
+        row4.pack(fill="x", pady=(4, 0))
+        self.yt_pl_vars = {"clip": ui.StringVar(), "round": ui.StringVar()}
+        self._yt_pl_items = []
+        self._reg("st.more.yt_pl_clip.label", ui.Label(row4, text=_("Clips in"))).pack(side="left")
+        self.yt_pl_cbs = {"clip": self._reg("st.more.yt_pl_clip", ui.Combobox(
+            row4, textvariable=self.yt_pl_vars["clip"], state="readonly", width=22, values=[]))}
+        self.yt_pl_cbs["clip"].pack(side="left", padx=6)
+        self._reg("st.more.yt_pl_round.label", ui.Label(row4, text=_("Runden in"))).pack(side="left", padx=(10, 0))
+        self.yt_pl_cbs["round"] = self._reg("st.more.yt_pl_round", ui.Combobox(
+            row4, textvariable=self.yt_pl_vars["round"], state="readonly", width=22, values=[]))
+        self.yt_pl_cbs["round"].pack(side="left", padx=6)
+        for cb in self.yt_pl_cbs.values():
+            cb.bind("<<ComboboxSelected>>", lambda e: self._youtube_setting())
+        self._yt_playlists_fill()
         self.yt_status_var = ui.StringVar(value="")
         self._reg("st.more.yt_status", ui.Label(yc, textvariable=self.yt_status_var, wraplength=420,
                                                  style="Dim.TLabel")).pack(anchor="w", pady=(4, 0))
@@ -74,21 +98,29 @@ class YouTubeUpload:
             "Google erlaubt mit dem Standardkontingent etwa sechs Uploads am Tag; was nicht mehr passt, wartet in der "
             "Warteschlange bis zum nächsten Tag. Hochgeladen wird nur, wenn keine Runde läuft; die Datei bleibt immer "
             "auch auf der Platte. Gesendet werden nur die Videodatei, Titel (Map, Killer, Datum) und Beschreibung – "
-            "nie Spielernamen; die Freigabe liegt verschlüsselt auf diesem PC."),
+            "nie Spielernamen; die Freigabe liegt verschlüsselt auf diesem PC. Mit „Uploads in Playlists einsortieren“ kommt jedes Video "
+            "zusätzlich in eine Playlist deiner Wahl – dafür fragt die Anmeldung die breitere Berechtigung „YouTube-Konto "
+            "verwalten“ an (einmal neu verbinden)."),
             style="Dim.TLabel", wraplength=420)).pack(anchor="w", pady=(4, 0))
 
     def _youtube_setting(self, save=True):
         on, cid = bool(self.yt_on_var.get()), self.yt_id_var.get().strip()
         secret = self.yt_secret_var.get().strip()
         privacy = next((k for k, lbl in self._yt_privacies if lbl == self.yt_privacy_var.get()), "private")
+        manage = bool(self.yt_pl_var.get())
+        playlists = {key: self._yt_pl_id(var.get()) for key, var in self.yt_pl_vars.items()}
         if save:
             self.settings.set("youtube_on", on)
             self.settings.set("youtube_client_id", cid)
             self.settings.set("youtube_client_secret", spotify.protect(secret))
             self.settings.set("youtube_privacy", privacy)
+            self.settings.set("youtube_playlists", manage)
+            for key, pid in playlists.items():
+                self.settings.set(f"youtube_playlist_{key}", pid)
             self._save_soon()
         self.youtube.configure(on, cid, secret, privacy, self.settings.get("youtube_token", ""),
-                               self.settings.get("youtube_queue") or [], self.settings.get("youtube_quota") or {})
+                               self.settings.get("youtube_queue") or [], self.settings.get("youtube_quota") or {},
+                               manage=manage, playlists=playlists)
         self._yt_queued = {str(d.get("rel")) for d in (self.settings.get("youtube_queue") or [])
                            if isinstance(d, dict) and d.get("rel")}
 
@@ -102,6 +134,52 @@ class YouTubeUpload:
 
     def _youtube_logout(self):
         self.youtube.logout()
+
+    # ---------------------------------------------------------- playlists (1.11)
+    def _yt_pl_names(self) -> dict:
+        names = self.settings.get("youtube_playlist_names") or {}
+        return {str(k): str(v) for k, v in names.items() if k} if isinstance(names, dict) else {}
+
+    def _yt_playlists_fill(self):
+        """The two choices: "(keine)" + the playlists Google listed; a chosen id Google no longer lists stays
+        selectable under its id. Labels are made unique (two playlists may share a title)."""
+        names = self._yt_pl_names()
+        chosen = {key: str(self.settings.get(f"youtube_playlist_{key}") or "") for key in self.yt_pl_vars}
+        for pid in chosen.values():
+            if pid:
+                names.setdefault(pid, pid)
+        items, seen = [("", _("(keine)"))], {_("(keine)")}
+        for pid, title in sorted(names.items(), key=lambda kv: (kv[1].lower(), kv[0])):
+            label = title
+            if label in seen:
+                label = f"{title} ({pid[-4:]})"
+            seen.add(label)
+            items.append((pid, label))
+        self._yt_pl_items = items
+        labels = [lbl for _pid, lbl in items]
+        for key, cb in self.yt_pl_cbs.items():
+            cb.configure(values=labels)
+            self.yt_pl_vars[key].set(next((lbl for pid, lbl in items if pid == chosen[key]), labels[0]))
+
+    def _yt_pl_id(self, label: str) -> str:
+        return next((pid for pid, lbl in self._yt_pl_items if lbl == label), "")
+
+    def _youtube_playlists_toggle(self):
+        self._youtube_setting()
+        if self.yt_pl_var.get() and self._yt_ready() and not self._yt_pl_names():
+            self.yt_status_var.set(_("YouTube: lade Playlists …"))
+            self.youtube.list_playlists()
+
+    def _youtube_playlists_load(self):
+        self._youtube_setting()
+        if not self.yt_pl_var.get():
+            self.yt_status_var.set(_("YouTube: zuerst „Uploads in Playlists einsortieren“ anhaken."))
+            return
+        if not self._yt_ready():
+            self.yt_status_var.set(_("YouTube: nicht verbunden – „Mit YouTube verbinden“ klicken."))
+            return
+        self.yt_status_var.set(_("YouTube: lade Playlists …"))
+        self.youtube.list_playlists()
 
     def _youtube_file(self, path=None):
         """1.10.1: the client_secret_….json Google offers after the OAuth client was created – no copying of id
@@ -165,6 +243,24 @@ class YouTubeUpload:
         elif kind == "failed":
             self._log(_("YouTube: nicht hochgeladen – {file}: {why}", file=os.path.basename(data.get("rel", "")),
                         why=data.get("why", "")), "Fehler")
+        elif kind == "playlists":                             # 1.11
+            if data.get("ok"):
+                names = {str(pid): str(title) for pid, title in (data.get("items") or []) if pid}
+                self.settings.set("youtube_playlist_names", names)
+                self._save_soon()
+                self._yt_playlists_fill()
+                self.yt_status_var.set(_("YouTube: {n} Playlists geladen – im Kasten auswählen", n=len(names)) if names
+                                       else _("YouTube: keine Playlists auf dem Kanal – zuerst auf YouTube eine anlegen"))
+            else:
+                self._log(_("YouTube: Playlists nicht geladen – {why}", why=data.get("why", "")), "Fehler")
+        elif kind == "playlist":
+            file, pid = os.path.basename(data.get("rel", "")), str(data.get("playlist") or "")
+            if data.get("ok"):
+                self._log(_("YouTube: {file} in Playlist „{name}“ einsortiert", file=file,
+                            name=self._yt_pl_names().get(pid, pid)), "System")
+            else:
+                self._log(_("YouTube: {file} hochgeladen, aber nicht in die Playlist – {why}", file=file,
+                            why=data.get("why", "")), "Fehler")
 
     # ---------------------------------------------------------- what the recordings tab asks for
     def _yt_who(self, role, killer) -> str:

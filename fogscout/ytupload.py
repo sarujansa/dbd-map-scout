@@ -45,9 +45,15 @@ log = logging.getLogger(__name__)
 
 ENDPOINTS = {"auth": "https://accounts.google.com/o/oauth2/v2/auth",
              "token": "https://oauth2.googleapis.com/token",
-             "upload": "https://www.googleapis.com/upload/youtube/v3/videos"}
+             "upload": "https://www.googleapis.com/upload/youtube/v3/videos",
+             "playlists": "https://www.googleapis.com/youtube/v3/playlists",          # 1.11: playlists.list (mine)
+             "items": "https://www.googleapis.com/youtube/v3/playlistItems"}          # 1.11: playlistItems.insert
 CONSOLE = "https://console.cloud.google.com/apis/credentials"
 SCOPE = "https://www.googleapis.com/auth/youtube.upload"
+SCOPE_MANAGE = "https://www.googleapis.com/auth/youtube"   # 1.11: playlists (list + add); asked for only with the box ticked
+PLAYLIST_COST = 50                # playlistItems.insert (units)
+LIST_COST = 1                     # playlists.list, per page of 50
+PLAYLIST_PAGES = 4                # at most 200 playlists are listed
 REDIRECT_PATH = spotify.REDIRECT_PATH
 LOGIN_WAIT_S = 180.0
 QUOTA_DAY = 10000                 # units per project and day (Google's default)
@@ -184,14 +190,21 @@ def read_client_file(path: str) -> tuple:
     return cid, secret
 
 
-def auth_url(client_id: str, state: str, challenge: str, redirect: str) -> str:
-    q = {"client_id": client_id, "redirect_uri": redirect, "response_type": "code", "scope": SCOPE,
+def auth_url(client_id: str, state: str, challenge: str, redirect: str, manage: bool = False) -> str:
+    """``manage``: also ask for SCOPE_MANAGE (playlists) – only when the user ticked the playlist box."""
+    q = {"client_id": client_id, "redirect_uri": redirect, "response_type": "code",
+         "scope": SCOPE + (" " + SCOPE_MANAGE if manage else ""),
          "code_challenge": challenge, "code_challenge_method": "S256", "state": state,
          "access_type": "offline", "prompt": "consent"}            # offline + consent: a refresh token every time
     return ENDPOINTS["auth"] + "?" + urllib.parse.urlencode(q)
 
 
-def _token_request(form: dict) -> spotify.Token:
+@dataclass(frozen=True)
+class GToken(spotify.Token):
+    scopes: tuple = ()               # what Google granted (the token answer's "scope"; empty = not told)
+
+
+def _token_request(form: dict) -> GToken:
     data = urllib.parse.urlencode(form).encode("ascii")
     _status, _h, body = _call(ENDPOINTS["token"], data, {"Content-Type": "application/x-www-form-urlencoded"})
     d = _parse(body)
@@ -202,15 +215,16 @@ def _token_request(form: dict) -> spotify.Token:
         ttl = float(d.get("expires_in", 3600))
     except (TypeError, ValueError):
         ttl = 3600.0
-    return spotify.Token(access, str(d.get("refresh_token") or form.get("refresh_token") or ""), time.time() + ttl)
+    return GToken(access, str(d.get("refresh_token") or form.get("refresh_token") or ""), time.time() + ttl,
+                  tuple(str(d.get("scope") or "").split()))
 
 
-def exchange_code(client_id: str, secret: str, code: str, verifier: str, redirect: str) -> spotify.Token:
+def exchange_code(client_id: str, secret: str, code: str, verifier: str, redirect: str) -> GToken:
     return _token_request({"grant_type": "authorization_code", "code": code, "redirect_uri": redirect,
                            "client_id": client_id, "client_secret": secret, "code_verifier": verifier})
 
 
-def refresh(client_id: str, secret: str, refresh_token: str) -> spotify.Token:
+def refresh(client_id: str, secret: str, refresh_token: str) -> GToken:
     """A new access token; Google hands out no new refresh token here, the old one stays."""
     return _token_request({"grant_type": "refresh_token", "refresh_token": refresh_token, "client_id": client_id,
                            "client_secret": secret})
@@ -239,13 +253,13 @@ class Quota:
         if self.day != day:
             self.day, self.used = day, 0
 
-    def allows(self, now: float) -> bool:
+    def allows(self, now: float, cost: int = UPLOAD_COST) -> bool:
         self.roll(now)
-        return self.used + UPLOAD_COST <= QUOTA_DAY
+        return self.used + cost <= QUOTA_DAY
 
-    def spend(self, now: float):
+    def spend(self, now: float, cost: int = UPLOAD_COST):
         self.roll(now)
-        self.used += UPLOAD_COST
+        self.used += cost
 
     def exhaust(self, now: float):
         self.roll(now)
@@ -276,6 +290,7 @@ class Job:
     session: str = ""                # Google's resumable session URI once the upload was opened
     size: int = 0
     attempts: int = 0
+    video: str = ""                  # 1.11: the uploaded video's id while the playlist step is still due
 
     @classmethod
     def from_dict(cls, d) -> "Job | None":
@@ -374,12 +389,43 @@ def video_url(video_id: str) -> str:
     return VIDEO_URL.format(id=video_id)
 
 
+# ------------------------------------------------------------------ playlists (1.11, SCOPE_MANAGE)
+def list_playlists(access: str) -> tuple:
+    """The user's own playlists: ([(id, title), …], pages read). playlists.list mine=true, LIST_COST per page."""
+    out, token, pages = [], "", 0
+    while pages < PLAYLIST_PAGES:
+        q = {"part": "snippet", "mine": "true", "maxResults": "50"}
+        if token:
+            q["pageToken"] = token
+        _s, _h, body = _call(ENDPOINTS["playlists"] + "?" + urllib.parse.urlencode(q), None,
+                             {"Authorization": f"Bearer {access}"})
+        pages += 1
+        d = _parse(body)
+        for it in d.get("items") or []:
+            if isinstance(it, dict) and it.get("id"):
+                snippet = it.get("snippet") if isinstance(it.get("snippet"), dict) else {}
+                out.append((str(it["id"]), str(snippet.get("title") or it["id"])))
+        token = str(d.get("nextPageToken") or "")
+        if not token:
+            break
+    return out, pages
+
+
+def add_to_playlist(access: str, playlist_id: str, video_id: str):
+    """playlistItems.insert (PLAYLIST_COST): the video at the end of the playlist. Errors raise YouTubeError."""
+    body = json.dumps({"snippet": {"playlistId": playlist_id,
+                                   "resourceId": {"kind": "youtube#video", "videoId": video_id}}}).encode("utf-8")
+    _call(ENDPOINTS["items"] + "?part=snippet", body,
+          {"Authorization": f"Bearer {access}", "Content-Type": "application/json; charset=UTF-8"})
+
+
 # ------------------------------------------------------------------ the thread
 class Uploader(threading.Thread):
     """Keeps the login and works the queue: one job at a time, chunk by chunk, only while not ``paused`` (a round
     runs) and while the day's quota allows. ``post(kind, data)``: "status" -> (text, ok); "token" -> the protected
     refresh token to keep ("" = forget); "queue" -> [job dicts] to keep whenever it changes; "quota" -> dict;
-    "progress" -> (rel, sent, size); "done" -> {rel, kind, id, url}; "failed" -> {rel, kind, why}."""
+    "progress" -> (rel, sent, size); "done" -> {rel, kind, id, url}; "failed" -> {rel, kind, why};
+    1.11: "playlists" -> {ok, why, items: [[id, title], …]}; "playlist" -> {rel, kind, ok, playlist, why}."""
 
     def __init__(self, post, opener=None):
         super().__init__(name="youtube", daemon=True)
@@ -389,6 +435,10 @@ class Uploader(threading.Thread):
         self.on = False                   # clips go up by themselves (the queue is worked either way)
         self.client_id, self.secret = "", ""
         self.privacy = "private"
+        self.manage = False               # 1.11: playlists wanted (the login then asks for SCOPE_MANAGE)
+        self.playlists = {}               # kind -> playlist id ("" = none)
+        self._scopes = ()                 # what the current login grants (known after a token answer)
+        self._probed = False              # a token answer was fetched just to learn the scopes
         self.folder = ""
         self.paused = False
         self.jobs: list = []
@@ -406,9 +456,11 @@ class Uploader(threading.Thread):
         self.uploaded = 0                 # videos done since start (diagnosis)
 
     # ---- UI thread
-    def configure(self, on: bool, client_id: str, secret: str, privacy: str, stored_token="", jobs=None, quota=None):
+    def configure(self, on: bool, client_id: str, secret: str, privacy: str, stored_token="", jobs=None, quota=None,
+                  manage: bool = False, playlists=None):
         self.cmds.put(("config", (bool(on), str(client_id or "").strip(), str(secret or "").strip(),
-                                  str(privacy or "private"), str(stored_token or ""), list(jobs or []), quota)))
+                                  str(privacy or "private"), str(stored_token or ""), list(jobs or []), quota,
+                                  bool(manage), {str(k): str(v or "") for k, v in dict(playlists or {}).items()})))
 
     def set_folder(self, folder):
         self.cmds.put(("folder", str(folder or "")))
@@ -421,6 +473,10 @@ class Uploader(threading.Thread):
 
     def logout(self):
         self.cmds.put(("logout", None))
+
+    def list_playlists(self):
+        """1.11: fetch the channel's playlists once (LIST_COST) -> event "playlists"."""
+        self.cmds.put(("playlists", None))
 
     def add(self, job: Job):
         self.cmds.put(("add", job))
@@ -437,6 +493,7 @@ class Uploader(threading.Thread):
 
     def diag_line(self) -> str:
         return (f"YouTube: an={self.on}, Zustand={self.state}, Pause={self.paused}, Warteschlange={len(self.jobs)}, "
+                f"Playlists={self.manage}, Rechte={len(self._scopes)}, "
                 f"Kontingent={self.quota.used}/{QUOTA_DAY} ({self.quota.day}), hochgeladen={self.uploaded}, "
                 f"Status={self.status}")
 
@@ -460,10 +517,11 @@ class Uploader(threading.Thread):
 
     def _command(self, cmd, arg):
         if cmd == "config":
-            on, cid, secret, privacy, stored, jobs, quota = arg
+            on, cid, secret, privacy, stored, jobs, quota, manage, playlists = arg
             if (cid, secret) != (self.client_id, self.secret):     # tokens belong to the client: a new one starts over
                 self._drop_tokens(tell=bool(self.client_id and self._refresh))
             self.on, self.client_id, self.secret, self.privacy = on, cid, secret, privacy
+            self.manage, self.playlists = manage, playlists
             if not self._refresh:
                 self._refresh = spotify.unprotect(stored)
             if not self.jobs:
@@ -477,6 +535,8 @@ class Uploader(threading.Thread):
             self.paused = arg
         elif cmd == "login":
             self._start_login()
+        elif cmd == "playlists":
+            self._list_playlists()
         elif cmd == "logout":
             self._stop_login()
             self._drop_tokens(tell=True)
@@ -508,7 +568,7 @@ class Uploader(threading.Thread):
         self._tell("queue", [asdict(j) for j in self.jobs])
 
     def _drop_tokens(self, tell: bool):
-        self._token, self._refresh = spotify.Token(), ""
+        self._token, self._refresh, self._scopes, self._probed = spotify.Token(), "", (), False
         if tell:
             self._tell("token", "")
 
@@ -535,7 +595,7 @@ class Uploader(threading.Thread):
         self.state = "linking"
         self._say(_("YouTube: öffne die Anmeldung im Browser …"), True)
         try:
-            self._open(auth_url(self.client_id, state, challenge, self._redirect))
+            self._open(auth_url(self.client_id, state, challenge, self._redirect, manage=self.manage))
         except Exception as e:
             self._stop_login()
             self.state = "error"
@@ -557,7 +617,7 @@ class Uploader(threading.Thread):
                 self._say(_("YouTube: Anmeldung abgelehnt ({error})", error=srv.error), False)
                 return
             tok = exchange_code(self.client_id, self.secret, srv.code, self._verifier, self._redirect)
-            self._token, self._refresh = tok, tok.refresh
+            self._token, self._refresh, self._scopes = tok, tok.refresh, tok.scopes
             if not tok.refresh:
                 self.state = "login_needed"
                 self._say(_("YouTube: Google gab kein dauerhaftes Token – in der Cloud Console den OAuth-Client als "
@@ -565,7 +625,9 @@ class Uploader(threading.Thread):
                 return
             self._tell("token", spotify.protect(tok.refresh))
             self.state = "linked"
-            self._say(_("YouTube: verbunden"), True)
+            self._say(self._linked_status(), True)
+            if self.manage and self._has_manage():
+                self._list_playlists()                    # the new login can: fill the choices right away
         elif time.time() - self._login_at > LOGIN_WAIT_S:
             self._stop_login()
             self.state = "login_needed"
@@ -584,10 +646,82 @@ class Uploader(threading.Thread):
                 self._drop_tokens(tell=True)
             raise
         self._token = tok
+        if tok.scopes:
+            self._scopes = tok.scopes
         if tok.refresh and tok.refresh != self._refresh:
             self._refresh = tok.refresh
             self._tell("token", spotify.protect(tok.refresh))
         return tok.access
+
+    # ---- playlists (1.11)
+    def _has_manage(self) -> bool:
+        """The login grants SCOPE_MANAGE – or has not said yet (empty: the first token answer tells)."""
+        return not self._scopes or SCOPE_MANAGE in self._scopes
+
+    def _linked_status(self) -> str:
+        if self.manage and not self._has_manage():
+            return _("YouTube: verbunden – für Playlists einmal neu „Mit YouTube verbinden“ klicken.")
+        return _("YouTube: verbunden")
+
+    def _playlist_for(self, job: Job) -> str:
+        return str(self.playlists.get(job.kind) or "") if self.manage else ""
+
+    def _cost(self, job: Job) -> int:
+        """Units the job still needs: the insert (unless the video is up already) and the playlist step."""
+        return (0 if job.video else UPLOAD_COST) + (PLAYLIST_COST if self._playlist_for(job) else 0)
+
+    def _access_failed(self, e: YouTubeError):
+        if e.kind == "auth":
+            self.state = "login_needed"
+            self._say(_("YouTube: Anmeldung abgelaufen – noch einmal „Mit YouTube verbinden“ klicken."), False)
+        else:
+            self._retry_at = time.time() + RETRY_S
+            self._say(_("YouTube: {error} – neuer Versuch in {s} s", error=e, s=int(RETRY_S)), False)
+
+    def _list_playlists(self):
+        now = time.time()
+        try:
+            access = self._access()
+            if not self._has_manage():
+                raise YouTubeError(_("Berechtigung fehlt – noch einmal „Mit YouTube verbinden“ klicken"), "forbidden",
+                                   "insufficientPermissions")
+            items, pages = list_playlists(access)
+        except YouTubeError as e:
+            if e.kind == "auth":
+                self._access_failed(e)
+            self._tell("playlists", {"ok": False, "why": str(e), "items": []})
+            return
+        self.quota.spend(now, LIST_COST * max(1, pages))
+        self._tell("quota", asdict(self.quota))
+        self._tell("playlists", {"ok": True, "why": "", "items": [[pid, title] for pid, title in items]})
+
+    def _playlist_step(self, job: Job, access: str, now: float):
+        """After the upload: the video into its playlist (when one is chosen and the login allows), then the job
+        is done. Quota, expired token and network errors raise – the step is tried again, never the upload."""
+        pid = self._playlist_for(job)
+        note = {"rel": job.rel, "kind": job.kind, "ok": False, "playlist": pid, "why": ""}
+        if pid and not self._has_manage():
+            note["why"] = _("Berechtigung fehlt – noch einmal „Mit YouTube verbinden“ klicken")
+            self._tell("playlist", note)
+        elif pid:
+            try:
+                add_to_playlist(access, pid, job.video)
+            except YouTubeError as e:
+                if e.kind not in ("forbidden", "limit", "gone"):
+                    raise                                 # quota / expired / rate / net: again next time
+                note["why"] = str(e)                      # no right, or the playlist is no more: the video stays up
+                self._tell("playlist", note)
+            else:
+                self.quota.spend(now, PLAYLIST_COST)
+                self._tell("quota", asdict(self.quota))
+                note["ok"] = True
+                self._tell("playlist", note)
+        self._done(job)
+
+    def _done(self, job: Job):
+        self.jobs = [j for j in self.jobs if j.rel != job.rel]
+        self._sent.pop(job.rel, None)
+        self._queue_changed()
 
     # ---- the work
     def _tick(self):
@@ -607,22 +741,30 @@ class Uploader(threading.Thread):
                 self._say(_("YouTube: nicht verbunden – „Mit YouTube verbinden“ klicken."), True)
             return
         if not self.jobs:
-            if self.state != "linked":
+            if self.manage and not self._scopes and not self._probed and now >= self._retry_at:
+                try:
+                    self._access()                        # one token answer tells what the login grants
+                    self._probed = True                   # once: an answer without "scope" must not loop
+                except YouTubeError as e:
+                    self._access_failed(e)
+                    return
+            text = self._linked_status()
+            if self.state != "linked" or text != self.status:
                 self.state = "linked"
-                self._say(_("YouTube: verbunden"), True)
+                self._say(text, True)
             return
         if self.paused:
             self._say(_("YouTube: {n} in der Warteschlange – wartet, bis die Runde vorbei ist", n=len(self.jobs)), True)
             return
         if now < self._retry_at:
             return
-        if not self.quota.allows(now):
+        job = self.jobs[0]
+        if not self.quota.allows(now, self._cost(job)):
             self._say(_("YouTube: {n} in der Warteschlange – Tageskontingent aufgebraucht, weiter ab {when}",
                         n=len(self.jobs), when=time.strftime("%H:%M", time.localtime(next_reset(now)))), True)
             return
-        job = self.jobs[0]
         path = os.path.join(self.folder, job.rel.replace("/", os.sep)) if self.folder else ""
-        if not path or not os.path.isfile(path):
+        if not job.video and (not path or not os.path.isfile(path)):
             self._give_up(job, _("Datei nicht gefunden") if self.folder else _("Aufnahmeordner nicht da"),
                           final=bool(self.folder))
             return
@@ -633,6 +775,9 @@ class Uploader(threading.Thread):
 
     def _work(self, job: Job, path: str, now: float):
         access = self._access()
+        if job.video:                                     # uploaded already, only the playlist step is left
+            self._playlist_step(job, access, now)
+            return
         size = os.path.getsize(path)
         if not job.session or job.size != size:
             job.size = size
@@ -648,7 +793,7 @@ class Uploader(threading.Thread):
                 self._queue_changed()
                 return                                    # the next tick opens a new session (counted again)
             if how == "done":
-                self._finished(job, at)
+                self._uploaded(job, at, access, now)
                 return
             self._sent[job.rel] = at
         deadline = time.time() + TICK_BUDGET_S
@@ -656,7 +801,7 @@ class Uploader(threading.Thread):
             start = self._sent[job.rel]
             how, at = send_chunk(access, job.session, path, start, size)
             if how == "done":
-                self._finished(job, at)
+                self._uploaded(job, at, access, now)
                 return
             self._sent[job.rel] = at
             self._tell("progress", (job.rel, at, size))
@@ -665,13 +810,15 @@ class Uploader(threading.Thread):
             if time.time() > deadline:
                 return
 
-    def _finished(self, job: Job, video_id: str):
-        self.jobs = [j for j in self.jobs if j.rel != job.rel]
+    def _uploaded(self, job: Job, video_id: str, access: str, now: float):
+        """The video is up: the app learns the id at once; the playlist step follows (and finishes the job)."""
+        job.video = video_id
         self._sent.pop(job.rel, None)
         self.uploaded += 1
         self._queue_changed()
         self._tell("done", {"rel": job.rel, "kind": job.kind, "id": video_id, "url": video_url(video_id)})
         self._say(_("YouTube: hochgeladen – {file}", file=os.path.basename(job.rel)), True)
+        self._playlist_step(job, access, now)
 
     def _failed(self, job: Job, e: YouTubeError):
         if e.kind == "quota":

@@ -171,6 +171,14 @@ TIPS = {
     "YouTube-Verbindung trennen": "Vergisst die Google-Freigabe auf diesem PC; die Warteschlange wartet, bis du dich "
                                   "neu verbindest. In deinem Google-Konto unter Sicherheit → Drittanbieter-Apps lässt "
                                   "sich der Zugriff ebenfalls entfernen.",
+    "Uploads in Playlists einsortieren": "Nach dem Upload kommt jedes Video in die gewählte Playlist – für Clips und "
+                                         "Runden getrennt wählbar, beide dürfen dieselbe sein. Braucht bei Google die "
+                                         "Berechtigung „YouTube-Konto verwalten“ statt nur „Videos hochladen“: nach dem "
+                                         "Anhaken einmal neu „Mit YouTube verbinden“. Das Programm nutzt davon nur "
+                                         "Playlists auflisten und Video einsortieren (50 Einheiten je Video; es bleiben "
+                                         "sechs Uploads am Tag).",
+    "Playlists laden": "Holt die Liste deiner Playlists von YouTube (1 Einheit) in die beiden Auswahlfelder. Neue "
+                       "Playlists legst du auf YouTube an und lädst die Liste danach neu.",
     "Auf YouTube hochladen": "Die markierte Datei in die YouTube-Warteschlange (Sichtbarkeit wie in den Einstellungen, "
                              "Standard privat). Hochgeladen wird, sobald keine Runde läuft und das Tageskontingent "
                              "reicht; der Link erscheint danach im Rechtsklick-Menü.",

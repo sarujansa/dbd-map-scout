@@ -32,6 +32,10 @@ class FakeGoogle(threading.Thread):
         self.tokens, self.grants, self.sessions = [], [], {}
         self.inserts = 0
         self.mode = "ok"
+        self.scope = yt.SCOPE             # what the token answers say the login grants (1.11)
+        self.playlists = [("PL1", "Clips"), ("PL2", "Runden")]
+        self.playlist_items = []          # (playlist id, video id) added
+        self.pl_fail_once = False         # the next playlistItems.insert answers 500
         self.verifier_for = {}            # code -> expected code_verifier
         self.dead_refresh = set()
 
@@ -77,7 +81,7 @@ class FakeGoogle(threading.Thread):
                         return self._json(400, {"error": "unsupported_grant_type"})
                     access = f"acc{len(outer.tokens) + 1}"
                     outer.tokens.append(access)
-                    d = {"access_token": access, "token_type": "Bearer", "expires_in": 3599, "scope": yt.SCOPE}
+                    d = {"access_token": access, "token_type": "Bearer", "expires_in": 3599, "scope": outer.scope}
                     if refresh:
                         d["refresh_token"] = refresh
                     return self._json(200, d)
@@ -95,6 +99,30 @@ class FakeGoogle(threading.Thread):
                     self.send_header("Content-Length", "0")
                     self.end_headers()
                     return None
+                if self.path.startswith("/youtube/v3/playlistItems"):
+                    if not self._authed():
+                        return self._api_error(401, "authError", "Invalid Credentials")
+                    if yt.SCOPE_MANAGE not in outer.scope:
+                        return self._api_error(403, "insufficientPermissions", "Insufficient Permission")
+                    if outer.pl_fail_once:
+                        outer.pl_fail_once = False
+                        return self._api_error(500, "backendError", "Backend Error")
+                    snippet = json.loads(raw.decode())["snippet"]
+                    if snippet["playlistId"] not in {pid for pid, _t in outer.playlists}:
+                        return self._api_error(404, "playlistNotFound", "Playlist not found.")
+                    outer.playlist_items.append((snippet["playlistId"], snippet["resourceId"]["videoId"]))
+                    return self._json(200, {"id": f"pli{len(outer.playlist_items)}", "kind": "youtube#playlistItem"})
+                return self._api_error(404, "notFound")
+
+            def do_GET(self):
+                if self.path.startswith("/youtube/v3/playlists"):
+                    if not self._authed():
+                        return self._api_error(401, "authError", "Invalid Credentials")
+                    if yt.SCOPE_MANAGE not in outer.scope:
+                        return self._api_error(403, "insufficientPermissions", "Insufficient Permission")
+                    q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(self.path).query))
+                    assert q.get("mine") == "true" and q.get("part") == "snippet"
+                    return self._json(200, {"items": [{"id": pid, "snippet": {"title": t}} for pid, t in outer.playlists]})
                 return self._api_error(404, "notFound")
 
             def do_PUT(self):
@@ -147,6 +175,8 @@ def fake(monkeypatch):
     monkeypatch.setitem(yt.ENDPOINTS, "auth", f.base + "/auth")
     monkeypatch.setitem(yt.ENDPOINTS, "token", f.base + "/token")
     monkeypatch.setitem(yt.ENDPOINTS, "upload", f.base + "/upload/youtube/v3/videos")
+    monkeypatch.setitem(yt.ENDPOINTS, "playlists", f.base + "/youtube/v3/playlists")
+    monkeypatch.setitem(yt.ENDPOINTS, "items", f.base + "/youtube/v3/playlistItems")
     monkeypatch.setattr(yt, "OPENER", urllib.request.build_opener(urllib.request.ProxyHandler({})))
     monkeypatch.setattr(yt, "CHUNK", 256 * 1024)
     monkeypatch.setattr(yt, "RETRY_S", 0.3)
@@ -211,10 +241,13 @@ def test_auth_url_tokens_and_the_secret(fake):
     q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query))
     assert q["response_type"] == "code" and q["code_challenge_method"] == "S256" and q["scope"] == yt.SCOPE
     assert q["access_type"] == "offline" and q["prompt"] == "consent" and q["redirect_uri"] == "http://127.0.0.1:5/callback"
+    wide = yt.auth_url(CID, "st", "chal", "http://127.0.0.1:5/callback", manage=True)          # 1.11: playlists
+    assert dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(wide).query))["scope"] == f"{yt.SCOPE} {yt.SCOPE_MANAGE}"
     assert yt.valid_client_id(CID) and not yt.valid_client_id("abc") and not yt.valid_client_id("")
     fake.verifier_for["code-1"] = "verifier-1"
     tok = yt.exchange_code(CID, SECRET, "code-1", "verifier-1", "http://127.0.0.1:5/callback")
     assert tok.access == "acc1" and tok.refresh == "ref1" and tok.expires_at > time.time() + 3000
+    assert tok.scopes == (yt.SCOPE,)                                            # what Google granted
     tok2 = yt.refresh(CID, SECRET, "ref1")
     assert tok2.access == "acc2" and tok2.refresh == "ref1"                     # Google gives no new refresh token
     with pytest.raises(yt.YouTubeError) as e:
@@ -414,6 +447,64 @@ def test_a_dead_refresh_token_and_a_missing_file_are_reported(fake, tmp_path):
         # without a client id nothing runs
         up.configure(True, "", "", "private", "", [], {})
         assert _wait(lambda: up.state == "no_id")
+    finally:
+        up.quit()
+        up.join(timeout=3)
+
+
+def test_playlists_take_the_uploaded_videos_only_with_the_wider_scope(fake, tmp_path):
+    """1.11: with the box, the login grants SCOPE_MANAGE: the channel's playlists are listed, each upload lands in the
+    playlist of its kind (a failed insert is tried again without a second upload), the quota counts both. An old
+    login without the scope still uploads, says what is missing and asks to reconnect."""
+    folder = str(tmp_path)
+    _video(folder, "Clips/a.mp4", 300 * 1024)
+    _video(folder, "r.mkv", 300 * 1024)
+    fake.scope = f"{yt.SCOPE} {yt.SCOPE_MANAGE}"
+    events = []
+    up = _uploader(events)
+    try:
+        up.configure(True, CID, SECRET, "private", spotify.protect("ref-stored"), [], {}, manage=True,
+                     playlists={"clip": "PL1", "round": "PL2"})
+        up.set_folder(folder)
+        up.list_playlists()
+        assert _wait(lambda: any(k == "playlists" for k, _d in events))
+        listed = next(d for k, d in events if k == "playlists")
+        assert listed["ok"] and listed["items"] == [["PL1", "Clips"], ["PL2", "Runden"]]
+        fake.pl_fail_once = True                                   # the first insert fails: no second upload
+        up.add(yt.Job(rel="Clips/a.mp4", kind="clip", title="C", description="D"))
+        up.add(yt.Job(rel="r.mkv", kind="round", title="R", description="D"))
+        assert _wait(lambda: sum(1 for k, d in events if k == "playlist" and d["ok"]) == 2, 12)
+        assert fake.playlist_items == [("PL1", "vids1"), ("PL2", "vids2")] and fake.inserts == 2
+        assert [d["rel"] for k, d in events if k == "done"] == ["Clips/a.mp4", "r.mkv"]
+        assert _wait(lambda: up.jobs == [])
+        quotas = [d for k, d in events if k == "quota"]
+        assert quotas[-1]["used"] == yt.LIST_COST + 2 * (yt.UPLOAD_COST + yt.PLAYLIST_COST)
+        assert "Playlists=True" in up.diag_line()
+        assert _wait(lambda: up.status == "YouTube: verbunden")                    # no reconnect hint
+    finally:
+        up.quit()
+        up.join(timeout=3)
+    # the old login (upload only): the status asks to reconnect, uploads go on, the playlist step says why not
+    fake.scope = yt.SCOPE
+    _video(folder, "Clips/b.mp4", 100 * 1024)
+    events, urls = [], []
+    up = _uploader(events, opener=urls.append)
+    try:
+        up.configure(True, CID, SECRET, "private", spotify.protect("ref-stored"), [], {}, manage=True,
+                     playlists={"clip": "PL1"})
+        up.set_folder(folder)
+        assert _wait(lambda: up.state == "linked" and "neu" in up.status)
+        up.add(yt.Job(rel="Clips/b.mp4", kind="clip", title="C", description="D"))
+        assert _wait(lambda: any(k == "playlist" for k, _d in events))
+        note = next(d for k, d in events if k == "playlist")
+        assert not note["ok"] and "verbinden" in note["why"] and any(k == "done" for k, _d in events)
+        assert len(fake.playlist_items) == 2 and _wait(lambda: up.jobs == [])
+        up.list_playlists()
+        assert _wait(lambda: any(k == "playlists" for k, _d in events))
+        assert not next(d for k, d in events if k == "playlists")["ok"]
+        up.login()                                                 # the new login asks for both scopes
+        assert _wait(lambda: bool(urls))
+        assert yt.SCOPE_MANAGE in dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(urls[0]).query))["scope"]
     finally:
         up.quit()
         up.join(timeout=3)
