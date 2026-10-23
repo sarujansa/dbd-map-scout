@@ -1017,6 +1017,10 @@ EN = {
     "Noch keine offiziellen Daten.": "No official data yet.",
     "Neu seit {version}": "New since {version}",
     "sofort": "instant",
+    "HWiNFO läuft nicht: CPU-Temperatur, CPU-Leistung, Kerne und FPS fehlen.":
+        "HWiNFO is not running: CPU temperature, CPU power, cores and FPS are missing.",
+    "Systemwerte: HWiNFO läuft nicht – CPU-Temperatur, CPU-Leistung, Kerne und FPS fehlen in dieser Runde.":
+        "System values: HWiNFO is not running – CPU temperature, CPU power, cores and FPS are missing in this round.",
     "Vorwoche {value}": "last week {value}",
     "{n} Pkt.": "{n} pts",
     "Montag bis jetzt gegenüber der Vorwoche (Mo–So); Custom und Farming zählen nicht.":

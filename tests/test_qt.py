@@ -1857,3 +1857,15 @@ def test_the_overview_compares_this_week_with_the_last_one(qapp, keep):
     assert overview.overview_model(fake_app(), now, is_win=True).week == []        # nothing: no row
     win.show_model(overview.overview_model(fake_app(), now, is_win=True))
     assert page.week_title.isHidden() and all(c.isHidden() for c in page.week_cards)
+
+
+def test_the_overview_says_when_hwinfo_is_missing():
+    """1.8.86: the system card names the values HWiNFO would add while it is not running; nothing once it was seen."""
+    from dbdmapscout.sysinfo import Snapshot
+    now = time.time()
+    snap = Snapshot(cpu_load=10, t=now)
+    app = fake_app(sysmon=SimpleNamespace(active=True, snapshot=snap, hwinfo_seen=False))
+    app.settings["sysinfo"] = "right"
+    assert "HWiNFO" in overview.overview_model(app, now, is_win=True).system_note
+    app.sysmon.hwinfo_seen = True
+    assert overview.overview_model(app, now, is_win=True).system_note == ""

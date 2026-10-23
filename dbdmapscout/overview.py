@@ -263,6 +263,9 @@ def system(app, now: float, is_win: bool) -> tuple[list, str]:
     note = ""
     if s.throttle:
         note = _("GPU DROSSELT (TEMP.)") if s.throttle == "thermal" else _("GPU DROSSELT (HW)")
+    if not s.hwinfo and not getattr(app.sysmon, "hwinfo_seen", False):     # 1.8.86: say what is missing, and why
+        hw = _("HWiNFO läuft nicht: CPU-Temperatur, CPU-Leistung, Kerne und FPS fehlen.")
+        note = f"{note} · {hw}" if note else hw
     return rows, note
 
 

@@ -2143,3 +2143,44 @@ def test_the_search_finds_statistics_tabs_and_log_categories(app_root):
         assert app.stats_nb.tab(app.stats_nb.select(), "text") == "Gegner & Builds"
     finally:
         app.quit()
+
+
+def test_a_round_without_hwinfo_is_said_once_per_dbd_start(app_root):
+    """1.8.86 (user: empty CPU columns in the statistics): with the system values on and DBD running, the log says
+    once per DBD start that HWiNFO is not running – after HWINFO_WAIT_S, not again until DBD was closed."""
+    import json
+    from dbdmapscout import app_sysinfo
+    from dbdmapscout.app import App
+    from dbdmapscout.sysinfo import Snapshot
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        told = lambda: sum(1 for e in app._log_entries if "HWiNFO läuft nicht" in e[2])   # noqa: E731
+        now = time.time()
+        app.game = object()
+        app.sysmon.active = True
+        app.sysmon.snapshot = Snapshot(cpu_load=10, t=now)
+        app._hwinfo_check(now)
+        app._hwinfo_check(now + app_sysinfo.HWINFO_WAIT_S - 1)
+        assert told() == 0
+        app.sysmon.snapshot = Snapshot(cpu_load=10, t=now + app_sysinfo.HWINFO_WAIT_S)
+        app._hwinfo_check(now + app_sysinfo.HWINFO_WAIT_S)
+        app._hwinfo_check(now + app_sysinfo.HWINFO_WAIT_S + 30)
+        assert told() == 1                                               # once
+        app.game = None
+        app._hwinfo_check(now + 100)                                     # DBD gone: the next start may say it again
+        app.game = object()
+        app.sysmon.snapshot = Snapshot(cpu_load=10, t=now + 200)
+        app._hwinfo_check(now + 200)
+        app.sysmon.snapshot = Snapshot(cpu_load=10, t=now + 200 + app_sysinfo.HWINFO_WAIT_S)   # a fresh reading
+        app._hwinfo_check(now + 200 + app_sysinfo.HWINFO_WAIT_S)
+        assert told() == 2
+        app.sysmon.snapshot = Snapshot(cpu_load=10, t=now + 300, hwinfo=True)       # HWiNFO there: never
+        app.game = None
+        app._hwinfo_check(now + 300)
+        app.game = object()
+        app._hwinfo_check(now + 300)
+        app._hwinfo_check(now + 400)
+        assert told() == 2
+    finally:
+        app.quit()
