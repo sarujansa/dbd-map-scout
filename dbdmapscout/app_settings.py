@@ -7,7 +7,7 @@ import logging
 import os
 import threading
 import time
-from . import __version__, backups, i18n, obsrec, qt_theme, regions, status, whatsnew
+from . import __version__, backups, i18n, obsoverlay, obsrec, qt_theme, regions, status, whatsnew
 from . import uimodel as ui
 from .capture import IS_WIN, foreground_root, is_game_window
 from . import autostart
@@ -271,6 +271,9 @@ class SettingsTab:
         self.rec_window_var = ui.BooleanVar(value=bool(self.settings.get("rec_window", False)))   # 1.8.41
         self._reg("st.more.rec_window", ui.Checkbutton(rc, text=_("Nur das DBD-Fenster aufnehmen"),
                                                         variable=self.rec_window_var, command=self._rec_setting)).pack(anchor="w")
+        self.rec_overlay_var = ui.BooleanVar(value=bool(self.settings.get("rec_overlay", False)))   # 1.8.89
+        self._reg("st.more.rec_overlay", ui.Checkbutton(rc, text=_("Overlay mit in die Aufnahme"),
+                                                         variable=self.rec_overlay_var, command=self._rec_setting)).pack(anchor="w")
         self.rec_merge_var = ui.BooleanVar(value=bool(self.settings.get("rec_merge", True)))       # 1.4.2
         self._reg("st.more.rec_merge", ui.Checkbutton(rc, text=_("Vorlauf und Runde zu einer Datei zusammenfügen"),
                                                        variable=self.rec_merge_var, command=self._rec_setting)).pack(anchor="w")
@@ -557,6 +560,7 @@ class SettingsTab:
                              folder=str(self.settings.get("rec_folder", "")), limit_gb=limit,
                              pre=bool(self.rec_pre_var.get()), tail_s=tail, buffer_auto=bool(self.rec_buffer_var.get()),
                              window=bool(self.rec_window_var.get()), obs_start=bool(self.rec_obs_start_var.get()),
+                             overlay=bool(self.rec_overlay_var.get()), overlay_file=obsoverlay.path(self.root_dir),
                              merge=bool(self.rec_merge_var.get()), farming_sub=bool(self.rec_farming_var.get()),
                              early=bool(self.rec_early_var.get()), instant=bool(self.rec_instant_var.get()),
                              clip_s=next((s for s, lbl in self._rec_clips if lbl == self.rec_clip_var.get()),
@@ -582,6 +586,7 @@ class SettingsTab:
             self.settings.set("rec_tail_s", int(cfg.tail_s))
             self.settings.set("rec_buffer_auto", cfg.buffer_auto)
             self.settings.set("rec_window", cfg.window)
+            self.settings.set("rec_overlay", cfg.overlay)
             self.settings.set("rec_obs_start", cfg.obs_start)
             self.settings.set("rec_merge", cfg.merge)
             self.settings.set("rec_farming_dir", cfg.farming_sub)
@@ -737,6 +742,43 @@ class SettingsTab:
         # recordings switched on, "Overlay testen" shows it too, so one sees where it sits
         sample = bool(getattr(self, "_forced", False)) and bool(self.settings.get("rec_on", False))
         self.overlay.set_rec(self.recorder.recording or sample)
+        try:
+            self._overlay_feed()
+        except Exception:
+            log.debug("Overlay-Bild für OBS", exc_info=True)
+
+    # 1.8.89: the elements that go into the picture OBS shows, with the worker's rect of each (None = hidden)
+    OVERLAY_FEED = (("map", "overlay", "overlay_rect"), ("text", "info_win", "info_rect"), ("hud", "hud", "hud_rect"),
+                    ("today", "today_win", "today_rect"), ("music", "media_win", "media_rect"))
+
+    def _overlay_feed(self):
+        """1.8.89 (user: "nur das DBD-Fenster aufnehmen und das Overlay im Spiel"): the visible elements – their
+        pictures and places – go to the obsoverlay.Writer, which composes them into cache/obs-overlay.png for OBS's
+        image source; the recorder then moves that source over their place. Only with recordings, the window
+        capture and the tick on and DBD there; otherwise a transparent picture once."""
+        want = (bool(self.settings.get("rec_on", False)) and bool(self.settings.get("rec_window", False))
+                and bool(self.settings.get("rec_overlay", False)) and self.game is not None)
+        writer = getattr(self, "_overlay_writer", None)
+        if not want:
+            if writer is not None and writer.key is not None:
+                writer.submit([], (0, 0), None)
+            return
+        if writer is None:
+            writer = self._overlay_writer = obsoverlay.Writer(obsoverlay.path(self.root_dir), self.recorder.set_overlay)
+            writer.start()
+        gx, gy = self._game_rect()[:2]
+        elements, key = [], []
+        for name, attr, rect_attr in self.OVERLAY_FEED:
+            win, rect = getattr(self, attr, None), getattr(self.worker, rect_attr, None)
+            if win is None or rect is None or not getattr(win, "shown", False) or not hasattr(win, "picture"):
+                continue
+            pic = win.picture()
+            if pic is None:
+                continue
+            op = float(getattr(win, "opacity", 1.0)) * float(getattr(win, "fade", 1.0))
+            elements.append((pic, (rect[0], rect[1]), op))
+            key.append((name, int(rect[0]), int(rect[1]), id(pic), round(op, 3)))
+        writer.submit(elements, (gx, gy), tuple(key) or None)
 
     def _tray_flag_changed(self):
         on = bool(self.tray_var.get())

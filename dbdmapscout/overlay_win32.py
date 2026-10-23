@@ -998,6 +998,7 @@ class HudWindow:
         self._data = None
         self._pos = None
         self._bodies = {}                      # the music card's bodies (1.2.13), kept while a song plays
+        self._pic = None                       # 1.8.89: the RGBA picture on display (obsoverlay composes it)
         self._memo = {}                        # 1.8.31: {key: (data, size)} of the last MEMO_KEPT pictures
         self._shown = False
         self.size = (0, 0)
@@ -1042,9 +1043,14 @@ class HudWindow:
         """Show a ready picture (the centre guide lines, 1.64.5); ``key`` says when it changed."""
         if key != self._key:
             self._key = key
-            self._data, self.size = premultiplied_bgra(pic), pic.size
+            self._data, self.size, self._pic = premultiplied_bgra(pic), pic.size, pic
             self._pos = None
         return self.size
+
+    def picture(self):
+        """1.8.89: the RGBA picture on display, None without one – composed into the picture OBS shows
+        (obsoverlay) where the window capture lacks our windows."""
+        return self._pic if self._data else None
 
     def render(self, rows, height: int, cover=None, style=None, progress=None, look=(), skin="classic",
                accent=None, title=None, upnext=None, upnext_pos="below", min_w=0, min_h=0):
@@ -1067,11 +1073,11 @@ class HudWindow:
                 memo = self._memo = {}
             hit = memo.get(key) if rows else None
             if hit is not None:                       # drawn a moment ago (natural size ↔ steady size)
-                self._data, self.size = hit
+                self._data, self.size, self._pic = hit
                 self._pos = None
                 return self.size
             if not rows:
-                self._data, self.size = None, (0, 0)
+                self._data, self.size, self._pic = None, (0, 0), None
             elif style is not None:                   # the music card (1.2.13: body once per song, strip every second)
                 pic = music_picture(rows, height, cover, style, progress, look, skin, accent, upnext, upnext_pos,
                                     None, self._bodies, min_w, min_h)
@@ -1085,9 +1091,9 @@ class HudWindow:
             if rows:
                 if self.editing:
                     pic = add_border(pic, self.edit_label)
-                self._data, self.size = premultiplied_bgra(pic), pic.size
+                self._data, self.size, self._pic = premultiplied_bgra(pic), pic.size, pic
                 self._pos = None                      # push again
-                memo[key] = (self._data, self.size)
+                memo[key] = (self._data, self.size, self._pic)
                 while len(memo) > self.MEMO_KEPT:
                     memo.pop(next(iter(memo)))
         return self.size
@@ -1100,7 +1106,7 @@ class HudWindow:
         b = music_picture(bodies=self._bodies, **new)
         pic = blend_cards(a, b, t, new.get("style", "big") == "big" and new.get("cover") is not None)
         self._key = None
-        self._data, self.size = premultiplied_bgra(pic), pic.size
+        self._data, self.size, self._pic = premultiplied_bgra(pic), pic.size, pic
         self._pos = None
         return self.size
 
@@ -1225,6 +1231,7 @@ class PictureOverlay:
         self._base = []                 # [(PIL RGBA, duration)] scaled map (+ caption), cached per size
         self._base_key = None
         self._prepared = []             # [(bytes, w, h, duration)]
+        self._pics = []                 # 1.8.89: the frames' RGBA pictures (obsoverlay composes the shown one)
         self._key = None
         self._pushed_key = None         # _key of the picture last put on the screen
         self._fit = None                # fit_width(): (content key, text height, map height)
@@ -1447,7 +1454,7 @@ class PictureOverlay:
         key = (base_key, self._editing, timer, server, ping, note, record, memo,
                self.info_beside, self.backdrop, self.skin, self.accent, self.realm, rec, top)
         if key != self._key:
-            self._prepared = []
+            self._prepared, self._pics = [], []
             pics = []
             if modern:
                 from .skin import map_card
@@ -1472,6 +1479,7 @@ class PictureOverlay:
                 if self._editing:
                     pic = add_border(pic.copy(), self.edit_label)
                 self._prepared.append((premultiplied_bgra(pic), pic.width, pic.height, dur))
+                self._pics.append(pic)
             self._key = key
             self._size = (self._prepared[0][1], self._prepared[0][2])
             if new_base or self._frame_i >= len(self._prepared):
@@ -1565,6 +1573,7 @@ class PictureOverlay:
             if self._editing:
                 pic = add_border(pic.copy(), self.edit_label)
             self._prepared = [(premultiplied_bgra(pic), pic.width, pic.height, 0)]
+            self._pics = [pic]
             self._key, self._base_key, self._frame_i = key, None, 0     # the map is rebuilt afterwards
             self._size = (pic.width, pic.height)
             if self._shown:
@@ -1617,6 +1626,13 @@ class PictureOverlay:
     @property
     def shown(self):
         return self._shown
+
+    def picture(self):
+        """1.8.89: the RGBA picture on display (the floor animation's current frame), None while nothing is
+        prepared – composed into the picture OBS shows (obsoverlay) where the window capture lacks our windows."""
+        if not self._prepared or not self._pics:
+            return None
+        return self._pics[min(self._frame_i, len(self._pics) - 1)]
 
     def _keep_on_top(self):
         try:

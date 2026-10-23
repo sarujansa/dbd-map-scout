@@ -166,6 +166,12 @@ TIPS = {
         "Startet DBD und ist OBS nicht erreichbar, startet das Programm OBS einmal minimiert im Infobereich – nur, "
         "wenn kein OBS-Fenster offen ist. OBS bleibt offen, wenn DBD beendet wird. OBS läuft dann mit denselben "
         "Rechten wie das Programm (Administrator).",
+    "Overlay mit in die Aufnahme":
+        "Die Fensteraufnahme enthält das Overlay dieses Programms nicht (eigene Fenster). Mit Häkchen schreibt das "
+        "Programm das sichtbare Overlay – Karte, Infos, Systemwerte, Heute, Musik – als Bild in seinen Cache-Ordner "
+        "und legt in OBS eine Bildquelle „DbD Map Scout – Overlay“ darauf an, genau dort, wo das Overlay über dem "
+        "DBD-Fenster liegt. Nur zusammen mit „Nur das DBD-Fenster aufnehmen“; bei einer Bildschirmaufnahme ist das "
+        "Overlay ohnehin im Bild. Aus: die Quelle wird nur ausgeblendet.",
     "Nur das DBD-Fenster aufnehmen":
         "Das Programm legt in OBS eine Fensteraufnahme „DbD Map Scout – DBD-Fenster“ an (oben in der laufenden Szene, "
         "auf die Leinwand eingepasst) und stellt sie auf Steam, Epic oder Store um. Aufgenommen wird dann nur das "
