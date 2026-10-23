@@ -1916,13 +1916,30 @@ EN = {
     'Sichtbarkeit': 'Visibility',
     'Clips automatisch auf YouTube hochladen': 'Upload clips to YouTube automatically',
     'Google Cloud Console öffnen': 'Open Google Cloud console',
+    'Client-Datei laden …': 'Load client file …',                                                     # 1.10.1
+    'Client-Datei laden': 'Load client file',
+    'Client-Datei von Google laden': 'Load the client file from Google',
+    'Das ist keine Client-Datei von Google ({error}).': 'That is not a client file from Google ({error}).',
+    'YouTube: Client-ID und Client-Secret aus {file} übernommen – jetzt „Mit YouTube verbinden“ klicken.':
+        'YouTube: client ID and client secret taken from {file} – now click "Connect to YouTube".',
+    'YouTube: Client-Daten aus {file} übernommen.': 'YouTube: client data taken from {file}.',
+    'Datei zu gross': 'file too large',
+    'nicht lesbar: {error}': 'not readable: {error}',
+    'kein JSON: {error}': 'not JSON: {error}',
+    'kein JSON-Objekt': 'not a JSON object',
+    'OAuth-Client vom Typ „Webanwendung“ – in der Cloud Console einen vom Typ „Desktop-App“ anlegen':
+        'OAuth client of type "Web application" – create one of type "Desktop app" in the Cloud console',
+    'kein Abschnitt „installed“': 'no "installed" section',
+    'Client-ID fehlt oder endet nicht auf .apps.googleusercontent.com':
+        'client ID missing or not ending in .apps.googleusercontent.com',
+    'Client-Secret fehlt': 'client secret missing',
     'Mit YouTube verbinden': 'Connect to YouTube',
     'YouTube-Verbindung trennen': 'Disconnect YouTube',
     'Auf YouTube hochladen': 'Upload to YouTube',
     'YouTube-Link kopieren': 'Copy YouTube link',
     'Auf YouTube öffnen': 'Open on YouTube',
-    'Lädt Clips (F8 und Editor) von selbst auf deinen YouTube-Kanal, Runden nur auf Wunsch: Rechtsklick oder „Auf YouTube hochladen“ unter Aufnahmen. Dafür einmal in der Google Cloud Console ein Projekt anlegen, „YouTube Data API v3“ aktivieren, unter „Anmeldedaten“ einen OAuth-Client vom Typ „Desktop-App“ erstellen und den Zustimmungsbildschirm veröffentlichen (sonst läuft die Anmeldung nach 7 Tagen ab); Client-ID und Client-Secret hier einfügen, dann „Mit YouTube verbinden“ – der Browser fragt einmal nach der Freigabe. Google erlaubt mit dem Standardkontingent etwa sechs Uploads am Tag; was nicht mehr passt, wartet in der Warteschlange bis zum nächsten Tag. Hochgeladen wird nur, wenn keine Runde läuft; die Datei bleibt immer auch auf der Platte. Gesendet werden nur die Videodatei, Titel (Map, Killer, Datum) und Beschreibung – nie Spielernamen; die Freigabe liegt verschlüsselt auf diesem PC.':
-        'Uploads clips (F8 and editor) to your YouTube channel by themselves, rounds only on request: right click or "Upload to YouTube" under Recordings. For that, create a project once in the Google Cloud console, enable "YouTube Data API v3", create an OAuth client of type "Desktop app" under "Credentials" and publish the consent screen (otherwise the login expires after 7 days); paste the client ID and client secret here, then "Connect to YouTube" – the browser asks once for your consent. With the default quota Google allows about six uploads a day; what does not fit waits in the queue until the next day. Uploads run only while no round is on; the file always stays on the disk too. Only the video file, a title (map, killer, date) and a description are sent – never player names; the consent is kept encrypted on this PC.',
+    'Lädt Clips (F8 und Editor) von selbst auf deinen YouTube-Kanal, Runden nur auf Wunsch: Rechtsklick oder „Auf YouTube hochladen“ unter Aufnahmen. Dafür einmal in der Google Cloud Console ein Projekt anlegen, „YouTube Data API v3“ aktivieren, unter „Anmeldedaten“ einen OAuth-Client vom Typ „Desktop-App“ erstellen und den Zustimmungsbildschirm veröffentlichen (sonst läuft die Anmeldung nach 7 Tagen ab); Client-ID und Client-Secret hier einfügen oder die heruntergeladene JSON-Datei laden, dann „Mit YouTube verbinden“ – der Browser fragt einmal nach der Freigabe. Google erlaubt mit dem Standardkontingent etwa sechs Uploads am Tag; was nicht mehr passt, wartet in der Warteschlange bis zum nächsten Tag. Hochgeladen wird nur, wenn keine Runde läuft; die Datei bleibt immer auch auf der Platte. Gesendet werden nur die Videodatei, Titel (Map, Killer, Datum) und Beschreibung – nie Spielernamen; die Freigabe liegt verschlüsselt auf diesem PC.':
+        'Uploads clips (F8 and editor) to your YouTube channel by themselves, rounds only on request: right click or "Upload to YouTube" under Recordings. For that, create a project once in the Google Cloud console, enable "YouTube Data API v3", create an OAuth client of type "Desktop app" under "Credentials" and publish the consent screen (otherwise the login expires after 7 days); paste the client ID and client secret here or load the downloaded JSON file, then "Connect to YouTube" – the browser asks once for your consent. With the default quota Google allows about six uploads a day; what does not fit waits in the queue until the next day. Uploads run only while no round is on; the file always stays on the disk too. Only the video file, a title (map, killer, date) and a description are sent – never player names; the consent is kept encrypted on this PC.',
     'YouTube: Client-ID (…apps.googleusercontent.com) und Client-Secret eintragen.':
         'YouTube: enter the client ID (…apps.googleusercontent.com) and the client secret.',
     'YouTube: öffne die Anmeldung im Browser …': 'YouTube: opening the login in the browser …',
@@ -1963,6 +1980,8 @@ EN = {
     # tooltips
     'Jeder neue Clip (F8 und aus dem Editor) kommt in die Warteschlange und geht auf deinen Kanal, sobald keine Runde läuft – mit der Sichtbarkeit rechts, Standard privat. Runden lädst du nur auf Wunsch hoch (Rechtsklick unter Aufnahmen). Google erlaubt etwa sechs Uploads am Tag, der Rest wartet bis zum nächsten Tag. Die Datei bleibt auf der Platte.':
         'Every new clip (F8 and from the editor) joins the queue and goes to your channel as soon as no round is on – with the visibility on the right, private by default. Rounds are uploaded only on request (right click under Recordings). Google allows about six uploads a day, the rest waits until the next day. The file stays on the disk.',
+    'Liest Client-ID und Client-Secret aus der Datei „client_secret_….json“, die Google nach dem Anlegen des OAuth-Clients zum Herunterladen anbietet („JSON herunterladen“). Die Datei wird nur gelesen und bleibt, wo sie ist; das Secret landet verschlüsselt in den Einstellungen.':
+        'Reads client ID and client secret from the file "client_secret_….json" Google offers for download after the OAuth client was created ("Download JSON"). The file is only read and stays where it is; the secret goes encrypted into the settings.',
     'Öffnet die Anmeldedaten der Google Cloud Console im Browser: Projekt anlegen, „YouTube Data API v3“ aktivieren, OAuth-Client „Desktop-App“ erstellen, Client-ID und -Secret hier einfügen.':
         'Opens the credentials page of the Google Cloud console in the browser: create a project, enable "YouTube Data API v3", create an OAuth client "Desktop app", paste client ID and secret here.',
     'Öffnet die Google-Anmeldung im Browser (nur Recht „Videos hochladen“). Danach kommt der Browser auf 127.0.0.1 zurück und das Programm merkt sich die Freigabe verschlüsselt auf diesem PC. Dafür hört es nur während der Anmeldung einmal auf einem freien Port.':

@@ -159,6 +159,9 @@ TIPS = {
                                                 "rechts, Standard privat. Runden lädst du nur auf Wunsch hoch (Rechtsklick "
                                                 "unter Aufnahmen). Google erlaubt etwa sechs Uploads am Tag, der Rest "
                                                 "wartet bis zum nächsten Tag. Die Datei bleibt auf der Platte.",
+    "Client-Datei laden …": "Liest Client-ID und Client-Secret aus der Datei „client_secret_….json“, die Google nach dem "
+                            "Anlegen des OAuth-Clients zum Herunterladen anbietet („JSON herunterladen“). Die Datei wird "
+                            "nur gelesen und bleibt, wo sie ist; das Secret landet verschlüsselt in den Einstellungen.",
     "Google Cloud Console öffnen": "Öffnet die Anmeldedaten der Google Cloud Console im Browser: Projekt anlegen, "
                                    "„YouTube Data API v3“ aktivieren, OAuth-Client „Desktop-App“ erstellen, Client-ID "
                                    "und -Secret hier einfügen.",

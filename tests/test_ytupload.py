@@ -173,6 +173,39 @@ def _video(folder, rel, size):
 
 
 # ------------------------------------------------------------------ pure parts
+def test_the_client_file_google_offers_is_read(tmp_path):
+    """1.10.1: client_secret_….json from the Cloud console – id and secret out of "installed"; a web client, junk and
+    missing fields are refused with a reason; the file is left in place."""
+    good = tmp_path / "client_secret_1234567890-abc.apps.googleusercontent.com.json"
+    good.write_text(json.dumps({"installed": {"client_id": "1234567890-abc.apps.googleusercontent.com",
+                                              "project_id": "x", "client_secret": "GOCSPX-s3cret",
+                                              "redirect_uris": ["http://localhost"]}}), encoding="utf-8")
+    assert yt.read_client_file(str(good)) == ("1234567890-abc.apps.googleusercontent.com", "GOCSPX-s3cret")
+    assert good.exists()
+    bom = tmp_path / "bom.json"                                     # Notepad saves JSON with a BOM
+    bom.write_bytes(b"\xef\xbb\xbf" + good.read_bytes())
+    assert yt.read_client_file(str(bom))[1] == "GOCSPX-s3cret"
+    bad = {"web.json": json.dumps({"web": {"client_id": "1234567890-abc.apps.googleusercontent.com", "client_secret": "s"}}),
+           "junk.json": "{not json", "list.json": "[1, 2]", "other.json": json.dumps({"foo": 1}),
+           "noid.json": json.dumps({"installed": {"client_id": "abc", "client_secret": "s"}}),
+           "nosecret.json": json.dumps({"installed": {"client_id": "1234567890-abc.apps.googleusercontent.com"}})}
+    reasons = {}
+    for name, text in bad.items():
+        (tmp_path / name).write_text(text, encoding="utf-8")
+        with pytest.raises(ValueError) as err:
+            yt.read_client_file(str(tmp_path / name))
+        reasons[name] = str(err.value)
+    assert "Desktop-App" in reasons["web.json"] and "JSON" in reasons["junk.json"] and "installed" in reasons["other.json"]
+    assert "Client-ID" in reasons["noid.json"] and "Client-Secret" in reasons["nosecret.json"]
+    assert "JSON-Objekt" in reasons["list.json"]
+    big = tmp_path / "big.json"
+    big.write_bytes(b" " * (yt.CLIENT_FILE_MAX + 1))
+    with pytest.raises(ValueError, match="gross"):
+        yt.read_client_file(str(big))
+    with pytest.raises(ValueError, match="nicht lesbar"):
+        yt.read_client_file(str(tmp_path / "missing.json"))
+
+
 def test_auth_url_tokens_and_the_secret(fake):
     url = yt.auth_url(CID, "st", "chal", "http://127.0.0.1:5/callback")
     q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query))
