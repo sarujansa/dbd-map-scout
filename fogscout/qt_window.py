@@ -261,7 +261,15 @@ SPECS = {
                                                       ("button", "st.more.sp_dash"), ("stretch",))),
                                              ("row", (("button", "st.more.sp_login"), ("button", "st.more.sp_logout"),
                                                       ("stretch",))),
-                                             ("hint", "st.more.sp_status"), ("hint", "st.more.sp_text"))))))),
+                                             ("hint", "st.more.sp_status"), ("hint", "st.more.sp_text"))),
+                ("card", "st.more.youtube", (("check", "st.more.yt_on"),                             # 1.10: upload
+                                             ("row", (("label", "st.more.yt_id.label"), ("entry", "st.more.yt_id"),
+                                                      ("label", "st.more.yt_secret.label"), ("entry", "st.more.yt_secret"),
+                                                      ("button", "st.more.yt_console"), ("stretch",))),
+                                             ("row", (("label", "st.more.yt_privacy.label"), ("combo", "st.more.yt_privacy"),
+                                                      ("button", "st.more.yt_login"), ("button", "st.more.yt_logout"),
+                                                      ("stretch",))),
+                                             ("hint", "st.more.yt_status"), ("hint", "st.more.yt_text"))))))),
     ),
 }
 

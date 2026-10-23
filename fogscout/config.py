@@ -182,6 +182,13 @@ DEFAULTS = {
     "spotify_on": False,                # 1.8: "Als nächstes" from the Spotify Web API on the music card (user's pick)
     "spotify_client_id": "",            # the Client-ID of the app the user registered in Spotify's dashboard
     "spotify_token": "",                # the refresh token, DPAPI-protected (spotify.protect), PC-specific
+    "youtube_on": False,                # 1.10: clips go to YouTube by themselves (user's pick; the queue runs either way)
+    "youtube_client_id": "",            # the OAuth client ("Desktop app") the user made in the Google Cloud console …
+    "youtube_client_secret": "",        # … and its secret, DPAPI-protected (spotify.protect), PC-specific
+    "youtube_token": "",                # the refresh token, DPAPI-protected, PC-specific
+    "youtube_privacy": "private",       # private | unlisted | public (ytupload.PRIVACY)
+    "youtube_queue": [],                # pending uploads (ytupload.Job dicts), PC-specific – they name local files
+    "youtube_quota": {},                # {"day", "used"}: the API units spent today (ytupload.Quota)
     "sysinfo": "right",                 # system values at the top of a black bar: off | left | right | custom
     "sysinfo_pos": [1.0, 0.0],          # sysinfo = custom: 0..1 of the free space in the DBD window (x, y)
 }
@@ -210,7 +217,7 @@ def _version(raw: dict) -> int:
         return SETTINGS_VERSION
 
 
-SECRET_KEYS = ("rec_password", "spotify_token")   # 1.8.38: never in a backup (they get shared, synced, uploaded)
+SECRET_KEYS = ("rec_password", "spotify_token", "youtube_client_secret", "youtube_token")   # 1.8.38: never in a backup
 
 
 def export_settings(data: dict, path: str) -> None:
@@ -225,7 +232,8 @@ def export_settings(data: dict, path: str) -> None:
 
 # per-PC values that must not come along from a backup (other folder / other machine)
 LOCAL_KEYS = ("setup_version", "setup_root", "qt_geometry", "official_dir", "layouts", "layout_key",
-              "rec_volume", "rec_rel", "rec_folder", "rec_password", "spotify_token", "seen_version")
+              "rec_volume", "rec_rel", "rec_folder", "rec_password", "spotify_token", "seen_version",
+              "youtube_client_secret", "youtube_token", "youtube_queue", "youtube_quota")
 
 
 def reset_data(current: dict) -> dict:

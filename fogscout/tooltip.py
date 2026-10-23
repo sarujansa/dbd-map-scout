@@ -153,6 +153,24 @@ TIPS = {
                              "PC). Dafür hört es nur während der Anmeldung einmal auf diesem Port.",
     "Spotify-Verbindung trennen": "Vergisst die Spotify-Freigabe auf diesem PC; die Liste verschwindet. In Spotify selbst "
                                   "lässt sich die App unter Konto → Apps ebenfalls entfernen.",
+    # 1.10: YouTube upload
+    "Clips automatisch auf YouTube hochladen": "Jeder neue Clip (F8 und aus dem Editor) kommt in die Warteschlange und "
+                                                "geht auf deinen Kanal, sobald keine Runde läuft – mit der Sichtbarkeit "
+                                                "rechts, Standard privat. Runden lädst du nur auf Wunsch hoch (Rechtsklick "
+                                                "unter Aufnahmen). Google erlaubt etwa sechs Uploads am Tag, der Rest "
+                                                "wartet bis zum nächsten Tag. Die Datei bleibt auf der Platte.",
+    "Google Cloud Console öffnen": "Öffnet die Anmeldedaten der Google Cloud Console im Browser: Projekt anlegen, "
+                                   "„YouTube Data API v3“ aktivieren, OAuth-Client „Desktop-App“ erstellen, Client-ID "
+                                   "und -Secret hier einfügen.",
+    "Mit YouTube verbinden": "Öffnet die Google-Anmeldung im Browser (nur Recht „Videos hochladen“). Danach kommt der "
+                             "Browser auf 127.0.0.1 zurück und das Programm merkt sich die Freigabe verschlüsselt auf "
+                             "diesem PC. Dafür hört es nur während der Anmeldung einmal auf einem freien Port.",
+    "YouTube-Verbindung trennen": "Vergisst die Google-Freigabe auf diesem PC; die Warteschlange wartet, bis du dich "
+                                  "neu verbindest. In deinem Google-Konto unter Sicherheit → Drittanbieter-Apps lässt "
+                                  "sich der Zugriff ebenfalls entfernen.",
+    "Auf YouTube hochladen": "Die markierte Datei in die YouTube-Warteschlange (Sichtbarkeit wie in den Einstellungen, "
+                             "Standard privat). Hochgeladen wird, sobald keine Runde läuft und das Tageskontingent "
+                             "reicht; der Link erscheint danach im Rechtsklick-Menü.",
     "Auch Lobby, Suche und Menü anzeigen": "Aus = der Status erscheint nur während einer Runde; sonst auch „Sucht ein "
                                            "Match“, „In der Lobby“ und „Im Menü“, solange DBD läuft.",
     "Jede Runde mit OBS aufnehmen": "Das Programm startet die OBS-Aufnahme beim Map-Banner und stoppt sie beim "

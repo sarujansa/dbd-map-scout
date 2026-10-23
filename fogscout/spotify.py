@@ -333,9 +333,10 @@ class LoginServer:
     """Listens once on 127.0.0.1:``port`` for the redirect of the Spotify login: only ``REDIRECT_PATH`` with the
     matching ``state`` is accepted (``code`` or ``error``); everything else gets 404/400. Closed by ``stop()``."""
 
-    def __init__(self, state: str, port: int = REDIRECT_PORT):
+    def __init__(self, state: str, port: int = REDIRECT_PORT, texts=None):
         self.state = state
-        self.port = port
+        self.port = port                      # 1.10: 0 = any free port (read it back after start – YouTube's login)
+        self.texts = texts                    # 1.10: (page when ok, page when refused); None = the Spotify texts
         self.code = None
         self.error = ""
         self._srv = None
@@ -379,14 +380,17 @@ class LoginServer:
 
         srv = _NoReuse(("127.0.0.1", self.port), Handler)
         srv.timeout = 0.5
+        self.port = srv.server_address[1]
         self._srv = srv
         self._thread = threading.Thread(target=self._serve, daemon=True, name="spotify-login")
         self._thread.start()
 
-    @staticmethod
-    def page(ok: bool) -> str:
-        text = _("Mit Spotify verbunden – du kannst dieses Fenster schliessen.") if ok else \
-            _("Spotify hat die Anmeldung abgelehnt – du kannst dieses Fenster schliessen.")
+    def page(self, ok: bool) -> str:
+        if self.texts:
+            text = self.texts[0] if ok else self.texts[1]
+        else:
+            text = _("Mit Spotify verbunden – du kannst dieses Fenster schliessen.") if ok else \
+                _("Spotify hat die Anmeldung abgelehnt – du kannst dieses Fenster schliessen.")
         return ("<!doctype html><html><head><meta charset='utf-8'><title>Fog Scout</title></head>"
                 "<body style='font-family:sans-serif;background:#1b1c21;color:#eee;padding:40px'>"
                 f"<h2>Fog Scout</h2><p>{text}</p></body></html>")

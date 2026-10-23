@@ -1906,6 +1906,71 @@ EN = {
     'Zeigt in der Musikkarte, was in Spotify als Nächstes kommt (Position und Anzahl unter Overlay → Musik). Die Windows-Mediensteuerung kennt nur den laufenden Titel, die Liste holt das Programm deshalb von Spotify selbst: Dafür im Developer-Dashboard „Create app“ anlegen (Name frei, API „Web API“), als Redirect URI genau {uri} eintragen, die Client-ID kopieren und hier einfügen, dann „Mit Spotify verbinden“ – der Browser fragt einmal nach der Freigabe. Gelesen wird nur die Warteschlange, nichts gesteuert; die Freigabe liegt verschlüsselt auf diesem PC und lässt sich hier trennen. Titel kommen nie ins Log.':
         'Shows on the music card what comes next in Spotify (place and count under Overlay → Music). The Windows media controls know only the current track, so the program gets the list from Spotify itself: in the developer dashboard "Create app" (any name, API "Web API"), enter exactly {uri} as the redirect URI, copy the Client ID and paste it here, then "Connect to Spotify" – the browser asks once for your consent. Only the queue is read, nothing is controlled; the consent is kept encrypted on this PC and can be removed here. Titles never go to the log.',
     'Spotify: öffne die Anmeldung im Browser …': 'Spotify: opening the login in the browser …',
+
+    # ------------------------------------------------------------------ 1.10: YouTube upload
+    'YouTube': 'YouTube',
+    'Privat': 'Private',
+    'Nicht gelistet': 'Unlisted',
+    'Öffentlich': 'Public',
+    'Client-Secret': 'Client secret',
+    'Sichtbarkeit': 'Visibility',
+    'Clips automatisch auf YouTube hochladen': 'Upload clips to YouTube automatically',
+    'Google Cloud Console öffnen': 'Open Google Cloud console',
+    'Mit YouTube verbinden': 'Connect to YouTube',
+    'YouTube-Verbindung trennen': 'Disconnect YouTube',
+    'Auf YouTube hochladen': 'Upload to YouTube',
+    'YouTube-Link kopieren': 'Copy YouTube link',
+    'Auf YouTube öffnen': 'Open on YouTube',
+    'Lädt Clips (F8 und Editor) von selbst auf deinen YouTube-Kanal, Runden nur auf Wunsch: Rechtsklick oder „Auf YouTube hochladen“ unter Aufnahmen. Dafür einmal in der Google Cloud Console ein Projekt anlegen, „YouTube Data API v3“ aktivieren, unter „Anmeldedaten“ einen OAuth-Client vom Typ „Desktop-App“ erstellen und den Zustimmungsbildschirm veröffentlichen (sonst läuft die Anmeldung nach 7 Tagen ab); Client-ID und Client-Secret hier einfügen, dann „Mit YouTube verbinden“ – der Browser fragt einmal nach der Freigabe. Google erlaubt mit dem Standardkontingent etwa sechs Uploads am Tag; was nicht mehr passt, wartet in der Warteschlange bis zum nächsten Tag. Hochgeladen wird nur, wenn keine Runde läuft; die Datei bleibt immer auch auf der Platte. Gesendet werden nur die Videodatei, Titel (Map, Killer, Datum) und Beschreibung – nie Spielernamen; die Freigabe liegt verschlüsselt auf diesem PC.':
+        'Uploads clips (F8 and editor) to your YouTube channel by themselves, rounds only on request: right click or "Upload to YouTube" under Recordings. For that, create a project once in the Google Cloud console, enable "YouTube Data API v3", create an OAuth client of type "Desktop app" under "Credentials" and publish the consent screen (otherwise the login expires after 7 days); paste the client ID and client secret here, then "Connect to YouTube" – the browser asks once for your consent. With the default quota Google allows about six uploads a day; what does not fit waits in the queue until the next day. Uploads run only while no round is on; the file always stays on the disk too. Only the video file, a title (map, killer, date) and a description are sent – never player names; the consent is kept encrypted on this PC.',
+    'YouTube: Client-ID (…apps.googleusercontent.com) und Client-Secret eintragen.':
+        'YouTube: enter the client ID (…apps.googleusercontent.com) and the client secret.',
+    'YouTube: öffne die Anmeldung im Browser …': 'YouTube: opening the login in the browser …',
+    'YouTube: hochgeladen – {file} → {url}': 'YouTube: uploaded – {file} → {url}',
+    'Hochgeladen: {file}': 'Uploaded: {file}',
+    'YouTube: nicht hochgeladen – {file}: {why}': 'YouTube: not uploaded – {file}: {why}',
+    'YouTube: in die Warteschlange – {file}': 'YouTube: queued – {file}',
+    'YouTube-Link kopiert: {url}': 'YouTube link copied: {url}',
+    'Clip: {what}': 'Clip: {what}',
+    'Dauer {d}': 'Length {d}',
+    'Aufgenommen mit Fog Scout': 'Recorded with Fog Scout',
+    'keine Upload-Sitzung erhalten': 'no upload session received',
+    'Antwort ohne Video-ID': 'answer without a video id',
+    'nicht angemeldet': 'not logged in',
+    'Datei nicht gefunden': 'file not found',
+    'Aufnahmeordner nicht da': 'recordings folder not there',
+    'YouTube: aus': 'YouTube: off',
+    'YouTube: nicht verbunden – „Mit YouTube verbinden“ klicken.': 'YouTube: not connected – click "Connect to YouTube".',
+    'Mit YouTube verbunden – du kannst dieses Fenster schliessen.': 'Connected to YouTube – you can close this window.',
+    'Google hat die Anmeldung abgelehnt – du kannst dieses Fenster schliessen.':
+        'Google refused the login – you can close this window.',
+    'YouTube: Anmeldung nicht möglich – {error}': 'YouTube: login not possible – {error}',
+    'YouTube: Browser nicht geöffnet – {error}': 'YouTube: browser not opened – {error}',
+    'YouTube: Anmeldung abgelehnt ({error})': 'YouTube: login refused ({error})',
+    'YouTube: Google gab kein dauerhaftes Token – in der Cloud Console den OAuth-Client als „Desktop“ anlegen und den Zustimmungsbildschirm veröffentlichen.':
+        'YouTube: Google gave no lasting token – create the OAuth client as "Desktop app" in the Cloud console and publish the consent screen.',
+    'YouTube: verbunden': 'YouTube: connected',
+    'YouTube: Anmeldung abgelaufen – noch einmal „Mit YouTube verbinden“ klicken.':
+        'YouTube: login expired – click "Connect to YouTube" once more.',
+    'YouTube: {n} in der Warteschlange – wartet, bis die Runde vorbei ist': 'YouTube: {n} queued – waiting for the round to end',
+    'YouTube: {n} in der Warteschlange – Tageskontingent aufgebraucht, weiter ab {when}':
+        'YouTube: {n} queued – daily quota used up, continues at {when}',
+    'YouTube: lädt {file} hoch ({pct} %)': 'YouTube: uploading {file} ({pct} %)',
+    'YouTube: hochgeladen – {file}': 'YouTube: uploaded – {file}',
+    'YouTube: {error} – neuer Versuch in {s} s': 'YouTube: {error} – trying again in {s} s',
+    'YouTube: {n} in der Warteschlange – {why}': 'YouTube: {n} queued – {why}',
+    'YouTube: Fehler – {error}': 'YouTube: error – {error}',
+    # tooltips
+    'Jeder neue Clip (F8 und aus dem Editor) kommt in die Warteschlange und geht auf deinen Kanal, sobald keine Runde läuft – mit der Sichtbarkeit rechts, Standard privat. Runden lädst du nur auf Wunsch hoch (Rechtsklick unter Aufnahmen). Google erlaubt etwa sechs Uploads am Tag, der Rest wartet bis zum nächsten Tag. Die Datei bleibt auf der Platte.':
+        'Every new clip (F8 and from the editor) joins the queue and goes to your channel as soon as no round is on – with the visibility on the right, private by default. Rounds are uploaded only on request (right click under Recordings). Google allows about six uploads a day, the rest waits until the next day. The file stays on the disk.',
+    'Öffnet die Anmeldedaten der Google Cloud Console im Browser: Projekt anlegen, „YouTube Data API v3“ aktivieren, OAuth-Client „Desktop-App“ erstellen, Client-ID und -Secret hier einfügen.':
+        'Opens the credentials page of the Google Cloud console in the browser: create a project, enable "YouTube Data API v3", create an OAuth client "Desktop app", paste client ID and secret here.',
+    'Öffnet die Google-Anmeldung im Browser (nur Recht „Videos hochladen“). Danach kommt der Browser auf 127.0.0.1 zurück und das Programm merkt sich die Freigabe verschlüsselt auf diesem PC. Dafür hört es nur während der Anmeldung einmal auf einem freien Port.':
+        'Opens the Google login in the browser (only the right "upload videos"). The browser then comes back to 127.0.0.1 and the program keeps the consent encrypted on this PC. For that it listens once on a free port, only during the login.',
+    'Vergisst die Google-Freigabe auf diesem PC; die Warteschlange wartet, bis du dich neu verbindest. In deinem Google-Konto unter Sicherheit → Drittanbieter-Apps lässt sich der Zugriff ebenfalls entfernen.':
+        'Forgets the Google consent on this PC; the queue waits until you connect again. In your Google account under Security → Third-party apps the access can be removed as well.',
+    'Die markierte Datei in die YouTube-Warteschlange (Sichtbarkeit wie in den Einstellungen, Standard privat). Hochgeladen wird, sobald keine Runde läuft und das Tageskontingent reicht; der Link erscheint danach im Rechtsklick-Menü.':
+        'The marked file into the YouTube queue (visibility as in the settings, private by default). Uploaded as soon as no round is on and the daily quota allows; the link then appears in the right-click menu.',
     'Spotify: Client-ID sieht falsch aus – erwartet werden 32 Zeichen aus 0–9 und a–f (Dashboard → deine App → Settings → Basic Information → Client ID).':
         'Spotify: the Client ID looks wrong – expected are 32 characters of 0–9 and a–f (dashboard → your app → Settings → Basic Information → Client ID).',
     'ALS NÄCHSTES': 'UP NEXT',
