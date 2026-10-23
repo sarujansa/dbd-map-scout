@@ -1,10 +1,10 @@
-"""Window-capture offsets of the game picture (dbdmapscout/capture.py, pure part)."""
+"""Window-capture offsets of the game picture (fogscout/capture.py, pure part)."""
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dbdmapscout.capture import GameWindow, overlaps  # noqa: E402
+from fogscout.capture import GameWindow, overlaps  # noqa: E402
 
 
 def test_borderless_picture_is_the_whole_capture():
@@ -41,7 +41,7 @@ def test_a_screen_grab_turns_mss_bgra_into_writable_bgr():
     the worker blacks out our overlay in place, so the picture must be its own writable array."""
     import types
     import numpy as np
-    from dbdmapscout import capture
+    from fogscout import capture
     px = (np.arange(4 * 5 * 4) + 1).astype(np.uint8).reshape(4, 5, 4)
     for raw in (bytearray(px.tobytes()), px.tobytes()):                  # Windows: bytearray; elsewhere bytes
         g = capture.ScreenGrabber.__new__(capture.ScreenGrabber)

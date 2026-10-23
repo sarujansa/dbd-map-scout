@@ -1,10 +1,10 @@
-"""Round history (dbdmapscout/history.py)."""
+"""Round history (fogscout/history.py)."""
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dbdmapscout import history as h  # noqa: E402
+from fogscout import history as h  # noqa: E402
 
 
 def rnd(m, s, t=0.0, region=""):
@@ -276,8 +276,8 @@ def test_farming_rounds_count_only_in_their_own_filter(tmp_path):
 def test_bloodpoints_per_round_and_per_hour_with_and_without_waiting():
     """1.6.3 (user: farming evaluation): BP per round, per hour in the match (the page's length, else banner to
     end) and per hour with the search time; rounds without a known wait count with the average of the others."""
-    from dbdmapscout import dashboard
-    from dbdmapscout.official import Match
+    from fogscout import dashboard
+    from fogscout.official import Match
     rs = [h.Round(t=1, seconds=500, map_id="a", map="A", role="survivor", wait=60.0),
           h.Round(t=2, seconds=500, map_id="a", map="A", role="killer", killer="The Nurse", wait=None),
           h.Round(t=3, seconds=500, map_id="a", map="A", role="killer", killer="The Nurse", wait=120.0),
@@ -298,8 +298,8 @@ def test_bloodpoints_per_round_and_per_hour_with_and_without_waiting():
 def test_the_bloodpoints_dashboard_tiles_and_trend():
     """1.7.1 (user: a small dashboard for the bloodpoints): tiles above the table – total, per round, per hour,
     best round, Ø per role with bars relative to the higher one – and Ø BP per bucket with empty buckets kept."""
-    from dbdmapscout import dashboard
-    from dbdmapscout.official import Match, bucket_start
+    from fogscout import dashboard
+    from fogscout.official import Match, bucket_start
     day = 86400
     t0 = bucket_start(1_760_000_000, "day")
     rs = [h.Round(t=t0 + 60, seconds=600, map_id="a", map="Coal Tower", role="killer", wait=60.0),

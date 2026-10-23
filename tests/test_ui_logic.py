@@ -4,8 +4,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dbdmapscout.hotkeys import combo_from_keys, game_only, modifier_name, parse, pretty  # noqa: E402
-from dbdmapscout.status import DOT_STYLE, user_state  # noqa: E402
+from fogscout.hotkeys import combo_from_keys, game_only, modifier_name, parse, pretty  # noqa: E402
+from fogscout.status import DOT_STYLE, user_state  # noqa: E402
 
 
 # ------------------------------------------------------------------ status line
@@ -91,7 +91,7 @@ def test_shift_digit_uses_the_windows_key_code():
 
 
 def test_tooltip_texts_by_label():
-    from dbdmapscout import tooltip
+    from fogscout import tooltip
     assert "Bildschirm" in tooltip.tip_for_label("Scannen")
     assert "#282a42" in tooltip.tip_for_label("Hintergrund entfernen (irgendein Zusatz)")   # prefix match
     assert tooltip.tip_for_label("gibt es nicht") is None

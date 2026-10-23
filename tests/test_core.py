@@ -9,11 +9,11 @@ import pytest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from dbdmapscout.catalog import Catalog
-from dbdmapscout.detector import Accumulator, FrameResult
-from dbdmapscout.hotkeys import parse
-from dbdmapscout.ocr import N_GROUPS, LexiconScorer, _GROUP_OF
-from dbdmapscout.textnorm import fmt_duration, fold, name_forms
+from fogscout.catalog import Catalog
+from fogscout.detector import Accumulator, FrameResult
+from fogscout.hotkeys import parse
+from fogscout.ocr import N_GROUPS, LexiconScorer, _GROUP_OF
+from fogscout.textnorm import fmt_duration, fold, name_forms
 
 
 def test_fold():
@@ -142,7 +142,7 @@ def test_suggestion_for_unknown_banner():
 
 def test_settings_backup_round_trip(tmp_path):
     import json
-    from dbdmapscout import config
+    from fogscout import config
     s = config.Settings(str(tmp_path / "settings.json"))
     s.data["hotkeys"]["rotate_map"] = "ctrl+alt+x"
     s.data["overlay"]["map_rotations"] = {"coal-tower": 90}

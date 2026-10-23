@@ -4,7 +4,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dbdmapscout.ticktime import TickTimes  # noqa: E402
+from fogscout.ticktime import TickTimes  # noqa: E402
 
 
 def test_steps_add_up_and_the_map_is_the_rest():

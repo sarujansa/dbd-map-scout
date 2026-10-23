@@ -4,8 +4,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dbdmapscout.detector import EndObservation  # noqa: E402
-from dbdmapscout.matchend import MatchEndTracker, Signals  # noqa: E402
+from fogscout.detector import EndObservation  # noqa: E402
+from fogscout.matchend import MatchEndTracker, Signals  # noqa: E402
 
 
 def run(tr, seconds, t0=0.0, step=0.2, **kw):
@@ -237,7 +237,7 @@ def test_in_trial_for_scan_throttling():
 def test_banner_scans_slow_down_in_the_menus_only():
     """1.6.4 (user: optimise): full rate while reading a banner, after a loading screen and for two minutes after the
     lobby button; 1/s in the match, in the lobby and in the other menus; simulation keeps its full rate."""
-    from dbdmapscout.worker import scan_rate
+    from fogscout.worker import scan_rate
     far = 1e9
 
     def rate(**kw):

@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from dbdmapscout import history, overview, qt_theme, theme
-from dbdmapscout.roundtimer import RoundTimer
+from fogscout import history, overview, qt_theme, theme
+from fogscout.roundtimer import RoundTimer
 
 
 # ------------------------------------------------------------------ colours
@@ -90,7 +90,7 @@ def test_overview_doubt_and_unknown():
 
 
 def test_overview_system_values():
-    from dbdmapscout.sysinfo import Snapshot
+    from fogscout.sysinfo import Snapshot
     now = time.time()
     snap = Snapshot(gpu_temp=88, gpu_load=97, gpu_power=220, cpu_load=51, vram_used=6, vram_total=12, t=now,
                     throttle="thermal")
@@ -107,7 +107,7 @@ def test_overview_system_values():
 @pytest.fixture(scope="module")
 def qapp():
     pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     return qt_window.application()
 
 
@@ -127,7 +127,7 @@ def keep(qapp):
 
 def test_window_shows_the_model_and_posts_clicks(qapp, keep):
     from PIL import Image
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = queue.Queue()
     win = keep(qt_window.MainWindow(lambda a, arg=None: posted.put((a, arg))))
     win.apply_theme(True, 1.0)
@@ -155,7 +155,7 @@ def test_window_shows_the_model_and_posts_clicks(qapp, keep):
 
 def test_pixmap_from_pil_keeps_the_shape(qapp):
     from PIL import Image
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     pm = qt_window.pixmap_from_pil(Image.new("RGBA", (100, 200)), 50, ratio=2.0)
     assert (pm.width(), pm.height()) == (50, 100) and pm.devicePixelRatio() == 2.0
 
@@ -166,9 +166,9 @@ def _registered_keys():
     import ast
     import glob
     import os
-    from dbdmapscout.app import LANGS
-    from dbdmapscout.app_hotkeys import HOTKEY_LABELS
-    pkg = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dbdmapscout")
+    from fogscout.app import LANGS
+    from fogscout.app_hotkeys import HOTKEY_LABELS
+    pkg = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fogscout")
     keys = set()
     for path in glob.glob(os.path.join(pkg, "app*.py")):
         with open(path, encoding="utf-8") as fh:
@@ -192,17 +192,17 @@ def _registered_keys():
 
 def test_every_control_of_the_hand_made_pages_exists():
     pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     missing = qt_window.page_keys() - _registered_keys()
     assert not missing, sorted(missing)
     assert {"ov.caption", "st.dark", "st.hk.reject_map"} <= qt_window.page_keys()
     assert qt_window.page_keys("overview") == set()
-    from dbdmapscout.app import LANGS
+    from fogscout.app import LANGS
     assert qt_window.GAME_LANGS == tuple(code for code, _l in LANGS)
 
 
 def test_form_page_shows_states_and_posts_clicks(qapp, keep):
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = queue.Queue()
     page = keep(qt_window.FormPage(lambda a, arg=None: posted.put((a, arg)), "Overlay", qt_window.SPECS["overlay"]))
     states = {"ov.pos": {"text": "Position"}, "ov.caption": {"text": "Map-Namen", "value": False, "enabled": True,
@@ -239,7 +239,7 @@ def test_maps_page_lists_by_realm_and_posts_the_pick(qapp, keep, tmp_path):
     chosen realm; the realm of the shown map first; the search shows all realms."""
     from PIL import Image
     from PySide6.QtCore import Qt
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = queue.Queue()
     page = keep(qt_window.MapsPage(lambda a, arg=None: posted.put((a, arg))))
     items = [("MacMillan", "Coal Tower", "coal", 1), ("MacMillan", "Suffocation Pit", "pit", 1),
@@ -268,7 +268,7 @@ def test_maps_page_lists_by_realm_and_posts_the_pick(qapp, keep, tmp_path):
 
 def test_maps_page_shows_a_map_big_after_a_click(qapp, keep):
     from PIL import Image
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = queue.Queue()
     page = keep(qt_window.MapsPage(lambda a, arg=None: posted.put((a, arg))))
     page.resize(900, 700)
@@ -305,7 +305,7 @@ NODE = {"kind": "box", "key": ".t", "side": "top", "row": False, "children": [
 
 
 def test_auto_page_shows_a_tab(qapp, keep):
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = queue.Queue()
     page = keep(qt_window.AutoPage(lambda a, arg=None: posted.put((a, arg)), "Statistik", NODE))
     assert page.visible_keys() >= {".t.sum", ".t.row.clear", ".t.nb.a.tree"}
@@ -337,7 +337,7 @@ def test_auto_page_shows_a_tab(qapp, keep):
 def test_filling_tabs_take_the_page_and_tick_boxes_show(qapp, keep):
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QScrollArea
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     node = {"kind": "box", "key": ".s", "side": "top", "row": False, "children": [
         {"kind": "tabs", "key": ".s.nb", "side": "top", "fill": True, "children": [
             {"kind": "box", "key": ".s.nb.a", "side": "top", "row": False, "children": [
@@ -365,7 +365,7 @@ def test_cards_can_be_put_in_own_order(qapp, keep):
     """Drag a card at its grip: the others make room, the new order is posted and comes back after a restart;
     an order that does not fit (other version) shows the built-in one."""
     from PySide6.QtCore import Qt
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = queue.Queue()
     spec = (("card", "a", (("hint", "a.t"),)), ("card", "b", (("hint", "b.t"),)), ("card", "c", (("hint", "c.t"),)),
             ("row", (("button", "more"), ("stretch",))), ("card", "d", (("hint", "d.t"),)))
@@ -403,7 +403,7 @@ def test_moved_card_keeps_the_page_still_and_tabs_in_shown_order(qapp, keep):
     from PySide6.QtCore import QPoint, Qt
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QPushButton, QScrollArea
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = queue.Queue()
     spec = tuple(("card", k, (("button", k + ".b"),) + tuple(("hint", f"{k}.h{i}") for i in range(12)))
                  for k in "abcd")
@@ -432,7 +432,7 @@ def test_moved_card_keeps_the_page_still_and_tabs_in_shown_order(qapp, keep):
 
 
 def test_chart_draws_columns_and_a_line(qapp, keep):
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     chart = keep(qt_window.Chart())
     chart.resize(600, 400)
     bars = [(2.5, "KW 40", "2,5 Kills · 4 Runden"), (None, "KW 41", ""), (3.0, "KW 42", "3,0 Kills · 2 Runden")]
@@ -451,7 +451,7 @@ def test_questions_and_notes_open_a_small_window_to_answer(qapp, keep):
     """1.8.44 (user: a small window to confirm instead of the bar at the top): OK/Cancel and notes in MessageBox –
     application-modal, opened with show() (no exec()), waiting while the main window is hidden."""
     from PySide6.QtCore import Qt
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = queue.Queue()
     win = keep(qt_window.MainWindow(lambda a, arg=None: posted.put((a, arg))))
     box = win.message
@@ -481,7 +481,7 @@ def test_questions_and_notes_open_a_small_window_to_answer(qapp, keep):
 
 
 def test_ask_runs_the_action_again_after_ok():
-    from dbdmapscout.app_qt import QtShell
+    from fogscout.app_qt import QtShell
     calls = []
 
     class Shell(QtShell):
@@ -507,7 +507,7 @@ def test_ask_runs_the_action_again_after_ok():
 
 # ------------------------------------------------------------------ detection, log, hotkeys, files
 def test_log_view_colours_and_escapes(qapp, keep):
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     log = keep(qt_window.LogView())
     log.show_state({"dark": True, "lines": [("12:00:01", "Fehler", "<kaputt>"), ("12:00:02", "System", "Bereit.")]})
     text = log.toPlainText()
@@ -517,7 +517,7 @@ def test_log_view_colours_and_escapes(qapp, keep):
 
 
 def test_log_view_appends_new_lines_and_rebuilds_only_when_needed(qapp, keep):
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     log = keep(qt_window.LogView())
     a, b, c = ("12:00:01", "System", "eins"), ("12:00:02", "System", "zwei"), ("12:00:03", "Fehler", "drei")
     log.show_state({"dark": True, "rev": 0, "lines": [a, b]})
@@ -534,7 +534,7 @@ def test_log_view_appends_new_lines_and_rebuilds_only_when_needed(qapp, keep):
 
 
 def test_table_updates_values_in_place(qapp, keep):
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     t = keep(qt_window.Table(".t", lambda a, arg=None: None))
     cols = [("#0", "Region", "w"), ("ping", "Ping", "e")]
     rows = [("g:eu", 0, "Europa", [], [], True), ("r:fra", 1, "Frankfurt", ["31 ms"], ["p_good"], False)]
@@ -552,7 +552,7 @@ def test_table_updates_values_in_place(qapp, keep):
 def test_hotkey_button_sends_the_keys_while_recording(qapp, keep):
     from PySide6.QtCore import Qt
     from PySide6.QtTest import QTest
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = queue.Queue()
     b = keep(qt_window.HotkeyButton("st.hk.rotate_map", lambda a, arg=None: posted.put((a, arg))))
     QTest.keyClick(b, Qt.Key_K, Qt.ControlModifier)                 # not recording: nothing
@@ -571,7 +571,7 @@ def test_hotkey_button_sends_the_keys_while_recording(qapp, keep):
 
 
 def test_auto_page_lays_out_a_grid(qapp, keep):
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     node = {"kind": "card", "key": ".l", "row": False, "grid": True, "children": [
         {"kind": "check", "key": f".l.c{i}", "cell": (i // 5, i % 5)} for i in range(9)]}
     page = keep(qt_window.AutoPage(lambda a, arg=None: None, "Erkennung", node))
@@ -582,7 +582,7 @@ def test_auto_page_lays_out_a_grid(qapp, keep):
 
 
 def test_file_choice_is_not_modal(qapp, keep):
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = queue.Queue()
     win = keep(qt_window.MainWindow(lambda a, arg=None: posted.put((a, arg))))
     win.choose_file("save", "Einstellungen exportieren", "x.json")
@@ -593,7 +593,7 @@ def test_file_choice_is_not_modal(qapp, keep):
 
 
 def test_hotkey_from_the_window_is_checked():
-    from dbdmapscout.app_hotkeys import Hotkeys
+    from fogscout.app_hotkeys import Hotkeys
     seen = []
 
     class H(Hotkeys):
@@ -611,7 +611,7 @@ def test_hotkey_from_the_window_is_checked():
 # ------------------------------------------------------------------ dialogs
 def test_dialog_window_mirrors_and_closes_both_ways(qapp, keep):
     from PIL import Image
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = queue.Queue()
     node = {"kind": "box", "key": ".d", "row": False, "children": [
         {"kind": "radio", "key": ".d.new"}, {"kind": "entry", "key": ".d.name"},
@@ -645,7 +645,7 @@ def test_dialog_window_mirrors_and_closes_both_ways(qapp, keep):
 def test_navigation_icons_are_drawn_alike(qapp, keep):
     """Own line icons (not font characters, which came out in different sizes): every page one, same box, and the
     log's gets an amber dot while there is an unseen error."""
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     for key, _label in qt_window.PAGES:
         img = qt_window.nav_icon(key, "#c9a227", 2.0).toImage()
         assert (img.width(), img.height()) == (2 * qt_window.NAV_ICON, 2 * qt_window.NAV_ICON)
@@ -663,7 +663,7 @@ def test_navigation_icons_are_drawn_alike(qapp, keep):
 def _dash_data():
     """Rounds with official matches: Nurse on Coal Tower 3 kills ×2, Oni on The Game once (too few for a cell),
     one survivor round escaped."""
-    from dbdmapscout.official import Match, Player
+    from fogscout.official import Match, Player
 
     def km(r, n):
         return Match(t=r.t, map=r.map, role="killer", character=r.killer, bp=30000,
@@ -677,7 +677,7 @@ def _dash_data():
 
 
 def test_dashboard_model():
-    from dbdmapscout import dashboard
+    from fogscout import dashboard
     rs, pairs = _dash_data()
     d = dashboard.build(rs, pairs)
     titles = [t.title for t in d.tiles]
@@ -692,7 +692,7 @@ def test_dashboard_model():
 
 
 def test_dashboard_view_draws_tiles_bars_and_heatmap(qapp, keep):
-    from dbdmapscout import dashboard, qt_window
+    from fogscout import dashboard, qt_window
     rs, pairs = _dash_data()
     v = keep(qt_window.DashboardView())
     v.resize(900, 700)
@@ -712,8 +712,8 @@ def test_narrow_window_wraps_instead_of_cutting_off(qapp, keep):
     """1.59.1 (user's screenshots): rows of controls wrap, tiles take fewer columns, tick box texts wrap, the
     navigation shows only icons – nothing wider than the window."""
     from PySide6.QtWidgets import QPushButton, QWidget
-    from dbdmapscout import qt_window
-    from dbdmapscout.qt_layouts import FlowRow, TileGrid, WrapCheck
+    from fogscout import qt_window
+    from fogscout.qt_layouts import FlowRow, TileGrid, WrapCheck
     host = keep(QWidget())
     row = FlowRow(host)
     row.right = 1
@@ -746,7 +746,7 @@ def test_narrow_window_wraps_instead_of_cutting_off(qapp, keep):
 def test_setup_assistant_goes_through_its_steps(qapp, keep):
     """1.60: first start = three steps (language, overlay, keys) with the widgets of the pages; done or skipped
     posts setup_done; the navigation leads away from it."""
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = queue.Queue()
     win = keep(qt_window.MainWindow(lambda a, arg=None: posted.put((a, arg))))
     win.show_setup(True)
@@ -770,7 +770,7 @@ def test_setup_assistant_goes_through_its_steps(qapp, keep):
 
 
 def test_search_finds_a_setting_and_lights_its_card(qapp, keep):
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = queue.Queue()
     win = keep(qt_window.MainWindow(lambda a, arg=None: posted.put((a, arg))))
     win.resize(1100, 800)
@@ -802,7 +802,7 @@ def _completions(win, text):
 def test_the_search_knows_other_words_both_languages_and_tells_twins_apart(qapp, keep):
     """1.8.38 (QA audit: "autostart", "Größe", "shortcut", "color" found nothing; "Position" three times on the
     overlay page, only the first reachable; a 190-px list cut ⅔ of the entries off; "Overlay" matched everything)."""
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     win = keep(qt_window.MainWindow(lambda a, arg=None: None))
     win.resize(1100, 800)
     win.show()
@@ -838,7 +838,7 @@ def test_the_search_knows_other_words_both_languages_and_tells_twins_apart(qapp,
 
 def test_open_tab_shows_an_elements_settings(qapp, keep):
     """1.2.12 (analysis point 10): a click on an element in the preview opens its tab of the overlay page."""
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     win = keep(qt_window.MainWindow(lambda a, arg=None: None))
     tabs = win.forms["overlay"].controls["ov.music_f"][1]
     assert tabs.currentIndex() == 0
@@ -852,8 +852,8 @@ def test_open_tab_shows_an_elements_settings(qapp, keep):
 
 
 def test_tiles_view_shows_the_system_averages(qapp, keep):
-    from dbdmapscout import qt_window
-    from dbdmapscout.app_stats import sys_tiles
+    from fogscout import qt_window
+    from fogscout.app_stats import sys_tiles
     view = keep(qt_window.TilesView())
     tiles = sys_tiles({"n": 17, "gpu_temp": 76.2, "gpu_load": 75, "throttle_rounds": 2, "throttle_s": 95})
     assert [t.value for t in tiles] == ["76 °C", "75 %", "2 von 17"]
@@ -868,7 +868,7 @@ def test_preview_draws_the_screen_and_posts_a_click(qapp, keep):
     from PIL import Image
     from PySide6.QtCore import QPoint, Qt
     from PySide6.QtTest import QTest
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = queue.Queue()
     view = keep(qt_window.PreviewView("ov.preview", lambda a, arg=None: posted.put((a, arg))))
     view.resize(1000, 419)
@@ -894,7 +894,7 @@ def test_preview_drags_the_element_under_the_mouse(qapp, keep):
     from PIL import Image
     from PySide6.QtCore import QPoint, Qt
     from PySide6.QtTest import QTest
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = queue.Queue()
     view = keep(qt_window.PreviewView("ov.preview", lambda a, arg=None: posted.put((a, arg))))
     view.resize(1000, 419)
@@ -931,7 +931,7 @@ def test_preview_sizes_the_picked_element_by_its_corner_and_the_wheel(qapp, keep
     from PySide6.QtCore import QPoint, QPointF, Qt
     from PySide6.QtGui import QWheelEvent
     from PySide6.QtTest import QTest
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = queue.Queue()
     view = keep(qt_window.PreviewView("ov.preview", lambda a, arg=None: posted.put((a, arg))))
     view.resize(1000, 419)
@@ -995,7 +995,7 @@ def test_colour_themes_stay_readable(key):
 def test_own_colour_is_made_readable(colour):
     """1.63: any colour (palette or "Eigene Farbe …") – same checks as the built-in themes, the hover too, white
     text on the selection; a colour that is readable already stays as it is."""
-    from dbdmapscout.theme import DARK
+    from fogscout.theme import DARK
     qt_theme.set_theme("custom", custom=colour)
     for oled in (False, True):
         _check_theme("custom", oled, custom=colour)
@@ -1017,7 +1017,7 @@ def test_swatches_ring_the_chosen_colour_and_post_clicks(qapp, keep):
     import queue as _q
     from PySide6.QtCore import Qt
     from PySide6.QtTest import QTest
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = _q.Queue()
     view = keep(qt_window.SwatchView("st.swatches", lambda a, arg=None: posted.put((a, arg))))
     view.resize(500, 80)
@@ -1050,7 +1050,7 @@ def _check_theme(key, oled, custom=None):
 
 def test_today_rows_for_the_black_bar():
     """1.62: block "today" below the system values – rounds and play time; kills/escaped only with stats data."""
-    from dbdmapscout.app_sysinfo import today_rows
+    from fogscout.app_sysinfo import today_rows
     now = time.time()
     rounds = [history.Round(history.period_start("day", now) + 60, 600, "coal", "Coal Tower", role="killer"),
               history.Round(history.period_start("day", now) - 3600, 600, "coal", "Coal Tower", role="killer")]
@@ -1062,8 +1062,8 @@ def test_today_rows_for_the_black_bar():
 def test_today_tells_normal_and_farming_rounds_apart():
     """1.8.56 (user): normal rounds with their escape rate and count, farming rounds (cross-play off) with their
     count and Ø bloodpoints – in the card "today" and on the overview page."""
-    from dbdmapscout import official
-    from dbdmapscout.app_sysinfo import today_rows
+    from fogscout import official
+    from fogscout.app_sysinfo import today_rows
     now = time.time()
     day = history.period_start("day", now)
     rs = [history.Round(day + 60 * i, 600, "coal", "Coal Tower", role="survivor") for i in range(4)] \
@@ -1110,8 +1110,8 @@ def test_the_today_card_asks_about_rounds_that_look_like_farming():
 def test_today_follows_what_is_played_now():
     """1.8.57 (user): while farming the card shows only farming, else only normal – the open round decides, then
     the lobby / search with cross-play read, then the last round; the row stays even with no round of that kind."""
-    from dbdmapscout.app_sysinfo import today_mode, today_rows
-    from dbdmapscout.lobby import Found
+    from fogscout.app_sysinfo import today_mode, today_rows
+    from fogscout.lobby import Found
     now = time.time()
     day = history.period_start("day", now)
     normal = history.Round(day + 60, 600, "coal", "Coal Tower", role="survivor")
@@ -1140,7 +1140,7 @@ def test_today_follows_what_is_played_now():
 def test_old_oled_theme_becomes_the_switch(tmp_path):
     """1.62.0 had OLED as a theme: it becomes gold + the OLED switch (1.62.1)."""
     import json
-    from dbdmapscout.config import Settings
+    from fogscout.config import Settings
     path = tmp_path / "settings.json"
     path.write_text(json.dumps({"settings_version": 3, "color_theme": "oled"}), encoding="utf-8")
     s = Settings(str(path))
@@ -1185,7 +1185,7 @@ def test_preview_snaps_while_dragging_and_moves_by_arrow_keys(qapp, keep):
     from PIL import Image
     from PySide6.QtCore import QPoint, Qt
     from PySide6.QtTest import QTest
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = queue.Queue()
     view = keep(qt_window.PreviewView("ov.preview", lambda a, arg=None: posted.put((a, arg))))
     view.resize(1000, 419)
@@ -1219,7 +1219,7 @@ def test_preview_snaps_while_dragging_and_moves_by_arrow_keys(qapp, keep):
 
 def test_fact_box_shows_its_action_button(qapp, keep):
     """1.2.15: a fact with an action gets a small button that posts the action; without one it is hidden."""
-    from dbdmapscout import overview, qt_window
+    from fogscout import overview, qt_window
     posted = []
     box = keep(qt_window.FactBox(bar=True, post=posted.append))
     box.show_fact(overview.Fact("Server", "–", "aus", action="server_page", action_label="Server-Tab öffnen"))
@@ -1235,7 +1235,7 @@ def test_fact_box_shows_its_action_button(qapp, keep):
 
 def test_reveal_opens_the_page_and_lights_the_card(qapp, keep):
     """1.2.15: MainWindow.reveal(page, key) – the overview's "Match-Daten einrichten" lands on the card."""
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     win = keep(qt_window.MainWindow(lambda a, arg=None: None))
     win.show()
     win.reveal("settings", "st.more.official")
@@ -1258,7 +1258,7 @@ def test_dashboard_clicks_post_the_map_and_the_cell(qapp, keep):
     them into the map / killer filter of the statistics."""
     from PySide6.QtCore import QPoint, Qt
     from PySide6.QtTest import QTest
-    from dbdmapscout import dashboard, qt_window
+    from fogscout import dashboard, qt_window
     posted = queue.Queue()
     view = keep(qt_window.DashboardView("stats.dash", lambda a, arg=None: posted.put((a, arg))))
     d = dashboard.Dashboard(tiles=[], maps=[("Coal Tower", 6, "Ø 2.4"), ("Gas Heaven", 3, "")], maps_max=6,
@@ -1284,7 +1284,7 @@ def test_dashboard_clicks_post_the_map_and_the_cell(qapp, keep):
 def test_map_tiles_show_marks_and_a_context_menu(qapp, keep):
     """1.2.18: a tile carries rounds / Ø kills and the map's own settings; the right click offers show, rotate,
     reset (only with own values) and replace picture, each posting ("map_action", (action, key))."""
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = queue.Queue()
     page = keep(qt_window.MapsPage(lambda a, arg=None: posted.put((a, arg))))
     items = [("MacMillan", "Coal Tower", "coal", 1), ("MacMillan", "Suffocation Pit", "pit", 1)]
@@ -1309,7 +1309,7 @@ def test_map_tiles_show_marks_and_a_context_menu(qapp, keep):
 def test_the_assistant_clears_the_navigation_and_shows_the_preview(qapp, keep):
     """1.2.19: no page stays highlighted behind the assistant; step 2 carries the overlay preview and the
     system values / today / music switches; a hotkey button's right click posts hk_menu."""
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = queue.Queue()
     win = keep(qt_window.MainWindow(lambda a, arg=None: posted.put((a, arg))))
     win.show_page("stats")
@@ -1326,7 +1326,7 @@ def test_the_assistant_clears_the_navigation_and_shows_the_preview(qapp, keep):
 def test_maps_page_switches_the_map_style(qapp, keep):
     """1.3.3 (user: "im Maps eine Option, normale Maps anzuzeigen, quasi zu wechseln"): Original / Dunkel on the
     maps page post the style; the shown style is checked."""
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = []
     page = keep(qt_window.MapsPage(lambda a, arg=None: posted.append((a, arg))))
     page.show_maps([("MacMillan Estate", "Coal Tower", "coal", 1)], None, {}, [], {}, "dark")
@@ -1340,7 +1340,7 @@ def test_maps_page_switches_the_map_style(qapp, keep):
 def test_style_buttons_switch_at_once_and_pages_can_be_warmed(qapp, keep):
     """1.3.4 (user: "Farbe wechselt erst nach 1 s"): Original / Dunkel are one exclusive group – a click shows at
     once, without waiting for the App; warm_pages lays out the hidden pages without errors."""
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = []
     page = keep(qt_window.MapsPage(lambda a, arg=None: posted.append((a, arg))))
     page.show_maps([("MacMillan Estate", "Coal Tower", "coal", 1)], None, {}, [], {}, "classic")
@@ -1355,7 +1355,7 @@ def test_style_buttons_switch_at_once_and_pages_can_be_warmed(qapp, keep):
 def test_a_theme_change_styles_the_page_on_display_first(qapp, keep):
     """1.3.4: the style sheet goes to the visible page at once and to the hidden ones one by one (or when opened) –
     on the whole window Qt repolished all 1236 widgets (≈ 250 ms per theme/zoom click)."""
-    from dbdmapscout import qt_theme, qt_window
+    from fogscout import qt_theme, qt_window
     win = keep(qt_window.MainWindow(lambda *a: None))
     win.apply_theme(True, 1.0)
     win._stale.clear()                                            # as if the idle restyling had finished
@@ -1376,7 +1376,7 @@ def test_a_theme_change_styles_the_page_on_display_first(qapp, keep):
 def test_columns_can_be_hidden_by_a_right_click_on_the_heading(qapp, keep):
     """1.3.6: the heading's menu hides columns (one always stays), the stretching column moves to a shown one;
     the choice goes to the App and comes back on the next start."""
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = []
     t = keep(qt_window.Table(".nb.f3.treeview9", lambda a, arg=None: posted.append((a, arg))))
     cols = [("map", "Map", "w"), ("n", "Runden", "e"), ("kills", "Ø Kills", "e")]
@@ -1405,7 +1405,7 @@ def test_a_multi_select_table_posts_the_whole_selection(qapp, keep):
     """1.5.4 (user: mark several rows and set them as farming): selectmode "extended" -> ExtendedSelection; the
     table posts the selected ids as one list and never a single "click" (that would reset a Ctrl-click)."""
     from PySide6.QtCore import Qt
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = []
     t = keep(qt_window.Table(".nb.f3.treeview9", lambda a, arg=None: posted.append((a, arg))))
     cols = [("map", "Map", "w"), ("n", "Runden", "e")]
@@ -1433,7 +1433,7 @@ def test_the_navigation_and_the_overlay_tabs_can_be_reordered_and_remembered(qap
     the saved order (missing ones follow), switching pages works by key, a drag posts the new order; the overlay
     page's tabs follow apply_tab_order, open_tab still finds its tab, a drag posts tab_order, {} restores."""
     from PySide6.QtCore import QModelIndex
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = queue.Queue()
     win = keep(qt_window.MainWindow(lambda a, arg=None: posted.put((a, arg))))
     built = [k for k, _l in qt_window.PAGES]
@@ -1475,7 +1475,7 @@ def test_the_navigation_and_the_overlay_tabs_can_be_reordered_and_remembered(qap
 def test_the_setup_assistant_survives_the_navigation_getting_focus(qapp, keep):
     """1.8.2: on the first start the navigation list got the keyboard focus and – Qt's list view picks the first
     row when none is current – left the setup assistant about a second after it came up."""
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = queue.Queue()
     win = keep(qt_window.MainWindow(lambda a, arg=None: posted.put((a, arg))))
     win.show_setup(True)
@@ -1492,7 +1492,7 @@ def test_the_setup_assistant_survives_the_navigation_getting_focus(qapp, keep):
 def test_the_search_finds_settings_on_another_tab_and_opens_it(qapp, keep):
     """1.8.2/1.8.90: a setting on a settings tab that is not open (Spotify on "Verbindungen") is found; going there
     opens the settings page and that tab. A control hidden for another reason stays out of the index."""
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = queue.Queue()
     win = keep(qt_window.MainWindow(lambda a, arg=None: posted.put((a, arg))))
     win.resize(1100, 800)
@@ -1524,7 +1524,7 @@ def test_the_search_finds_settings_on_another_tab_and_opens_it(qapp, keep):
 def test_the_settings_page_is_split_into_tabs_with_its_cards(qapp, keep):
     """1.8.90 (user: "Bei Settings ist es riesig geworden"): six tabs, each card on the expected one, the OBS card
     in five groups; a card inside a tab sits in a draggable column like on the page itself."""
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     page = keep(qt_window.FormPage(lambda a, arg=None: None, "Einstellungen", qt_window.SPECS["settings"], "settings"))
     tabs = {k: c for k, c in page.controls.items() if c[0] == "tab"}
     tw = next(iter(tabs.values()))[1]
@@ -1556,7 +1556,7 @@ def test_the_settings_page_is_split_into_tabs_with_its_cards(qapp, keep):
 def test_the_overlay_preview_and_its_tools_sit_side_by_side_on_a_wide_page(qapp, keep):
     """1.8.2: preview left, the picked element's tools right while the page is wide; below each other when it
     is narrow (the tabs with the settings were below the fold on a 760-px window)."""
-    from dbdmapscout import qt_pages, qt_window
+    from fogscout import qt_pages, qt_window
     page = keep(qt_window.FormPage(lambda a, arg=None: None, "Overlay", qt_window.SPECS["overlay"], "overlay"))
     side = page.findChild(qt_pages.SideBySide)
     assert side is not None and len(side.cards) == 2
@@ -1580,7 +1580,7 @@ def test_a_right_click_on_a_row_marks_it_and_asks_for_the_menu(qapp, keep):
     from PySide6.QtCore import QPoint, Qt
     from PySide6.QtGui import QContextMenuEvent
     from PySide6.QtTest import QTest
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = []
     t = keep(qt_window.Table(".nb.f9.treeview1", lambda a, arg=None: posted.append((a, arg))))
     cols = [("map", "Map", "w"), ("n", "Runden", "e")]
@@ -1645,8 +1645,8 @@ def test_a_right_click_on_a_row_marks_it_and_asks_for_the_menu(qapp, keep):
 def test_the_notification_window_tells_where_it_is_so_the_detection_skips_it(qapp):
     """1.8.13: the toast (F8 clip, lobby found) sits bottom right – where the lobby button is read; it reports its
     place in screen pixels while shown and None once closed (worker.toast_rect, blacked out like the overlay)."""
-    from dbdmapscout.mainloop import MainLoop
-    from dbdmapscout.toast import Toast
+    from fogscout.mainloop import MainLoop
+    from fogscout.toast import Toast
     rects = []
     t = Toast(MainLoop(qapp))
     t.on_rect = rects.append
@@ -1665,7 +1665,7 @@ def test_the_preview_draws_the_limiter_lines_and_drags_them_in_moving_mode(qapp,
     from PIL import Image
     from PySide6.QtCore import QPoint, Qt
     from PySide6.QtTest import QTest
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = queue.Queue()
     view = keep(qt_window.PreviewView("ov.preview", lambda a, arg=None: posted.put((a, arg))))
     view.resize(1000, 459)
@@ -1707,8 +1707,8 @@ def test_the_grid_is_laid_out_right_while_its_pictures_still_load(qapp, keep, tm
     added to the visible grid was shown by Qt's queued show, so the first layout pass counted it as hidden and
     the scroll area sized the grid to its viewport – with the pictures loading, nothing laid it out again."""
     from PIL import Image
-    from dbdmapscout import qt_theme, qt_window
-    from dbdmapscout.qt_maps import TILE_H
+    from fogscout import qt_theme, qt_window
+    from fogscout.qt_maps import TILE_H
     pics = []
     for i in range(3):
         p = tmp_path / f"{i}.png"
@@ -1735,7 +1735,7 @@ def test_the_search_and_the_realm_list_show_and_hide_the_tiles_instead_of_buildi
     """1.8.72 (measured: a cleared search built 56 tiles anew – 336 ms until the grid stood still, now 19 ms):
     the tiles stay, with their pictures; the realm list keeps every realm while a search runs."""
     from PySide6.QtCore import Qt
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = []
     page = keep(qt_window.MapsPage(lambda a, arg=None: posted.append((a, arg))))
     items = _grid_items(3, 2)
@@ -1768,7 +1768,7 @@ def test_the_tiles_are_walked_with_the_keyboard(qapp, keep):
     from PySide6.QtCore import Qt
     from PySide6.QtGui import QKeyEvent
     from PySide6.QtCore import QEvent
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = []
     page = keep(qt_window.MapsPage(lambda a, arg=None: posted.append((a, arg))))
     page.resize(1090, 760)
@@ -1813,8 +1813,8 @@ def test_the_pages_are_built_when_first_needed_and_keep_the_users_order(qapp, ke
     overview and the maps are made with the window; a form page comes with its first visit, ``forms[key]``, the
     search (build_all) or the idle warm-up (build_next) – with the card/tab order and the style sheet given
     meanwhile, in place of its stand-in in the stack."""
-    from dbdmapscout import qt_window
-    from dbdmapscout.qt_pages import FormPage
+    from fogscout import qt_window
+    from fogscout.qt_pages import FormPage
     posted = []
     win = keep(qt_window.MainWindow(lambda a, arg=None: posted.append((a, arg)), None, {"log": NODE}))
     assert dict(win.forms) == {} and "overlay" not in win.forms and win.forms.get("overlay") is None
@@ -1857,7 +1857,7 @@ def test_the_pages_are_built_when_first_needed_and_keep_the_users_order(qapp, ke
 def test_the_overview_lists_what_is_new_until_it_is_understood(qapp, keep):
     """1.8.79: after an update a card "Neu seit …" with the HISTORY.md rows; "Verstanden" posts news_seen and the
     card goes once the model has no news."""
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = queue.Queue()
     win = keep(qt_window.MainWindow(lambda a, arg=None: posted.put((a, arg))))
     win.apply_theme(True, 1.0)
@@ -1880,7 +1880,7 @@ def test_the_overview_lists_what_is_new_until_it_is_understood(qapp, keep):
 def test_the_overview_compares_this_week_with_the_last_one(qapp, keep):
     """1.8.83 (UI review idea 6): a tile row "Diese Woche" – rounds, Ø kills, escapes, Ø wait and bloodpoints of
     Monday until now, each with last week's value and the change; hidden while neither week has a round."""
-    from dbdmapscout import official, qt_window
+    from fogscout import official, qt_window
     now = time.time()
     start = history.period_start("week", now)
     rounds, off = [], {}
@@ -1922,7 +1922,7 @@ def test_the_overview_compares_this_week_with_the_last_one(qapp, keep):
 
 def test_the_overview_says_when_hwinfo_is_missing():
     """1.8.86: the system card names the values HWiNFO would add while it is not running; nothing once it was seen."""
-    from dbdmapscout.sysinfo import Snapshot
+    from fogscout.sysinfo import Snapshot
     now = time.time()
     snap = Snapshot(cpu_load=10, t=now)
     app = fake_app(sysmon=SimpleNamespace(active=True, snapshot=snap, hwinfo_seen=False))

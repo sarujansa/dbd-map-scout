@@ -20,7 +20,7 @@ only_linux_hosts = pytest.mark.skipif(WIN, reason="would write the real hosts fi
 @pytest.fixture(autouse=True)
 def _never_the_real_hosts_file(monkeypatch):
     if WIN:
-        from dbdmapscout import hostsedit
+        from fogscout import hostsedit
 
         def refuse():
             pytest.fail("test reached the real hosts file")

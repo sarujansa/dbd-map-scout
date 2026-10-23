@@ -4,7 +4,7 @@ import time
 
 from PIL import Image
 
-from dbdmapscout import thumbs
+from fogscout import thumbs
 
 
 def _picture(path, size=(1280, 900), colour="red"):

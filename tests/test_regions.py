@@ -4,7 +4,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dbdmapscout import hostsedit, regions  # noqa: E402
+from fogscout import hostsedit, regions  # noqa: E402
 from conftest import only_linux_hosts  # noqa: E402
 
 WIN_DEFAULT = (
@@ -70,7 +70,7 @@ def test_run_job_writes_file_and_backup(tmp_path, monkeypatch):
     monkeypatch.setenv("DBDMS_HOSTS_FILE", str(f))
     res = regions.run_job({"block": regions.block_list(["eu-central-1"]), "remove_foreign": True})
     assert res["ok"] and res["changed"]
-    assert (tmp_path / "hosts.dbdmapscout-backup").read_bytes() == WIN_DEFAULT.encode("latin-1")
+    assert (tmp_path / "hosts.fogscout-backup").read_bytes() == WIN_DEFAULT.encode("latin-1")
     assert regions.current_state()["regions"]["us-west-2"] == "gesperrt"
     res = regions.run_job({"block": [], "remove_foreign": True})
     assert res["ok"] and f.read_bytes() == WIN_DEFAULT.encode("latin-1")
@@ -97,7 +97,7 @@ def test_the_helpers_errors_show_in_the_ui_language():
     """1.8.45: the elevated helper has no i18n – it answers in German and names its text; the program shows it in
     the UI language (before, the English UI showed these errors in German)."""
     import json
-    from dbdmapscout import i18n
+    from fogscout import i18n
     assert set(regions.HELPER_TEXTS) == {hostsedit.BAD_NAME, hostsedit.CHANGED_AFTER, hostsedit.NO_RIGHTS}
     res = json.loads(json.dumps(hostsedit.apply_job({"block": ["update.microsoft.com"]})))   # as in the result file
     assert res["error"] == "Ungültiger Servername im Auftrag: 'update.microsoft.com'"
@@ -119,3 +119,31 @@ def test_odd_bytes_and_missing_end_marker_keep_other_lines():
            "\n192.168.1.5 printer.local\r\n"
     new = hostsedit.build(text, [], remove_foreign=True)
     assert "caf\x85e.local" in new and "printer.local" in new and "gamelift" not in new
+
+
+def test_the_section_written_under_the_old_program_name_is_still_ours():
+    """1.9: until 1.8.91 the markers said "DbD Map Scout" – that section is recognised as ours and replaced on the
+    next write, never left behind as a foreign block."""
+    old = (WIN_DEFAULT + "\r\n" + hostsedit.OLD_BEGIN + "\r\n# Written by DbD Map Scout.\r\n"
+           "0.0.0.0 gamelift.us-east-1.amazonaws.com\r\n" + hostsedit.OLD_END + "\r\n")
+    a = hostsedit.analyse(old, regions.MANAGED)
+    assert a["own"] and a["blocked_own"] == {"gamelift.us-east-1.amazonaws.com"} and a["foreign_lines"] == 0
+    new = hostsedit.build(old, ["gamelift.eu-west-2.amazonaws.com"], regions.MANAGED)
+    assert hostsedit.OLD_BEGIN not in new and hostsedit.OLD_END not in new and "us-east-1" not in new
+    assert hostsedit.BEGIN in new and "0.0.0.0 gamelift.eu-west-2.amazonaws.com" in new
+    assert hostsedit.build(old, [], regions.MANAGED) == WIN_DEFAULT
+
+
+@only_linux_hosts
+def test_a_backup_made_under_the_old_name_is_kept_as_the_original(tmp_path, monkeypatch):
+    """1.9: the backup is the hosts file from before the program's first change – one made as
+    hosts.dbdmapscout-backup stays that, no second "original" is copied from an already changed file."""
+    f = tmp_path / "hosts"
+    f.write_bytes(WIN_DEFAULT.encode("latin-1"))
+    old_backup = tmp_path / ("hosts" + hostsedit.OLD_BACKUP_SUFFIX)
+    old_backup.write_bytes(b"# the original\r\n")
+    monkeypatch.setenv("DBDMS_HOSTS_FILE", str(f))
+    res = regions.run_job({"block": regions.block_list(["eu-central-1"]), "remove_foreign": True})
+    assert res["ok"] and res["changed"] and res["backup"] == str(old_backup)
+    assert not (tmp_path / ("hosts" + hostsedit.BACKUP_SUFFIX)).exists()
+    assert old_backup.read_bytes() == b"# the original\r\n"

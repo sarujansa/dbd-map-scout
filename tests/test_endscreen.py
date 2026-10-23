@@ -6,7 +6,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dbdmapscout.detector import _right_region, fills_bars  # noqa: E402
+from fogscout.detector import _right_region, fills_bars  # noqa: E402
 
 W, H, VX = 3440, 1440, 440          # the user's monitor; 16:9 picture from x=440 to x=3000
 
@@ -74,7 +74,7 @@ def test_our_big_overlay_in_the_left_bar_does_not_hide_a_full_width_screen():
 
 
 def test_no_currency_ocr_in_a_trial_on_ultrawide():
-    from dbdmapscout.detector import OutOfMatchWatcher, has_bars
+    from fogscout.detector import OutOfMatchWatcher, has_bars
     calls = []
     w = OutOfMatchWatcher.__new__(OutOfMatchWatcher)
     w._thumb = None
@@ -98,14 +98,14 @@ def _full(name):
 
 
 def _watcher():
-    from dbdmapscout.detector import OutOfMatchWatcher
-    from dbdmapscout.ocr import Recognizer
+    from fogscout.detector import OutOfMatchWatcher
+    from fogscout.ocr import Recognizer
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     return OutOfMatchWatcher(Recognizer(os.path.join(root, "models", "ch_PP-OCRv4_rec_infer.onnx")))
 
 
 def test_real_loading_screen_counts():
-    from dbdmapscout.detector import has_loading_bar, is_dark
+    from fogscout.detector import has_loading_bar, is_dark
     f = _full("loading.jpg")                    # user screenshot: black, white logo, tip, filled bar
     assert has_loading_bar(f) and is_dark(f)
     w = _watcher()
@@ -117,7 +117,7 @@ def test_real_loading_screen_counts():
 def test_lying_on_the_ground_is_no_loading_screen():
     """Slugged (Ironworks of Misery, 1.31.2): a progress bar, the camera barely moves – but the game
     world is lit. Upper picture from a real match, bottom quarter with the loading bar."""
-    from dbdmapscout.detector import is_dark
+    from fogscout.detector import is_dark
     f = _full("loading.jpg")
     f[:int(0.72 * H)] = _full("spectate.jpg")[:int(0.72 * H)]
     assert not is_dark(f)

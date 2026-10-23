@@ -6,5 +6,5 @@ if not exist ".venv\installed.ok" (
   pause
   exit /b 1
 )
-".venv\Scripts\python.exe" -m dbdmapscout --test %*
+".venv\Scripts\python.exe" -m fogscout --test %*
 pause

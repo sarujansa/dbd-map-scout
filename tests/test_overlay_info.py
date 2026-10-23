@@ -11,7 +11,7 @@ if importlib.util.find_spec("tkinter") is None:   # headless CI: overlay_win32 i
 
 from PIL import Image  # noqa: E402
 
-from dbdmapscout import overlay_win32 as ow  # noqa: E402
+from fogscout import overlay_win32 as ow  # noqa: E402
 
 
 def map_pic(w=300, h=400, empty_bottom=0):
@@ -69,7 +69,7 @@ def test_ping_row_below_server_and_coloured():
 
 
 def test_program_icon(tmp_path):
-    from dbdmapscout.icon import SIZES, draw, save_ico
+    from fogscout.icon import SIZES, draw, save_ico
     path = tmp_path / "x.ico"
     save_ico(str(path))
     ico = Image.open(path)
@@ -195,7 +195,7 @@ def test_the_dark_area_does_not_make_the_map_smaller():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ov.set_map(os.path.join(root, "maps", "Forsaken Boneyard", "Eyrie of Crows.webp"), "")
     ov.set_timer("1:23")
-    from dbdmapscout import layout
+    from fogscout import layout
     height = layout.fit_height(470, 406, *ov.map_size())           # the map alone fits the bar (as the App does)
     plain_h = ov.fit_width(height, 518, 406)
     ov.set_backdrop(True)
@@ -238,7 +238,7 @@ def test_a_big_text_with_the_dark_area_still_fits_the_bar():
     ov.set_server("Frankfurt", 28)
     ov.set_record("Ø 2.8 Kills · 12 Runden")
     ov.set_backdrop(True)
-    from dbdmapscout import layout
+    from fogscout import layout
     text_h = int(1440 * 0.36 * 1.6)
     edge = min(ov.backdrop_pad(text_h), 17 - 2)
     height = layout.fit_height(518, 406, *ov.map_size())

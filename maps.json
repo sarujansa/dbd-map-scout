@@ -1,5 +1,5 @@
 {
- "_info": "Map-Katalog fuer DbD Map Scout: nur die mitgelieferten Bilder. Namen (EN + Uebersetzungen) aus dbd-map-overlay (Apache-2.0, LucaFontanot). variants: Layout-Nummer -> Bilddatei relativ zu maps/.",
+ "_info": "Map-Katalog fuer Fog Scout: nur die mitgelieferten Bilder. Namen (EN + Uebersetzungen) aus dbd-map-overlay (Apache-2.0, LucaFontanot). variants: Layout-Nummer -> Bilddatei relativ zu maps/.",
  "realms": {
   "The MacMillan Estate": {
    "en": "The MacMillan Estate",

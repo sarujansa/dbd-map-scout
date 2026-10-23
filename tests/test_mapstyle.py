@@ -10,7 +10,7 @@ from PIL import Image
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from dbdmapscout import mapimage, mapstyle  # noqa: E402
+from fogscout import mapimage, mapstyle  # noqa: E402
 
 MAPS = os.path.join(ROOT, "maps")
 
@@ -91,7 +91,7 @@ def _styled_in_the_background(appmod, fake):
 
 
 def test_app_takes_the_dark_picture_only_when_chosen_and_never_for_own_pictures(tmp_path):
-    from dbdmapscout import app as appmod
+    from fogscout import app as appmod
     path = os.path.join(MAPS, "McMillan", "Coal Tower.webp")
     own = {"x": False}
     cat = types.SimpleNamespace(image_path=lambda mid, v=1: (path, v), is_own=lambda mid, v=1: own["x"])
@@ -199,8 +199,8 @@ def test_midwich_keeps_its_floors(dark_maps):
     7 s, fading frames between), the name on top like on every map (stays upright when turned), the holes of the
     top floor dark grey, nothing of the patterned background left, the digits as many and as white as before."""
     import cv2
-    from dbdmapscout.mapimage import floor_frames, title_split
-    from dbdmapscout.overlay import load_frames
+    from fogscout.mapimage import floor_frames, title_split
+    from fogscout.overlay import load_frames
     src = os.path.join(MAPS, "Other", "Midwich.gif")
     out = dark_maps[src]
     assert out != src and out.endswith(".webp")
@@ -231,7 +231,7 @@ def test_midwich_keeps_its_floors(dark_maps):
 def test_frame_durations_of_an_animated_webp_are_read_right(tmp_path):
     """An animated WebP knows a frame's duration only once the frame is loaded – read before, it was the one of
     the frame before (Midwich's floors would have been the fading frames)."""
-    from dbdmapscout.overlay import load_frames
+    from fogscout.overlay import load_frames
     path = tmp_path / "anim.webp"
     frames = [Image.new("RGBA", (20, 20), (i * 60, 0, 0, 255)) for i in range(3)]
     frames[0].save(path, "WEBP", lossless=True, save_all=True, append_images=frames[1:], duration=[7000, 100, 200])
@@ -244,7 +244,7 @@ def test_the_floor_styles_put_a_floor_under_the_dark_drawing(tmp_path, style):
     floor under it – the drawing (digits, boxes) and the name stay as in "dark", the see-through floor of "dark"
     gets the style's colour, outside the map stays see-through; each style has its own cache file; Midwich keeps
     its floors."""
-    from dbdmapscout.mapimage import title_split
+    from fogscout.mapimage import title_split
     path = os.path.join(MAPS, "McMillan", "Coal Tower.webp")
     dark_path = mapstyle.styled_path(path, str(tmp_path))
     out_path = mapstyle.styled_path(path, str(tmp_path), style=style)
@@ -277,7 +277,7 @@ def test_the_floor_styles_put_a_floor_under_the_dark_drawing(tmp_path, style):
         wide = shape & ~mapstyle.cv2.erode(shape.astype(np.uint8), mapstyle._disk(8)).astype(bool)   # 1.8.29: ≥ 8 px
         assert (np.abs(body_o[wide][:, :3] - np.array(edge)).max(axis=1) <= 2).mean() > 0.9
     if style == "grey":                                                       # Midwich: floors kept, in this style
-        from dbdmapscout.overlay import load_frames
+        from fogscout.overlay import load_frames
         gif = os.path.join(MAPS, "Other", "Midwich.gif")
         styled = mapstyle.styled_path(gif, str(tmp_path), style=style)
         assert styled != gif and [d for _f, d in load_frames(styled)] == [d for _f, d in load_frames(gif)]
@@ -291,7 +291,7 @@ def test_no_map_keeps_the_black_ring_in_a_floor_style(map_cache):
     the light edge leaves light text on the outline readable (RPD West "BACK DOOR")."""
     import cv2
     from concurrent.futures import ThreadPoolExecutor
-    from dbdmapscout.mapimage import title_split
+    from fogscout.mapimage import title_split
 
     def check(path):
         name = os.path.basename(path)
@@ -331,14 +331,14 @@ def cv2_erode_edge(shape, px):
 
 
 def test_the_app_takes_the_picture_of_a_floor_style(tmp_path):
-    from dbdmapscout import app as appmod
+    from fogscout import app as appmod
     path = os.path.join(MAPS, "McMillan", "Coal Tower.webp")
     cat = types.SimpleNamespace(image_path=lambda mid, v=1: (path, v), is_own=lambda mid, v=1: False)
     fake = _fake_app(appmod, cat, tmp_path, "lilac")
     styled = _styled_in_the_background(appmod, fake)
     assert styled.startswith(os.path.join(str(tmp_path), appmod.STYLE_CACHE)) and "-lilac-" in styled
-    from dbdmapscout.app_overlay import MAP_STYLES
-    from dbdmapscout.qt_maps import STYLE_BUTTONS
+    from fogscout.app_overlay import MAP_STYLES
+    from fogscout.qt_maps import STYLE_BUTTONS
     assert [k for k, _l in MAP_STYLES] == [k for k, _l, _t in STYLE_BUTTONS] == ["classic", *mapstyle.STYLES]
 
 
@@ -349,7 +349,7 @@ def test_maps_drawn_dark_already_get_the_floor_of_a_floor_style(tmp_path, style)
     they were – a black ring on the black bar. Now they get the style's floor and edge like every converted map;
     "dark" leaves them. (Trickster's Delusion was an opaque picture of its own kind until 1.8.55 – now a callout map
     like the others, see test_tricksters_delusion_is_a_callout_map_like_the_others.)"""
-    from dbdmapscout.mapimage import title_split
+    from fogscout.mapimage import title_split
     for rel in ("Withered Isle/Fallen Refuge.webp", "Withered Isle/Freddy Fazbears Pizza.webp"):
         path = os.path.join(MAPS, rel)
         assert mapstyle.styled_path(path, str(tmp_path)) == path                  # "dark": as it is
@@ -378,7 +378,7 @@ def test_tricksters_delusion_is_a_callout_map_like_the_others(tmp_path):
     """1.8.55 (user: "das ist die offizielle von Hens"): the grey grid layout became the lilac callout map – name on
     top, see-through background (no crosses left), and every map style converts it."""
     import cv2
-    from dbdmapscout.mapimage import title_split
+    from fogscout.mapimage import title_split
     path = os.path.join(MAPS, "Sleepless District", "Trickster's Delusion.webp")
     src = Image.open(path).convert("RGBA")
     assert src.height == 1280 and title_split(src) is not None

@@ -1,6 +1,6 @@
 import json
 
-from dbdmapscout import config
+from fogscout import config
 
 
 def test_a_broken_settings_file_is_kept_and_never_overwritten_with_defaults(tmp_path):
@@ -56,7 +56,7 @@ def test_reset_data_keeps_only_the_pc_specific_values():
 def test_old_settings_forget_the_detection_page(tmp_path):
     """1.8.78: the page "Erkennung" is gone – a saved navigation/card/tab order that names it is cleaned once."""
     import json
-    from dbdmapscout.config import Settings, SETTINGS_VERSION
+    from fogscout.config import Settings, SETTINGS_VERSION
     p = tmp_path / "settings.json"
     p.write_text(json.dumps({"settings_version": 9, "nav_order": ["log", "detect", "overview"],
                              "card_order": {"detect": {}, "settings": {"a": ["x"]}},

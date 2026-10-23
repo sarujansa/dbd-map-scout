@@ -1,11 +1,11 @@
-"""Build statistics (dbdmapscout/builds.py, 1.8.48) – pure logic on (round, match) pairs."""
+"""Build statistics (fogscout/builds.py, 1.8.48) – pure logic on (round, match) pairs."""
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dbdmapscout import builds  # noqa: E402
-from dbdmapscout.official import Match, Player  # noqa: E402
+from fogscout import builds  # noqa: E402
+from fogscout.official import Match, Player  # noqa: E402
 
 T0 = 1791030420.0
 

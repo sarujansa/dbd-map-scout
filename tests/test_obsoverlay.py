@@ -7,7 +7,7 @@ from PIL import Image
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dbdmapscout import obsoverlay  # noqa: E402
+from fogscout import obsoverlay  # noqa: E402
 
 S = 2560 / 3440     # a 3440×1440 window fitted into a 2560×1440 canvas (obsrec.Recorder._fit)
 FIT = {"positionX": 0, "positionY": 0, "alignment": 5, "boundsType": "OBS_BOUNDS_SCALE_INNER", "boundsAlignment": 0,
