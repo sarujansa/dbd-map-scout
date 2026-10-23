@@ -59,11 +59,11 @@ SETUP = (
         ("grid", 1, tuple(("row", (("label", f"st.hk.{k}.label"), ("stretch",), ("hotkey", f"st.hk.{k}")))
                           for k in SETUP_HOTKEYS)),
         ("check", "st.autostart"), ("check", "st.lobby_notify"))),
-    # 1.2.15: the stats-page link was only under Einstellungen → Mehr; new users never found it
+    # 1.2.15: the stats-page link was only deep in the settings; new users never found it
     (N_("Match-Daten"), (
         ("note", N_("Kills, Entkommen und Bloodpoints deiner Runden kommen von stats.deadbydaylight.com – geladen "
                     "von deinem Browser, nicht vom Programm. Lässt sich auch später einrichten (Einstellungen → "
-                    "Mehr → Offizielle Match-Daten).")),
+                    "Match-Daten → Offizielle Match-Daten).")),
         ("row", (("button", "setup.script"), ("button", "setup.open_site"), ("stretch",))),
         ("check", "setup.off_notify"), ("check", "setup.off_open"), ("hint", "setup.off_text"))),
 )
@@ -487,7 +487,7 @@ def show_control(kind, w, extra, st):
         if idx >= 0 and w.isTabVisible(idx) != bool(st.get("visible", True)):
             w.setTabVisible(idx, bool(st.get("visible", True)))
         return
-    if kind == "title":                  # 1.66.3: a card whose frame is folded away ("Mehr" closed) is not shown
+    if kind == "title":                  # 1.66.3: a card whose model frame is hidden is not shown
         card, shown = w.parentWidget(), bool(st.get("visible", True))
         if card is not None and card.isHidden() == shown:
             card.setVisible(shown)
@@ -911,16 +911,7 @@ class FormPage(QWidget, _Arranged):
                 if col is None:
                     col = self._column(page_key)
                     lay.addWidget(col)
-                card = _card()
-                cl = QVBoxLayout(card)
-                cl.setContentsMargins(14, 12, 14, 12)
-                cl.setSpacing(6)
-                head, hrow = _card_head(cl)
-                self.controls[item[1]] = ("title", head, None)
-                self._group = []
-                for row in item[2]:
-                    self._add(row, cl)
-                self._align()
+                card, hrow = self._card_widget(item)
                 col.add(item[1], card, hrow)
             elif kind == "panel":
                 lay.addWidget(self._panel(item[1]))
@@ -937,11 +928,13 @@ class FormPage(QWidget, _Arranged):
                     body = QWidget()
                     body.setObjectName("page")
                     bl = QVBoxLayout(body)
-                    bl.setContentsMargins(14, 12, 14, 12)
+                    if rows and all(r[0] == "card" for r in rows):    # 1.8.90: a tab of cards (the settings page)
+                        bl.setContentsMargins(0, 8, 0, 0)             # – the cards bring their own padding
+                    else:
+                        bl.setContentsMargins(14, 12, 14, 12)
                     bl.setSpacing(6)
                     self._group = []
-                    for row in rows:
-                        self._add(row, bl)
+                    self._place(rows, bl, page_key)
                     self._align()
                     bl.addStretch()
                     tabs.addTab(body, _(label).replace("&", "&&"))
@@ -958,6 +951,36 @@ class FormPage(QWidget, _Arranged):
             else:
                 self._add(item, lay)
         lay.addStretch()
+
+    def _card_widget(self, item):
+        """("card", key, rows) → (card, its head row): a titled card whose title is the "title" control of ``key``
+        (shown/hidden with the model's frame)."""
+        card = _card()
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(14, 12, 14, 12)
+        cl.setSpacing(6)
+        head, hrow = _card_head(cl)
+        self.controls[item[1]] = ("title", head, None)
+        self._group = []
+        for row in item[2]:
+            self._add(row, cl)
+        self._align()
+        return card, hrow
+
+    def _place(self, rows, lay, page_key):
+        """1.8.90: rows of a tab body – cards standing together go into one draggable column (CardColumn, like on
+        the page itself), everything else straight into ``lay``."""
+        col = None
+        for item in rows:
+            if item[0] == "card":
+                if col is None:
+                    col = self._column(page_key)
+                    lay.addWidget(col)
+                card, hrow = self._card_widget(item)
+                col.add(item[1], card, hrow)
+            else:
+                col = None
+                self._add(item, lay)
 
     def _panel(self, rows):
         card = _card()

@@ -765,7 +765,7 @@ class StatsTab:
                      "ohne erkannte Runde gar nicht.", n=total)
         else:
             hint = _("Noch keine Matches mit Loadout in dieser Auswahl – die Stats-Seite liefert es ab Userscript "
-                     "Version 3 (Einstellungen → Mehr → Offizielle Match-Daten → „Userscript kopieren“).")
+                     "Version 3 (Einstellungen → Match-Daten → Offizielle Match-Daten → „Userscript kopieren“).")
         self.stats_build_var.set(hint)
         t = self.stats_items
         t.delete(*t.get_children())
@@ -1491,7 +1491,7 @@ class StatsTab:
                          "empty": _("Keine Survivor-Runden mit offiziellen Daten in dieser Auswahl.")}})
 
     def _official_check_render(self):
-        """Settings → Mehr → Match-Daten, "Abgleich mit der Stats-Seite": how well the program's rounds fit the page
+        """Settings → Match-Daten, "Abgleich mit der Stats-Seite": how well the program's rounds fit the page
         (all data; until 1.8.77 a card of the page Erkennung)."""
         j = self._joined()
         if not j.matches:

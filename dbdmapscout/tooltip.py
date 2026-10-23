@@ -130,7 +130,7 @@ TIPS = {
     "Custom Game": "Diese Runde als Custom Game zählen – sie fliesst dann nicht in die Wartezeit ein.",
     "Farming an/aus": "Diese Runde als Farming-Runde zählen bzw. wieder als normale Runde – Farming-Runden "
                       "erscheinen nur unter dem Filter „Farming“. Runden auf der Farming-Region (Einstellungen → "
-                      "Mehr) bleiben Farming.",
+                      "Match-Daten) bleiben Farming.",
     "Runden ohne Crossplay als Farming zählen": "Zeigt die Lobby die Weltkugel mit rotem Kreuz (Crossplay aus), "
                                                  "zählt die nächste Runde als Farming-Runde.",
     "Spielstatus in Discord anzeigen (Rich Presence)": "Dein Discord-Status zeigt Map, Rolle, Killer und die Rundenzeit "
@@ -249,7 +249,7 @@ TIPS = {
                          "und Ping stehen dann hier und im Overlay.",
     "Farming prüfen …": "Öffnet die Statistik-Übersicht mit der Zeile, die sagt, warum diese Runden nach Farming "
                         "aussehen – dort markieren oder ignorieren.",
-    "Match-Daten einrichten …": "Zu Einstellungen → Mehr → Offizielle Match-Daten: einmal das Userscript in den "
+    "Match-Daten einrichten …": "Zu Einstellungen → Match-Daten → Offizielle Match-Daten: einmal das Userscript in den "
                                 "Browser, danach zählen Kills, Entkommen und Bloodpoints in der Statistik.",
     "Weitere 100 Runden anzeigen": "Die Liste zeigt die neuesten 100 Runden der Auswahl; jeder Klick hängt 100 "
                                    "ältere an.",

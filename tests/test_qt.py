@@ -1248,6 +1248,8 @@ def test_reveal_opens_the_page_and_lights_the_card(qapp, keep):
     while card is not None and card.property("class") != "card":
         card = card.parentWidget()
     assert card is not None and card.property("found") is True
+    tabs = qt_window._tab_of(head)                                      # 1.8.90: on the tab "Match-Daten", opened
+    assert tabs and tabs[0][0].currentWidget() is tabs[0][1] and tabs[0][0].tabText(tabs[0][0].currentIndex()) == "Match-Daten"
     win.reveal("settings", "no.such.key")                     # unknown key: nothing happens
 
 
@@ -1487,32 +1489,68 @@ def test_the_setup_assistant_survives_the_navigation_getting_focus(qapp, keep):
     assert win.current_key() == "overview" and win.stack.currentWidget() is win._pages["overview"]
 
 
-def test_the_search_finds_settings_under_more_and_unfolds_them(qapp, keep):
-    """1.8.2: a setting under the fold "Mehr" (Spotify, OBS …) is found while folded; going there asks the App to
-    unfold first. A control hidden for another reason stays out of the index."""
+def test_the_search_finds_settings_on_another_tab_and_opens_it(qapp, keep):
+    """1.8.2/1.8.90: a setting on a settings tab that is not open (Spotify on "Verbindungen") is found; going there
+    opens the settings page and that tab. A control hidden for another reason stays out of the index."""
     from dbdmapscout import qt_window
     posted = queue.Queue()
     win = keep(qt_window.MainWindow(lambda a, arg=None: posted.put((a, arg))))
     win.resize(1100, 800)
     win.show()
     qapp.processEvents()
-    shut = {k: {"text": k, "visible": False} for k, c in win.forms["settings"].controls.items()
-            if k.startswith("st.more.") and c[0] == "title"}                  # the fold is shut: no card shows
-    win.show_states("settings", {**shut, "st.more.spotify": {"text": "Spotify", "visible": False},
+    win.show_states("settings", {"st.more.spotify": {"text": "Spotify", "visible": True},
                                  "st.more.sp_on": {"text": "„Als nächstes“ aus Spotify zeigen", "value": False,
                                                    "enabled": True, "visible": True}})
     win.show_states("overlay", {"ov.map_size_reset": {"text": "Eigene Grösse zurücksetzen", "visible": False,
                                                       "enabled": True}})
     win.update_search_index()
     hit = next(e for e in win._found if e.startswith("„Als nächstes“ aus Spotify"))
-    assert win._found[hit][2] is True                           # folded under "Mehr"
+    assert win._found[hit][2] is False                          # reachable through its tab: not folded
     assert not any(e.startswith("Eigene Grösse zurücksetzen") for e in win._found)
+    assert any(e.startswith("Verbindungen") for e in win._found)   # the tabs themselves are found too
     while not posted.empty():
         posted.get_nowait()
     win.go_to_found(hit)
     assert win.current_key() == "settings"
-    # 1.8.38: "open", not the toggle button – with a stale index the toggle shut the fold instead
-    assert ("more_open", None) in [posted.get_nowait() for _i in range(posted.qsize())]
+    for _i in range(5):
+        qapp.processEvents()
+        time.sleep(0.03)
+    w = win.forms["settings"].controls["st.more.sp_on"][1]
+    tabs = qt_window._tab_of(w)
+    assert tabs and tabs[0][0].currentWidget() is tabs[0][1]
+    assert not any(a == "more_open" for a, _x in [posted.get_nowait() for _i in range(posted.qsize())])
+
+
+def test_the_settings_page_is_split_into_tabs_with_its_cards(qapp, keep):
+    """1.8.90 (user: "Bei Settings ist es riesig geworden"): six tabs, each card on the expected one, the OBS card
+    in five groups; a card inside a tab sits in a draggable column like on the page itself."""
+    from dbdmapscout import qt_window
+    page = keep(qt_window.FormPage(lambda a, arg=None: None, "Einstellungen", qt_window.SPECS["settings"], "settings"))
+    tabs = {k: c for k, c in page.controls.items() if c[0] == "tab"}
+    tw = next(iter(tabs.values()))[1]
+    assert [tw.tabText(i) for i in range(tw.count())] == ["Allgemein", "Erkennung", "Hotkeys", "Match-Daten",
+                                                          "Aufnahmen", "Verbindungen"]
+    where = {}
+    for key, (kind, head, _x) in page.controls.items():
+        if kind == "title":
+            t = qt_window._tab_of(head)
+            where[key] = tw.tabText(tw.indexOf(t[0][1])) if t else None
+    assert where == {"st.look": "Allgemein", "st.start": "Allgemein", "st.updates": "Allgemein",
+                     "st.more.backup": "Allgemein", "st.more.folders": "Allgemein",
+                     "st.detect": "Erkennung", "st.langs": "Erkennung", "st.more.own": "Erkennung", "st.notify": "Erkennung",
+                     "st.hotkeys": "Hotkeys", "st.more.official": "Match-Daten", "st.more.farming": "Match-Daten",
+                     "st.more.rec": "Aufnahmen", "st.more.discord": "Verbindungen", "st.more.spotify": "Verbindungen"}
+    assert [col.ids() for col in page.columns] == [
+        ["st.look", "st.start", "st.updates", "st.more.backup", "st.more.folders"],
+        ["st.detect", "st.langs", "st.more.own", "st.notify"], ["st.hotkeys"],
+        ["st.more.official", "st.more.farming"], ["st.more.rec"], ["st.more.discord", "st.more.spotify"]]
+    rec = page.controls["st.more.rec"][1]
+    card = rec.parentWidget()
+    while card is not None and card.property("class") != "card":
+        card = card.parentWidget()
+    from PySide6.QtWidgets import QLabel
+    subs = [lbl.text() for lbl in card.findChildren(QLabel) if lbl.property("class") == "sub"]
+    assert subs == ["VERBINDUNG", "AUFNAHME", "TON", "CLIPS", "AUFRÄUMEN"]
 
 
 def test_the_overlay_preview_and_its_tools_sit_side_by_side_on_a_wide_page(qapp, keep):
@@ -1783,7 +1821,7 @@ def test_the_pages_are_built_when_first_needed_and_keep_the_users_order(qapp, ke
     pending = win.pending_pages()
     assert pending[:2] == ["overlay", "settings"] and "log" in pending and "stats" not in pending   # no layout
     first = []                                                                # the first column's cards
-    for item in qt_window.SPECS["settings"]:
+    for item in qt_window.SPECS["settings"][0][1][0][2]:                      # 1.8.90: those of the first tab
         if item[0] != "card":
             break
         first.append(item[1])

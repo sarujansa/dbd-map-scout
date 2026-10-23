@@ -27,7 +27,7 @@ class SpotifyUpNext:
         self._up_song, self._up_since = None, 0.0  # 1.8.37: the song the list was last checked for, since when
         self._spotify_setting(save=False)
 
-    # ---------------------------------------------------------- settings card (Einstellungen → Mehr)
+    # ---------------------------------------------------------- settings card (Einstellungen → Verbindungen)
     def _spotify_card(self, more):
         sc = self._reg("st.more.spotify", ui.LabelFrame(more, text=_("Spotify"), padding=8))
         sc.pack(fill="x", pady=(8, 0))

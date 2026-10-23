@@ -154,10 +154,18 @@ class SettingsTab:
         self._reg("st.upd_status", ui.Label(upd, textvariable=self.upd_status, wraplength=420,
                                              justify="left")).pack(anchor="w", pady=(4, 0))
 
-        # rarely needed: folded away (like "Erweitert" in the detection tab)
-        self.more_btn = self._reg("st.more_btn", ui.Button(f, command=self._toggle_more))
-        self.more_btn.pack(anchor="w", pady=(10, 0))
+        # until 1.8.89 folded away under a button "Mehr"; since 1.8.90 the window shows these cards on the tabs
+        # Match-Daten / Aufnahmen / Verbindungen / Allgemein (qt_window.SPECS) – the keys keep their prefix
         more = self.more_frame = ui.Frame(f)
+        more.pack(fill="x", pady=(4, 0))
+        # 1.8.90: the tabs' frames (qt_window.SPECS["settings"]) – a tab hides with its frame; one literal each, the
+        # test of the hand-made pages reads the keys from the source
+        self._reg("st.tab.general", ui.Frame(f)).pack()
+        self._reg("st.tab.detect", ui.Frame(f)).pack()
+        self._reg("st.tab.hotkeys", ui.Frame(f)).pack()
+        self._reg("st.tab.data", ui.Frame(f)).pack()
+        self._reg("st.tab.rec", ui.Frame(f)).pack()
+        self._reg("st.tab.links", ui.Frame(f)).pack()
         own = self._reg("st.more.own", ui.LabelFrame(more, text=_("Eigene Map-Zuordnungen"), padding=8))
         own.pack(fill="x")
         self.alias_var = ui.StringVar(value="")
@@ -420,21 +428,7 @@ class SettingsTab:
         self.version_label = self._reg("st.version", ui.Label(f, text=f"DbD Map Scout {__version__} · " + _("liest nur Bildschirmpixel, sendet keine Eingaben ans Spiel."),
                   style="Dim.TLabel", wraplength=430))
         self.version_label.pack(anchor="w", pady=(10, 0))
-        self._more_open = False
-        self._show_more()
         return outer
-
-    def _toggle_more(self):
-        self._more_open = not self._more_open
-        self._show_more()
-
-    def _show_more(self):
-        arrow = "▾ " if self._more_open else "▸ "
-        self.more_btn.configure(text=arrow + _("Mehr (Match-Daten, Farming, OBS-Aufnahmen, Discord, Spotify, Sicherung, Ordner)"))
-        if self._more_open:
-            self.more_frame.pack(fill="x", pady=(4, 0), before=self.version_label)
-        else:
-            self.more_frame.pack_forget()
 
     def _export_settings(self, path=None):
         if path is None:                            # the window asks for the file and calls again
@@ -708,10 +702,8 @@ class SettingsTab:
             self.toast.show(title, text, seconds)
 
     def _reveal_rec(self):
-        """Overview tile "Aufnahmen" → Settings, "Mehr" open, the card "Aufnahmen mit OBS" lit up."""
+        """Overview tile "Aufnahmen" → Settings, tab "Aufnahmen", the card "Aufnahmen mit OBS" lit up."""
         self.qt.show_page("settings")
-        if not self._more_open:
-            self._toggle_more()
         self._qt_refresh(force=True)
         self.qt.reveal("settings", "st.more.rec")
 

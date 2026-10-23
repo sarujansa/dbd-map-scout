@@ -525,8 +525,6 @@ class App(ServerTab, StatsTab, RecordingsTab, DiscordPresence, SpotifyUpNext, Lo
                               "ohne DBD. Nochmal drücken beendet den Test."))
         if w is self.adv_btn:
             return _("Technische Optionen für die Fehlersuche ein- oder ausklappen.")
-        if w is self.more_btn:
-            return _("Selten gebrauchte Einstellungen ein- oder ausklappen.")
         if w is self.edit_btn:
             return lambda: (_("Verschieben beenden.") if self.edit_btn.cget("text") == _("Fertig") else
                             _("Karte direkt mit der Maus ziehen, Strg+Mausrad ändert die Grösse.")

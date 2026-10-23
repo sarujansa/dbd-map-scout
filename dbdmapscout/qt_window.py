@@ -175,88 +175,93 @@ SPECS = {
                 ("check", "ov.fade"), ("check", "ov.per_size"), ("hint", "ov.per_size_hint"))))),
     ),
     "settings": (
-        ("card", "st.look", (
-            ("row", (("label", "st.lang.label"), ("combo", "st.lang"), ("stretch",))), ("hint", "st.lang_note"),
-            ("check", "st.dark"),
-            ("row", (("label", "st.theme.label"), ("combo", "st.theme"), ("stretch",))), ("swatches", "st.swatches"),
-            ("check", "st.oled"),
-            ("row", (("label", "st.zoom.label"), ("combo", "st.zoom"), ("stretch",))),
-            ("row", (("button", "st.card_reset"), ("hint", "st.card_hint"))))),
-        # 1.8.78: the page "Erkennung" is gone – its cards live here, "Erweitert" on the log page
-        ("card", "st.detect", (("check", "st.det_auto"), ("check", "st.det_hide"), ("hint", "st.det_hide_hint"),
-                               ("check", "st.det_menu"), ("hint", "st.det_menu_hint"))),
-        ("card", "st.langs", (("grid", 5, tuple(("check", f"det.lang.{code}") for code in GAME_LANGS)),)),
-        ("card", "st.notify", (
-            ("check", "st.lobby_notify"), ("check", "st.lobby_remind"), ("check", "st.notify_background_only"),
-            ("hint", "st.notify_text"), ("row", (("button", "st.notify_test"), ("stretch",))))),
-        ("card", "st.start", (("check", "st.tray"), ("check", "st.autostart"), ("hint", "st.autostart_info"),
-                              ("row", (("button", "st.setup_again"), ("stretch",))))),
-        ("card", "st.hotkeys", (
-            ("grid", 2, tuple(("row", (("label", f"st.hk.{k}.label"), ("stretch",), ("hotkey", f"st.hk.{k}")))
-                              for k in ("toggle_overlay", "next_variant", "scan_now", "prev_map", "next_map",
-                                        "bigger", "smaller", "edit_position", "rotate_map", "next_floor",
-                                        "reject_map", "mark_clip"))),
-            ("row", (("button", "st.hk_defaults"), ("hint", "st.hk_status"))))),
-        ("card", "st.updates", (
-            ("check", "st.update"), ("hint", "st.update_note"),
-            ("row", (("button", "st.upd_btn"), ("button", "st.upd_apply"), ("stretch",))), ("hint", "st.upd_status"),
-            ("hint", "st.version"))),                 # 1.2.19: the version where the updates are
-        ("row", (("button", "st.more_btn"), ("stretch",))),
-        ("card", "st.more.own", (("row", (("hint", "st.more.aliases"), ("button", "st.more.aliases_clear"))),)),
-        ("card", "st.more.official", (("check", "st.more.off_open"), ("check", "st.more.off_notify"),
-                                      ("row", (("button", "st.more.script"), ("button", "st.more.resave"),
-                                               ("button", "st.more.structure"), ("stretch",))), ("hint", "st.more.off_text"),
-                                      ("label", "st.more.off_check.label"), ("hint", "st.more.off_check"))),
-        ("card", "st.more.farming", (("check", "st.more.farm_cross"),                       # 1.2.20
-                                     ("row", (("label", "st.more.farm_region.label"), ("combo", "st.more.farm_region"),
-                                              ("stretch",))),
-                                     ("hint", "st.more.farm_text"), ("hint", "st.more.farm_opp"))),
-        ("card", "st.more.rec", (("check", "st.more.rec_on"),                              # 1.4: OBS recordings
-                                 ("row", (("label", "st.more.rec_port.label"), ("entry", "st.more.rec_port"),
-                                          ("label", "st.more.rec_pw.label"), ("entry", "st.more.rec_pw"),
-                                          ("button", "st.more.rec_test"), ("stretch",))),
-                                 ("row", (("button", "st.more.rec_dir"), ("hint", "st.more.rec_folder"))),
-                                 ("row", (("label", "st.more.rec_limit.label"), ("combo", "st.more.rec_limit"),
-                                          ("stretch",))),
-                                 ("check", "st.more.rec_obs_start"),
-                                 ("check", "st.more.rec_pre"), ("check", "st.more.rec_buffer"),
-                                 ("check", "st.more.rec_window"), ("check", "st.more.rec_overlay"),
-                                 ("check", "st.more.rec_merge"), ("check", "st.more.rec_early"),
-                                 ("row", (("check", "st.more.rec_instant"), ("combo", "st.more.rec_clip"),
-                                          ("check", "st.more.rec_clip_notify"),
-                                          ("stretch",))),
-                                 ("check", "st.more.rec_audio"),
-                                 ("row", (("check", "st.more.rec_audio_dbd"), ("check", "st.more.rec_audio_discord"),
-                                          ("check", "st.more.rec_audio_desktop"), ("check", "st.more.rec_audio_mic"),
-                                          ("stretch",))),
-                                 ("check", "st.more.rec_tracks"), ("hint", "st.more.rec_tracks_hint"),      # 1.8.6
-                                 ("row", (("label", "st.more.rec_clip_src.label"), ("check", "st.more.rec_clip_dbd"),
-                                          ("check", "st.more.rec_clip_discord"), ("check", "st.more.rec_clip_mic"),
-                                          ("check", "st.more.rec_clip_other"), ("stretch",))),
-                                 ("check", "st.more.rec_farming"),
-                                 ("row", (("label", "st.more.rec_farming_days.label"),           # 1.8.23
-                                          ("combo", "st.more.rec_farming_days"), ("stretch",))),
-                                 ("hint", "st.more.rec_ffmpeg"),
-                                 ("row", (("label", "st.more.rec_tail.label"), ("combo", "st.more.rec_tail"),
-                                          ("stretch",))),
-                                 ("hint", "st.more.rec_status"),
-                                 ("hint", "st.more.rec_text"))),
-        ("card", "st.more.discord", (("check", "st.more.dc_on"),                             # 1.7: Rich Presence
-                                     ("row", (("label", "st.more.dc_id.label"), ("entry", "st.more.dc_id"),
-                                              ("button", "st.more.dc_test"), ("button", "st.more.dc_portal"),
-                                              ("stretch",))),
-                                     ("check", "st.more.dc_killer"), ("check", "st.more.dc_lobby"),
-                                     ("hint", "st.more.dc_status"), ("hint", "st.more.dc_text"))),
-        ("card", "st.more.spotify", (("check", "st.more.sp_on"),                             # 1.8: "Als nächstes"
-                                     ("row", (("label", "st.more.sp_id.label"), ("entry", "st.more.sp_id"),
-                                              ("button", "st.more.sp_dash"), ("stretch",))),
-                                     ("row", (("button", "st.more.sp_login"), ("button", "st.more.sp_logout"),
-                                              ("stretch",))),
-                                     ("hint", "st.more.sp_status"), ("hint", "st.more.sp_text"))),
-        ("card", "st.more.backup", (("row", (("button", "st.more.export"), ("button", "st.more.import"), ("stretch",),
-                                             ("button", "st.more.clear_hist"), ("button", "st.more.reset_all"))),
-                                    ("hint", "st.more.backup_hint"))),
-        ("card", "st.more.folders", (("row", (("button", "st.more.dir"), ("button", "st.more.maps_dir"), ("stretch",))),)),
+        # 1.8.90 (user: "Bei Settings ist es riesig geworden"): six tabs instead of one column of 15 cards and the
+        # fold "Mehr" (shut 1.8 window heights, open 3.9 on a 820-px window) – every tab fits about one screen
+        ("tabs", (
+            ("st.tab.general", N_("Allgemein"), (
+                ("card", "st.look", (
+                    ("row", (("label", "st.lang.label"), ("combo", "st.lang"), ("stretch",))), ("hint", "st.lang_note"),
+                    ("check", "st.dark"),
+                    ("row", (("label", "st.theme.label"), ("combo", "st.theme"), ("stretch",))), ("swatches", "st.swatches"),
+                    ("check", "st.oled"),
+                    ("row", (("label", "st.zoom.label"), ("combo", "st.zoom"), ("stretch",))),
+                    ("row", (("button", "st.card_reset"), ("hint", "st.card_hint"))))),
+                ("card", "st.start", (("check", "st.tray"), ("check", "st.autostart"), ("hint", "st.autostart_info"),
+                                      ("row", (("button", "st.setup_again"), ("stretch",))))),
+                ("card", "st.updates", (
+                    ("check", "st.update"), ("hint", "st.update_note"),
+                    ("row", (("button", "st.upd_btn"), ("button", "st.upd_apply"), ("stretch",))), ("hint", "st.upd_status"),
+                    ("hint", "st.version"))),                 # 1.2.19: the version where the updates are
+                ("card", "st.more.backup", (("row", (("button", "st.more.export"), ("button", "st.more.import"), ("stretch",),
+                                                     ("button", "st.more.clear_hist"), ("button", "st.more.reset_all"))),
+                                            ("hint", "st.more.backup_hint"))),
+                ("card", "st.more.folders", (("row", (("button", "st.more.dir"), ("button", "st.more.maps_dir"), ("stretch",))),)))),
+            ("st.tab.detect", N_("Erkennung"), (
+                # 1.8.78: the page "Erkennung" is gone – its cards live here, "Erweitert" on the log page
+                ("card", "st.detect", (("check", "st.det_auto"), ("check", "st.det_hide"), ("hint", "st.det_hide_hint"),
+                                       ("check", "st.det_menu"), ("hint", "st.det_menu_hint"))),
+                ("card", "st.langs", (("grid", 5, tuple(("check", f"det.lang.{code}") for code in GAME_LANGS)),)),
+                ("card", "st.more.own", (("row", (("hint", "st.more.aliases"), ("button", "st.more.aliases_clear"))),)),
+                ("card", "st.notify", (
+                    ("check", "st.lobby_notify"), ("check", "st.lobby_remind"), ("check", "st.notify_background_only"),
+                    ("hint", "st.notify_text"), ("row", (("button", "st.notify_test"), ("stretch",))))))),
+            ("st.tab.hotkeys", N_("Hotkeys"), (
+                ("card", "st.hotkeys", (
+                    ("grid", 2, tuple(("row", (("label", f"st.hk.{k}.label"), ("stretch",), ("hotkey", f"st.hk.{k}")))
+                                      for k in ("toggle_overlay", "next_variant", "scan_now", "prev_map", "next_map",
+                                                "bigger", "smaller", "edit_position", "rotate_map", "next_floor",
+                                                "reject_map", "mark_clip"))),
+                    ("row", (("button", "st.hk_defaults"), ("hint", "st.hk_status"))))),)),
+            ("st.tab.data", N_("Match-Daten"), (
+                ("card", "st.more.official", (("check", "st.more.off_open"), ("check", "st.more.off_notify"),
+                                              ("row", (("button", "st.more.script"), ("button", "st.more.resave"),
+                                                       ("button", "st.more.structure"), ("stretch",))), ("hint", "st.more.off_text"),
+                                              ("label", "st.more.off_check.label"), ("hint", "st.more.off_check"))),
+                ("card", "st.more.farming", (("check", "st.more.farm_cross"),                       # 1.2.20
+                                             ("row", (("label", "st.more.farm_region.label"), ("combo", "st.more.farm_region"),
+                                                      ("stretch",))),
+                                             ("hint", "st.more.farm_text"), ("hint", "st.more.farm_opp"))))),
+            ("st.tab.rec", N_("Aufnahmen"), (
+                # 1.4: OBS recordings – 1.8.90 in five groups (the card was 686 px of 24 controls)
+                ("card", "st.more.rec", (
+                    ("sub", N_("Verbindung")), ("check", "st.more.rec_on"),
+                    ("row", (("label", "st.more.rec_port.label"), ("entry", "st.more.rec_port"),
+                             ("label", "st.more.rec_pw.label"), ("entry", "st.more.rec_pw"),
+                             ("button", "st.more.rec_test"), ("stretch",))),
+                    ("row", (("button", "st.more.rec_dir"), ("hint", "st.more.rec_folder"))),
+                    ("row", (("label", "st.more.rec_limit.label"), ("combo", "st.more.rec_limit"), ("stretch",))),
+                    ("check", "st.more.rec_obs_start"),
+                    ("sub", N_("Aufnahme")), ("check", "st.more.rec_early"), ("check", "st.more.rec_pre"),
+                    ("check", "st.more.rec_buffer"), ("check", "st.more.rec_merge"),
+                    ("row", (("label", "st.more.rec_tail.label"), ("combo", "st.more.rec_tail"), ("stretch",))),
+                    ("check", "st.more.rec_window"), ("check", "st.more.rec_overlay"),
+                    ("sub", N_("Ton")), ("check", "st.more.rec_audio"),
+                    ("row", (("check", "st.more.rec_audio_dbd"), ("check", "st.more.rec_audio_discord"),
+                             ("check", "st.more.rec_audio_desktop"), ("check", "st.more.rec_audio_mic"), ("stretch",))),
+                    ("check", "st.more.rec_tracks"), ("hint", "st.more.rec_tracks_hint"),      # 1.8.6
+                    ("sub", N_("Clips")),
+                    ("row", (("check", "st.more.rec_instant"), ("combo", "st.more.rec_clip"),
+                             ("check", "st.more.rec_clip_notify"), ("stretch",))),
+                    ("row", (("label", "st.more.rec_clip_src.label"), ("check", "st.more.rec_clip_dbd"),
+                             ("check", "st.more.rec_clip_discord"), ("check", "st.more.rec_clip_mic"),
+                             ("check", "st.more.rec_clip_other"), ("stretch",))),
+                    ("sub", N_("Aufräumen")), ("check", "st.more.rec_farming"),
+                    ("row", (("label", "st.more.rec_farming_days.label"),           # 1.8.23
+                             ("combo", "st.more.rec_farming_days"), ("stretch",))),
+                    ("hint", "st.more.rec_ffmpeg"), ("hint", "st.more.rec_status"), ("hint", "st.more.rec_text"))),)),
+            ("st.tab.links", N_("Verbindungen"), (
+                ("card", "st.more.discord", (("check", "st.more.dc_on"),                             # 1.7: Rich Presence
+                                             ("row", (("label", "st.more.dc_id.label"), ("entry", "st.more.dc_id"),
+                                                      ("button", "st.more.dc_test"), ("button", "st.more.dc_portal"),
+                                                      ("stretch",))),
+                                             ("check", "st.more.dc_killer"), ("check", "st.more.dc_lobby"),
+                                             ("hint", "st.more.dc_status"), ("hint", "st.more.dc_text"))),
+                ("card", "st.more.spotify", (("check", "st.more.sp_on"),                             # 1.8: "Als nächstes"
+                                             ("row", (("label", "st.more.sp_id.label"), ("entry", "st.more.sp_id"),
+                                                      ("button", "st.more.sp_dash"), ("stretch",))),
+                                             ("row", (("button", "st.more.sp_login"), ("button", "st.more.sp_logout"),
+                                                      ("stretch",))),
+                                             ("hint", "st.more.sp_status"), ("hint", "st.more.sp_text"))))))),
     ),
 }
 
@@ -426,7 +431,6 @@ class _SearchCompleter(QCompleter):
     def pathFromIndex(self, index):
         w = self.widget()
         return w.text() if w is not None else ""
-MORE_BUTTON, MORE_PREFIX = "st.more_btn", "st.more."   # the settings' fold "Mehr" and the keys of what it holds
 
 
 def _tab_of(w):
@@ -735,8 +739,8 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------- search over the settings
     def search_index(self) -> dict:
         """{shown text: (page key, widget, folded)} – every tick box, button, slider, card title, label and tab the
-        pages show now (folded parts like "Mehr" only once they are open). 1.8.38: a label shown more than once on
-        a page carries its tab ("Position (Musik)") – before, only the first of them could be found."""
+        pages show now (a tab that is not open counts as shown: the search opens it). 1.8.38: a label shown more
+        than once on a page carries its tab ("Position (Musik)") – before, only the first of them could be found."""
         return {entry: hit[:3] for entry, hit in self._search_hits().items()}
 
     def _search_hits(self) -> dict:
@@ -744,9 +748,6 @@ class MainWindow(QMainWindow):
         found = []
         labels = dict(PAGES)
         for key, page in self.forms.items():
-            # 1.8.2: while "Mehr" is shut, what lies under it is found too (and unfolded on the way there)
-            shut = key == "settings" and not any(_reachable(c[1], page) for k, c in page.controls.items()
-                                                 if k.startswith(MORE_PREFIX) and c[0] == "title")
             for ckey, (kind, w, extra) in page.controls.items():
                 if kind not in SEARCH_KINDS:
                     continue
@@ -761,7 +762,7 @@ class MainWindow(QMainWindow):
                 text = " ".join(text.split())
                 if len(text) < 3 or text.startswith("▸"):
                     continue
-                if folded and not (shut and ckey.startswith(MORE_PREFIX)):
+                if folded:
                     continue
                 found.append((text, key, w, folded, _haystack(text, i18n.other(text))))
         count = collections.Counter((text, key) for text, key, *_rest in found)
@@ -822,13 +823,11 @@ class MainWindow(QMainWindow):
         if self._nav_kept:
             self._nav_kept = False
             self._compact_nav(self.width() < NAV_COMPACT_BELOW)
-        if folded:                                        # under "Mehr": the App unfolds it, then we scroll there
-            self._post("more_open")                       # 1.8.38: opens only (the button toggled a stale fold shut)
         self._reveal_widget(w, delay=150 if folded else 0)
 
     def reveal(self, page: str, key: str):
         """1.2.15: open ``page``, scroll to the control ``key`` of a hand-made page and light up its card (the
-        overview's "Match-Daten einrichten" leads to the card under "Mehr")."""
+        overview's "Match-Daten einrichten" leads to the card on the tab "Match-Daten"; its tab is opened)."""
         form = self._form(page)
         ctl = form.controls.get(key) if form is not None else None
         if ctl is None:

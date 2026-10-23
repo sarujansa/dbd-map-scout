@@ -890,5 +890,5 @@ class DashboardView(QWidget):
         self.heat.set_data(d, dark)
         self.heat.setVisible(bool(d.rows))
         _set(self.heat_note, "" if d.rows else _("Noch keine Killer-Runden mit Ergebnis von der Stats-Seite "
-                                                 "(Einstellungen → Mehr → Offizielle Match-Daten)."))
+                                                 "(Einstellungen → Match-Daten → Offizielle Match-Daten)."))
         self.heat_note.setVisible(not d.rows)

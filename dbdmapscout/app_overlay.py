@@ -361,7 +361,7 @@ class OverlayTab:
         self._slider(mf, _("Anzahl Titel"), self.media_next_n_var, *MEDIA_NEXT_N, self._media_next_changed,
                      fmt="{:.0f}", key="ov.media_next_n")
         self._reg("ov.media_next_hint", ui.Label(mf, text=_("Die Liste kommt aus Spotify – einrichten unter "
-                                                             "Einstellungen → Mehr → Spotify."),
+                                                             "Einstellungen → Verbindungen → Spotify."),
                                                  style="Dim.TLabel", wraplength=420)).pack(anchor="w")
         return outer
 

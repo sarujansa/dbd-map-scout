@@ -34,7 +34,7 @@ SOURCE_TIPS = {"dbd": N_("Nur der Ton von Dead by Daylight – OBS-Spur 2."),
 ABSENT_TIPS = {"other": N_("In OBS gab es bei dieser Aufnahme keine Hintergrund-Quelle. Für Spotify, Browser & Co. "
                            "in OBS je Programm eine Anwendungs-Audioaufnahme anlegen – das Programm legt sie auf "
                            "Spur 5."),
-               "dbd": N_("Diese Tonquelle war bei der Aufnahme unter Einstellungen → Mehr → Aufnahmen mit OBS "
+               "dbd": N_("Diese Tonquelle war bei der Aufnahme unter Einstellungen → Aufnahmen "
                          "ausgeschaltet.")}
 MODE_LABELS = {"copy": N_("Schnell (an Schlüsselbildern, Anfang bis zu ein paar Sekunden früher)"),
                "exact": N_("Genau (Bild neu kodiert, dauert etwas)"),
@@ -909,7 +909,7 @@ class ClipWindow(QWidget):
             row.addWidget(sl)
             row.addWidget(val)
             row.addSpacing(8)
-        self.mix_hint = QLabel(_("Eine Tonspur – zum Mischen nimmt OBS mit Spur 1–4 auf (Einstellungen → Mehr → Aufnahmen mit OBS)."))
+        self.mix_hint = QLabel(_("Eine Tonspur – zum Mischen nimmt OBS mit Spur 1–4 auf (Einstellungen → Aufnahmen)."))
         self.mix_hint.setProperty("class", "dim")
         self.mix_hint.setWordWrap(True)
         row.addWidget(self.mix_hint, 1)

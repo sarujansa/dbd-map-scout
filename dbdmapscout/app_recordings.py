@@ -132,7 +132,7 @@ class RecordingsTab:
         self._table_menu(self.rec_table, self._rec_menu_items, self._rec_menu_act)       # 1.8.10: right click
         self.rec_marks_var = ui.StringVar(value="")
         ui.Label(f, textvariable=self.rec_marks_var, style="Dim.TLabel", wraplength=560).pack(anchor="w", pady=(6, 0))
-        ui.Label(f, text=_("OBS nimmt jede Runde auf (Einstellungen → Mehr → Aufnahmen mit OBS). F8 setzt während "
+        ui.Label(f, text=_("OBS nimmt jede Runde auf (Einstellungen → Aufnahmen). F8 setzt während "
                             "der Runde eine Marke; „Behalten“ schützt eine Aufnahme vor dem Aufräumen, wenn die "
                             "Platte Platz braucht."),
                  style="Dim.TLabel", wraplength=560).pack(anchor="w", pady=(6, 0))
@@ -227,7 +227,7 @@ class RecordingsTab:
         sp = self.recorder.space
         if not self.settings.get("rec_on", False) and not recs:
             self.rec_summary_var.set(_("Aufnahme ist aus."))
-            self.rec_hint_var.set(_("Einschalten unter Einstellungen → Mehr → Aufnahmen mit OBS."))
+            self.rec_hint_var.set(_("Einschalten unter Einstellungen → Aufnahmen."))
         elif folder is None:
             self.rec_summary_var.set(_("Aufnahme-Laufwerk nicht angeschlossen.") if self.settings.get("rec_folder")
                                      else _("Noch kein Aufnahmeordner gewählt."))
