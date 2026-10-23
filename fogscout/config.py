@@ -189,6 +189,10 @@ DEFAULTS = {
     "youtube_privacy": "private",       # private | unlisted | public (ytupload.PRIVACY)
     "youtube_queue": [],                # pending uploads (ytupload.Job dicts), PC-specific – they name local files
     "youtube_quota": {},                # {"day", "used"}: the API units spent today (ytupload.Quota)
+    "youtube_playlists": False,         # 1.11: videos go into playlists after the upload (login asks for the wider scope)
+    "youtube_playlist_clip": "",        # playlist id for clips …
+    "youtube_playlist_round": "",       # … and for rounds ("" = none)
+    "youtube_playlist_names": {},       # {id: title} as Google listed them (the two choices)
     "sysinfo": "right",                 # system values at the top of a black bar: off | left | right | custom
     "sysinfo_pos": [1.0, 0.0],          # sysinfo = custom: 0..1 of the free space in the DBD window (x, y)
 }

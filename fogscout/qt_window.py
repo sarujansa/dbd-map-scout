@@ -270,6 +270,11 @@ SPECS = {
                                              ("row", (("label", "st.more.yt_privacy.label"), ("combo", "st.more.yt_privacy"),
                                                       ("button", "st.more.yt_login"), ("button", "st.more.yt_logout"),
                                                       ("stretch",))),
+                                             ("row", (("check", "st.more.yt_pl_on"), ("button", "st.more.yt_pl_load"),
+                                                      ("stretch",))),                                  # 1.11: playlists
+                                             ("row", (("label", "st.more.yt_pl_clip.label"), ("combo", "st.more.yt_pl_clip"),
+                                                      ("label", "st.more.yt_pl_round.label"), ("combo", "st.more.yt_pl_round"),
+                                                      ("stretch",))),
                                              ("hint", "st.more.yt_status"), ("hint", "st.more.yt_text"))))))),
     ),
 }

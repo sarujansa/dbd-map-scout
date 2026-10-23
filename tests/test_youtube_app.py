@@ -55,7 +55,8 @@ def test_the_app_queues_rounds_on_request_and_clips_by_themselves(app_root, tmp_
         monkeypatch.setattr(app.youtube, "add", lambda job: added.append(job))
         # the settings card is there, every widget the page names was made
         for key in ("st.more.youtube", "st.more.yt_on", "st.more.yt_id", "st.more.yt_secret", "st.more.yt_privacy",
-                    "st.more.yt_login", "st.more.yt_logout", "st.more.yt_status", "st.more.yt_text", "st.more.yt_file"):
+                    "st.more.yt_login", "st.more.yt_logout", "st.more.yt_status", "st.more.yt_text", "st.more.yt_file",
+                    "st.more.yt_pl_on", "st.more.yt_pl_load", "st.more.yt_pl_clip", "st.more.yt_pl_round"):
             assert key in app._qt_reg, key
         # not connected: nothing can be uploaded, the menu entry is there but greyed
         app._rec_render(force=True)
@@ -146,6 +147,31 @@ def test_the_app_queues_rounds_on_request_and_clips_by_themselves(app_root, tmp_
         assert app.yt_id_var.get() == "1234567890-abc.apps.googleusercontent.com"
         assert app._qt_question is not None and "Desktop-App" in app._qt_question[1]
         app._qt_question = None
+        # 1.11: playlists – the thread lists them, the two choices fill, the pick is kept and handed on
+        cfg = []
+        monkeypatch.setattr(app.youtube, "configure", lambda *a, **kw: cfg.append((a, kw)))
+        assert app.yt_pl_cbs["clip"].cget("values") == ["(keine)"] and app.yt_pl_vars["clip"].get() == "(keine)"
+        app._youtube_event("playlists", {"ok": True, "why": "", "items": [["PL2", "Runden"], ["PL1", "Clips"], ["PL3", "Clips"]]})
+        assert app.settings.get("youtube_playlist_names") == {"PL2": "Runden", "PL1": "Clips", "PL3": "Clips"}
+        assert app.yt_pl_cbs["round"].cget("values") == ["(keine)", "Clips", "Clips (PL3)", "Runden"]
+        assert "3 Playlists" in app.yt_status_var.get()
+        app.yt_pl_var.set(True)
+        app.yt_pl_vars["clip"].set("Clips")
+        app.yt_pl_vars["round"].set("Runden")
+        app._youtube_setting()
+        assert app.settings.get("youtube_playlists") is True
+        assert (app.settings.get("youtube_playlist_clip"), app.settings.get("youtube_playlist_round")) == ("PL1", "PL2")
+        assert cfg[-1][1] == {"manage": True, "playlists": {"clip": "PL1", "round": "PL2"}}
+        app._yt_playlists_fill()                                                    # re-filled: the pick stays
+        assert app.yt_pl_vars["round"].get() == "Runden"
+        app._youtube_event("playlist", {"rel": "Clips/clip1.mp4", "kind": "clip", "ok": True, "playlist": "PL1", "why": ""})
+        assert any("clip1.mp4" in str(e) and "„Clips“" in str(e) for e in app._log_entries)
+        app._youtube_event("playlist", {"rel": "r.mkv", "kind": "round", "ok": False, "playlist": "PL2",
+                                        "why": "Berechtigung fehlt"})
+        assert any("Berechtigung fehlt" in str(e) for e in app._log_entries)
+        app._youtube_event("playlists", {"ok": False, "why": "Insufficient Permission", "items": []})
+        assert any("Insufficient Permission" in str(e) for e in app._log_entries)
+        assert app.settings.get("youtube_playlist_names") == {"PL2": "Runden", "PL1": "Clips", "PL3": "Clips"}
         # the secret is stored protected, never plain
         app.yt_secret_var.set("GOCSPX-abc")
         app._youtube_setting()

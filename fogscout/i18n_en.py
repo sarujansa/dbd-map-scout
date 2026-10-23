@@ -1938,8 +1938,8 @@ EN = {
     'Auf YouTube hochladen': 'Upload to YouTube',
     'YouTube-Link kopieren': 'Copy YouTube link',
     'Auf YouTube öffnen': 'Open on YouTube',
-    'Lädt Clips (F8 und Editor) von selbst auf deinen YouTube-Kanal, Runden nur auf Wunsch: Rechtsklick oder „Auf YouTube hochladen“ unter Aufnahmen. Dafür einmal in der Google Cloud Console ein Projekt anlegen, „YouTube Data API v3“ aktivieren, unter „Anmeldedaten“ einen OAuth-Client vom Typ „Desktop-App“ erstellen und den Zustimmungsbildschirm veröffentlichen (sonst läuft die Anmeldung nach 7 Tagen ab); Client-ID und Client-Secret hier einfügen oder die heruntergeladene JSON-Datei laden, dann „Mit YouTube verbinden“ – der Browser fragt einmal nach der Freigabe. Google erlaubt mit dem Standardkontingent etwa sechs Uploads am Tag; was nicht mehr passt, wartet in der Warteschlange bis zum nächsten Tag. Hochgeladen wird nur, wenn keine Runde läuft; die Datei bleibt immer auch auf der Platte. Gesendet werden nur die Videodatei, Titel (Map, Killer, Datum) und Beschreibung – nie Spielernamen; die Freigabe liegt verschlüsselt auf diesem PC.':
-        'Uploads clips (F8 and editor) to your YouTube channel by themselves, rounds only on request: right click or "Upload to YouTube" under Recordings. For that, create a project once in the Google Cloud console, enable "YouTube Data API v3", create an OAuth client of type "Desktop app" under "Credentials" and publish the consent screen (otherwise the login expires after 7 days); paste the client ID and client secret here or load the downloaded JSON file, then "Connect to YouTube" – the browser asks once for your consent. With the default quota Google allows about six uploads a day; what does not fit waits in the queue until the next day. Uploads run only while no round is on; the file always stays on the disk too. Only the video file, a title (map, killer, date) and a description are sent – never player names; the consent is kept encrypted on this PC.',
+    'Lädt Clips (F8 und Editor) von selbst auf deinen YouTube-Kanal, Runden nur auf Wunsch: Rechtsklick oder „Auf YouTube hochladen“ unter Aufnahmen. Dafür einmal in der Google Cloud Console ein Projekt anlegen, „YouTube Data API v3“ aktivieren, unter „Anmeldedaten“ einen OAuth-Client vom Typ „Desktop-App“ erstellen und den Zustimmungsbildschirm veröffentlichen (sonst läuft die Anmeldung nach 7 Tagen ab); Client-ID und Client-Secret hier einfügen oder die heruntergeladene JSON-Datei laden, dann „Mit YouTube verbinden“ – der Browser fragt einmal nach der Freigabe. Google erlaubt mit dem Standardkontingent etwa sechs Uploads am Tag; was nicht mehr passt, wartet in der Warteschlange bis zum nächsten Tag. Hochgeladen wird nur, wenn keine Runde läuft; die Datei bleibt immer auch auf der Platte. Gesendet werden nur die Videodatei, Titel (Map, Killer, Datum) und Beschreibung – nie Spielernamen; die Freigabe liegt verschlüsselt auf diesem PC. Mit „Uploads in Playlists einsortieren“ kommt jedes Video zusätzlich in eine Playlist deiner Wahl – dafür fragt die Anmeldung die breitere Berechtigung „YouTube-Konto verwalten“ an (einmal neu verbinden).':
+        'Uploads clips (F8 and editor) to your YouTube channel by themselves, rounds only on request: right click or "Upload to YouTube" under Recordings. For that, create a project once in the Google Cloud console, enable "YouTube Data API v3", create an OAuth client of type "Desktop app" under "Credentials" and publish the consent screen (otherwise the login expires after 7 days); paste the client ID and client secret here or load the downloaded JSON file, then "Connect to YouTube" – the browser asks once for your consent. With the default quota Google allows about six uploads a day; what does not fit waits in the queue until the next day. Uploads run only while no round is on; the file always stays on the disk too. Only the video file, a title (map, killer, date) and a description are sent – never player names; the consent is kept encrypted on this PC. With "Sort uploads into playlists" every video also goes into a playlist of your choice – for that the login asks for the wider permission "Manage your YouTube account" (connect once more).',
     'YouTube: Client-ID (…apps.googleusercontent.com) und Client-Secret eintragen.':
         'YouTube: enter the client ID (…apps.googleusercontent.com) and the client secret.',
     'YouTube: öffne die Anmeldung im Browser …': 'YouTube: opening the login in the browser …',
@@ -1976,6 +1976,27 @@ EN = {
     'YouTube: hochgeladen – {file}': 'YouTube: uploaded – {file}',
     'YouTube: {error} – neuer Versuch in {s} s': 'YouTube: {error} – trying again in {s} s',
     'YouTube: {n} in der Warteschlange – {why}': 'YouTube: {n} queued – {why}',
+    'Uploads in Playlists einsortieren': 'Sort uploads into playlists',                                # 1.11
+    'Playlists laden': 'Load playlists',
+    'Clips in': 'Clips into',
+    'Runden in': 'Rounds into',
+    'YouTube: lade Playlists …': 'YouTube: loading playlists …',
+    'YouTube: zuerst „Uploads in Playlists einsortieren“ anhaken.': 'YouTube: tick "Sort uploads into playlists" first.',
+    'YouTube: {n} Playlists geladen – im Kasten auswählen': 'YouTube: {n} playlists loaded – pick them in the box',
+    'YouTube: keine Playlists auf dem Kanal – zuerst auf YouTube eine anlegen':
+        'YouTube: no playlists on the channel – create one on YouTube first',
+    'YouTube: Playlists nicht geladen – {why}': 'YouTube: playlists not loaded – {why}',
+    'YouTube: {file} in Playlist „{name}“ einsortiert': 'YouTube: {file} sorted into playlist "{name}"',
+    'YouTube: {file} hochgeladen, aber nicht in die Playlist – {why}':
+        'YouTube: {file} uploaded, but not into the playlist – {why}',
+    'Berechtigung fehlt – noch einmal „Mit YouTube verbinden“ klicken':
+        'permission missing – click "Connect to YouTube" once more',
+    'YouTube: verbunden – für Playlists einmal neu „Mit YouTube verbinden“ klicken.':
+        'YouTube: connected – for playlists click "Connect to YouTube" once more.',
+    'Nach dem Upload kommt jedes Video in die gewählte Playlist – für Clips und Runden getrennt wählbar, beide dürfen dieselbe sein. Braucht bei Google die Berechtigung „YouTube-Konto verwalten“ statt nur „Videos hochladen“: nach dem Anhaken einmal neu „Mit YouTube verbinden“. Das Programm nutzt davon nur Playlists auflisten und Video einsortieren (50 Einheiten je Video; es bleiben sechs Uploads am Tag).':
+        'After the upload every video goes into the chosen playlist – separately for clips and rounds, both may be the same. Needs Google\'s permission "Manage your YouTube account" instead of only "Upload videos": after ticking, click "Connect to YouTube" once more. The program uses it only to list playlists and to sort a video in (50 units per video; six uploads a day remain).',
+    'Holt die Liste deiner Playlists von YouTube (1 Einheit) in die beiden Auswahlfelder. Neue Playlists legst du auf YouTube an und lädst die Liste danach neu.':
+        'Fetches the list of your playlists from YouTube (1 unit) into the two choices. New playlists you create on YouTube, then load the list again.',
     'YouTube: Fehler – {error}': 'YouTube: error – {error}',
     # tooltips
     'Jeder neue Clip (F8 und aus dem Editor) kommt in die Warteschlange und geht auf deinen Kanal, sobald keine Runde läuft – mit der Sichtbarkeit rechts, Standard privat. Runden lädst du nur auf Wunsch hoch (Rechtsklick unter Aufnahmen). Google erlaubt etwa sechs Uploads am Tag, der Rest wartet bis zum nächsten Tag. Die Datei bleibt auf der Platte.':
