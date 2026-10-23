@@ -55,7 +55,7 @@ def test_the_app_queues_rounds_on_request_and_clips_by_themselves(app_root, tmp_
         monkeypatch.setattr(app.youtube, "add", lambda job: added.append(job))
         # the settings card is there, every widget the page names was made
         for key in ("st.more.youtube", "st.more.yt_on", "st.more.yt_id", "st.more.yt_secret", "st.more.yt_privacy",
-                    "st.more.yt_login", "st.more.yt_logout", "st.more.yt_status", "st.more.yt_text"):
+                    "st.more.yt_login", "st.more.yt_logout", "st.more.yt_status", "st.more.yt_text", "st.more.yt_file"):
             assert key in app._qt_reg, key
         # not connected: nothing can be uploaded, the menu entry is there but greyed
         app._rec_render(force=True)
@@ -125,6 +125,27 @@ def test_the_app_queues_rounds_on_request_and_clips_by_themselves(app_root, tmp_
         app._youtube_tick()
         app._youtube_tick()
         assert sent == [("pause", False), ("folder", folder)]
+        # 1.10.1: the client file from Google fills both fields (the dialog starts in the download folder) …
+        asked = []
+        monkeypatch.setattr(app, "_qt_file", lambda mode, title, initial, cb, pattern="JSON (*.json)":
+                            asked.append((mode, cb)))
+        app._youtube_file()
+        assert asked == [("open", app._youtube_file)]
+        cfile = tmp_path / "client_secret_1234567890-abc.apps.googleusercontent.com.json"
+        cfile.write_text(json.dumps({"installed": {"client_id": "1234567890-abc.apps.googleusercontent.com",
+                                                   "client_secret": "GOCSPX-fromfile"}}), encoding="utf-8")
+        app._youtube_file(str(cfile))
+        assert app.yt_id_var.get() == "1234567890-abc.apps.googleusercontent.com"
+        assert app.settings.get("youtube_client_id") == "1234567890-abc.apps.googleusercontent.com"
+        assert ytupload.spotify.unprotect(app.settings.get("youtube_client_secret")) == "GOCSPX-fromfile"
+        assert cfile.name in app.yt_status_var.get() and cfile.exists()
+        assert not any("GOCSPX-fromfile" in str(e) for e in app._log_entries)
+        # … a wrong file changes nothing and says why
+        (tmp_path / "web.json").write_text(json.dumps({"web": {"client_id": "x", "client_secret": "y"}}), encoding="utf-8")
+        app._youtube_file(str(tmp_path / "web.json"))
+        assert app.yt_id_var.get() == "1234567890-abc.apps.googleusercontent.com"
+        assert app._qt_question is not None and "Desktop-App" in app._qt_question[1]
+        app._qt_question = None
         # the secret is stored protected, never plain
         app.yt_secret_var.set("GOCSPX-abc")
         app._youtube_setting()

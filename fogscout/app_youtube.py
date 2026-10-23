@@ -44,8 +44,10 @@ class YouTubeUpload:
         secret = self._reg("st.more.yt_secret", ui.Entry(row, textvariable=self.yt_secret_var, width=22))
         secret._dbdms_secret = True
         secret.pack(side="left", padx=6)
+        self._reg("st.more.yt_file", ui.Button(row, text=_("Client-Datei laden …"),
+                                                command=self._youtube_file)).pack(side="left")       # 1.10.1
         self._reg("st.more.yt_console", ui.Button(row, text=_("Google Cloud Console öffnen"),
-                                                   command=lambda: webbrowser.open(ytupload.CONSOLE))).pack(side="left")
+                                                   command=lambda: webbrowser.open(ytupload.CONSOLE))).pack(side="left", padx=(6, 0))
         row2 = ui.Frame(yc)
         row2.pack(fill="x", pady=(4, 0))
         self._reg("st.more.yt_privacy.label", ui.Label(row2, text=_("Sichtbarkeit"))).pack(side="left")
@@ -68,7 +70,7 @@ class YouTubeUpload:
             "„Auf YouTube hochladen“ unter Aufnahmen. Dafür einmal in der Google Cloud Console ein Projekt anlegen, "
             "„YouTube Data API v3“ aktivieren, unter „Anmeldedaten“ einen OAuth-Client vom Typ „Desktop-App“ erstellen "
             "und den Zustimmungsbildschirm veröffentlichen (sonst läuft die Anmeldung nach 7 Tagen ab); Client-ID und "
-            "Client-Secret hier einfügen, dann „Mit YouTube verbinden“ – der Browser fragt einmal nach der Freigabe. "
+            "Client-Secret hier einfügen oder die heruntergeladene JSON-Datei laden, dann „Mit YouTube verbinden“ – der Browser fragt einmal nach der Freigabe. "
             "Google erlaubt mit dem Standardkontingent etwa sechs Uploads am Tag; was nicht mehr passt, wartet in der "
             "Warteschlange bis zum nächsten Tag. Hochgeladen wird nur, wenn keine Runde läuft; die Datei bleibt immer "
             "auch auf der Platte. Gesendet werden nur die Videodatei, Titel (Map, Killer, Datum) und Beschreibung – "
@@ -100,6 +102,27 @@ class YouTubeUpload:
 
     def _youtube_logout(self):
         self.youtube.logout()
+
+    def _youtube_file(self, path=None):
+        """1.10.1: the client_secret_….json Google offers after the OAuth client was created – no copying of id
+        and secret by hand (Google shows the secret only once). The file is read once and stays where it is."""
+        if path is None:
+            from .official import downloads_dir
+            start = downloads_dir()
+            self._qt_file("open", _("Client-Datei von Google laden"), start if os.path.isdir(start) else "",
+                          self._youtube_file)
+            return
+        try:
+            cid, secret = ytupload.read_client_file(path)
+        except ValueError as e:
+            self._inform(_("Client-Datei laden"), _("Das ist keine Client-Datei von Google ({error}).", error=e))
+            return
+        self.yt_id_var.set(cid)
+        self.yt_secret_var.set(secret)
+        self._youtube_setting()
+        self.yt_status_var.set(_("YouTube: Client-ID und Client-Secret aus {file} übernommen – jetzt „Mit YouTube verbinden“ klicken.",
+                               file=os.path.basename(path)))
+        self._log(_("YouTube: Client-Daten aus {file} übernommen.", file=os.path.basename(path)), "System")
 
     def _youtube_tick(self):
         """Every tick: the thread learns whether a round runs (uploads pause) and where the recordings are."""

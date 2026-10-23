@@ -148,6 +148,42 @@ def valid_client_id(client_id) -> bool:
     return s.endswith(".apps.googleusercontent.com") and len(s) > len(".apps.googleusercontent.com") + 8
 
 
+CLIENT_FILE_MAX = 64 << 10        # Google's client file has a few hundred bytes
+
+
+def read_client_file(path: str) -> tuple:
+    """1.10.1: the ``client_secret_….json`` Google offers for download right after the OAuth client was created
+    (``{"installed": {"client_id": …, "client_secret": …}}`` for a desktop client). Returns (client_id, secret);
+    ``ValueError`` says what is wrong – also for a "web" client, which cannot log in from a desktop program.
+    The file is only read and stays where it is."""
+    try:
+        too_big = os.path.getsize(path) > CLIENT_FILE_MAX
+        with open(path, "r", encoding="utf-8-sig") as fh:
+            text = "" if too_big else fh.read()
+    except OSError as e:
+        raise ValueError(_("nicht lesbar: {error}", error=e)) from None
+    if too_big:
+        raise ValueError(_("Datei zu gross"))
+    try:
+        data = json.loads(text)
+    except ValueError as e:
+        raise ValueError(_("kein JSON: {error}", error=e)) from None
+    if not isinstance(data, dict):
+        raise ValueError(_("kein JSON-Objekt"))
+    inner = data.get("installed")
+    if not isinstance(inner, dict):
+        if isinstance(data.get("web"), dict):
+            raise ValueError(_("OAuth-Client vom Typ „Webanwendung“ – in der Cloud Console einen vom Typ „Desktop-App“ anlegen"))
+        raise ValueError(_("kein Abschnitt „installed“"))
+    cid = str(inner.get("client_id") or "").strip()
+    secret = str(inner.get("client_secret") or "").strip()
+    if not valid_client_id(cid):
+        raise ValueError(_("Client-ID fehlt oder endet nicht auf .apps.googleusercontent.com"))
+    if not secret:
+        raise ValueError(_("Client-Secret fehlt"))
+    return cid, secret
+
+
 def auth_url(client_id: str, state: str, challenge: str, redirect: str) -> str:
     q = {"client_id": client_id, "redirect_uri": redirect, "response_type": "code", "scope": SCOPE,
          "code_challenge": challenge, "code_challenge_method": "S256", "state": state,
