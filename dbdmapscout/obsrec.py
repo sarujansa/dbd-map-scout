@@ -34,6 +34,7 @@ import time
 import uuid
 from dataclasses import asdict, dataclass, field
 
+from . import obsoverlay
 from .i18n import _
 
 log = logging.getLogger("dbdmapscout")
@@ -79,6 +80,10 @@ WINDOW_KIND = "window_capture"
 WINDOW_SOURCE = "DbD Map Scout – DBD-Fenster"
 WINDOW_PRIORITY_CLASS = 0              # OBS: 0 title, else same type · 1 title only · 2 title, else same program
 WINDOW_METHOD_WGC = 2                  # OBS window capture: 0 automatic · 1 BitBlt · 2 Windows 10 (1903 and up)
+# 1.8.89 (user: "nur das DBD-Fenster aufnehmen und das Overlay im Spiel"): the window capture has no overlay (our own
+# windows) – an image source of ours shows the picture obsoverlay writes, placed over the window item
+OVERLAY_KIND = "image_source"
+OVERLAY_SOURCE = "DbD Map Scout – Overlay"
 RECHECK_S = 30.0                       # 1.8.41: while DBD runs, OBS is set up again this often if it was not ready
 # 1.8.47 (user: "OBS autostart" – when DBD starts, OBS keeps running after it): OBS started by the program, once per
 # DBD start, only when no OBS window is open; then looked for every OBS_START_POLL_S up to OBS_START_WAIT_S
@@ -862,6 +867,8 @@ class Config:
     farming_days: int = DEFAULT_FARMING_DAYS     # 1.8.23: farming recordings go after this many days (0 = never)
     window: bool = False             # 1.8.41: our window capture of DBD in OBS (WINDOW_SOURCE) instead of the monitor
     obs_start: bool = False          # 1.8.47: start OBS when DBD starts and OBS cannot be reached
+    overlay: bool = False            # 1.8.89: our overlay as an image source over the window capture
+    overlay_file: str = ""           # … the PNG obsoverlay writes (absolute)
 
     @property
     def wants_buffer(self) -> bool:
@@ -969,6 +976,9 @@ class Recorder(threading.Thread):
         self._obs_wait = 0.0         # … and look for it often until then
         self._obs_late = False       # … "started, but not reachable" said
         self._obs_open = False       # … an OBS window was open when we looked (its WebSocket server is off)
+        self._overlay_item = None    # 1.8.89: (scene, scene item id) of our image source while it is wanted
+        self._overlay_box = None     # … where the overlay picture lies, relative to the DBD window (set_overlay)
+        self._overlay_placed = None  # … the transform sent last (nothing is sent twice)
         self.start_obs = self._start_obs_process       # tests replace it
 
     @property
@@ -1030,6 +1040,11 @@ class Recorder(threading.Thread):
         file into / out of the subfolder FARMING_DIR. Unknown rounds are ignored."""
         self.cmds.put(("farming", (float(t), bool(on))))
 
+    def set_overlay(self, box):
+        """1.8.89: the overlay picture (obsoverlay.Writer) covers ``box`` = (x, y, w, h) relative to the DBD window,
+        None = nothing shown; our image item in OBS is moved there (own source only). Called from the writer."""
+        self.cmds.put(("overlay", tuple(int(v) for v in box) if box else None))
+
     def set_game(self, on: bool):
         """DBD running or not (1.4.1): starts/stops OBS's replay buffer, checks OBS and the drive once."""
         if bool(on) != self._game:
@@ -1088,6 +1103,8 @@ class Recorder(threading.Thread):
                     self._stop_later(arg)
                 elif cmd == "game":
                     self._game_changed(arg)
+                elif cmd == "overlay":
+                    self._overlay_moved(arg)
                 elif cmd == "mark":
                     self._mark()
                 elif cmd == "keep":
@@ -1323,6 +1340,7 @@ class Recorder(threading.Thread):
     def _game_changed(self, on: bool):
         self._game = on
         self._ready = False
+        self._overlay_item = self._overlay_placed = None
         self._buffer_tried = self._buffer_check = False
         self._obs_started = self._obs_late = False
         if not on:
@@ -1352,7 +1370,9 @@ class Recorder(threading.Thread):
         if not self._ready:
             self._setup(quiet=True)
             return
-        if not (self.cfg.wants_buffer and self.cfg.buffer_auto):
+        buffer = self.cfg.wants_buffer and self.cfg.buffer_auto
+        overlay = self._overlay_wanted() and self._overlay_item is not None and self._overlay_box is not None
+        if not (buffer or overlay):
             return
         try:
             c = self._client()
@@ -1361,6 +1381,13 @@ class Recorder(threading.Thread):
             self._buffer_tried = self._buffer_check = False   # gets one start of its own)
             return
         try:
+            if overlay:                                 # 1.8.89: the user may have moved or resized the window
+                try:                                    # item in OBS – our picture follows it
+                    self._place_overlay(c)
+                except ObsError as e:
+                    log.info("OBS: Overlay nicht nachgeführt (%s)", e)
+            if not buffer:
+                return
             state = self._buffer_state(c)
             if state:
                 self._buffer_check = False
@@ -1451,6 +1478,7 @@ class Recorder(threading.Thread):
         try:
             sound = self._audio(c) if self.cfg.audio else ""     # 1.8.7: a sound problem must stay in the status
             picture = self._video(c)                              # 1.8.41
+            picture = " ".join(t for t in (picture, self._overlay_video(c)) if t)   # 1.8.89
             sound = " ".join(t for t in (sound, picture) if t)
             if self.cfg.wants_buffer and self.cfg.buffer_auto:
                 try:
@@ -1852,6 +1880,105 @@ class Recorder(threading.Thread):
         c.request("SetSceneItemTransform", {"sceneName": scene, "sceneItemId": item_id, "sceneItemTransform": {
             "positionX": 0, "positionY": 0, "alignment": 5, "boundsType": "OBS_BOUNDS_SCALE_INNER",
             "boundsAlignment": 0, "boundsWidth": w, "boundsHeight": h}})
+
+    def _overlay_wanted(self) -> bool:
+        """1.8.89: only together with our window capture – a display capture shows the real overlay already."""
+        return bool(self.cfg.window and self.cfg.overlay and self.cfg.overlay_file)
+
+    def _overlay_video(self, c: ObsClient) -> str:
+        """1.8.89 (user: "nur das DBD-Fenster aufnehmen und das Overlay im Spiel"): our image source with the overlay
+        picture (OVERLAY_SOURCE, the file obsoverlay writes) in the scene on air – created on top of the window
+        capture, shown while wanted, else only hidden (never deleted; the user's sources are never touched),
+        pointed at our file. Returns a problem for the status line, else ""."""
+        want = self._overlay_wanted()
+        self._overlay_item = None
+        notes = []
+        try:
+            names = {i.get("inputName") for i in c.request("GetInputList").get("inputs", [])}
+            if OVERLAY_SOURCE not in names and not want:
+                return ""
+            cur = c.request("GetCurrentProgramScene")
+            scene = cur.get("currentProgramSceneName") or cur.get("sceneName") or ""
+            if not scene:
+                return ""
+            if OVERLAY_SOURCE not in names:
+                made = c.request("CreateInput", {"sceneName": scene, "inputName": OVERLAY_SOURCE,
+                                                 "inputKind": OVERLAY_KIND, "sceneItemEnabled": True,
+                                                 "inputSettings": {"file": self.cfg.overlay_file, "unload": False}})
+                self._overlay_item = (scene, made.get("sceneItemId"))
+                notes.append(_("Bildquelle angelegt: {name} (Szene „{scene}“)", name=OVERLAY_SOURCE, scene=scene))
+            else:
+                items = [i for i in c.request("GetSceneItemList", {"sceneName": scene}).get("sceneItems", [])
+                         if i.get("sourceName") == OVERLAY_SOURCE]
+                if not want:
+                    for i in items:
+                        if i.get("sceneItemEnabled", True):
+                            c.request("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": i.get("sceneItemId"),
+                                                              "sceneItemEnabled": False})
+                            notes.append(_("Bildquelle in der Szene „{scene}“ ausgeblendet: {name}", scene=scene,
+                                           name=OVERLAY_SOURCE))
+                    for n in notes:
+                        log.info("OBS: %s", n)
+                    return ""
+                if not items:
+                    made = c.request("CreateSceneItem", {"sceneName": scene, "sourceName": OVERLAY_SOURCE,
+                                                         "sceneItemEnabled": True})
+                    self._overlay_item = (scene, made.get("sceneItemId"))
+                    notes.append(_("Bildquelle zur Szene „{scene}“ hinzugefügt: {name}", scene=scene,
+                                   name=OVERLAY_SOURCE))
+                else:
+                    self._overlay_item = (scene, items[0].get("sceneItemId"))
+                    if not any(i.get("sceneItemEnabled", True) for i in items):
+                        c.request("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": items[0].get("sceneItemId"),
+                                                          "sceneItemEnabled": True})
+                        notes.append(_("Bildquelle in der Szene „{scene}“ wieder eingeblendet: {name}", scene=scene,
+                                       name=OVERLAY_SOURCE))
+                have = c.request("GetInputSettings", {"inputName": OVERLAY_SOURCE}).get("inputSettings") or {}
+                if have.get("file") != self.cfg.overlay_file:              # another program folder than before
+                    c.request("SetInputSettings", {"inputName": OVERLAY_SOURCE,
+                                                   "inputSettings": {"file": self.cfg.overlay_file, "unload": False}})
+            self._overlay_placed = None
+            self._place_overlay(c)
+        except ObsError as e:
+            log.info("OBS: Overlay-Bildquelle nicht eingerichtet (%s)", e)
+            return _("Overlay in OBS nicht eingerichtet: {error}", error=e)
+        for n in notes:
+            log.info("OBS: %s", n)
+        return ""
+
+    def _overlay_moved(self, box):
+        """The writer wrote a picture for ``box`` (relative to the DBD window, None = nothing shown)."""
+        self._overlay_box = box
+        if box is None or not self._game or not self._ready or self._overlay_item is None or not self._overlay_wanted():
+            return
+        try:
+            c = self._client()
+        except ObsError as e:
+            log.info("OBS: Overlay nicht platziert (%s)", e)
+            return
+        try:
+            self._place_overlay(c)
+        except ObsError as e:
+            log.info("OBS: Overlay nicht platziert (%s)", e)
+        finally:
+            c.close()
+
+    def _place_overlay(self, c: ObsClient):
+        """Move our image item over the overlay's place: the window item's transform (GetSceneItemList, read
+        only) says where OBS draws the DBD window on the canvas, obsoverlay.overlay_transform does the maths;
+        nothing is sent while the transform is the one sent last or OBS has no picture of the window yet."""
+        if self._overlay_item is None or self._overlay_box is None:
+            return
+        scene, item_id = self._overlay_item
+        items = c.request("GetSceneItemList", {"sceneName": scene}).get("sceneItems", [])
+        win = next((i for i in items if i.get("sourceName") == WINDOW_SOURCE), None)
+        if win is None:
+            return
+        tf = obsoverlay.overlay_transform(win.get("sceneItemTransform") or {}, self._overlay_box)
+        if tf is None or tf == self._overlay_placed:
+            return
+        c.request("SetSceneItemTransform", {"sceneName": scene, "sceneItemId": item_id, "sceneItemTransform": tf})
+        self._overlay_placed = tf
 
     @staticmethod
     def _in_scene(c: ObsClient, scene: str, name: str) -> list:

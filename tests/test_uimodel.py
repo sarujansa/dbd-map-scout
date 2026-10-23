@@ -1048,6 +1048,57 @@ def test_short_rounds_against_the_same_killer_are_offered_as_farming_and_the_ove
         app.quit()
 
 
+def test_the_visible_elements_go_to_obs_as_one_picture_over_the_dbd_window(app_root):
+    """1.8.89 (user: "nur das DBD-Fenster aufnehmen und das Overlay im Spiel"): with recordings, the window capture
+    and the tick on, every shown element (its picture at the worker's rect) goes to the writer as one picture; the
+    recorder gets the picture's box relative to the DBD window; tick off → one transparent picture, no box."""
+    import json
+    from types import SimpleNamespace
+    from PIL import Image
+    from dbdmapscout import obsoverlay
+    from dbdmapscout.app import App
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True, "rec_on": True, "rec_window": True,
+                                                        "rec_overlay": True}), encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    boxes = []
+    try:
+        app.recorder.set_overlay = boxes.append
+        app.game = SimpleNamespace(minimized=False, width=3440, rect=(100, 0, 3440, 1440))
+        app._game_rect = lambda: (100, 0, 3440, 1440)
+        card = Image.new("RGBA", (400, 900), (255, 0, 0, 255))
+        app.overlay._shown, app.overlay.picture = True, lambda: card
+        app.worker.overlay_rect = (120, 300, 400, 900)
+        hud_pic = Image.new("RGBA", (300, 200), (0, 0, 255, 255))
+        app.hud = SimpleNamespace(shown=True, opacity=0.5, fade=1.0, picture=lambda: hud_pic,
+                                  destroy=lambda: None, hide=lambda: None)
+        app.worker.hud_rect = (3100, 10, 300, 200)
+        app.today_win = SimpleNamespace(shown=False, picture=lambda: card,        # hidden: not in the picture
+                                        destroy=lambda: None, hide=lambda: None)
+        app.worker.today_rect = None
+        app._overlay_feed()
+        w = app._overlay_writer
+        end = time.time() + 5
+        while w.writes < 1 and time.time() < end:
+            time.sleep(0.02)
+        assert boxes == [(20, 10, 3280, 1190)] and not w.last_error            # relative to the window at x=100
+        with Image.open(obsoverlay.path(str(app_root))) as img:
+            assert img.size == (3280, 1190) and img.getpixel((0, 290)) == (255, 0, 0, 217)   # opacity 0.85 baked in
+            assert img.getpixel((3279, 0))[3] == 128                             # the HUD's 0.5 as well
+        app._overlay_feed()                                                      # nothing changed: no new picture
+        time.sleep(0.1)
+        assert w.writes == 1
+        app.rec_overlay_var.set(False)                                           # the tick off, as the user does
+        app._rec_setting()
+        app._overlay_feed()
+        end = time.time() + 5
+        while w.writes < 2 and time.time() < end:
+            time.sleep(0.02)
+        assert boxes[-1] is None
+        assert app._rec_cfg().overlay is False and app._rec_cfg().overlay_file == obsoverlay.path(str(app_root))
+    finally:
+        app.quit()
+
+
 def test_the_discord_state_follows_round_and_lobby_and_the_records_tab_draws(app_root):
     """1.7: the game state for the Rich Presence comes from the open round (map, realm, role, killer, start),
     else from the lobby, else the menu; the Discord boxes are saved and passed to the thread; the statistics'

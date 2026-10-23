@@ -148,7 +148,9 @@ def collect(app) -> str:
     if rec is not None:
         lines.append(f"OBS-Aufnahme: an={bool(app.settings.get('rec_on', False))} nimmt_auf={rec.recording} "
                      f"REC-Punkt={getattr(getattr(app, 'overlay', None), '_rec', None)} "
-                     f"Status={getattr(rec, 'status', '') or '–'}")
+                     f"Status={getattr(rec, 'status', '') or '–'} "
+                     f"Overlay-Bild={bool(app.settings.get('rec_overlay', False))}/"
+                     f"{getattr(getattr(app, '_overlay_writer', None), 'writes', 0)}")
     lines.append(f"Discord: {getattr(pres, 'status', '–')} (an={app.settings.get('discord_on')}, "
                  f"ID gesetzt={bool(app.settings.get('discord_client_id'))}, Zustand={getattr(pres, 'state', None)})")
     sp = getattr(app, "spotify", None)

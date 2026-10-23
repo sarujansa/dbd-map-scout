@@ -220,7 +220,7 @@ SPECS = {
                                           ("stretch",))),
                                  ("check", "st.more.rec_obs_start"),
                                  ("check", "st.more.rec_pre"), ("check", "st.more.rec_buffer"),
-                                 ("check", "st.more.rec_window"),
+                                 ("check", "st.more.rec_window"), ("check", "st.more.rec_overlay"),
                                  ("check", "st.more.rec_merge"), ("check", "st.more.rec_early"),
                                  ("row", (("check", "st.more.rec_instant"), ("combo", "st.more.rec_clip"),
                                           ("check", "st.more.rec_clip_notify"),
