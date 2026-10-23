@@ -4,6 +4,12 @@ Without it Windows files the control window under the executable that hosts it (
 the taskbar button shows the Python icon and never joins a pinned desktop shortcut. With an explicit ID the
 button shows the window's own icon, and the desktop shortcut carries the same ID, so a pinned shortcut and
 the running program are one taskbar button.
+
+1.9.1 (user's screenshot after the rename: the taskbar showed the Python icon): with an explicit ID the taskbar takes
+the button's icon from a Start menu shortcut that carries the same ID – and from the hosting executable while there
+is none (the shortcuts are made in a thread after the window, or never without administrator rights). The window's
+own relaunch properties (``set_window_relaunch``: icon, display name, command) tell the taskbar what to show and
+what to pin without any shortcut – the documented way for windows hosted by a shared executable.
 """
 from __future__ import annotations
 
@@ -19,6 +25,9 @@ GPS_READWRITE = 2
 VT_LPWSTR = 31
 IID_IPROPERTYSTORE = "{886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99}"
 PKEY_APPUSERMODEL_ID = ("{9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3}", 5)
+PKEY_RELAUNCH_COMMAND = ("{9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3}", 2)       # 1.9.1: System.AppUserModel.Relaunch…
+PKEY_RELAUNCH_ICON = ("{9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3}", 3)
+PKEY_RELAUNCH_NAME = ("{9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3}", 4)
 
 
 class _GUID(ctypes.Structure):
@@ -99,8 +108,83 @@ def _with_store(path: str, write: bool, use):
             ole32.CoUninitialize()
 
 
-def _key() -> _PROPERTYKEY:
-    return _PROPERTYKEY(_guid(PKEY_APPUSERMODEL_ID[0]), PKEY_APPUSERMODEL_ID[1])
+def _key(pkey=PKEY_APPUSERMODEL_ID) -> _PROPERTYKEY:
+    return _PROPERTYKEY(_guid(pkey[0]), pkey[1])
+
+
+def _with_window_store(hwnd: int, use):
+    """Open the property store of a window (SHGetPropertyStoreForWindow), run use(store, vtable), release it."""
+    ole32 = ctypes.windll.ole32
+    ole32.CoInitializeEx.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+    ole32.CoInitializeEx.restype = ctypes.c_long
+    inited = ole32.CoInitializeEx(None, 2) in (0, 1)          # S_OK / S_FALSE: must be balanced (Qt: already OLE)
+    try:
+        f = ctypes.windll.shell32.SHGetPropertyStoreForWindow
+        f.argtypes = [ctypes.c_void_p, ctypes.POINTER(_GUID), ctypes.POINTER(ctypes.c_void_p)]
+        f.restype = ctypes.c_long
+        store = ctypes.c_void_p()
+        iid = _guid(IID_IPROPERTYSTORE)
+        if f(ctypes.c_void_p(int(hwnd)), ctypes.byref(iid), ctypes.byref(store)) != 0:
+            return None
+        vtbl = ctypes.cast(store, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p)))[0]
+        try:
+            return use(store, vtbl)
+        finally:
+            ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(vtbl[2])(store)            # Release
+    finally:
+        if inited:
+            ole32.CoUninitialize()
+
+
+def set_window_relaunch(hwnd: int, command: str, icon: str, name: str) -> bool:
+    """1.9.1: the taskbar's picture of this window – its icon (``icon`` = path to an .ico, ",0" appended),
+    display name and the command a pinned button runs – independent of any shortcut. Before the window is shown.
+    False if that did not work (then the Start menu shortcut, once made, still does it)."""
+    if not IS_WIN or not hwnd:
+        return False
+    values = [(PKEY_RELAUNCH_COMMAND, command), (PKEY_RELAUNCH_ICON, icon + ",0" if icon else ""),
+              (PKEY_RELAUNCH_NAME, name)]
+    values = [(k, v) for k, v in values if v]
+    texts = [ctypes.create_unicode_buffer(v) for _k, v in values]              # kept alive until Commit
+
+    def use(store, vtbl):
+        set_value = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.POINTER(_PROPERTYKEY),
+                                       ctypes.POINTER(_PROPVARIANT))(vtbl[6])
+        commit = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p)(vtbl[7])
+        for (pkey, _v), text in zip(values, texts):
+            pv = _PROPVARIANT(vt=VT_LPWSTR, pwszVal=ctypes.cast(text, ctypes.c_void_p).value)
+            key = _key(pkey)
+            if set_value(store, ctypes.byref(key), ctypes.byref(pv)) != 0:
+                return False
+        return commit(store) == 0
+    try:
+        return bool(_with_window_store(hwnd, use))
+    except (AttributeError, OSError):
+        return False
+
+
+def window_relaunch(hwnd: int):
+    """(command, icon, name) stored on a window, each None when unset; None when the store cannot be read."""
+    if not IS_WIN or not hwnd:
+        return None
+
+    def use(store, vtbl):
+        get_value = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.POINTER(_PROPERTYKEY),
+                                       ctypes.POINTER(_PROPVARIANT))(vtbl[5])
+        out = []
+        for pkey in (PKEY_RELAUNCH_COMMAND, PKEY_RELAUNCH_ICON, PKEY_RELAUNCH_NAME):
+            pv = _PROPVARIANT()
+            key = _key(pkey)
+            if get_value(store, ctypes.byref(key), ctypes.byref(pv)) != 0:
+                out.append(None)
+                continue
+            out.append(ctypes.wstring_at(pv.pwszVal) if pv.vt == VT_LPWSTR and pv.pwszVal else None)
+            ctypes.windll.ole32.PropVariantClear(ctypes.byref(pv))
+        return tuple(out)
+    try:
+        return _with_window_store(hwnd, use)
+    except (AttributeError, OSError):
+        return None
 
 
 def set_link_app_id(path: str, app_id: str = APP_ID) -> bool:

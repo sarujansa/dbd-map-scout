@@ -453,3 +453,18 @@ def test_the_window_list_and_the_obs_lookup_work_on_windows():
     assert isinstance(obsrec.obs_window_open(wins), bool)
     exe = obsrec.obs_exe()
     assert exe is None or (os.path.isabs(exe) and exe.endswith(obsrec.OBS_EXE))
+
+
+def test_the_window_carries_relaunch_icon_name_and_command(root):
+    """1.9.1 (user's screenshot: the Python icon on the taskbar after the rename): the main window tells the
+    taskbar its icon, name and pin command itself, before any Start menu shortcut exists."""
+    from fogscout import appid, autostart
+    win, hwnd = _window(40, 40, 300, 200)
+    try:
+        assert appid.window_relaunch(hwnd) == (None, None, None)
+        assert appid.set_window_relaunch(hwnd, autostart.relaunch_command(), r"C:\x\fogscout-2.ico", "Fog Scout")
+        cmd, ico, name = appid.window_relaunch(hwnd)
+        assert cmd.endswith('/run /tn "Fog Scout"') and ico == r"C:\x\fogscout-2.ico,0" and name == "Fog Scout"
+    finally:
+        win.close()
+        pump()
