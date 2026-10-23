@@ -1141,7 +1141,7 @@ EN = {
     "noch keine Stats-Daten": "no stats page data yet",
     "{n} Survivor-Runden": "{n} survivor rounds",
     "{n} normal": "{n} normal",
-    "{n} Farming-Runden · Ø BP": "{n} farming rounds · avg. BP",
+    "{n} Farming-Runden · Ø {bp} BP": "{n} farming rounds · avg. {bp} BP",
     "Spielzeit heute: {time}": "Played today: {time}",
     "Systemwerte sind aus (Tab Overlay → Systemwerte).": "System values are off (Overlay tab → System values).",
     "Systemwerte gibt es nur unter Windows.": "System values are only available on Windows.",
@@ -1332,7 +1332,7 @@ EN = {
     'Ø KILLS ': 'AVG. KILLS ',
     'NORMAL ': 'NORMAL ',
     'FARMING ': 'FARMING ',
-    'Ø BP ': 'AVG. BP ',
+    'BP/H ': 'BP/H ',
     # 1.62.1: OLED black with every accent
     "OLED-Schwarz": "OLED black",
     'Hintergründe in echtem Schwarz statt Dunkelgrau – passt zu OLED-Bildschirmen und geht mit jeder Akzentfarbe. Im hellen Modus ohne Wirkung.':

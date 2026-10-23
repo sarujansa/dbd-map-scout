@@ -65,11 +65,10 @@ def today_rows(j, now: float, mode: str | None = None) -> list:
             res += [(" · ", sysinfo.DIM), (_("Ø KILLS "), sysinfo.DIM), (f"{s['kills']:.1f}", sysinfo.WHITE)]
         rows.append(res)
     if mode == "farming" or (mode is None and d["farming"]):
-        f = official.summary([j.off[id(r)] for r in mine if r.farming and not r.custom])
+        b = dashboard.bp_rate([(r, j.off[id(r)]) for r in mine if r.farming and not r.custom])   # 1.8.87: BP/h
         res = [(_("FARMING "), sysinfo.DIM), (str(d["farming"]), sysinfo.WHITE)]
-        if f["bp_matches"]:
-            res += [(" · ", sysinfo.DIM), (_("Ø BP "), sysinfo.DIM),
-                    (dashboard._bp(f["bp"] / f["bp_matches"]), sysinfo.WHITE)]
+        if b.per_hour:
+            res += [(" · ", sysinfo.DIM), (_("BP/H "), sysinfo.DIM), (dashboard._bp(b.per_hour), sysinfo.WHITE)]
         rows.append(res)
     return rows
 

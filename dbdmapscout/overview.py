@@ -137,10 +137,11 @@ def today(app, now: float) -> tuple[list, str]:
         return tiles + ([rec] if rec else []), ""
     rounds = Fact(_("Runden"), str(d["count"]), _("{k} Killer / {s} Survivor", k=d["killer"], s=d["survivor"]))
     farm = None
-    if d["farming"]:                           # 1.8.56: farming rounds apart, with their Ø bloodpoints
-        f = official.summary([j.off[id(r)] for r in mine if r.farming and not r.custom])
-        farm = Fact(_("Farming"), dashboard._bp(f["bp"] / f["bp_matches"]) if f["bp_matches"] else "–",
-                    _("{n} Farming-Runden · Ø BP", n=d["farming"]))
+    if d["farming"]:                           # 1.8.56: farming rounds apart; 1.8.87: bloodpoints per hour
+        b = dashboard.bp_rate([(r, j.off[id(r)]) for r in mine if r.farming and not r.custom])
+        farm = Fact(_("Farming"), dashboard._bp(b.per_hour) + "/h" if b.per_hour else "–",
+                    _("{n} Farming-Runden · Ø {bp} BP", n=d["farming"],
+                      bp=dashboard._bp(b.per_round) if b.rounds else "–"))
     if s["killer"]:
         kills = Fact(_("Ø Kills"), _num(s["kills"]), _("4K: {n} von {total}", n=s["four"], total=s["killer"]),
                      frac=s["kills"] / 4)

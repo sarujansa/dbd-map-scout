@@ -1074,13 +1074,14 @@ def test_today_tells_normal_and_farming_rounds_apart():
            id(rs[5]): official.Match(day, "Coal Tower", role="killer", bp=40000)}
     j = SimpleNamespace(rounds=rs, off=off, matches=list(off.values()))
     text = ["".join(t for t, _c in row) for row in today_rows(j, now)]
-    assert text == ["HEUTE 6 RUNDEN · 1:00:00", "NORMAL 4 · ENTKOMMEN 50%", "FARMING 2 · Ø BP 35k"]
+    # 1.8.87: bloodpoints per hour of match time (70k in 2 × 600 s) instead of Ø per round
+    assert text == ["HEUTE 6 RUNDEN · 1:00:00", "NORMAL 4 · ENTKOMMEN 50%", "FARMING 2 · BP/H 210k"]
     only_normal = SimpleNamespace(rounds=rs[2:4], off={}, matches=[])
     assert ["".join(t for t, _c in row) for row in today_rows(only_normal, now)][1:] == ["NORMAL 2"]
     app = SimpleNamespace(_joined=lambda: j, settings={})
     facts, _note = overview.today(app, now)
     farm = [f for f in facts if f.title == "Farming"]
-    assert farm and farm[0].value == "35k" and farm[0].sub.startswith("2 Farming-Runden")
+    assert farm and farm[0].value == "210k/h" and farm[0].sub == "2 Farming-Runden · Ø 35k BP"
     assert [f for f in facts if f.title == "Entkommen"][0].sub == "2 Survivor-Runden · 4 normal"
 
 
