@@ -1074,14 +1074,37 @@ def test_today_tells_normal_and_farming_rounds_apart():
            id(rs[5]): official.Match(day, "Coal Tower", role="killer", bp=40000)}
     j = SimpleNamespace(rounds=rs, off=off, matches=list(off.values()))
     text = ["".join(t for t, _c in row) for row in today_rows(j, now)]
-    assert text == ["HEUTE 6 RUNDEN · 1:00:00", "NORMAL 4 · ENTKOMMEN 50%", "FARMING 2 · Ø BP 35k"]
+    # 1.8.87: bloodpoints per hour of match time (70k in 2 × 600 s) instead of Ø per round
+    assert text == ["HEUTE 6 RUNDEN · 1:00:00", "NORMAL 4 · ENTKOMMEN 50%", "FARMING 2 · BP/H 210k"]
     only_normal = SimpleNamespace(rounds=rs[2:4], off={}, matches=[])
     assert ["".join(t for t, _c in row) for row in today_rows(only_normal, now)][1:] == ["NORMAL 2"]
     app = SimpleNamespace(_joined=lambda: j, settings={})
     facts, _note = overview.today(app, now)
     farm = [f for f in facts if f.title == "Farming"]
-    assert farm and farm[0].value == "35k" and farm[0].sub.startswith("2 Farming-Runden")
+    assert farm and farm[0].value == "210k/h" and farm[0].sub == "2 Farming-Runden · Ø 35k BP"
     assert [f for f in facts if f.title == "Entkommen"][0].sub == "2 Survivor-Runden · 4 normal"
+
+
+def test_the_today_card_asks_about_rounds_that_look_like_farming():
+    """1.8.88: the tile "Farming?" with the button "Farming prüfen …" appears when the statistics have candidates
+    (StatsTab._stats_farm_candidates) – with rounds today and on an empty day; never without candidates or the
+    helper (fake apps)."""
+    now = time.time()
+    day = history.period_start("day", now)
+    rs = [history.Round(day + 60 * i, 120, "coal", "Coal Tower", role="survivor") for i in range(3)]
+    j = SimpleNamespace(rounds=rs, off={}, matches=[])
+    app = SimpleNamespace(_joined=lambda: j, settings={}, _stats_farm_candidates=lambda: rs)
+    facts, _note = overview.today(app, now)
+    ask = facts[-1]
+    assert (ask.title, ask.value, ask.sub) == ("Farming?", "3", "Runden sehen nach Farming aus")
+    assert (ask.action, ask.action_label) == ("farm_suggest", "Farming prüfen …")
+    app._stats_farm_candidates = lambda: []
+    assert not [f for f in overview.today(app, now)[0] if f.title == "Farming?"]
+    empty = SimpleNamespace(_joined=lambda: SimpleNamespace(rounds=[], off={}, matches=[1]), settings={},
+                            _stats_farm_candidates=lambda: rs[:1])
+    facts, note = overview.today(empty, now)
+    assert note == "" and [f.title for f in facts] == ["Runden", "Farming?"] and facts[1].value == "1"
+    assert overview.farming_question(SimpleNamespace()) is None
 
 
 def test_today_follows_what_is_played_now():
@@ -1857,3 +1880,15 @@ def test_the_overview_compares_this_week_with_the_last_one(qapp, keep):
     assert overview.overview_model(fake_app(), now, is_win=True).week == []        # nothing: no row
     win.show_model(overview.overview_model(fake_app(), now, is_win=True))
     assert page.week_title.isHidden() and all(c.isHidden() for c in page.week_cards)
+
+
+def test_the_overview_says_when_hwinfo_is_missing():
+    """1.8.86: the system card names the values HWiNFO would add while it is not running; nothing once it was seen."""
+    from dbdmapscout.sysinfo import Snapshot
+    now = time.time()
+    snap = Snapshot(cpu_load=10, t=now)
+    app = fake_app(sysmon=SimpleNamespace(active=True, snapshot=snap, hwinfo_seen=False))
+    app.settings["sysinfo"] = "right"
+    assert "HWiNFO" in overview.overview_model(app, now, is_win=True).system_note
+    app.sysmon.hwinfo_seen = True
+    assert overview.overview_model(app, now, is_win=True).system_note == ""

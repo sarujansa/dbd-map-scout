@@ -17,6 +17,8 @@ HUD_SIDES = [("off", N_("Aus")), ("above", N_("Direkt über der Karte (wandert m
              ("left", N_("Links oben (über der Karte)")), ("right", N_("Rechts oben")),
              ("custom", N_("Eigene Position (mit der Maus verschieben)"))]
 HUD_SHOWN = ("above", "left", "right", "custom")
+HWINFO_WAIT_S = 20       # 1.8.86: s the monitor runs without HWiNFO before the log says so
+
 BAR_ALIGNS = [("left", N_("Links")), ("centre", N_("Mittig")), ("right", N_("Rechts"))]     # 1.2.8
 PRESET_LABELS = [("left", N_("Alles links")), ("right", N_("Alles rechts")),           # 1.2.9 (layoutmem.PRESETS)
                  ("spread", N_("Verteilt: Karte links, Werte rechts")),
@@ -63,11 +65,10 @@ def today_rows(j, now: float, mode: str | None = None) -> list:
             res += [(" · ", sysinfo.DIM), (_("Ø KILLS "), sysinfo.DIM), (f"{s['kills']:.1f}", sysinfo.WHITE)]
         rows.append(res)
     if mode == "farming" or (mode is None and d["farming"]):
-        f = official.summary([j.off[id(r)] for r in mine if r.farming and not r.custom])
+        b = dashboard.bp_rate([(r, j.off[id(r)]) for r in mine if r.farming and not r.custom])   # 1.8.87: BP/h
         res = [(_("FARMING "), sysinfo.DIM), (str(d["farming"]), sysinfo.WHITE)]
-        if f["bp_matches"]:
-            res += [(" · ", sysinfo.DIM), (_("Ø BP "), sysinfo.DIM),
-                    (dashboard._bp(f["bp"] / f["bp_matches"]), sysinfo.WHITE)]
+        if b.per_hour:
+            res += [(" · ", sysinfo.DIM), (_("BP/H "), sysinfo.DIM), (dashboard._bp(b.per_hour), sysinfo.WHITE)]
         rows.append(res)
     return rows
 
@@ -170,6 +171,24 @@ class SysInfo:
         except Exception:
             return "#c9a227"
 
+    def _hwinfo_check(self, now: float, snap=None):
+        """1.8.86 (user: "why are so many fields empty?" – rounds without CPU values in the statistics): once per
+        DBD start, after the monitor ran HWINFO_WAIT_S without ever seeing HWiNFO, one log line names the values
+        that will be missing. Reset when DBD is gone, so the next start may say it again."""
+        snap = self.sysmon.snapshot if snap is None else snap
+        if not self.sysmon.active or self.game is None:
+            self._hwinfo_since, self._hwinfo_told = None, False
+            return
+        if snap.hwinfo or self.sysmon.hwinfo_seen or now - snap.t > 3:
+            return                                           # HWiNFO is there, or the monitor delivers nothing yet
+        since = getattr(self, "_hwinfo_since", None)
+        if since is None:
+            self._hwinfo_since, self._hwinfo_told = now, False
+        elif not getattr(self, "_hwinfo_told", False) and now - since >= HWINFO_WAIT_S:
+            self._hwinfo_told = True
+            self._log(_("Systemwerte: HWiNFO läuft nicht – CPU-Temperatur, CPU-Leistung, Kerne und FPS fehlen in "
+                        "dieser Runde."), "System")
+
     def _hud_place(self, gx, gy, gw, gh, show: bool):
         """Show/hide the system values; returns (side, height) when they take the top of a bar."""
         side = self.settings.get("sysinfo", "off")
@@ -179,6 +198,7 @@ class SysInfo:
         self.sysmon.active = sys_on and self.hud is not None and self.game is not None
         bar = layout.bar_width(gw, gh)
         snap = self.sysmon.snapshot
+        self._hwinfo_check(time.time(), snap)
         if self._hist is not None and self._sysrec is not None and sys_on and time.time() - snap.t < 3:
             self._sysrec.add(snap)
         forced = getattr(self, "_forced", False)            # "Overlay testen" (1.2.8): every element, sample values

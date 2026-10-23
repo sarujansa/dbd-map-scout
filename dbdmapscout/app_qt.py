@@ -502,6 +502,10 @@ class QtShell:
             self._reveal_official()
         elif action == "news_seen":                  # 1.8.79: "Verstanden" on the card "Neu seit …"
             self._news_seen()
+        elif action == "farm_suggest":               # 1.8.88: tile "Farming?" → the statistics' overview with the row
+            self.qt.show_page("stats")
+            self._stats_select("Übersicht")
+            self._stats_render()
         elif action == "rec_setup":                  # 1.4.2: tile "Aufnahmen" without a folder/drive
             self._reveal_rec()
         else:

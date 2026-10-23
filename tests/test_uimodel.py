@@ -984,7 +984,8 @@ def test_custom_rounds_that_were_public_matches_are_offered_as_farming(app_root)
     try:
         assert [r.t for r in app._stats_farm_candidates()] == [t0, t0 + 2700]
         app._stats_render()
-        assert "2 Runden sind als Custom Game gespeichert" in app.stats_farm_var.get()
+        text = app.stats_farm_var.get()                       # 1.8.88: the hint names the reason
+        assert "2 Runden sehen nach Farming aus: 2 als Custom Game gespeichert" in text and "kurze" not in text
         assert app.stats_farm_row.winfo_manager()
         app._confirmed = True
         app._stats_farm_found()
@@ -998,6 +999,51 @@ def test_custom_rounds_that_were_public_matches_are_offered_as_farming(app_root)
         assert [x.t for x in app._stats_farm_candidates()] == [t0 + 1800]
         app._stats_farm_ignore()
         assert not app._stats_farm_candidates() and app.settings.get("farming_ignored") == [repr(t0 + 1800)]
+    finally:
+        app.quit()
+
+
+def test_short_rounds_against_the_same_killer_are_offered_as_farming_and_the_overview_asks(app_root):
+    """1.8.88 (user: farming rounds the lobby look missed had to be marked by hand): three short rounds in a row
+    against the same killer (stats page) are offered with their reason – on the statistics' overview and as the
+    tile "Farming?" of the overview page, whose button opens that overview; one answer marks them all, nothing
+    is marked by itself."""
+    import json
+    from dbdmapscout import history, official, overview
+    from dbdmapscout.app import App
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    t0 = time.time() - 7200
+    ms = []
+    for i, (seconds, killer) in enumerate([(120, "Slasher"), (120, "Slasher"), (150, "Slasher"), (600, "Nurse")]):
+        history.append(str(app_root / history.FILE), history.Round(t0 + i * 300, seconds, "coal", "Coal Tower",
+                                                                   role="survivor"))
+        ms.append(official.Match(t=t0 + i * 300 - 38, map="Coal Tower", role="survivor", seconds=seconds,
+                                 status="Escaped", opp=[official.Player(role="killer", character=killer)]))
+    official.merge(str(app_root / official.FILE), ms)
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    moved = []
+    app.recorder.set_farming = lambda t, on: moved.append((t, on))
+    try:
+        assert [r.t for r in app._stats_farm_candidates()] == [t0, t0 + 300, t0 + 600]
+        assert [r.farming for r in app._joined().rounds] == [False] * 4           # a suggestion, no verdict
+        app._stats_render()
+        text = app.stats_farm_var.get()
+        assert text.startswith("3 Runden sehen nach Farming aus: 3 kurze Runden (bis 3 min) hintereinander gegen "
+                               "denselben Charakter. Zuletzt: Coal Tower")
+        assert app.stats_farm_row.winfo_manager()
+        facts, _note = overview.today(app, time.time())
+        ask = [f for f in facts if f.title == "Farming?"]
+        assert ask and ask[0].value == "3" and (ask[0].action, ask[0].action_label) == ("farm_suggest",
+                                                                                           "Farming prüfen …")
+        app._qt_event("farm_suggest")
+        assert app.qt.current_key() == "stats" and app._stats_current_title() == "Übersicht"
+        app._confirmed = True
+        app._stats_farm_found()
+        saved = {r.t: r for r in history.load(str(app_root / history.FILE))}
+        assert [saved[t0 + i * 300].farming for i in range(4)] == [True, True, True, False]
+        assert sorted(moved) == [(t0, True), (t0 + 300, True), (t0 + 600, True)]
+        assert not app._stats_farm_candidates() and not [f for f in overview.today(app, time.time())[0]
+                                                        if f.title == "Farming?"]
     finally:
         app.quit()
 
@@ -2141,5 +2187,46 @@ def test_the_search_finds_statistics_tabs_and_log_categories(app_root):
             app._poll()
         assert app.qt.current_key() == "stats" and app._stats_current_title() == "Gegner"
         assert app.stats_nb.tab(app.stats_nb.select(), "text") == "Gegner & Builds"
+    finally:
+        app.quit()
+
+
+def test_a_round_without_hwinfo_is_said_once_per_dbd_start(app_root):
+    """1.8.86 (user: empty CPU columns in the statistics): with the system values on and DBD running, the log says
+    once per DBD start that HWiNFO is not running – after HWINFO_WAIT_S, not again until DBD was closed."""
+    import json
+    from dbdmapscout import app_sysinfo
+    from dbdmapscout.app import App
+    from dbdmapscout.sysinfo import Snapshot
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        told = lambda: sum(1 for e in app._log_entries if "HWiNFO läuft nicht" in e[2])   # noqa: E731
+        now = time.time()
+        app.game = object()
+        app.sysmon.active = True
+        app.sysmon.snapshot = Snapshot(cpu_load=10, t=now)
+        app._hwinfo_check(now)
+        app._hwinfo_check(now + app_sysinfo.HWINFO_WAIT_S - 1)
+        assert told() == 0
+        app.sysmon.snapshot = Snapshot(cpu_load=10, t=now + app_sysinfo.HWINFO_WAIT_S)
+        app._hwinfo_check(now + app_sysinfo.HWINFO_WAIT_S)
+        app._hwinfo_check(now + app_sysinfo.HWINFO_WAIT_S + 30)
+        assert told() == 1                                               # once
+        app.game = None
+        app._hwinfo_check(now + 100)                                     # DBD gone: the next start may say it again
+        app.game = object()
+        app.sysmon.snapshot = Snapshot(cpu_load=10, t=now + 200)
+        app._hwinfo_check(now + 200)
+        app.sysmon.snapshot = Snapshot(cpu_load=10, t=now + 200 + app_sysinfo.HWINFO_WAIT_S)   # a fresh reading
+        app._hwinfo_check(now + 200 + app_sysinfo.HWINFO_WAIT_S)
+        assert told() == 2
+        app.sysmon.snapshot = Snapshot(cpu_load=10, t=now + 300, hwinfo=True)       # HWiNFO there: never
+        app.game = None
+        app._hwinfo_check(now + 300)
+        app.game = object()
+        app._hwinfo_check(now + 300)
+        app._hwinfo_check(now + 400)
+        assert told() == 2
     finally:
         app.quit()

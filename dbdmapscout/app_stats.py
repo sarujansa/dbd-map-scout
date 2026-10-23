@@ -477,9 +477,11 @@ class StatsTab:
         ghost = official.phantoms(candidates[:len(all_rounds)], tied)
         phantoms = [all_rounds[i] for i in sorted(ghost)]
         kept = [r for i, r in enumerate(all_rounds) if i not in ghost]
+        # 1.8.88: runs of short rounds against the same character – farming the lobby look missed (a suggestion)
+        short_runs = official.farming_runs([(r, off[id(r)]) for r in kept if id(r) in off and history.normal(r)])
         return SimpleNamespace(rounds=sorted(kept + rescued, key=lambda r: r.t), off=off, tied=tied,
                                other=other, fixed=fixed, rescued=rescued, matches=matches, candidates=candidates,
-                               phantoms=phantoms, public_custom=public_custom)
+                               phantoms=phantoms, public_custom=public_custom, short_runs=short_runs)
 
     def _stats_render(self):
         t0 = time.perf_counter()
@@ -587,9 +589,8 @@ class StatsTab:
             self.stats_lost_label.pack_forget()
         found = self._stats_farm_candidates()
         if found:
-            self.stats_farm_var.set(_("{n} Runden sind als Custom Game gespeichert, laut Stats-Seite waren es aber "
-                                      "öffentliche Matches – vermutlich Farming mit Crossplay aus (vor 1.5.5 als Custom "
-                                      "Game erkannt). Zuletzt: {map}, {when}.", n=len(found), map=found[-1].map,
+            self.stats_farm_var.set(_("{n} Runden sehen nach Farming aus: {reasons}. Zuletzt: {map}, {when}.",
+                                      n=len(found), reasons=self._stats_farm_reasons(found), map=found[-1].map,
                                       when=time.strftime("%d.%m.%y %H:%M", time.localtime(found[-1].t))))
             self.stats_farm_row.pack(anchor="w", fill="x", after=self.stats_dash, pady=(6, 0))
         else:
@@ -1119,16 +1120,38 @@ class StatsTab:
         self._stats_render()
 
     def _stats_farm_candidates(self):
-        """1.6.1: rounds saved as custom games that the stats page lists as public matches (not ignored)."""
+        """1.6.1: rounds saved as custom games that the stats page lists as public matches, 1.8.88: plus runs of
+        short rounds against the same character (official.farming_runs) – both not ignored, oldest first."""
         ignored = set(self.settings.get("farming_ignored") or [])
-        return [r for r in self._joined().public_custom if repr(r.t) not in ignored]
+        j = self._joined()
+        seen, out = set(), []
+        for r in sorted(list(j.public_custom) + list(getattr(j, "short_runs", ())), key=lambda r: r.t):
+            if repr(r.t) not in ignored and r.t not in seen:
+                seen.add(r.t)
+                out.append(r)
+        return out
+
+    def _stats_farm_reasons(self, found) -> str:
+        """Why the candidates look like farming, for the hint and the question."""
+        j = self._joined()
+        ts = {r.t for r in found}
+        custom = {r.t for r in j.public_custom if r.t in ts}
+        n_custom = len(custom)
+        n_runs = sum(1 for r in getattr(j, "short_runs", ()) if r.t in ts and r.t not in custom)
+        parts = []
+        if n_custom:
+            parts.append(_("{n} als Custom Game gespeichert, laut Stats-Seite aber öffentliche Matches (vor 1.5.5 "
+                           "so erkannt)", n=n_custom))
+        if n_runs:
+            parts.append(_("{n} kurze Runden (bis 3 min) hintereinander gegen denselben Charakter", n=n_runs))
+        return "; ".join(parts)
 
     def _stats_farm_found(self):
         """1.6.1: mark them all as farming rounds (that also drops "custom game"); the recordings follow."""
         found = self._stats_farm_candidates()
         if not found or not self._ask(_("Als Farming markieren"),
-                                      _("{n} Runden als Farming-Runden markieren?", n=len(found)),
-                                      self._stats_farm_found):
+                                      _("{n} Runden als Farming-Runden markieren?", n=len(found)) + "\n\n"
+                                      + self._stats_farm_reasons(found), self._stats_farm_found):
             return
         done = 0
         try:

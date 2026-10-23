@@ -241,6 +241,8 @@ TIPS = {
     # maps tab
     "Server-Tab öffnen": "Zum Tab Server: dort „Anzeigen, mit welchem Server DBD verbunden ist“ anhaken – Region "
                          "und Ping stehen dann hier und im Overlay.",
+    "Farming prüfen …": "Öffnet die Statistik-Übersicht mit der Zeile, die sagt, warum diese Runden nach Farming "
+                        "aussehen – dort markieren oder ignorieren.",
     "Match-Daten einrichten …": "Zu Einstellungen → Mehr → Offizielle Match-Daten: einmal das Userscript in den "
                                 "Browser, danach zählen Kills, Entkommen und Bloodpoints in der Statistik.",
     "Weitere 100 Runden anzeigen": "Die Liste zeigt die neuesten 100 Runden der Auswahl; jeder Klick hängt 100 "
