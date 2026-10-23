@@ -9,8 +9,8 @@ if "tkinter" not in sys.modules and importlib.util.find_spec("tkinter") is None:
     from unittest import mock
     sys.modules["tkinter"] = mock.MagicMock()
 
-from dbdmapscout import layout, sysinfo  # noqa: E402
-from dbdmapscout.overlay_win32 import render_hud  # noqa: E402
+from fogscout import layout, sysinfo  # noqa: E402
+from fogscout.overlay_win32 import render_hud  # noqa: E402
 
 
 def _hwinfo(readings, poll=1000, sig=0x53695748, sensors=()):
@@ -72,7 +72,7 @@ def test_hwinfo_cpu_power_busiest_thread_and_throttling():
 
 
 def test_cpu_throttling_shows_in_the_hud_and_counts_only_with_hwinfo():
-    from dbdmapscout.sysinfo import MIN_SAMPLES, Snapshot, SysRecorder
+    from fogscout.sysinfo import MIN_SAMPLES, Snapshot, SysRecorder
     texts = ["".join(t for t, _ in r) for r in sysinfo.hud_rows(Snapshot(cpu_temp=95, cpu_throttle="thermal"))]
     assert "CPU DROSSELT (TEMP.)" in texts
     rec = SysRecorder()
@@ -121,7 +121,7 @@ def test_hud_fits_the_bar_and_map_moves_below():
 
 
 def test_recorder_averages_and_maxima_per_round():
-    from dbdmapscout.sysinfo import MIN_SAMPLES, Snapshot, SysRecorder
+    from fogscout.sysinfo import MIN_SAMPLES, Snapshot, SysRecorder
     rec = SysRecorder()
     for i in range(MIN_SAMPLES):
         snap = Snapshot(t=100 + i, gpu_temp=70 + i, gpu_load=90, cpu_temp=None if i else 60)
@@ -134,7 +134,7 @@ def test_recorder_averages_and_maxima_per_round():
 
 
 def test_round_keeps_system_values_and_stats(tmp_path):
-    from dbdmapscout import history
+    from fogscout import history
     path = str(tmp_path / "rounds.jsonl")
     hot = {"gpu_temp": 78.0, "gpu_temp_max": 84.0, "cpu_temp": 66.0, "cpu_temp_max": 91.0, "gpu_power_max": 240.0}
     cool = {"gpu_temp": 62.0, "gpu_temp_max": 70.0, "gpu_load": 80.0}
@@ -171,7 +171,7 @@ def test_hotspot_memory_and_throttling():
 
 
 def test_recorder_counts_throttled_seconds_and_trend():
-    from dbdmapscout import history
+    from fogscout import history
     rec = sysinfo.SysRecorder()
     for i in range(12):
         rec.add(sysinfo.Snapshot(t=100 + i, gpu_temp=70, gpu_hot=85 + i, throttle="thermal" if i < 3 else ""))
@@ -193,7 +193,7 @@ def test_recorder_counts_throttled_seconds_and_trend():
 
 
 def test_temperature_line_breaks_at_gaps():
-    from dbdmapscout import trendchart
+    from fogscout import trendchart
     pts = [(0, 70), None, (2, 72), (3, 75)]
     assert trendchart.segments(pts) == [((2, 72), (3, 75))]       # one segment c–d; "a" stands alone (gap)
     assert trendchart.segments([]) == [] and trendchart.segments([None, None]) == []
@@ -202,7 +202,7 @@ def test_temperature_line_breaks_at_gaps():
 
 def test_info_beside_the_map_for_low_bars():
     from PIL import Image
-    from dbdmapscout.overlay_win32 import add_info
+    from fogscout.overlay_win32 import add_info
     pic = Image.new("RGBA", (120, 160), (200, 200, 255, 255))
     below = add_info(pic, "1:42", "Frankfurt", 160, ping=24)
     beside = add_info(pic, "1:42", "Frankfurt", 160, ping=24, beside=True)
@@ -213,7 +213,7 @@ def test_info_beside_the_map_for_low_bars():
 
 def test_system_values_follow_the_map():
     from types import SimpleNamespace
-    from dbdmapscout.app_sysinfo import SysInfo
+    from fogscout.app_sysinfo import SysInfo
     shown = []
     hud = SimpleNamespace(size=(300, 120), show_at=lambda x, y: shown.append((x, y)), hide=lambda: shown.append(None),
                           shown=True, set_fade=lambda f: None)
@@ -243,8 +243,8 @@ def test_system_values_follow_the_map():
 
 def test_statistics_know_cpu_throttling_only_from_rounds_with_hwinfo():
     from types import SimpleNamespace
-    from dbdmapscout import history
-    from dbdmapscout.app_stats import sys_tiles
+    from fogscout import history
+    from fogscout.app_stats import sys_tiles
     rounds = [SimpleNamespace(t=1, map="Coal Tower", sys={"gpu_temp": 70, "core_max": 92, "cpu_power": 110,
                                                           "cpu_power_max": 140, "cpu_throttle_s": 30.0}),
               SimpleNamespace(t=2, map="Coal Tower", sys={"gpu_temp": 72, "core_max": 88, "cpu_power": 100,
@@ -265,8 +265,8 @@ def test_frame_rate_from_hwinfo_and_the_slowest_seconds_of_a_round():
     """1.2.2 (user's decision): FPS only from HWiNFO's shared memory (PresentMon / RivaTuner there); 0 = no 3D
     picture and does not count. FPS low = the slowest 1 % of the seconds, the worst round is the lowest."""
     from types import SimpleNamespace
-    from dbdmapscout import history
-    from dbdmapscout.sysinfo import MIN_SAMPLES, Snapshot, SysRecorder
+    from fogscout import history
+    from fogscout.sysinfo import MIN_SAMPLES, Snapshot, SysRecorder
     rows = [(8, "Framerate (Displayed)", "FPS", 140.0), (8, "Framerate (Presented)", "FPS", 143.5),
             (8, "Frame Time", "ms", 7.0)]
     assert sysinfo.parse_hwinfo(_hwinfo(rows), now=1000)["fps"] == 143.5
@@ -306,8 +306,8 @@ def test_every_window_fades_in_and_out_through_one_helper(monkeypatch):
     """1.2.9 (user's pick 25): map, system values and "today" fade like the music card – one helper per window,
     hidden only at the end of a fade-out, no fading when switched off."""
     from types import SimpleNamespace
-    from dbdmapscout import app_sysinfo
-    from dbdmapscout.app_sysinfo import SysInfo
+    from fogscout import app_sysinfo
+    from fogscout.app_sysinfo import SysInfo
     clock = [100.0]
     monkeypatch.setattr(app_sysinfo.time, "monotonic", lambda: clock[0])
     jobs = []

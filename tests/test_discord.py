@@ -1,4 +1,4 @@
-"""Discord Rich Presence (dbdmapscout/discordrpc.py, 1.7): the activity (pure), the IPC client against a fake
+"""Discord Rich Presence (fogscout/discordrpc.py, 1.7): the activity (pure), the IPC client against a fake
 Discord on a local socket, the presence thread (connect, update, clear, bad ID, no Discord). Nothing leaves the PC."""
 import json
 import os
@@ -12,7 +12,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dbdmapscout import discordrpc as dc  # noqa: E402
+from fogscout import discordrpc as dc  # noqa: E402
 
 GOOD_ID = "123456789012345678"
 

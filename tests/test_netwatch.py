@@ -8,8 +8,8 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dbdmapscout import connwatch, netwatch  # noqa: E402
-from dbdmapscout.connwatch import pick_server, region_from_ptr  # noqa: E402
+from fogscout import connwatch, netwatch  # noqa: E402
+from fogscout.connwatch import pick_server, region_from_ptr  # noqa: E402
 
 LOCAL = "192.168.1.20"
 SERVER = "3.120.45.67"

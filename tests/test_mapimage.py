@@ -8,8 +8,8 @@ from PIL import Image
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dbdmapscout import mapimage as mi  # noqa: E402
-from dbdmapscout.catalog import Catalog  # noqa: E402
+from fogscout import mapimage as mi  # noqa: E402
+from fogscout.catalog import Catalog  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DARK, GREY = (0x28, 0x2A, 0x42), (0x53, 0x57, 0x81)
@@ -142,7 +142,7 @@ def test_all_frames_use_the_same_split():
 
 def test_supplied_maps_keep_their_name_on_top():
     import glob
-    from dbdmapscout.overlay import load_frames
+    from fogscout.overlay import load_frames
     split = [p for p in glob.glob(os.path.join(ROOT, "maps", "*", "*.webp"))
              if mi.title_split(load_frames(p)[0][0])]
     webp = glob.glob(os.path.join(ROOT, "maps", "*", "*.webp"))
@@ -177,7 +177,7 @@ def test_convert_adds_a_name_only_when_missing(tmp_path):
 
 
 def test_oversized_pictures_shrink_on_load():
-    from dbdmapscout import overlay
+    from fogscout import overlay
     frames = overlay.load_frames(os.path.join(ROOT, "maps", "Other", "Midwich.gif"))
     assert len(frames) > 1 and all(img.height == overlay.MAX_LOAD_H for img, _d in frames)
     small = overlay.load_frames(os.path.join(ROOT, "maps", "McMillan", "Coal Tower.webp"))
@@ -185,7 +185,7 @@ def test_oversized_pictures_shrink_on_load():
 
 
 def test_midwich_has_two_floors_between_the_fades():
-    from dbdmapscout import overlay
+    from fogscout import overlay
     frames = overlay.load_frames(os.path.join(ROOT, "maps", "Other", "Midwich.gif"))
     assert mi.floor_frames(frames) == [0, 3]                 # bottom, top – the 100 ms frames only fade over
     assert mi.floor_frames(mi.rotate_frames(frames, 90)) == [0, 3]
@@ -205,7 +205,7 @@ def test_next_floor_cycles_through_both_and_each_floor():
 
 
 def test_midwich_floors_stack_top_above_bottom():
-    from dbdmapscout import overlay
+    from fogscout import overlay
     frames = overlay.load_frames(os.path.join(ROOT, "maps", "Other", "Midwich.gif"))
     side = frames[0][0].width
     view, n = mi.floor_view(frames, None, overlay.MAX_LOAD_H)
@@ -271,7 +271,7 @@ def test_a_map_is_decoded_once_until_its_file_changes(tmp_path, monkeypatch):
     """1.8.84 (idea 8 of the UI review, measured: show_map + set_map decoded Midwich twice per call, 0.43 s each):
     load_frames keeps the last FRAMES_KEPT results by path, file time, size and rotation; a changed file or
     another rotation is decoded anew; callers get their own list."""
-    from dbdmapscout import overlay
+    from fogscout import overlay
     overlay.clear_frames()
     paths = []
     for i in range(3):

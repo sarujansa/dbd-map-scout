@@ -8,10 +8,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytest  # noqa: E402
 from PIL import Image  # noqa: E402
 
-from dbdmapscout import layout, preview  # noqa: E402
-from dbdmapscout import overlay_win32 as ow  # noqa: E402
-from dbdmapscout.config import DEFAULTS  # noqa: E402
-from dbdmapscout.mapimage import title_split  # noqa: E402
+from fogscout import layout, preview  # noqa: E402
+from fogscout import overlay_win32 as ow  # noqa: E402
+from fogscout.config import DEFAULTS  # noqa: E402
+from fogscout.mapimage import title_split  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # the whole program, like tests/test_uimodel.py: Linux only – on Windows it would touch the system (hosts file …)
@@ -121,8 +121,8 @@ def test_the_lines_below_a_map_at_the_bottom_go_above_it_and_stay_on_screen():
 
 def test_the_music_cover_can_be_round_or_square_in_every_style():
     """1.8.24 (user: "im Spotify-Overlay die Option zwischen runden und eckigen Bildern")."""
-    from dbdmapscout import media, skin
-    from dbdmapscout.sysinfo import DIM, WHITE
+    from fogscout import media, skin
+    from fogscout.sysinfo import DIM, WHITE
     cover = Image.new("RGB", (300, 300), (200, 40, 40))
     rows = [[("Blinding Lights", WHITE)], [("The Weeknd", DIM)]]
     assert media.look(_o(media_cover_shape="round"))[-1] == "cover_round"
@@ -151,8 +151,8 @@ def test_the_music_cover_can_be_round_or_square_in_every_style():
 def test_a_page_never_changes_width_when_its_scroll_bar_comes_and_goes():
     """1.8.24 (user: "das GUI springt ab und zu kurz nach links und dann wieder zurück")."""
     from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
-    from dbdmapscout import qt_window
-    from dbdmapscout.qt_common import _scroll_page
+    from fogscout import qt_window
+    from fogscout.qt_common import _scroll_page
     qt_window.application()
     page, lay = _scroll_page("Test")
     page.resize(600, 300)
@@ -185,9 +185,9 @@ def test_a_page_never_changes_width_when_its_scroll_bar_comes_and_goes():
 def test_the_queue_beside_the_card_fills_its_height():
     """1.8.24 (user: "wenn rechts angezeigt wird, was abgespielt wird, soll die Liste verlängert werden, bis sie
     da voll ist")."""
-    from dbdmapscout import skin
-    from dbdmapscout.app_spotify import SAMPLE_UPNEXT
-    from dbdmapscout.sysinfo import DIM, WHITE
+    from fogscout import skin
+    from fogscout.app_spotify import SAMPLE_UPNEXT
+    from fogscout.sysinfo import DIM, WHITE
     cover = Image.new("RGB", (300, 300), (200, 40, 40))
     rows = [[("Blinding Lights", WHITE)], [("The Weeknd", DIM)]]
     up = ("ALS NÄCHSTES", SAMPLE_UPNEXT)
@@ -208,7 +208,7 @@ def test_no_element_lies_on_another_on_the_map_or_on_discords_overlay():
     """1.8.25 (user: "alle UI-Elemente beachten, damit es immer sauber aussieht" + screenshots with Discord's
     overlay open): the areas of Discord's widgets keep the bars' lines away (voice bottom left, notifications top
     right), and every element that would lie on another, on the map or on such an area moves up or down."""
-    from dbdmapscout import media, sysinfo
+    from fogscout import media, sysinfo
     game = (0, 0, W, H)
     o = _o(keep_out_on=True)
     bands = layout.bar_bands(o, game, 17)
@@ -249,7 +249,7 @@ def test_no_element_lies_on_another_on_the_map_or_on_discords_overlay():
 def test_characters_a_font_lacks_come_from_a_fallback_font():
     """1.8.25 (user: "andere Sprachen werden bei ‚Als nächstes' nicht korrekt angezeigt (russisch)"): the Inter
     subset of the modern styles has no Cyrillic – those characters are drawn with a font that has them."""
-    from dbdmapscout import skin
+    from fogscout import skin
     inter = skin.inter("Medium", 40)
     assert ow._has_glyph(inter, "a") and not ow._has_glyph(inter, "Ж")
     fb = ow.font_for(inter, "Ж")
@@ -300,8 +300,8 @@ def test_a_card_keeps_its_widest_width_while_its_values_change(tmp_path):
     (layout.steady_width) – a shorter title or value never moves the card; another layout starts anew."""
     import json
     import time
-    from dbdmapscout import media
-    from dbdmapscout.app import App
+    from fogscout import media
+    from fogscout.app import App
     (tmp_path / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
     (tmp_path / "sim").mkdir()
     app = App(str(tmp_path), simulate=str(tmp_path / "sim"))
@@ -347,7 +347,7 @@ class _DrawWin:
             pic = ow.music_picture(rows, height, cover, style, progress, look, skin, accent, upnext, upnext_pos,
                                    None, self._bodies, min_w, min_h)
         elif skin != "classic":
-            from dbdmapscout import skin as skins
+            from fogscout import skin as skins
             pic = skins.card(rows, height, skin, accent, title, min_w=min_w)
         else:
             pic = ow.pad_to(ow.render_hud(rows, height), min_w)
@@ -395,8 +395,8 @@ def test_every_element_is_placed_with_real_windows(tmp_path):
     draw for real: one _place_overlay without an exception, every element on screen, in its bar, none on another."""
     import json
     import time
-    from dbdmapscout import media, sysinfo
-    from dbdmapscout.app import App
+    from fogscout import media, sysinfo
+    from fogscout.app import App
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     for name in ("maps", "models", "maps.json"):
         os.symlink(os.path.join(root, name), tmp_path / name)
@@ -445,8 +445,8 @@ def test_cards_in_the_same_bar_share_one_width_and_merge_into_a_column(tmp_path)
     column with flush edges; switched off, every card keeps its natural width; undo restores the own places."""
     import json
     import time
-    from dbdmapscout import media, sysinfo
-    from dbdmapscout.app import App
+    from fogscout import media, sysinfo
+    from fogscout.app import App
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     for name in ("maps", "models", "maps.json"):
         os.symlink(os.path.join(root, name), tmp_path / name)
@@ -507,9 +507,9 @@ def test_a_song_change_never_shrinks_the_music_card_or_its_column(tmp_path):
     (SHRINK_AFTER) is followed."""
     import json
     import time
-    from dbdmapscout import media, sysinfo
-    from dbdmapscout.app import App
-    from dbdmapscout.preview import sample_cover
+    from fogscout import media, sysinfo
+    from fogscout.app import App
+    from fogscout.preview import sample_cover
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     for name in ("maps", "models", "maps.json"):
         os.symlink(os.path.join(root, name), tmp_path / name)
@@ -563,8 +563,8 @@ def test_the_rec_dot_blinks_in_the_lines_and_shows_in_the_overlay_test(tmp_path,
     import json
     import time
     import numpy as np
-    from dbdmapscout import diagnose
-    from dbdmapscout.app import App
+    from fogscout import diagnose
+    from fogscout.app import App
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     for name in ("maps", "models", "maps.json"):
         os.symlink(os.path.join(root, name), tmp_path / name)
@@ -611,8 +611,8 @@ def test_the_diagnosis_tells_where_the_overlay_tick_spends_its_time(tmp_path):
     diagnosis shows average and maximum."""
     import json
     import time
-    from dbdmapscout import diagnose
-    from dbdmapscout.app import App
+    from fogscout import diagnose
+    from fogscout.app import App
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     for name in ("maps", "models", "maps.json"):
         os.symlink(os.path.join(root, name), tmp_path / name)
@@ -643,8 +643,8 @@ def test_the_lines_can_be_joined_to_the_map_above_it(tmp_path):
     import json
     import time
     import numpy as np
-    from dbdmapscout import preview, skin
-    from dbdmapscout.app import App
+    from fogscout import preview, skin
+    from fogscout.app import App
     pic = Image.open(COAL).convert("RGBA")
     body = ow.map_body(pic, 400, title_split(pic)[2])
     for style in ("glass", "chips", "line"):

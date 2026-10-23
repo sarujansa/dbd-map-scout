@@ -15,7 +15,7 @@ from types import SimpleNamespace
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from dbdmapscout import obsrec  # noqa: E402
+from fogscout import obsrec  # noqa: E402
 
 
 # ------------------------------------------------------------------ a fake obs-websocket 5 server
@@ -160,6 +160,14 @@ class FakeObs(threading.Thread):
                 self.inputs[data["inputName"]] = dict(data, muted=False)
                 out = {"sceneItemId": self._item(data["sceneName"], data["inputName"],
                                                  data.get("sceneItemEnabled", True))}
+            elif kind == "SetInputName":               # 1.9: only our own sources are renamed
+                ok = data["inputName"] in self.inputs and data["newInputName"] not in self.inputs
+                if ok:
+                    self.inputs[data["newInputName"]] = self.inputs.pop(data["inputName"])
+                    for items in self.scenes.values():
+                        for i in items:
+                            if i["sourceName"] == data["inputName"]:
+                                i["sourceName"] = data["newInputName"]
             elif kind == "GetInputPropertiesListPropertyItems":     # 1.8.20: the windows OBS offers
                 ok = data["inputName"] in self.inputs and data["propertyName"] == "window"
                 if ok:
@@ -602,7 +610,7 @@ def test_the_rec_dot_blinks_right_of_the_timer_in_every_style_and_on_the_tray_ic
     during even seconds, off during odd ones, never while not recording; the card keeps its size between the
     phases (nothing jumps)."""
     from PIL import Image
-    from dbdmapscout import icon, overlay_win32, skin
+    from fogscout import icon, overlay_win32, skin
     assert overlay_win32.rec_phase(10.2) and not overlay_win32.rec_phase(11.7)
     pic = Image.new("RGBA", (400, 300), (0, 0, 0, 0))
     on = overlay_win32.add_info(pic.copy(), "03:12", "", 480, rec=True)
@@ -771,8 +779,8 @@ def test_space_counts_the_index_and_the_drive(tmp_path):
 def test_the_f8_hotkey_and_the_overview_tile_exist():
     import inspect
     from types import SimpleNamespace
-    from dbdmapscout import config, hotkeys, overview, qt_window
-    from dbdmapscout.app_hotkeys import HOTKEY_LABELS
+    from fogscout import config, hotkeys, overview, qt_window
+    from fogscout.app_hotkeys import HOTKEY_LABELS
     assert config.DEFAULTS["hotkeys"]["mark_clip"] == "f8" and hotkeys.game_only("f8")
     assert "mark_clip" in dict(HOTKEY_LABELS) and '"mark_clip"' in inspect.getsource(qt_window)
     app = SimpleNamespace(settings={"rec_on": False}, recorder=SimpleNamespace(space=obsrec.Space()))
@@ -907,7 +915,7 @@ def test_the_timer_field_and_the_dot_keep_their_place_while_the_seconds_run():
     """1.5.4 (user: "die Zeit und der Punkt werden immer grösser und kleiner"): digits are proportional – the
     field is measured with the widest ("0"), so the block and the dot never move between 11:11 and 00:00."""
     from PIL import Image
-    from dbdmapscout import overlay_win32, skin
+    from fogscout import overlay_win32, skin
     pic = Image.new("RGBA", (400, 300), (0, 0, 0, 0))
     a = overlay_win32.add_info(pic.copy(), "11:11", "", 480, rec=True)
     b = overlay_win32.add_info(pic.copy(), "00:00", "", 480, rec=True)
@@ -924,7 +932,7 @@ def test_the_timer_field_and_the_dot_keep_their_place_while_the_seconds_run():
 def test_an_unreadable_globe_crop_is_kept_for_a_look(tmp_path):
     import numpy as np
     from types import SimpleNamespace
-    from dbdmapscout import worker
+    from fogscout import worker
     fake = SimpleNamespace(root_dir=str(tmp_path))
     img = np.zeros((20, 40, 3), dtype=np.uint8)
     for i in range(worker.GLOBE_KEPT + 3):
@@ -961,7 +969,7 @@ def test_a_farming_mark_from_the_statistics_moves_the_recording(tmp_path):
 
 # ------------------------------------------------------------------ 1.6
 def test_the_match_start_comes_after_the_loading_screen_of_a_found_lobby_only():
-    from dbdmapscout.matchstart import MatchStart
+    from fogscout.matchstart import MatchStart
     m = MatchStart()
     assert not m.update(0, True, True, False)                       # not armed: a loading screen does nothing
     m.arm(10)
@@ -1679,3 +1687,54 @@ def test_obs_is_found_in_the_registry_folder_or_program_files(tmp_path):
     assert obsrec.obs_window_open([("OBS 30.2.3 - Profile: x - Scenes: y", "Qt663QWindowIcon")])
     assert not obsrec.obs_window_open([("OBS 30.2.3", "Chrome_WidgetWin_1"),           # a browser tab about OBS
                                        ("Settings - OBS", "Qt663QWindowIcon"), ("", "")])
+
+
+# ------------------------------------------------------------------ 1.9: the old program name
+def test_sources_made_under_the_old_program_name_are_renamed_once(obs, tmp_path):
+    """1.9: the program was "DbD Map Scout" until 1.8.91 – OBS still holds its sources under that name. They are ours:
+    renamed (SetInputName), never created a second time; the scene items follow, the user's sources keep their names."""
+    old_win, old_dbd = "DbD Map Scout – DBD-Fenster", "DbD Map Scout – DBD"
+    obs.inputs["Bildschirmaufnahme"] = {"inputKind": "monitor_capture", "video": True}
+    obs.inputs[old_win] = {"inputKind": "window_capture", "video": True,
+                           "inputSettings": {"window": "x", "priority": 0, "method": 2, "cursor": False}}
+    obs.inputs[old_dbd] = {"inputKind": obsrec.AUDIO_KIND, "inputSettings": {"window": "y"}, "muted": False}
+    obs._item("Szene", "Bildschirmaufnahme")
+    item = obs._item("Szene", old_win)
+    obs.windows = ["DeadByDaylight  :UnrealWindow:DeadByDaylight-Win64-Shipping.exe"]
+    r, _posted = _recorder(obs, str(tmp_path), pre=False, window=True)
+    r._game_changed(True)
+    assert obsrec.WINDOW_SOURCE in obs.inputs and obsrec.AUDIO_APPS["dbd"][0] in obs.inputs
+    assert old_win not in obs.inputs and old_dbd not in obs.inputs and "Bildschirmaufnahme" in obs.inputs
+    renamed = [(d["inputName"], d["newInputName"]) for k, d in obs.requests if k == "SetInputName"]
+    assert renamed == [(old_dbd, obsrec.AUDIO_APPS["dbd"][0]), (old_win, obsrec.WINDOW_SOURCE)]
+    created = [d["inputName"] for k, d in obs.requests if k == "CreateInput"]
+    assert obsrec.WINDOW_SOURCE not in created and obsrec.AUDIO_APPS["dbd"][0] not in created
+    assert next(i for i in obs.scenes["Szene"] if i["sceneItemId"] == item)["sourceName"] == obsrec.WINDOW_SOURCE
+    assert obs.inputs[obsrec.WINDOW_SOURCE]["inputSettings"]["window"] == obs.windows[0]   # and pointed at DBD
+    assert not any(k in ("RemoveInput", "RemoveSceneItem") for k, _d in obs.requests)
+    r._game_changed(False)
+    r._game_changed(True)
+    assert [k for k, _d in obs.requests].count("SetInputName") == 2                          # once, not again
+
+
+def test_indexes_written_under_the_old_name_are_taken_over(tmp_path):
+    """1.9: fogscout-recordings.jsonl / fogscout-clips.jsonl were dbdmapscout-… – renamed when first read, so no
+    recording or clip of the user is forgotten (only indexed files are ever deleted)."""
+    folder = str(tmp_path)
+    with open(os.path.join(folder, obsrec.OLD_INDEX), "w", encoding="utf-8") as f:
+        f.write(json.dumps({"t": 1.0, "file": "a.mkv"}) + "\n")
+    recs = obsrec.load_index(folder)
+    assert [r.file for r in recs] == ["a.mkv"] and sorted(os.listdir(folder)) == [obsrec.INDEX]
+    cdir = os.path.join(folder, obsrec.CLIPS_DIR)
+    os.makedirs(cdir)
+    with open(os.path.join(cdir, obsrec.OLD_CLIPS_INDEX), "w", encoding="utf-8") as f:
+        f.write(json.dumps({"file": "c.mp4", "t": 2.0}) + "\n")
+    assert [c.file for c in obsrec.load_clips(cdir)] == ["c.mp4"] and sorted(os.listdir(cdir)) == [obsrec.CLIPS_INDEX]
+    # a new index already there: the old one is left alone, not read, never offered as a clip
+    for d, old in ((folder, obsrec.OLD_INDEX), (cdir, obsrec.OLD_CLIPS_INDEX)):
+        with open(os.path.join(d, old), "w", encoding="utf-8") as f:
+            f.write(json.dumps({"t": 3.0, "file": "b.mkv"}) + "\n")
+    assert [r.file for r in obsrec.load_index(folder)] == ["a.mkv"]
+    assert [c.file for c in obsrec.load_clips(cdir)] == ["c.mp4"]
+    assert obsrec.list_clips(cdir, recs) == []
+    assert sorted(os.listdir(cdir)) == [obsrec.OLD_CLIPS_INDEX, obsrec.CLIPS_INDEX]

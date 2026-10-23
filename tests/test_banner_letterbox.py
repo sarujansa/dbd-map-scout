@@ -5,8 +5,8 @@ import os
 import cv2
 import pytest
 
-from dbdmapscout import detector
-from dbdmapscout.detector import BannerReader, find_separator
+from fogscout import detector
+from fogscout.detector import BannerReader, find_separator
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CROP = os.path.join(ROOT, "tests", "data", "banner", "letterbox_badham.jpg")   # ROI of the 1718×1359 frame
@@ -24,8 +24,8 @@ def test_dim_separator_found_only_by_the_second_pass(monkeypatch):
 
 def test_letterboxed_banner_is_read():
     pytest.importorskip("onnxruntime")
-    from dbdmapscout.catalog import Catalog
-    from dbdmapscout.ocr import Recognizer
+    from fogscout.catalog import Catalog
+    from fogscout.ocr import Recognizer
     reader = BannerReader(Recognizer(os.path.join(ROOT, "models", "ch_PP-OCRv4_rec_infer.onnx")), Catalog(ROOT))
     sep, res = reader.read(cv2.imread(CROP), *FRAME, letterboxed=True)
     assert sep is not None and res is not None
@@ -34,7 +34,7 @@ def test_letterboxed_banner_is_read():
 
 def test_letterbox_bars_measured_and_used_only_when_fresh():
     import numpy as np
-    from dbdmapscout import layout
+    from fogscout import layout
     frame = np.zeros((1359, 1718, 3), np.uint8)
     frame[251:1109] = 90                                      # intro picture, bars of 251/250 px
     frame[5:15, 0:40] = 255                                   # FPS counter in the bar does not end it
@@ -54,10 +54,10 @@ def test_letterbox_bars_measured_and_used_only_when_fresh():
 
 def test_worker_keeps_the_smallest_bars_of_the_last_looks():
     import numpy as np
-    from dbdmapscout.worker import DetectionWorker
+    from fogscout.worker import DetectionWorker
     w = DetectionWorker.__new__(DetectionWorker)
     import collections
-    from dbdmapscout import worker
+    from fogscout import worker
     w._vbar_looks = collections.deque(maxlen=worker.VBAR_LOOKS)
 
     def look(bar):
@@ -77,7 +77,7 @@ def test_worker_keeps_the_smallest_bars_of_the_last_looks():
 
 
 def test_empty_read_is_no_evidence():
-    from dbdmapscout.detector import Accumulator, FrameResult
+    from fogscout.detector import Accumulator, FrameResult
     acc = Accumulator()
     fr = FrameResult(scores={("the-game", 1): -10.0, ("coal-tower", 1): -60.0}, best=("the-game", 1),
                      name_text="", realm_text="", name_fit=-8.1, realm_fit=-20.0, ms=1.0)
@@ -96,8 +96,8 @@ def test_banner_without_a_visible_line_is_read_where_it_sits():
     ~97 – no pass finds it. In a letterboxed small picture the name is read where the banner sits; it counts only
     when it fits a known name cleanly, so a frame without a banner stays nothing."""
     pytest.importorskip("onnxruntime")
-    from dbdmapscout.catalog import Catalog
-    from dbdmapscout.ocr import Recognizer
+    from fogscout.catalog import Catalog
+    from fogscout.ocr import Recognizer
     img = cv2.imread(RPD)
     assert find_separator(img, *RPD_FRAME, letterboxed=True) is None
     reader = BannerReader(Recognizer(os.path.join(ROOT, "models", "ch_PP-OCRv4_rec_infer.onnx")), Catalog(ROOT))
@@ -125,8 +125,8 @@ def test_the_worker_reads_a_letterboxed_banner_with_no_map_on_display(tmp_path, 
     import queue
     import time
     import numpy as np
-    from dbdmapscout import config, worker
-    from dbdmapscout.catalog import Catalog
+    from fogscout import config, worker
+    from fogscout.catalog import Catalog
     w, h = RPD_FRAME
     frame = np.zeros((h, w, 3), np.uint8)
     frame[RPD_BARS[0]:h - RPD_BARS[1]] = 60                       # the picture between the bars

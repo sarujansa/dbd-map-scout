@@ -12,8 +12,8 @@ import pytest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from dbdmapscout import config, worker  # noqa: E402
-from dbdmapscout.catalog import Catalog  # noqa: E402
+from fogscout import config, worker  # noqa: E402
+from fogscout.catalog import Catalog  # noqa: E402
 
 
 def _events(q, timeout, until):
@@ -88,7 +88,7 @@ def app(tmp_path):
         os.symlink(os.path.join(ROOT, name), tmp_path / name)
     (tmp_path / "sim").mkdir()
     (tmp_path / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
-    from dbdmapscout.app import App
+    from fogscout.app import App
     a = App(str(tmp_path), simulate=str(tmp_path / "sim"))
     yield a
     a.quit()
@@ -109,7 +109,7 @@ def test_the_map_is_hidden_at_the_round_end_even_when_saving_the_round_fails(app
 
 
 def test_a_crashed_detection_shows_in_the_status_line(app):
-    from dbdmapscout import status
+    from fogscout import status
     app._dispatch(worker.Event("error", {"text": "Traceback …\nRuntimeError: boom"}))
     assert status.is_problem(app._worker_status) and "neu starten" in app._worker_status
 

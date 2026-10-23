@@ -1,5 +1,5 @@
 """Overlay layout memory (1.65): snapping, undo, one layout per window size – pure logic."""
-from dbdmapscout import layoutmem
+from fogscout import layoutmem
 
 
 def _data():
@@ -53,7 +53,7 @@ def test_snapping_to_the_closest_line():
 
 def test_layout_presets_only_touch_layout_keys_and_apply():
     """1.2.9 (user's pick 23): ready-made arrangements as partial layouts."""
-    from dbdmapscout import layoutmem
+    from fogscout import layoutmem
     for name, preset in layoutmem.PRESETS.items():
         assert set(preset["overlay"]) <= set(layoutmem.OVERLAY_KEYS), name
         assert set(preset) - {"overlay"} <= set(layoutmem.TOP_KEYS), name
@@ -66,8 +66,8 @@ def test_layout_presets_only_touch_layout_keys_and_apply():
 
 def test_the_standard_preset_is_the_delivered_layout():
     """1.2.17: "Standard (wie ausgeliefert)" puts every layout key back to the defaults, map sizes included."""
-    from dbdmapscout import layoutmem
-    from dbdmapscout.config import DEFAULTS
+    from fogscout import layoutmem
+    from fogscout.config import DEFAULTS
     snap = layoutmem.standard_layout(DEFAULTS)
     assert set(snap["overlay"]) >= set(layoutmem.OVERLAY_KEYS) and snap["overlay"]["map_heights"] == {}
     assert snap["sysinfo"] == DEFAULTS["sysinfo"] and snap["overlay"]["anchor"] == DEFAULTS["overlay"]["anchor"]

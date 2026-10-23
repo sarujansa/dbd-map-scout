@@ -8,8 +8,8 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dbdmapscout import lobby  # noqa: E402
-from dbdmapscout.lobby import Found, LobbyView, QueueTracker  # noqa: E402
+from fogscout import lobby  # noqa: E402
+from fogscout.lobby import Found, LobbyView, QueueTracker  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, "tests", "data", "lobby")
@@ -18,7 +18,7 @@ W, H = 3440, 1440
 
 @pytest.fixture(scope="module")
 def reader():
-    from dbdmapscout.ocr import Recognizer
+    from fogscout.ocr import Recognizer
     return lobby.LobbyReader(Recognizer(os.path.join(ROOT, "models", "ch_PP-OCRv4_rec_infer.onnx")))
 
 
@@ -409,7 +409,7 @@ def test_any_multiplier_without_a_globe_means_cross_play_on():
     from PIL import Image, ImageDraw, ImageFont
     on = cv2.imread(os.path.join(DATA, "crossplay_on.png"))
     off = cv2.imread(os.path.join(DATA, "crossplay_off_2.png"))
-    font = ImageFont.truetype(os.path.join(os.path.dirname(DATA), "..", "..", "dbdmapscout", "fonts",
+    font = ImageFont.truetype(os.path.join(os.path.dirname(DATA), "..", "..", "fogscout", "fonts",
                                            "Inter-Medium.otf"), 14)
 
     def draw(base, clear, text, right):

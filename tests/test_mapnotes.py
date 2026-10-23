@@ -9,9 +9,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytest  # noqa: E402
 from PIL import Image  # noqa: E402
 
-from dbdmapscout import mapnotes, preview, skin  # noqa: E402
-from dbdmapscout import overlay_win32 as ow  # noqa: E402
-from dbdmapscout.config import DEFAULTS  # noqa: E402
+from fogscout import mapnotes, preview, skin  # noqa: E402
+from fogscout import overlay_win32 as ow  # noqa: E402
+from fogscout.config import DEFAULTS  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 COAL = os.path.join(ROOT, "maps", "McMillan", "Coal Tower.webp")
@@ -102,7 +102,7 @@ def test_the_preview_shows_the_note_like_the_game():
 def page():
     pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
     import shiboken6
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     qapp = qt_window.application()
     posted = queue.Queue()
     p = qt_window.MapsPage(lambda a, arg=None: posted.put((a, arg)))
@@ -155,7 +155,7 @@ def test_the_program_keeps_the_note_and_shows_it_with_the_map(tmp_path):
     for name in ("maps", "models", "maps.json"):
         os.symlink(os.path.join(ROOT, name), tmp_path / name)
     (tmp_path / "sim").mkdir()
-    from dbdmapscout.app import App
+    from fogscout.app import App
     app = App(str(tmp_path), simulate=str(tmp_path / "sim"))
     try:
         mid, other = list(app.catalog.maps)[:2]

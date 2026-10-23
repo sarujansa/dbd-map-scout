@@ -7,13 +7,13 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dbdmapscout import i18n, update  # noqa: E402
-from dbdmapscout.i18n_en import EN  # noqa: E402
+from fogscout import i18n, update  # noqa: E402
+from fogscout.i18n_en import EN  # noqa: E402
 
-PKG = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dbdmapscout")
+PKG = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fogscout")
 SOURCES = [p for p in sorted(glob.glob(os.path.join(PKG, "*.py")))
            if os.path.basename(p) not in ("update.py", "i18n_en.py")]
-UNTRANSLATED_OK = {"Sprache / Language", "Log", "Log ⚠", "Maps", "Layout ▸", "●", "DbD Map Scout", "Ping", "Realm"}
+UNTRANSLATED_OK = {"Sprache / Language", "Log", "Log ⚠", "Maps", "Layout ▸", "●", "Fog Scout", "Ping", "Realm"}
 
 def _trees():
     for p in SOURCES:
@@ -35,7 +35,7 @@ def fields(text):
     return {f for _lit, f, _spec, _conv in string.Formatter().parse(text) if f is not None}
 
 def tooltip_texts():
-    from dbdmapscout import tooltip
+    from fogscout import tooltip
     return set(tooltip.TIPS) | set(tooltip.TIPS.values()) | {t for _p, t in tooltip._PREFIX}
 
 def test_every_text_has_an_english_version():
@@ -108,7 +108,7 @@ def test_underscore_is_never_shadowed():
     assert not bad
 
 def test_switching_language():
-    from dbdmapscout.status import user_state
+    from fogscout.status import user_state
     try:
         assert i18n.set_language("en") == "en"
         assert i18n._("Im Match: {map}", map="Coal Tower") == "In match: Coal Tower"

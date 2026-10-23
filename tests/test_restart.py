@@ -4,9 +4,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dbdmapscout import restart  # noqa: E402
+from fogscout import restart  # noqa: E402
 
-ROOT = r"C:\Users\Player\Desktop\dbd-map-scout"
+ROOT = r"C:\Users\Player\Desktop\fog-scout"
 
 
 def test_start_command_runs_start_bat_minimised():
@@ -18,12 +18,12 @@ def test_start_command_runs_start_bat_minimised():
 def test_the_helper_starts_in_the_program_folder(monkeypatch):
     calls = []
     monkeypatch.setattr(restart.subprocess, "Popen", lambda cmd, **kw: calls.append((cmd, kw["cwd"])))
-    assert restart.wait_and_start(r"C:\Spiele & Tools\dbd-map-scout", running=lambda: False)
-    assert calls == [(restart.start_command(), r"C:\Spiele & Tools\dbd-map-scout")]
+    assert restart.wait_and_start(r"C:\Spiele & Tools\fog-scout", running=lambda: False)
+    assert calls == [(restart.start_command(), r"C:\Spiele & Tools\fog-scout")]
 
 
 def test_helper_is_the_program_itself():
-    assert restart.helper_args("pythonw.exe") == ["pythonw.exe", "-m", "dbdmapscout", "--restart"]
+    assert restart.helper_args("pythonw.exe") == ["pythonw.exe", "-m", "fogscout", "--restart"]
 
 
 def test_waits_until_the_program_has_ended(monkeypatch):

@@ -13,8 +13,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytest  # noqa: E402
 from PIL import Image  # noqa: E402
 
-from dbdmapscout import skin, sysinfo  # noqa: E402
-from dbdmapscout.preview import sample_cover  # noqa: E402
+from fogscout import skin, sysinfo  # noqa: E402
+from fogscout.preview import sample_cover  # noqa: E402
 
 HUD = sysinfo.hud_rows(sysinfo.Snapshot(t=0, cpu_load=38, cpu_temp=64, gpu_temp=71, gpu_load=92, vram_used=7.9,
                                         vram_total=12, ram_used=18.2, ram_total=32, gpu_hot=88))
@@ -74,8 +74,8 @@ def test_chips_wrap_into_rows():
 
 
 def test_the_preview_draws_the_cards_in_the_chosen_style():
-    from dbdmapscout import preview
-    from dbdmapscout.config import DEFAULTS
+    from fogscout import preview
+    from fogscout.config import DEFAULTS
     import copy
     o = copy.deepcopy(DEFAULTS["overlay"])
     pic = Image.new("RGBA", (300, 400), (120, 120, 200, 255))
@@ -93,8 +93,8 @@ def test_the_preview_draws_the_cards_in_the_chosen_style():
 
 # ------------------------------------------------------------------ the map card (1.3.1)
 def _coal_body():
-    from dbdmapscout import mapimage
-    from dbdmapscout.overlay_win32 import map_body
+    from fogscout import mapimage
+    from fogscout.overlay_win32 import map_body
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     pic = Image.open(os.path.join(root, "maps", "McMillan", "Coal Tower II.webp")).convert("RGBA")
     return pic, map_body(pic, 440, mapimage.title_split(pic)[2])
@@ -156,8 +156,8 @@ def test_every_up_next_row_has_the_same_size_and_a_long_one_is_cut(style):
 def test_the_overlay_draws_the_map_card_in_the_style_and_fits_the_bar():
     """PictureOverlay with skin glass / chips / line: the card stays inside the 440-px bar (its frame may use the
     margin like the dark area), the waiting card follows the style, and a style change re-renders."""
-    from dbdmapscout import layout
-    from dbdmapscout import overlay_win32 as ow
+    from fogscout import layout
+    from fogscout import overlay_win32 as ow
 
     class Root:
         def after(self, *a):
@@ -209,7 +209,7 @@ def test_the_drop_shadow_looks_like_the_full_size_blur():
     """1.3.5: blurred on a smaller picture (it is drawn every second) – no visible difference."""
     import numpy as np
     from PIL import ImageFilter
-    from dbdmapscout import skin
+    from fogscout import skin
     card = skin._panel(420, 760, 20, (20, 20, 24, 200), (255, 255, 255, 40))
     for u in (0.6, 1.0, 2.0):
         blur, off = max(2, int(8 * u)), max(1, int(4 * u))
@@ -227,7 +227,7 @@ def test_values_never_change_the_size_of_a_card():
     """1.8.28 (user: "mir ist wichtig, dass sich die GUI-Elemente nicht verschieben, wenn ein Wert grösser oder
     kleiner wird"): the tile cards have one width, the timer field is at least five digits wide, the ping pill
     is sized for three digits, the progress time for the song's length – and ``min_w`` widens any card."""
-    from dbdmapscout import overlay_win32 as ow
+    from fogscout import overlay_win32 as ow
 
     def rows(cpu, gpu, vram, ram, throttle=None):
         return sysinfo.hud_rows(sysinfo.Snapshot(t=0, cpu_load=cpu, cpu_temp=64, gpu_temp=71, gpu_load=gpu,
@@ -265,8 +265,8 @@ def test_a_music_card_keeps_a_given_height_and_steady_box_holds_a_size():
     """1.8.30: ``min_h`` makes the card (frame included) that tall in every style and in classic (the dark area
     round it too); layout.steady_box keeps the largest size for a key and follows a smaller one only after it
     lasted SHRINK_AFTER seconds."""
-    from dbdmapscout import layout
-    from dbdmapscout import overlay_win32 as ow
+    from fogscout import layout
+    from fogscout import overlay_win32 as ow
     up = ("ALS NÄCHSTES", (("Save Your Tears", "The Weeknd"), ("Levitating", "Dua Lipa")))
     for style in MODERN:
         full = skin.music(MUSIC, sample_cover(), 1440, style, (10, 100), (), None, "big", up, "below")

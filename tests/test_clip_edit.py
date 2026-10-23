@@ -1,6 +1,6 @@
 """1.8.60: a clip from the Clips tab opens in the clip editor like a recording."""
-from dbdmapscout import obsrec
-from dbdmapscout.app_recordings import clip_round
+from fogscout import obsrec
+from fogscout.app_recordings import clip_round
 
 
 def test_a_clip_opens_with_the_round_it_came_from():

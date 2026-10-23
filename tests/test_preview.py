@@ -6,8 +6,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PIL import Image  # noqa: E402
 
-from dbdmapscout import layout, media, preview, sysinfo  # noqa: E402
-from dbdmapscout.config import DEFAULTS  # noqa: E402
+from fogscout import layout, media, preview, sysinfo  # noqa: E402
+from fogscout.config import DEFAULTS  # noqa: E402
 
 W, H = 3440, 1440
 ROWS = [[("CPU ", sysinfo.DIM), ("64°C", sysinfo.WHITE)], [("GPU ", sysinfo.DIM), ("71°C", sysinfo.WHITE)]]
@@ -59,8 +59,8 @@ def test_centre_guides_are_thin_lines_and_blacked_out_for_the_detection():
     """1.64.5 (user: Mittellinie als Kreuz beim Ausrichten): 3-px lines with light dashes on a dark edge; the
     worker blacks them out like the overlay (a long light line would look like a banner's separator)."""
     import numpy as np
-    from dbdmapscout.overlay_win32 import guide_line
-    from dbdmapscout.worker import DetectionWorker
+    from fogscout.overlay_win32 import guide_line
+    from fogscout.worker import DetectionWorker
     v, h = guide_line(1440, True), guide_line(3440, False)
     assert v.size == (3, 1440) and h.size == (3440, 3)
     assert v.getpixel((1, 0))[:3] == (255, 255, 255) and v.getpixel((0, 0))[:3] == (0, 0, 0)
@@ -75,9 +75,9 @@ def test_centre_guides_are_thin_lines_and_blacked_out_for_the_detection():
 def test_onnxruntime_telemetry_is_off_before_it_is_loaded():
     """1.64.7: onnxruntime sends Microsoft telemetry (measured in the container: mobile.events.data.microsoft.com,
     4 tries in 40 s) unless ORT_DISABLE_TELEMETRY is set before it loads – the package sets it on import, so even
-    a fresh interpreter that loads onnxruntime through dbdmapscout has it."""
+    a fresh interpreter that loads onnxruntime through fogscout has it."""
     import subprocess
-    code = ("import os; os.environ.pop('ORT_DISABLE_TELEMETRY', None); import dbdmapscout.ocr; "
+    code = ("import os; os.environ.pop('ORT_DISABLE_TELEMETRY', None); import fogscout.ocr; "
             "print(os.environ.get('ORT_DISABLE_TELEMETRY'))")
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
                          cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -90,15 +90,15 @@ def test_numpy_does_one_thread_so_nothing_spins_between_the_looks():
     numpy loads; a value the user set stays, and the OCR session does not spin either."""
     import subprocess
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    code = ("import os; os.environ.pop('OPENBLAS_NUM_THREADS', None); import dbdmapscout.ocr; "
+    code = ("import os; os.environ.pop('OPENBLAS_NUM_THREADS', None); import fogscout.ocr; "
             "print(os.environ.get('OPENBLAS_NUM_THREADS'))")
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=root)
     assert out.stdout.strip() == "1", out.stderr
     env = dict(os.environ, OPENBLAS_NUM_THREADS="3")
-    out = subprocess.run([sys.executable, "-c", "import os, dbdmapscout; print(os.environ['OPENBLAS_NUM_THREADS'])"],
+    out = subprocess.run([sys.executable, "-c", "import os, fogscout; print(os.environ['OPENBLAS_NUM_THREADS'])"],
                          capture_output=True, text=True, cwd=root, env=env)
     assert out.stdout.strip() == "3", out.stderr
-    from dbdmapscout.ocr import Recognizer
+    from fogscout.ocr import Recognizer
     rec = Recognizer(os.path.join(root, "models", "ch_PP-OCRv4_rec_infer.onnx"), threads=2)
     opts = rec.session.get_session_options()
     assert opts.get_session_config_entry("session.intra_op.allow_spinning") == "0"
@@ -114,7 +114,7 @@ def test_system_values_keep_their_place_while_values_change_width():
 
 
 def test_edit_frame_names_the_element_without_changing_its_size():
-    from dbdmapscout.overlay_win32 import BORDER, add_border
+    from fogscout.overlay_win32 import BORDER, add_border
     pic = add_border(Image.new("RGBA", (300, 200), (0, 0, 0, 0)), "MUSIK")
     assert pic.size == (300, 200)                              # no jump after "Fertig"
     assert pic.getpixel((2, 2)) == BORDER and pic.getpixel((150, 199)) == BORDER
@@ -123,7 +123,7 @@ def test_edit_frame_names_the_element_without_changing_its_size():
 def test_the_map_grows_but_its_text_keeps_its_size():
     """1.65 (user: "nur die Map grösser machen und die Schrift gleich behalten")."""
     from PIL import Image
-    from dbdmapscout.preview import overlay_picture
+    from fogscout.preview import overlay_picture
     pic = Image.new("RGBA", (300, 400), (90, 90, 140, 255))
     small = overlay_picture(pic, 400, "", True, "3:27", "", None, "", text_h=500)
     big = overlay_picture(pic, 800, "", True, "3:27", "", None, "", text_h=500)
@@ -135,8 +135,8 @@ def test_the_drawn_in_name_keeps_its_size_when_the_map_grows():
     import glob
     import os
     from PIL import Image
-    from dbdmapscout.mapimage import title_split
-    from dbdmapscout.overlay_win32 import compose
+    from fogscout.mapimage import title_split
+    from fogscout.overlay_win32 import compose
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     path = sorted(glob.glob(os.path.join(root, "maps", "**", "*.webp"), recursive=True))[0]
     img = Image.open(path).convert("RGBA")
@@ -151,7 +151,7 @@ def test_the_drawn_in_name_keeps_its_size_when_the_map_grows():
 
 def test_a_map_wider_than_the_bar_stays_at_its_outer_edge():
     """1.65.4: "Karte darf grösser als der Balken werden" – at the bar's outer edge, never off the screen."""
-    from dbdmapscout import layout
+    from fogscout import layout
     assert layout.clamp_x("left", 100, 600, 0, 3440, 440, 17) == 17
     assert layout.clamp_x("right", 3000, 600, 0, 3440, 440, 17) == 3440 - 17 - 600
     assert layout.clamp_x("right", 3200, 300, 0, 3440, 440, 17) == 3440 - 17 - 300     # fits: as before
@@ -213,7 +213,7 @@ def test_cards_stack_in_any_order_and_a_loop_falls_back():
 def test_the_name_strip_no_longer_widens_the_map():
     """1.2.7 (idea 1): the map's name scaled apart from the map took the whole strip's width – wider than the map,
     so the lines below were shrunk for nothing. Now only the name itself counts."""
-    from dbdmapscout.overlay_win32 import compose
+    from fogscout.overlay_win32 import compose
     pic = Image.new("RGBA", (1000, 1200), (0, 0, 0, 0))
     pic.paste((255, 255, 255, 255), (300, 20, 700, 120))                 # the name: 400 px of a 1000-px strip
     pic.paste((140, 147, 232, 255), (100, 200, 900, 1100))               # the map body
@@ -225,8 +225,8 @@ def test_the_preview_draws_the_cards_of_one_bar_at_one_width():
     """1.8.29: like the App – system values, today and music standing in the same bar get the widest one's
     width (two passes over layout.column_widths); off, each keeps its own."""
     import copy
-    from dbdmapscout import preview, sysinfo
-    from dbdmapscout.config import DEFAULTS
+    from fogscout import preview, sysinfo
+    from fogscout.config import DEFAULTS
     o = copy.deepcopy(DEFAULTS["overlay"])
     o.update(style="chips", today_pos="custom", today_xy=[0.94, 0.6], media_pos="custom", media_xy=[0.94, 0.87],
              media_style="big", bar_limits_on=False, keep_out_on=False)

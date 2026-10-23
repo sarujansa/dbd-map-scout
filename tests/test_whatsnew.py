@@ -1,7 +1,7 @@
 """1.8.79: "Neu seit …" on the overview – the HISTORY.md rows after the version last run (whatsnew.py)."""
 import os
 
-from dbdmapscout import __version__, whatsnew
+from fogscout import __version__, whatsnew
 
 SAMPLE = """# History
 

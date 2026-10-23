@@ -1,7 +1,7 @@
 """1.8.80: daily copies of rounds.jsonl / official.jsonl in backup/ (backups.py)."""
 import time
 
-from dbdmapscout import backups
+from fogscout import backups
 
 DAY = 86400
 
