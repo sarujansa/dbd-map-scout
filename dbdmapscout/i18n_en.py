@@ -1755,7 +1755,17 @@ EN = {
     'Zeigt den zuletzt gespeicherten Clip im Explorer.': 'Shows the clip saved last in Explorer.',
     '{n} Runden als Farming markiert.': '{n} rounds marked as farming.',
     '{n} Runden als Farming-Runden markieren?': 'Mark {n} rounds as farming rounds?',
-    '{n} Runden sind als Custom Game gespeichert, laut Stats-Seite waren es aber öffentliche Matches – vermutlich Farming mit Crossplay aus (vor 1.5.5 als Custom Game erkannt). Zuletzt: {map}, {when}.': '{n} rounds are saved as custom games, but the stats page lists them as public matches – probably farming with cross-play off (recognised as custom games before 1.5.5). Last: {map}, {when}.',
+    "{n} Runden sehen nach Farming aus: {reasons}. Zuletzt: {map}, {when}.":
+        "{n} rounds look like farming: {reasons}. Latest: {map}, {when}.",
+    "{n} als Custom Game gespeichert, laut Stats-Seite aber öffentliche Matches (vor 1.5.5 so erkannt)":
+        "{n} saved as custom games but public matches on the stats page (read that way before 1.5.5)",
+    "{n} kurze Runden (bis 3 min) hintereinander gegen denselben Charakter":
+        "{n} short rounds (up to 3 min) in a row against the same character",
+    "Farming?": "Farming?",
+    "Runden sehen nach Farming aus": "rounds look like farming",
+    "Farming prüfen …": "Check farming …",
+    "Öffnet die Statistik-Übersicht mit der Zeile, die sagt, warum diese Runden nach Farming aussehen – dort markieren oder ignorieren.":
+        "Opens the statistics overview with the line that says why these rounds look like farming – mark or ignore them there.",
     'etwa {mb} MB': 'about {mb} MB',
     'wird {h}p {fps} fps, ≈ {kbps} kbit/s, unter {mb} MB': 'becomes {h}p {fps} fps, ≈ {kbps} kbit/s, under {mb} MB',
     '≤ {n} MB': '≤ {n} MB',

@@ -690,3 +690,40 @@ def test_opponent_names_are_the_other_players_characters():
         o.Player(role="survivor", character="Meg Thomas"), o.Player(role="survivor", character="")])
     assert o.opponent_names(m) == {"Slasher", "Meg Thomas"}
     assert o.opponent_names(o.Match(t=T0, map="Coal Tower")) == set()
+
+
+def test_runs_of_short_rounds_against_the_same_character_look_like_farming():
+    """1.8.88 (user: farming rounds the lobby look missed had to be marked by hand): three short rounds in a row
+    against the same character are offered as farming – as survivor the same killer, as killer two of the same
+    survivors; a long round, a longer pause, another role or another character ends the run; two are not a run."""
+    def pair(t, seconds, role, names, m_seconds=None):
+        r = history.Round(t, seconds, "coal", "Coal Tower", role=role)
+        other = "killer" if role == "survivor" else "survivor"
+        m = o.Match(t=t - 38, map="Coal Tower", role=role, seconds=m_seconds if m_seconds is not None else seconds,
+                    opp=[o.Player(role=other, character=n) for n in names])
+        return r, m
+
+    surv = [pair(T0 + i * 200, 120, "survivor", ["Slasher"]) for i in range(3)]
+    assert [r.t for r in o.farming_runs(surv)] == [T0, T0 + 200, T0 + 400]
+    assert [r.t for r in o.farming_runs(surv[::-1])] == [T0, T0 + 200, T0 + 400]            # order does not matter
+    assert o.farming_runs(surv[:2]) == []                                                   # two are not a run
+    assert o.farming_runs(surv[:2] + [pair(T0 + 400, 120, "survivor", ["Nurse"])]) == []    # another killer
+    assert o.farming_runs(surv[:2] + [pair(T0 + 400, 120, "killer", ["Slasher"])]) == []    # another role
+    assert o.farming_runs(surv[:2] + [pair(T0 + 400, 120, "survivor", [])]) == []           # no opponent known
+    assert o.farming_runs(surv[:2] + [pair(T0 + 400, 0, "survivor", ["Slasher"])]) == []    # no length
+    long = pair(T0 + 400, 600, "survivor", ["Slasher"])                                     # a real round between
+    late = [pair(T0 + 1100 + i * 200, 120, "survivor", ["Slasher"]) for i in range(3)]
+    assert [r.t for r in o.farming_runs(surv[:2] + [long] + late)] == [r.t for r, _m in late]
+    pause = surv[:2] + [pair(T0 + 200 + 120 + o.FARM_RUN_GAP_S + 1, 120, "survivor", ["Slasher"])]
+    assert o.farming_runs(pause) == []                                                      # pause too long
+    pause[2][0].t -= 2                                                                      # just inside the gap
+    assert len(o.farming_runs(pause)) == 3
+    # as killer: at least two of the same survivors (bots change one or two between the rounds)
+    crews = (["Meg", "Dwight", "Claudette", "Jake"], ["Meg", "Dwight", "Nea", "Ace"], ["Meg", "Dwight", "Bill", "Feng"])
+    kill = [pair(T0 + i * 200, 150, "killer", crew) for i, crew in enumerate(crews)]
+    assert len(o.farming_runs(kill)) == 3
+    kill[2] = pair(T0 + 400, 150, "killer", ["Meg", "Bill", "Feng", "Yui"])                 # only one in common
+    assert o.farming_runs(kill) == []
+    duo = [pair(T0 + i * 200, 150, "killer", ["Meg"]) for i in range(3)]                    # one survivor known
+    assert len(o.farming_runs(duo)) == 3
+    assert len(o.farming_runs(surv, max_seconds=100)) == 0 and len(o.farming_runs(surv, min_run=4)) == 0

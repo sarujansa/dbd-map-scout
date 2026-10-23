@@ -129,12 +129,13 @@ def today(app, now: float) -> tuple[list, str]:
     mine = [r for r in j.rounds if r.t >= day and id(r) in j.off]
     s = official.summary([j.off[id(r)] for r in mine if history.normal(r)])
     rec = recordings(app)
+    ask = farming_question(app)
     if not d["count"]:                         # 1.8.75: one line instead of four tiles with "–" (user review)
         tiles = [Fact(_("Runden"), "0", _("Noch keine Runden heute"))]
         if not getattr(j, "matches", None):    # never set up – say where (it hides under "Mehr")
             tiles.append(Fact(_("Stats-Seite"), "–", _("nicht eingerichtet"), action="official_setup",
                               action_label=_("Match-Daten einrichten …")))
-        return tiles + ([rec] if rec else []), ""
+        return tiles + ([rec] if rec else []) + ([ask] if ask else []), ""
     rounds = Fact(_("Runden"), str(d["count"]), _("{k} Killer / {s} Survivor", k=d["killer"], s=d["survivor"]))
     farm = None
     if d["farming"]:                           # 1.8.56: farming rounds apart; 1.8.87: bloodpoints per hour
@@ -159,7 +160,20 @@ def today(app, now: float) -> tuple[list, str]:
     wait = Fact(_("Ø Wartezeit"), fmt_duration(d["wait"]) if d["wait"] is not None else "–",
                 _("Ping {ms} ms", ms=f"{d['ping']:.0f}") if d["ping"] is not None else "")
     note = _("Spielzeit heute: {time}", time=fmt_duration(d["total"]))
-    return [rounds, kills, esc] + ([farm] if farm else []) + [wait] + ([rec] if rec else []), note
+    tiles = [rounds, kills, esc] + ([farm] if farm else []) + [wait] + ([rec] if rec else [])
+    return tiles + ([ask] if ask else []), note
+
+
+def farming_question(app):
+    """1.8.88: a tile for the rounds that look like farming (StatsTab._stats_farm_candidates: custom games the
+    stats page lists as public, runs of short rounds against the same character) – the user decides, nothing
+    is marked by itself. None without candidates."""
+    candidates = getattr(app, "_stats_farm_candidates", None)
+    found = candidates() if candidates else []
+    if not found:
+        return None
+    return Fact(_("Farming?"), str(len(found)), _("Runden sehen nach Farming aus"), action="farm_suggest",
+                action_label=_("Farming prüfen …"))
 
 
 def _week_part(j, lo: float, hi: float) -> dict:

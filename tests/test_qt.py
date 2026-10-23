@@ -1085,6 +1085,28 @@ def test_today_tells_normal_and_farming_rounds_apart():
     assert [f for f in facts if f.title == "Entkommen"][0].sub == "2 Survivor-Runden · 4 normal"
 
 
+def test_the_today_card_asks_about_rounds_that_look_like_farming():
+    """1.8.88: the tile "Farming?" with the button "Farming prüfen …" appears when the statistics have candidates
+    (StatsTab._stats_farm_candidates) – with rounds today and on an empty day; never without candidates or the
+    helper (fake apps)."""
+    now = time.time()
+    day = history.period_start("day", now)
+    rs = [history.Round(day + 60 * i, 120, "coal", "Coal Tower", role="survivor") for i in range(3)]
+    j = SimpleNamespace(rounds=rs, off={}, matches=[])
+    app = SimpleNamespace(_joined=lambda: j, settings={}, _stats_farm_candidates=lambda: rs)
+    facts, _note = overview.today(app, now)
+    ask = facts[-1]
+    assert (ask.title, ask.value, ask.sub) == ("Farming?", "3", "Runden sehen nach Farming aus")
+    assert (ask.action, ask.action_label) == ("farm_suggest", "Farming prüfen …")
+    app._stats_farm_candidates = lambda: []
+    assert not [f for f in overview.today(app, now)[0] if f.title == "Farming?"]
+    empty = SimpleNamespace(_joined=lambda: SimpleNamespace(rounds=[], off={}, matches=[1]), settings={},
+                            _stats_farm_candidates=lambda: rs[:1])
+    facts, note = overview.today(empty, now)
+    assert note == "" and [f.title for f in facts] == ["Runden", "Farming?"] and facts[1].value == "1"
+    assert overview.farming_question(SimpleNamespace()) is None
+
+
 def test_today_follows_what_is_played_now():
     """1.8.57 (user): while farming the card shows only farming, else only normal – the open round decides, then
     the lobby / search with cross-play read, then the last round; the row stays even with no round of that kind."""

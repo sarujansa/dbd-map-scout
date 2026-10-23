@@ -427,6 +427,38 @@ def survivors(m: Match) -> list:
     return [p for p in m.opp if p.role == "survivor"]
 
 
+FARM_RUN_MAX_S = 180      # 1.8.88: a round this short …
+FARM_RUN_MIN = 3          # … this many times in a row …
+FARM_RUN_GAP_S = 900      # … with at most this pause between them, against the same character: looks like farming
+
+
+def farming_runs(pairs, max_seconds: float = FARM_RUN_MAX_S, min_run: int = FARM_RUN_MIN,
+                 gap_s: float = FARM_RUN_GAP_S) -> list:
+    """1.8.88 (user: farming rounds the lobby look missed had to be marked by hand): the rounds of ``pairs``
+    [(round, match)] that form runs of at least ``min_run`` short rounds in a row against the same character –
+    as survivor the same killer, as killer at least two of the same survivors (or all, with fewer) – with no
+    more than ``gap_s`` between the end of one and the start of the next. A suggestion for the user, never a
+    verdict: the caller asks before marking anything."""
+    out = []
+    run = []                                                    # [(round, names)] of the run being built
+    for r, m in sorted(pairs, key=lambda p: p[0].t):
+        names = opponent_names(m)
+        short = 0 < r.seconds <= max_seconds and names
+        if short and run:
+            prev_r, prev_names, _prev_role = run[-1]
+            common = names & prev_names
+            need = 1 if m.role == "survivor" else min(2, len(names), len(prev_names))
+            if r.t - (prev_r.t + prev_r.seconds) <= gap_s and len(common) >= need and m.role == run[-1][2]:
+                run.append((r, names, m.role))
+                continue
+        if len(run) >= min_run:
+            out.extend(x[0] for x in run)
+        run = [(r, names, m.role)] if short else []
+    if len(run) >= min_run:
+        out.extend(x[0] for x in run)
+    return out
+
+
 def opponent_names(m: Match) -> set:
     """1.8.73: the characters of the other players of ``m`` as the page names them ("" left out) – the setting
     farming_opponents names farming partners by them."""
