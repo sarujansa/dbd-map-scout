@@ -418,9 +418,6 @@ class QtShell:
             self._qt_maps_rev = getattr(self, "_qt_maps_rev", 0) + 1
             self._fill_list()
             self._qt_refresh()                       # 1.8.72: the hits now, not with the next overlay tick (≤ 250 ms)
-        elif action == "more_open":                  # 1.8.38: a search hit under "Mehr" – open it, never shut it
-            if not self._more_open:
-                self._toggle_more()
         elif action == "search_open":                # the search reads the texts of all pages: fill them now
             self.qt.build_all()                      # 1.8.72: the pages not visited yet
             reg, auto = self.__dict__.get("_qt_reg", {}), self._qt_auto
@@ -516,10 +513,8 @@ class QtShell:
         self._qt_refresh(force=True)
 
     def _reveal_official(self):
-        """Settings → "Mehr" opened → the card "Offizielle Match-Daten" scrolled into view and lit up."""
+        """Settings → tab "Match-Daten" → the card "Offizielle Match-Daten" scrolled into view and lit up."""
         self.qt.show_page("settings")
-        if not self._more_open:
-            self._toggle_more()
         self._qt_refresh(force=True)
         self.qt.reveal("settings", "st.more.official")
 

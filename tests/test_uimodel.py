@@ -314,7 +314,7 @@ def test_the_program_starts_shows_every_page_and_quits(app_root):
             assert (app.settings["color_theme"], app.settings["accent_custom"]) == ("custom", "#e0508f")
             assert app.swatches.current == "#e0508f" and app.theme_var.get() == "Eigene Farbe"
             order = app.settings["card_order"]["settings"]["0"]
-            assert order[0] == "st.updates"
+            assert order[0] == "st.more.folders"               # 1.8.90: the last card of the tab "Allgemein" first
             app._card_order_reset()                            # "Anordnung zurücksetzen"
             assert app.settings["card_order"] == {} and app.qt.forms["settings"].columns[0].ids()[0] == "st.look"
             for key in list(app.qt.dialogs):
@@ -605,7 +605,7 @@ def test_size_changes_with_a_map_on_display_are_for_that_map(app_root):
 
 def test_position_sliders_only_for_an_own_position_and_folded_cards_are_gone(app_root):
     """1.66.3 (user: "GUI user friendly"): the sliders "Horizontal/Vertikal" stood there at 1 % with "automatisch";
-    the cards under "Mehr" showed as empty headings while folded."""
+    the cards under "Mehr" showed as empty headings while folded (the fold is gone since 1.8.90)."""
     from dbdmapscout import uimodel as ui
     from dbdmapscout.app import App, anchor_label
     from dbdmapscout.app_qt import ui_shown, ui_state
@@ -626,10 +626,8 @@ def test_position_sliders_only_for_an_own_position_and_folded_cards_are_gone(app
         assert not ui_shown(x)
         app._overlay_dragged(500, 300)                        # dragged in the game: own position, sliders there
         assert ui_shown(x) and app.settings["overlay"]["anchor"] == "custom"
-        card = app._qt_reg["st.more.backup"]
-        assert isinstance(card, ui.LabelFrame) and not ui_state(card)["visible"]
-        app._toggle_more()
-        assert ui_state(card)["visible"]
+        card = app._qt_reg["st.more.backup"]                 # 1.8.90: no fold any more – always there (tab Allgemein)
+        assert isinstance(card, ui.LabelFrame) and ui_state(card)["visible"]
     finally:
         app.quit()
 
@@ -1219,7 +1217,8 @@ def test_the_statistics_tabs_are_short_and_the_last_rounds_come_second(app_root)
         app._stats_select("Letzte Runden")
         app._stats_render_tab()
         assert len(app.stats_last.get_children()) == 1
-        assert "Spotify" in app.more_btn.cget("text") and "Discord" in app.more_btn.cget("text")
+        tabs = [c[1] for k, c in app.qt.forms["settings"].controls.items() if c[0] == "tab"]   # 1.8.90
+        assert tabs and tabs[0].count() == 6 and not hasattr(app, "more_btn")
     finally:
         app.quit()
 

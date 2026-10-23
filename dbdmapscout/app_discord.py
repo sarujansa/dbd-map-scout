@@ -18,7 +18,7 @@ class DiscordPresence:
         self.presence.start()
         self._discord_setting(save=False)
 
-    # ---------------------------------------------------------- settings card (Einstellungen → Mehr)
+    # ---------------------------------------------------------- settings card (Einstellungen → Verbindungen)
     def _discord_card(self, more):
         dc = self._reg("st.more.discord", ui.LabelFrame(more, text=_("Discord"), padding=8))
         dc.pack(fill="x", pady=(8, 0))

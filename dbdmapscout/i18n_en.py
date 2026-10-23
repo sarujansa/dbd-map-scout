@@ -145,9 +145,9 @@ EN = {
     "Lobby zu alt": "lobby too old",
     "Lobby nicht gesehen": "lobby not seen",
     "Diese Runde als Farming-Runde zählen bzw. wieder als normale Runde – Farming-Runden erscheinen nur unter dem "
-    "Filter „Farming“. Runden auf der Farming-Region (Einstellungen → Mehr) bleiben Farming.":
+    "Filter „Farming“. Runden auf der Farming-Region (Einstellungen → Match-Daten) bleiben Farming.":
         "Count this round as a farming round, or as a normal round again – farming rounds show only under the "
-        "filter \"Farming\". Rounds on the farming region (Settings → More) stay farming.",
+        "filter \"Farming\". Rounds on the farming region (Settings → Match data) stay farming.",
     "Zeigt die Lobby die Weltkugel mit rotem Kreuz (Crossplay aus), zählt die nächste Runde als Farming-Runde.":
         "If the lobby shows the globe with the red cross (cross-play off), the next round counts as a farming round.",
     "Custom Game – keine Wartezeit.": "Custom game – no waiting time.",
@@ -336,7 +336,6 @@ EN = {
     "Rundenende-Erkennung können danebenliegen. Am sichersten: 16:9 oder breiter.":
         "DBD window is narrower than 16:9 ({w}×{h}): this shape is untested, map and round-end "
         "detection may be off. Safest: 16:9 or wider.",
-    "Selten gebrauchte Einstellungen ein- oder ausklappen.": "Show or hide rarely used settings.",
     "Verbunden mit: {server}": "Connected to: {server}",
     "pausiert, bis DBD läuft": "paused until DBD runs",
     "Anzeige des Spielservers beendet.": "Game server display stopped.",
@@ -1151,7 +1150,7 @@ EN = {
     'Killer × Map – Ø Kills laut Stats-Seite': 'Killer × map – avg. kills from the stats page',
     'Maps – am häufigsten gespielt': 'Maps – most played',
     'Median {time}': 'median {time}',
-    'Noch keine Killer-Runden mit Ergebnis von der Stats-Seite (Einstellungen → Mehr → Offizielle Match-Daten).': 'No killer rounds with a result from the stats page yet (Settings → More → Official match data).',
+    'Noch keine Killer-Runden mit Ergebnis von der Stats-Seite (Einstellungen → Match-Daten → Offizielle Match-Daten).': 'No killer rounds with a result from the stats page yet (Settings → Match data → Official match data).',
     'keine Killer-Runden mit Stats-Daten': 'no killer rounds with stats data',
     'keine Survivor-Runden mit Stats-Daten': 'no survivor rounds with stats data',
     '{map} · {killer}: Ø {kills} Kills ({n} Runden)': '{map} · {killer}: avg. {kills} kills ({n} rounds)',
@@ -1477,14 +1476,14 @@ EN = {
     'nicht eingerichtet': 'not set up',
     'Match-Daten': 'Match data',
     'Kills, Entkommen und Bloodpoints deiner Runden kommen von stats.deadbydaylight.com – geladen von deinem '
-    'Browser, nicht vom Programm. Lässt sich auch später einrichten (Einstellungen → Mehr → Offizielle Match-Daten).':
+    'Browser, nicht vom Programm. Lässt sich auch später einrichten (Einstellungen → Match-Daten → Offizielle Match-Daten).':
         'Kills, escapes and bloodpoints of your rounds come from stats.deadbydaylight.com – loaded by your browser, '
-        'not by the program. Can be set up later too (Settings → More → Official match data).',
+        'not by the program. Can be set up later too (Settings → Match data → Official match data).',
     'Zum Tab Server: dort „Anzeigen, mit welchem Server DBD verbunden ist“ anhaken – Region und Ping stehen dann '
     'hier und im Overlay.': 'To the server tab: tick "Show which server DBD is connected to" there – region and '
                             'ping then show here and in the overlay.',
-    'Zu Einstellungen → Mehr → Offizielle Match-Daten: einmal das Userscript in den Browser, danach zählen Kills, '
-    'Entkommen und Bloodpoints in der Statistik.': 'To Settings → More → Official match data: the userscript into '
+    'Zu Einstellungen → Match-Daten → Offizielle Match-Daten: einmal das Userscript in den Browser, danach zählen Kills, '
+    'Entkommen und Bloodpoints in der Statistik.': 'To Settings → Match data → Official match data: the userscript into '
                                                    'the browser once, then kills, escapes and bloodpoints count in '
                                                    'the statistics.',
     'CPU DROSSELT (TEMP.)': 'CPU THROTTLED (TEMP.)',
@@ -1504,8 +1503,11 @@ EN = {
     'Klick: sortieren · Rechtsklick: Spalten ein-/ausblenden': 'Click: sort · right-click: show/hide columns',
     'Alle Spalten zeigen': 'Show all columns',
     # 1.4: recordings with OBS
-    'Mehr (Match-Daten, Farming, OBS-Aufnahmen, Discord, Spotify, Sicherung, Ordner)': 'More (match data, farming, OBS recordings, Discord, Spotify, backup, folders)',
     'Aufnahmen mit OBS': 'Recordings with OBS',
+    "Verbindungen": "Connections",
+    "Verbindung": "Connection",
+    "Ton": "Sound",
+    "Aufräumen": "Clean-up",
     'Jede Runde mit OBS aufnehmen': 'Record every round with OBS',
     'Port': 'Port',
     'Passwort': 'Password',
@@ -1612,7 +1614,7 @@ EN = {
     'Behalten': 'Keep',
     'Beschädigt': 'Broken',
     'Datei': 'File',
-    'Einschalten unter Einstellungen → Mehr → Aufnahmen mit OBS.': 'Turn it on under Settings → More → Recordings with OBS.',
+    'Einschalten unter Einstellungen → Aufnahmen.': 'Turn it on under Settings → Recordings.',
     'Im Explorer zeigen': 'Show in Explorer',
     'Keine Marken – F8 während der Runde setzt eine.': 'No marks – F8 during the round sets one.',
     'Marken': 'Marks',
@@ -1620,7 +1622,7 @@ EN = {
     'Mit Marke': 'With a mark',
     'Nicht mehr behalten': 'Stop keeping',
     'Noch kein Aufnahmeordner gewählt.': 'No recording folder chosen yet.',
-    'OBS nimmt jede Runde auf (Einstellungen → Mehr → Aufnahmen mit OBS). F8 setzt während der Runde eine Marke; „Behalten“ schützt eine Aufnahme vor dem Aufräumen, wenn die Platte Platz braucht.': 'OBS records every round (Settings → More → Recordings with OBS). F8 sets a mark during the round; "Keep" protects a recording from the clean-up when the drive needs room.',
+    'OBS nimmt jede Runde auf (Einstellungen → Aufnahmen). F8 setzt während der Runde eine Marke; „Behalten“ schützt eine Aufnahme vor dem Aufräumen, wenn die Platte Platz braucht.': 'OBS records every round (Settings → Recordings). F8 sets a mark during the round; "Keep" protects a recording from the clean-up when the drive needs room.',
     'fehlt': 'missing',
     '{file} von der Platte löschen?': 'Delete {file} from the drive?',
     'Spielt die markierte Aufnahme im Standard-Videoplayer ab.': 'Plays the marked recording in the default video player.',
@@ -1680,7 +1682,7 @@ EN = {
     'Discord-Sprachchat – OBS-Spur 3. Aus = der Clip hat keinen Discord-Ton.': 'Discord voice chat – OBS track 3. Off = the clip has no Discord sound.',
     'Dein Mikrofon – OBS-Spur 4 (nur, wenn es in OBS aufgenommen wird).': 'Your microphone – OBS track 4 (only when OBS records it).',
     'Lautstärke dieser Quelle im Clip (100 % = wie aufgenommen).': 'Level of this source in the clip (100 % = as recorded).',
-    'Eine Tonspur – zum Mischen nimmt OBS mit Spur 1–4 auf (Einstellungen → Mehr → Aufnahmen mit OBS).': 'One audio track – for mixing, OBS records with tracks 1–4 (Settings → More → Recordings with OBS).',
+    'Eine Tonspur – zum Mischen nimmt OBS mit Spur 1–4 auf (Einstellungen → Aufnahmen).': 'One audio track – for mixing, OBS records with tracks 1–4 (Settings → Recordings).',
     'ohne Ton': 'without sound',
     'Ton neu gemischt': 'sound remixed',
     'Clip speichern': 'Save clip',
@@ -1729,7 +1731,7 @@ EN = {
     '{name} – keine Quelle': '{name} – no source',
     '{name} – in OBS aus': '{name} – off in OBS',
     'In OBS gab es bei dieser Aufnahme keine Hintergrund-Quelle. Für Spotify, Browser & Co. in OBS je Programm eine Anwendungs-Audioaufnahme anlegen – das Programm legt sie auf Spur 5.': 'OBS had no background source for this recording. For Spotify, the browser & co. add an application audio capture per program in OBS – the program puts it on track 5.',
-    'Diese Tonquelle war bei der Aufnahme unter Einstellungen → Mehr → Aufnahmen mit OBS ausgeschaltet.': 'This sound source was switched off under Settings → More → Recordings with OBS when this was recorded.',
+    'Diese Tonquelle war bei der Aufnahme unter Einstellungen → Aufnahmen ausgeschaltet.': 'This sound source was switched off under Settings → Recordings when this was recorded.',
     'Tonquelle {name} hört jetzt auf {exe}': 'Sound source {name} now listens to {exe}',
     'Auf Spur 5 (Hintergrund) statt bei Spiel/Discord/Mikrofon: {names}': 'On track 5 (background) instead of with game/Discord/microphone: {names}',
     'Auf Spur {n} ist in der ganzen Aufnahme nichts zu hören.': 'Nothing can be heard on track {n} in the whole recording.',
@@ -1871,8 +1873,8 @@ EN = {
     'Rechts neben dem Lied': 'Right of the song',
     'Als nächstes': 'Up next',
     'Anzahl Titel': 'Tracks shown',
-    'Die Liste kommt aus Spotify – einrichten unter Einstellungen → Mehr → Spotify.':
-        'The list comes from Spotify – set it up under Settings → More → Spotify.',
+    'Die Liste kommt aus Spotify – einrichten unter Einstellungen → Verbindungen → Spotify.':
+        'The list comes from Spotify – set it up under Settings → Connections → Spotify.',
     'Spotify: aus': 'Spotify: off',
     'Spotify: Client-ID fehlt – im Developer-Dashboard anlegen und hier eintragen.':
         'Spotify: Client ID missing – create it in the developer dashboard and enter it here.',
@@ -2034,8 +2036,8 @@ EN = {
     'Ø Punkte': 'Ø points',
     'voll': 'full',
     'Killer-Wertung: {list}': 'Killer rating: {list}',
-    'Noch keine Matches mit Loadout in dieser Auswahl – die Stats-Seite liefert es ab Userscript Version 3 (Einstellungen → Mehr → Offizielle Match-Daten → „Userscript kopieren“).':
-        'No matches with a loadout in this selection yet – the stats page sends it from userscript version 3 (Settings → More → Official match data → "Copy userscript").',
+    'Noch keine Matches mit Loadout in dieser Auswahl – die Stats-Seite liefert es ab Userscript Version 3 (Einstellungen → Match-Daten → Offizielle Match-Daten → „Userscript kopieren“).':
+        'No matches with a loadout in this selection yet – the stats page sends it from userscript version 3 (Settings → Match data → Official match data → "Copy userscript").',
     # 1.8.49
     'Alle Modi': 'All modes',
     # 1.8.73: farming partners by character (right click in "Gegner")
