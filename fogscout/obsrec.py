@@ -373,6 +373,7 @@ class Recording:
     marks: list = field(default_factory=list)   # 1.4.2: F8 moments, seconds from the start of the file
     farming: bool = False        # 1.4.2: a farming round (cross-play off) – goes first when room is needed
     pre_s: float = 0.0           # 1.4.2: seconds of pre-roll at the start of the file (0 = none or separate)
+    yt: str = ""                 # 1.10: the YouTube video id once uploaded (ytupload)
 
 
 def rel_path(folder: str, name: str) -> str | None:
@@ -558,6 +559,7 @@ class Clip:
     seconds: float = 0.0         # length (0 = unknown / a still)
     size: int = 0                # bytes, filled when listed
     adopted: bool = False        # not in the index: an older version made it (told by its name), never saved
+    yt: str = ""                 # 1.10: the YouTube video id once uploaded (ytupload)
 
 
 def clips_dir(folder: str) -> str:
@@ -1060,6 +1062,11 @@ class Recorder(threading.Thread):
         file into / out of the subfolder FARMING_DIR. Unknown rounds are ignored."""
         self.cmds.put(("farming", (float(t), bool(on))))
 
+    def set_link(self, kind: str, rel: str, video_id: str):
+        """1.10: a file was uploaded to YouTube – the video id into the index entry of the recording (``kind``
+        "round", ``rel`` as in Recording.file) or the clip ("clip", "Clips/<name>"). Index writes stay here."""
+        self.cmds.put(("link", (str(kind), str(rel), str(video_id))))
+
     def set_overlay(self, box):
         """1.8.89: the overlay picture (obsoverlay.Writer) covers ``box`` = (x, y, w, h) relative to the DBD window,
         None = nothing shown; our image item in OBS is moved there (own source only). Called from the writer."""
@@ -1133,6 +1140,8 @@ class Recorder(threading.Thread):
                     self._delete_one(arg)
                 elif cmd == "farming":
                     self._set_farming(*arg)
+                elif cmd == "link":
+                    self._set_link(*arg)
                 elif cmd == "clip_add":
                     self._add_clip(arg)
                 elif cmd == "clip_delete":
@@ -1212,6 +1221,27 @@ class Recorder(threading.Thread):
         save_index(folder, recs)
         self._post("changed", what="farming", t=t, on=on, file=hit.file)
         self._look_at_space(force=True)
+
+    def _set_link(self, kind, rel, video_id):
+        folder = self.folder()
+        if folder is None:
+            return
+        if kind == "clip":
+            cdir = clips_dir(folder)
+            clips = load_clips(cdir)
+            hit = next((c for c in clips if c.file == os.path.basename(rel)), None)
+            if hit is None:
+                return
+            hit.yt = video_id
+            save_clips(cdir, clips)
+        else:
+            recs = load_index(folder)
+            hit = next((r for r in recs if r.file == rel), None)
+            if hit is None:
+                return
+            hit.yt = video_id
+            save_index(folder, recs)
+        self._post("changed", what="link", file=rel, kind=kind, id=video_id)
 
     def _delete_one(self, t):
         folder = self.folder()
@@ -2163,5 +2193,7 @@ class Recorder(threading.Thread):
             self._add_clip({"file": os.path.basename(out), "kind": "instant", "seconds": float(self.cfg.clip_s),
                             **{k: meta[k] for k in ("source", "map_id", "label", "role", "killer", "farming")
                                if k in meta}}, folder)
-        self._post("clip", ok=True, file=os.path.basename(out), seconds=int(self.cfg.clip_s))
+        self._post("clip", ok=True, file=os.path.basename(out), seconds=int(self.cfg.clip_s),
+                   label=meta.get("label") or "", role=meta.get("role") or "", killer=meta.get("killer") or "",
+                   source=float(meta.get("source") or 0.0))          # 1.10: the YouTube title
         self._look_at_space(force=True)

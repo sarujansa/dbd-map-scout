@@ -1,0 +1,185 @@
+"""Mixin of App (1.10): YouTube upload – the settings card under Einstellungen → Verbindungen (client id and
+secret, login, privacy, status), the events of the ``ytupload.Uploader`` thread, the queue the settings keep,
+and what the recordings tab needs (enqueue a clip or a round, links of uploaded videos)."""
+from __future__ import annotations
+
+import os
+import time
+import webbrowser
+
+from . import obsrec, spotify, ytupload
+from . import uimodel as ui
+from .capture import foreground_root, is_game_window
+from .i18n import _
+from .lobby import killer_label
+
+FOLDER_EVERY_S = 5.0      # recorder.folder() asks every drive letter on Windows – not four times a second
+
+
+class YouTubeUpload:
+    def _youtube_init(self):
+        self.youtube = ytupload.Uploader(lambda kind, data: self.events.put(("youtube", kind, data)))
+        self.youtube.start()
+        self._yt_sent = None                 # (paused, folder) last given to the thread
+        self._yt_folder, self._yt_folder_at = "", 0.0
+        self._yt_queued = set()              # rels waiting (mirror of the thread's queue, for the tables)
+        self._youtube_setting(save=False)
+
+    # ---------------------------------------------------------- settings card (Einstellungen → Verbindungen)
+    def _youtube_card(self, more):
+        yc = self._reg("st.more.youtube", ui.LabelFrame(more, text=_("YouTube"), padding=8))
+        yc.pack(fill="x", pady=(8, 0))
+        self.yt_on_var = ui.BooleanVar(value=bool(self.settings.get("youtube_on", False)))
+        self._reg("st.more.yt_on", ui.Checkbutton(yc, text=_("Clips automatisch auf YouTube hochladen"),
+                                                   variable=self.yt_on_var, command=self._youtube_setting)).pack(anchor="w")
+        row = ui.Frame(yc)
+        row.pack(fill="x", pady=(4, 0))
+        self._reg("st.more.yt_id.label", ui.Label(row, text=_("Client-ID"))).pack(side="left")
+        self.yt_id_var = ui.StringVar(value=str(self.settings.get("youtube_client_id", "")))
+        self.yt_id_var.trace_add("write", lambda *a: self._youtube_setting())
+        self._reg("st.more.yt_id", ui.Entry(row, textvariable=self.yt_id_var, width=34)).pack(side="left", padx=6)
+        self._reg("st.more.yt_secret.label", ui.Label(row, text=_("Client-Secret"))).pack(side="left")
+        self.yt_secret_var = ui.StringVar(value=spotify.unprotect(self.settings.get("youtube_client_secret", "")))
+        self.yt_secret_var.trace_add("write", lambda *a: self._youtube_setting())
+        secret = self._reg("st.more.yt_secret", ui.Entry(row, textvariable=self.yt_secret_var, width=22))
+        secret._dbdms_secret = True
+        secret.pack(side="left", padx=6)
+        self._reg("st.more.yt_console", ui.Button(row, text=_("Google Cloud Console öffnen"),
+                                                   command=lambda: webbrowser.open(ytupload.CONSOLE))).pack(side="left")
+        row2 = ui.Frame(yc)
+        row2.pack(fill="x", pady=(4, 0))
+        self._reg("st.more.yt_privacy.label", ui.Label(row2, text=_("Sichtbarkeit"))).pack(side="left")
+        self._yt_privacies = [(k, _(label)) for k, label in ytupload.PRIVACY]
+        current = str(self.settings.get("youtube_privacy", "private"))
+        self.yt_privacy_var = ui.StringVar(value=dict(self._yt_privacies).get(current, self._yt_privacies[0][1]))
+        cb = self._reg("st.more.yt_privacy", ui.Combobox(row2, textvariable=self.yt_privacy_var, state="readonly",
+                                                          width=14, values=[lbl for _k, lbl in self._yt_privacies]))
+        cb.pack(side="left", padx=6)
+        cb.bind("<<ComboboxSelected>>", lambda e: self._youtube_setting())
+        self._reg("st.more.yt_login", ui.Button(row2, text=_("Mit YouTube verbinden"),
+                                                 command=self._youtube_login)).pack(side="left", padx=(6, 0))
+        self._reg("st.more.yt_logout", ui.Button(row2, text=_("YouTube-Verbindung trennen"),
+                                                  command=self._youtube_logout)).pack(side="left", padx=(6, 0))
+        self.yt_status_var = ui.StringVar(value="")
+        self._reg("st.more.yt_status", ui.Label(yc, textvariable=self.yt_status_var, wraplength=420,
+                                                 style="Dim.TLabel")).pack(anchor="w", pady=(4, 0))
+        self._reg("st.more.yt_text", ui.Label(yc, text=_(
+            "Lädt Clips (F8 und Editor) von selbst auf deinen YouTube-Kanal, Runden nur auf Wunsch: Rechtsklick oder "
+            "„Auf YouTube hochladen“ unter Aufnahmen. Dafür einmal in der Google Cloud Console ein Projekt anlegen, "
+            "„YouTube Data API v3“ aktivieren, unter „Anmeldedaten“ einen OAuth-Client vom Typ „Desktop-App“ erstellen "
+            "und den Zustimmungsbildschirm veröffentlichen (sonst läuft die Anmeldung nach 7 Tagen ab); Client-ID und "
+            "Client-Secret hier einfügen, dann „Mit YouTube verbinden“ – der Browser fragt einmal nach der Freigabe. "
+            "Google erlaubt mit dem Standardkontingent etwa sechs Uploads am Tag; was nicht mehr passt, wartet in der "
+            "Warteschlange bis zum nächsten Tag. Hochgeladen wird nur, wenn keine Runde läuft; die Datei bleibt immer "
+            "auch auf der Platte. Gesendet werden nur die Videodatei, Titel (Map, Killer, Datum) und Beschreibung – "
+            "nie Spielernamen; die Freigabe liegt verschlüsselt auf diesem PC."),
+            style="Dim.TLabel", wraplength=420)).pack(anchor="w", pady=(4, 0))
+
+    def _youtube_setting(self, save=True):
+        on, cid = bool(self.yt_on_var.get()), self.yt_id_var.get().strip()
+        secret = self.yt_secret_var.get().strip()
+        privacy = next((k for k, lbl in self._yt_privacies if lbl == self.yt_privacy_var.get()), "private")
+        if save:
+            self.settings.set("youtube_on", on)
+            self.settings.set("youtube_client_id", cid)
+            self.settings.set("youtube_client_secret", spotify.protect(secret))
+            self.settings.set("youtube_privacy", privacy)
+            self._save_soon()
+        self.youtube.configure(on, cid, secret, privacy, self.settings.get("youtube_token", ""),
+                               self.settings.get("youtube_queue") or [], self.settings.get("youtube_quota") or {})
+        self._yt_queued = {str(d.get("rel")) for d in (self.settings.get("youtube_queue") or [])
+                           if isinstance(d, dict) and d.get("rel")}
+
+    def _youtube_login(self):
+        self._youtube_setting()
+        if not ytupload.valid_client_id(self.yt_id_var.get()) or not self.yt_secret_var.get().strip():
+            self.yt_status_var.set(_("YouTube: Client-ID (…apps.googleusercontent.com) und Client-Secret eintragen."))
+            return
+        self.yt_status_var.set(_("YouTube: öffne die Anmeldung im Browser …"))
+        self.youtube.login()
+
+    def _youtube_logout(self):
+        self.youtube.logout()
+
+    def _youtube_tick(self):
+        """Every tick: the thread learns whether a round runs (uploads pause) and where the recordings are."""
+        yt = getattr(self, "youtube", None)
+        if yt is None:
+            return
+        now = time.time()
+        if now - self._yt_folder_at >= FOLDER_EVERY_S:
+            self._yt_folder, self._yt_folder_at = self.recorder.folder() or "", now
+        state = (bool(self._round_running()), self._yt_folder)
+        if state != self._yt_sent:
+            self._yt_sent = state
+            yt.set_paused(state[0])
+            yt.set_folder(state[1])
+
+    # ---------------------------------------------------------- events from the thread
+    def _youtube_event(self, kind, data):
+        if kind == "status":
+            text, ok = data
+            self.yt_status_var.set(text)
+            if not ok:
+                self._log(text, "Fehler")
+        elif kind == "token":
+            self.settings.set("youtube_token", str(data or ""))
+            self._save_soon()
+        elif kind == "queue":
+            self.settings.set("youtube_queue", list(data or []))
+            self._yt_queued = {str(d.get("rel")) for d in data if isinstance(d, dict) and d.get("rel")}
+            self._rec_dirty = True
+            self._save_soon()
+        elif kind == "quota":
+            self.settings.set("youtube_quota", dict(data or {}))
+            self._save_soon()
+        elif kind == "done":
+            self.recorder.set_link(data.get("kind", "clip"), data.get("rel", ""), data.get("id", ""))
+            self._log(_("YouTube: hochgeladen – {file} → {url}", file=os.path.basename(data.get("rel", "")),
+                        url=data.get("url", "")), "System")
+            if not (self.game is not None and not self.simulate and is_game_window(foreground_root())):
+                self.toast.show(_("YouTube"), _("Hochgeladen: {file}", file=os.path.basename(data.get("rel", ""))))
+        elif kind == "failed":
+            self._log(_("YouTube: nicht hochgeladen – {file}: {why}", file=os.path.basename(data.get("rel", "")),
+                        why=data.get("why", "")), "Fehler")
+
+    # ---------------------------------------------------------- what the recordings tab asks for
+    def _yt_who(self, role, killer) -> str:
+        return killer_label(self._killer_of(killer)) if role == "killer" and killer else (self._role_name(role) or "")
+
+    def _yt_enqueue(self, kind: str, rel: str, label: str, role: str, killer: str, t: float, seconds: float = 0.0):
+        """A file of the recordings folder into the upload queue (nothing twice)."""
+        yt = getattr(self, "youtube", None)
+        if yt is None or not rel or rel in self._yt_queued:
+            return False
+        if os.path.splitext(rel)[1].lower() not in ytupload.VIDEO_EXTS:
+            return False
+        title, text = ytupload.describe(kind, label or "", self._yt_who(role, killer), t, seconds)
+        yt.add(ytupload.Job(rel=rel.replace(os.sep, "/"), kind=kind, title=title, description=text))
+        self._yt_queued.add(rel)
+        self._rec_dirty = True
+        self._log(_("YouTube: in die Warteschlange – {file}", file=os.path.basename(rel)), "System")
+        return True
+
+    def _yt_auto_clip(self, name: str, label: str, role: str, killer: str, t: float, seconds: float = 0.0):
+        """1.10: a new clip (F8 / editor) – uploaded by itself when the box is ticked and the login is there."""
+        if not self.settings.get("youtube_on", False) or not getattr(self, "youtube", None) or not self.youtube.linked:
+            return
+        self._yt_enqueue("clip", f"{obsrec.CLIPS_DIR}/{os.path.basename(name)}", label, role, killer, t, seconds)
+
+    def _yt_ready(self) -> bool:
+        yt = getattr(self, "youtube", None)
+        return yt is not None and yt.linked
+
+    def _yt_mark(self, rel: str, video_id: str) -> str:
+        """What the tables show in their YouTube column."""
+        if video_id:
+            return "✓"
+        return "…" if rel in self._yt_queued else ""
+
+    def _yt_copy_link(self, video_id: str):
+        self.root.clipboard_set(ytupload.video_url(video_id))
+        self._log(_("YouTube-Link kopiert: {url}", url=ytupload.video_url(video_id)), "System")
+
+    def _yt_open_link(self, video_id: str):
+        webbrowser.open(ytupload.video_url(video_id))

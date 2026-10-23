@@ -723,7 +723,7 @@ def test_the_clips_sub_tab_lists_filters_and_deletes_the_programs_clips(app_root
         assert app.clip_delete_btn.cget("state") == "normal"
         ui_act = __import__("fogscout.app_qt", fromlist=["ui_act"]).ui_act
         ui_act(t, ("menu", (1, 2)))
-        assert [i[0] for i in shown[-1] if i] == ["play", "edit", "explorer", "copy", "round", "delete"]
+        assert [i[0] for i in shown[-1] if i] == ["play", "edit", "explorer", "copy", "round", "youtube", "delete"]
         app._confirmed = True
         app._menu_act("delete")                                # → recorder thread
         deadline = time.time() + 5
@@ -1532,7 +1532,7 @@ def test_right_click_menus_of_recordings_last_rounds_and_the_overlay_preview(app
         ui_act(app.rec_table, ("menu", (5, 6)))
         items, pos = shown[-1]
         assert pos == (5, 6) and [i[0] for i in items if i] == ["play", "clip", "explorer", "copy", "keep", "farming",
-                                                                  "delete"]
+                                                                  "youtube", "delete"]                   # 1.10
         assert dict((i[0], i) for i in items if i)["keep"][3] is False          # a tick: not kept yet
         app._menu_act("keep")                                                   # → recorder thread
         deadline = time.time() + 5

@@ -381,6 +381,8 @@ class SettingsTab:
         self._discord_init()
         self._spotify_card(more)                      # 1.8: "Als nächstes" from Spotify
         self._spotify_init()
+        self._youtube_card(more)                      # 1.10: upload
+        self._youtube_init()
 
         # 1.2.15: the same controls once more for the setup assistant's step "Match-Daten" – the originals sit
         # under "Mehr" and count as hidden while it is folded (the settings page itself draws only SPECS keys)
@@ -665,6 +667,8 @@ class SettingsTab:
                           "System")
                 self._rec_dirty = True
                 self._clip_toast(_("Clip gespeichert ✓"), _("{n} s · im Tab Aufnahmen → Clips", n=d.get("seconds", 0)))
+                self._yt_auto_clip(d.get("file", ""), d.get("label", ""), d.get("role", ""), d.get("killer", ""),
+                                   float(d.get("source") or 0.0) or time.time(), float(d.get("seconds") or 0))   # 1.10
             else:
                 self._log(_("Kein Sofort-Clip: {why}", why=d.get("why", "")), "Fehler")
                 self._clip_toast(_("Kein Clip"), d.get("why", ""), 5)

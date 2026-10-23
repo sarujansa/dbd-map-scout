@@ -110,6 +110,8 @@ class RecordingsTab:
         self.rec_delete_btn.pack(side="left", padx=(6, 0))
         self.rec_clip_btn = ui.Button(row, text=_("Clip bearbeiten …"), command=self._rec_clip, state="disabled")   # 1.5.1
         self.rec_clip_btn.pack(side="left", padx=(6, 0))
+        self.rec_yt_btn = ui.Button(row, text=_("Auf YouTube hochladen"), command=self._rec_youtube, state="disabled")  # 1.10
+        self.rec_yt_btn.pack(side="left", padx=(6, 0))
         self._clip_windows = []
         self.rec_folder_btn = ui.Button(row, text=_("Aufnahmeordner öffnen"), command=self._rec_open_folder)
         self.rec_folder_btn.pack(side="right")
@@ -118,7 +120,8 @@ class RecordingsTab:
         tf.pack(fill="both", expand=True)
         cols = (("when", _("Wann"), 100, "w"), ("map", _("Map"), 130, "w"), ("role", _("Rolle/Killer"), 110, "w"),
                 ("res", _("Ergebnis"), 65, "w"), ("dur", _("Dauer"), 55, "e"), ("size", _("Grösse"), 65, "e"),
-                ("marks", _("Marken"), 50, "e"), ("keep", _("Behalten"), 60, "w"), ("file", _("Datei"), 110, "w"))
+                ("marks", _("Marken"), 50, "e"), ("keep", _("Behalten"), 60, "w"), ("yt", _("YouTube"), 60, "w"),
+                ("file", _("Datei"), 110, "w"))
         self.rec_table = ui.Treeview(tf, columns=[c[0] for c in cols], show="headings", height=12, selectmode="browse")
         for key, title, width, anchor in cols:
             self.rec_table.heading(key, text=title, anchor=anchor)
@@ -180,6 +183,8 @@ class RecordingsTab:
         self.clip_show_btn.pack(side="left", padx=(6, 0))
         self.clip_delete_btn = ui.Button(row, text=_("Clip löschen"), command=self._clip_delete, state="disabled")
         self.clip_delete_btn.pack(side="left", padx=(6, 0))
+        self.clip_yt_btn = ui.Button(row, text=_("Auf YouTube hochladen"), command=self._clip_youtube, state="disabled")
+        self.clip_yt_btn.pack(side="left", padx=(6, 0))                                                      # 1.10
         self.clip_folder_btn = ui.Button(row, text=_("Clips-Ordner öffnen"), command=self._clip_open_folder)
         self.clip_folder_btn.pack(side="right")
 
@@ -190,7 +195,7 @@ class RecordingsTab:
         tf.pack(fill="both", expand=True)
         cols = (("when", _("Wann"), 100, "w"), ("map", _("Map"), 130, "w"), ("role", _("Rolle/Killer"), 110, "w"),
                 ("kind", _("Art"), 85, "w"), ("dur", _("Länge"), 55, "e"), ("size", _("Grösse"), 65, "e"),
-                ("file", _("Datei"), 140, "w"))
+                ("yt", _("YouTube"), 60, "w"), ("file", _("Datei"), 140, "w"))
         self.clip_table = ui.Treeview(tf, columns=[c[0] for c in cols], show="headings", height=12,
                                       selectmode="browse")
         for key, title, width, anchor in cols:
@@ -270,7 +275,7 @@ class RecordingsTab:
             t.insert("", "end", iid=iid, values=(time.strftime("%d.%m.%y %H:%M", time.localtime(r.t)), r.label or "–",
                                                  role_txt, res, fmt_duration(r.end - r.t) if r.end > r.t else "–",
                                                  size, str(len(r.marks)) if r.marks else "", "✓" if r.keep else "",
-                                                 r.file))
+                                                 self._yt_mark(r.file, r.yt), r.file))
         if keep and t.exists(keep[0]):
             t.selection_set(keep[0])
         self._rec_buttons()
@@ -329,7 +334,7 @@ class RecordingsTab:
             t.insert("", "end", iid=c.file, values=(
                 time.strftime("%d.%m.%y %H:%M", time.localtime(c.t)), c.label or "–", who,
                 _(CLIP_KIND_NAMES.get(c.kind, "Clip")), fmt_duration(c.seconds) if c.seconds else "–",
-                fmt_bytes(c.size), c.file))
+                fmt_bytes(c.size), self._yt_mark(self._clip_rel(c), c.yt), c.file))
         if keep and t.exists(keep[0]):
             t.selection_set(keep[0])
         self._clip_buttons()
@@ -348,20 +353,44 @@ class RecordingsTab:
             b.configure(state=state)
         c = self._clip_selected()
         self.clip_edit_btn.configure(state="normal" if c is not None and c.kind != "still" else "disabled")
+        self.clip_yt_btn.configure(state="normal" if c is not None and self._clip_uploadable(c) else "disabled")
+
+    @staticmethod
+    def _clip_rel(c) -> str:
+        return f"{obsrec.CLIPS_DIR}/{c.file}"
+
+    def _clip_uploadable(self, c) -> bool:
+        return c.kind != "still" and self._yt_ready() and not c.yt and self._clip_rel(c) not in self._yt_queued
 
     def _clip_menu_items(self):
         if self._clip_selected() is None:
             return []
         c = self._clip_selected()
-        return [("play", _("Abspielen"), True), ("edit", _("Im Editor öffnen …"), c.kind != "still"),
-                ("explorer", _("Im Explorer zeigen"), True), ("copy", _("Datei kopieren (zum Einfügen)"), True),
-                ("round", _("Zur Runde springen"), bool(c.source)), None, ("delete", _("Clip löschen"), True)]
+        items = [("play", _("Abspielen"), True), ("edit", _("Im Editor öffnen …"), c.kind != "still"),
+                 ("explorer", _("Im Explorer zeigen"), True), ("copy", _("Datei kopieren (zum Einfügen)"), True),
+                 ("round", _("Zur Runde springen"), bool(c.source)), None]
+        if c.yt:                                                                   # 1.10
+            items += [("yt_link", _("YouTube-Link kopieren"), True), ("yt_open", _("Auf YouTube öffnen"), True), None]
+        elif c.kind != "still":
+            items += [("youtube", _("Auf YouTube hochladen"), self._clip_uploadable(c)), None]
+        return items + [("delete", _("Clip löschen"), True)]
 
     def _clip_menu_act(self, ident):
+        c = self._clip_selected()
         act = {"play": self._clip_play, "edit": self._clip_edit, "explorer": self._clip_explorer,
-               "copy": self._clip_copy, "round": self._clip_round_show, "delete": self._clip_delete}.get(ident)
+               "copy": self._clip_copy, "round": self._clip_round_show, "delete": self._clip_delete,
+               "youtube": self._clip_youtube,
+               "yt_link": lambda: self._yt_copy_link(c.yt) if c is not None and c.yt else None,
+               "yt_open": lambda: self._yt_open_link(c.yt) if c is not None and c.yt else None}.get(ident)
         if act is not None:
             act()
+
+    def _clip_youtube(self):
+        """1.10: the marked clip into the upload queue."""
+        c = self._clip_selected()
+        if c is not None and self._clip_uploadable(c):
+            self._yt_enqueue("clip", self._clip_rel(c), c.label, c.role, c.killer, c.t, c.seconds)
+            self._clip_buttons()
 
     def _clip_play(self):
         path = self._clip_path(self._clip_selected())
@@ -468,6 +497,8 @@ class RecordingsTab:
         self.recorder.add_clip(file=os.path.basename(out), kind="still" if still else "clip", source=r.t,
                                map_id=r.map_id, label=r.label, role=r.role, killer=r.killer, farming=r.farming,
                                seconds=0.0 if still else float(win.saved_seconds.get(out, 0.0)))
+        if not still:                                                              # 1.10: by itself, when wanted
+            self._yt_auto_clip(out, r.label, r.role, r.killer, time.time(), float(win.saved_seconds.get(out, 0.0)))
 
     def _rec_role(self, r, rnd):
         role, killer = r.role or (rnd.role if rnd else ""), r.killer or (rnd.killer if rnd else "")
@@ -486,6 +517,7 @@ class RecordingsTab:
         for b in (self.rec_play_btn, self.rec_show_btn, self.rec_keep_btn, self.rec_delete_btn, self.rec_clip_btn):
             b.configure(state=state)
         self.rec_keep_btn.configure(text=_("Nicht mehr behalten") if r is not None and r.keep else _("Behalten"))
+        self.rec_yt_btn.configure(state="normal" if r is not None and self._rec_uploadable(r) else "disabled")
         self._rec_preview_follow(r)
         if r is None:
             self.rec_marks_var.set("")
@@ -499,17 +531,35 @@ class RecordingsTab:
         r = self._rec_selected()
         if r is None:
             return []
-        return [("play", _("Abspielen"), True), ("clip", _("Clip bearbeiten …"), True),
-                ("explorer", _("Im Explorer zeigen"), True), ("copy", _("Datei kopieren (zum Einfügen)"), True), None,
-                ("keep", _("Behalten"), True, bool(r.keep)), ("farming", _("Farming-Runde"), True, bool(r.farming)),
-                None, ("delete", _("Aufnahme löschen"), True)]
+        items = [("play", _("Abspielen"), True), ("clip", _("Clip bearbeiten …"), True),
+                 ("explorer", _("Im Explorer zeigen"), True), ("copy", _("Datei kopieren (zum Einfügen)"), True), None,
+                 ("keep", _("Behalten"), True, bool(r.keep)), ("farming", _("Farming-Runde"), True, bool(r.farming)),
+                 None]
+        if r.yt:                                                                   # 1.10
+            items += [("yt_link", _("YouTube-Link kopieren"), True), ("yt_open", _("Auf YouTube öffnen"), True), None]
+        else:
+            items += [("youtube", _("Auf YouTube hochladen"), self._rec_uploadable(r)), None]
+        return items + [("delete", _("Aufnahme löschen"), True)]
 
     def _rec_menu_act(self, ident):
+        r = self._rec_selected()
         act = {"play": self._rec_play, "clip": self._rec_clip, "explorer": self._rec_explorer,
                "copy": self._rec_copy, "keep": self._rec_keep, "farming": self._rec_farming,
-               "delete": self._rec_delete}.get(ident)
+               "delete": self._rec_delete, "youtube": self._rec_youtube,
+               "yt_link": lambda: self._yt_copy_link(r.yt) if r is not None and r.yt else None,
+               "yt_open": lambda: self._yt_open_link(r.yt) if r is not None and r.yt else None}.get(ident)
         if act is not None:
             act()
+
+    def _rec_uploadable(self, r) -> bool:
+        return self._yt_ready() and not r.yt and r.file not in self._yt_queued
+
+    def _rec_youtube(self):
+        """1.10: the marked recording into the upload queue (rounds only on request, never by themselves)."""
+        r = self._rec_selected()
+        if r is not None and self._rec_uploadable(r):
+            self._yt_enqueue("round", r.file, r.label, r.role, r.killer, r.t, r.end - r.t if r.end > r.t else 0.0)
+            self._rec_buttons()
 
     def _rec_path(self, r):
         folder = self.recorder.folder()

@@ -1539,11 +1539,12 @@ def test_the_settings_page_is_split_into_tabs_with_its_cards(qapp, keep):
                      "st.more.backup": "Allgemein", "st.more.folders": "Allgemein",
                      "st.detect": "Erkennung", "st.langs": "Erkennung", "st.more.own": "Erkennung", "st.notify": "Erkennung",
                      "st.hotkeys": "Hotkeys", "st.more.official": "Match-Daten", "st.more.farming": "Match-Daten",
-                     "st.more.rec": "Aufnahmen", "st.more.discord": "Verbindungen", "st.more.spotify": "Verbindungen"}
+                     "st.more.rec": "Aufnahmen", "st.more.discord": "Verbindungen", "st.more.spotify": "Verbindungen",
+                     "st.more.youtube": "Verbindungen"}                                                  # 1.10
     assert [col.ids() for col in page.columns] == [
         ["st.look", "st.start", "st.updates", "st.more.backup", "st.more.folders"],
         ["st.detect", "st.langs", "st.more.own", "st.notify"], ["st.hotkeys"],
-        ["st.more.official", "st.more.farming"], ["st.more.rec"], ["st.more.discord", "st.more.spotify"]]
+        ["st.more.official", "st.more.farming"], ["st.more.rec"], ["st.more.discord", "st.more.spotify", "st.more.youtube"]]
     rec = page.controls["st.more.rec"][1]
     card = rec.parentWidget()
     while card is not None and card.property("class") != "card":

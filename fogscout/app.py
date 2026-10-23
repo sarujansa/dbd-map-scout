@@ -40,6 +40,7 @@ from .app_recordings import RecordingsTab
 from .app_export import ExportDialog
 from .app_discord import DiscordPresence
 from .app_spotify import SpotifyUpNext
+from .app_youtube import YouTubeUpload
 
 LANGS = [("en", "EN"), ("de", "DE"), ("fr", "FR"), ("es", "ES"), ("es-MX", "ES-MX"), ("it", "IT"),
          ("pl", "PL"), ("pt-BR", "PT"), ("tr", "TR")]
@@ -62,7 +63,8 @@ def _event_name(ev) -> str:
 log = logging.getLogger("fogscout")
 
 
-class App(ServerTab, StatsTab, ExportDialog, RecordingsTab, DiscordPresence, SpotifyUpNext, LobbyInfo, Hotkeys, SettingsTab,
+class App(ServerTab, StatsTab, ExportDialog, RecordingsTab, DiscordPresence, SpotifyUpNext, YouTubeUpload, LobbyInfo,
+          Hotkeys, SettingsTab,
           SysInfo, OverlayPlacement, LayoutMemory, OverlayTab, QtShell):
     def __init__(self, root_dir: str, simulate: str | None = None, start_in_tray: bool = False):
         self.root_dir = root_dir
@@ -824,6 +826,8 @@ class App(ServerTab, StatsTab, ExportDialog, RecordingsTab, DiscordPresence, Spo
             self._discord_status(ev[1], ev[2])
         elif isinstance(ev, tuple) and ev[0] == "spotify":          # 1.8: status / token of "Als nächstes"
             self._spotify_event(ev[1], ev[2])
+        elif isinstance(ev, tuple) and ev[0] == "youtube":          # 1.10: upload status / queue / done
+            self._youtube_event(ev[1], ev[2])
         elif isinstance(ev, tuple) and ev[0] == "call":       # from a window procedure (overlay, HUD)
             ev[1](*ev[2])
         elif isinstance(ev, tuple) and ev[0] == "backup":     # 1.8.80: the daily copy is done
@@ -997,7 +1001,7 @@ class App(ServerTab, StatsTab, ExportDialog, RecordingsTab, DiscordPresence, Spo
     TICK_STEPS = (("overlay", ("_tick_unsure", "_tick_timer", "_place_overlay")), ("layout", ("_layout_size_tick",)),
                   ("verbindung", ("_conn_tick",)), ("offizielle Daten", ("_official_tick",)), ("show", ("_show_tick",)),
                   ("hotkeys", ("_hotkeys_tick",)), ("tray", ("_tray_tick", "_rec_tick")),
-                  ("discord", ("_discord_tick",)), ("Qt", ("_qt_refresh",)))
+                  ("discord", ("_discord_tick",)), ("youtube", ("_youtube_tick",)), ("Qt", ("_qt_refresh",)))
 
     def _tick_overlay(self, reschedule=True):
         # 1.8.67 (user: "Statistik dauert ewig zum Laden"; the diagnosis only said "App._tick_overlay 6005 ms"): each
@@ -1506,7 +1510,8 @@ class App(ServerTab, StatsTab, ExportDialog, RecordingsTab, DiscordPresence, Spo
             wins = [w for w in (self.media_win, getattr(self, "today_win", None), getattr(self, "info_win", None))
                     if w is not None]
             steps = [self._qt_close, self.settings.save, self.tray.stop, self.conn.stop, self.sysmon.stop,
-                     self.media.stop, self.recorder.quit, self.presence.quit, self.spotify.quit, self.worker.stop,
+                     self.media.stop, self.recorder.quit, self.presence.quit, self.spotify.quit, self.youtube.quit,
+                     self.worker.stop,
                      self.hotkeys.stop,
                      lambda: self.worker.join(timeout=4),        # let a running OCR call finish cleanly
                      # 1.8.38: OBS stops a round still running – else it records on and blocks the next start
