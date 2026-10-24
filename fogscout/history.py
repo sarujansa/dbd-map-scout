@@ -9,6 +9,8 @@ import json
 import os
 from dataclasses import asdict, dataclass
 
+from . import jsonlcache
+
 FILE = "rounds.jsonl"
 MIN_SECONDS = 60.0
 KEEP = 5000                 # newest rounds kept when the file is tidied
@@ -146,31 +148,29 @@ def _stalls(d: dict) -> dict:
             "stall_max": float(m) if ok and isinstance(m, (int, float)) and not isinstance(m, bool) and m >= 0 else None}
 
 
+def _round_line(line: str):
+    """One stored line → Round, None for a lost round's line (load_lost_rounds) or another dict."""
+    d = json.loads(line)
+    if not isinstance(d, dict) or d.get("lost"):
+        return None
+    wait = d.get("wait")
+    return Round(t=float(d["t"]), seconds=float(d["seconds"]), map_id=str(d["map_id"]),
+                 map=str(d.get("map") or d["map_id"]), region=str(d.get("region") or ""),
+                 source=str(d.get("source") or ""),
+                 wait=float(wait) if isinstance(wait, (int, float)) and wait >= 0 else None,
+                 role=str(d.get("role") or "") if d.get("role") in ROLES else "",
+                 custom=bool(d.get("custom")), farming=bool(d.get("farming")),
+                 ping=float(d["ping"]) if isinstance(d.get("ping"), (int, float)) and d["ping"] >= 0 else None,
+                 killer=str(d.get("killer") or ""), sys=_sys(d.get("sys")), **_stalls(d))
+
+
+_LINES = jsonlcache.LineCache(_round_line)   # 1.11.10: a new round parses one line, not the whole file
+
+
 def load(path: str) -> list:
-    """All rounds, oldest first; broken lines and lines of lost rounds are skipped."""
-    out = []
-    try:
-        with open(path, encoding="utf-8") as fh:
-            for line in fh:
-                try:
-                    d = json.loads(line)
-                    if d.get("lost"):
-                        continue
-                    wait = d.get("wait")
-                    out.append(Round(t=float(d["t"]), seconds=float(d["seconds"]), map_id=str(d["map_id"]),
-                                     map=str(d.get("map") or d["map_id"]), region=str(d.get("region") or ""),
-                                     source=str(d.get("source") or ""),
-                                     wait=float(wait) if isinstance(wait, (int, float)) and wait >= 0 else None,
-                                     role=str(d.get("role") or "") if d.get("role") in ROLES else "",
-                                     custom=bool(d.get("custom")), farming=bool(d.get("farming")),
-                                     ping=float(d["ping"]) if isinstance(d.get("ping"), (int, float))
-                                     and d["ping"] >= 0 else None,
-                                     killer=str(d.get("killer") or ""), sys=_sys(d.get("sys")), **_stalls(d)))
-                except (ValueError, KeyError, TypeError):
-                    continue
-    except OSError:
-        return []
-    return out
+    """All rounds, oldest first; broken lines and lines of lost rounds are skipped. Fresh objects each call
+    (1.11.10: parsed from a cache that reads only the lines added since the last call)."""
+    return [jsonlcache.clone(r) for r in _LINES.items(path)]
 
 
 def _sys(d):

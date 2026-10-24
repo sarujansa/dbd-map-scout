@@ -38,7 +38,8 @@ class Item:
     name: str
     n: int = 0                   # matches with it
     results: list = field(default_factory=list)    # results of those matches (unknown ones left out)
-    others: list = field(default_factory=list)     # results of the same role's matches without it
+    others_sum: float = 0.0      # 1.11.10: sum and count of the results of the same role's matches without it
+    others_n: int = 0            # (a list of them per item cost 96 000 appends with 3000 matches)
     share: float = 0.0           # n / matches of the role with a loadout
 
     @property
@@ -47,7 +48,7 @@ class Item:
 
     @property
     def mean_without(self):
-        return sum(self.others) / len(self.others) if self.others else None
+        return self.others_sum / self.others_n if self.others_n else None
 
 
 @dataclass
@@ -72,22 +73,33 @@ def items(pairs) -> list:
     """Every perk, add-on, offering and power/item of the own loadouts in ``pairs`` with how its matches ended,
     most used first."""
     matches = [m for _r, m in pairs if m.role in ("killer", "survivor") and has_loadout(m)]
-    per_role = {role: [m for m in matches if m.role == role] for role in ("killer", "survivor")}
+    # 1.11.10: one pass over the matches – each result worked out once, each item collects only its own matches,
+    # "without it" = the role's totals minus its own. Before, every item went through every match of its role and
+    # worked out the result anew (3000 matches: 190 ms per click on the tab).
+    count = {"killer": 0, "survivor": 0}
+    total = {"killer": [0.0, 0], "survivor": [0.0, 0]}
     found = {}
     for m in matches:
+        res = result(m)
+        count[m.role] += 1
+        if res is not None:
+            total[m.role][0] += res
+            total[m.role][1] += 1
         for kind in KINDS:
+            seen = set()
             for ref in _refs(m, kind):
-                it = found.setdefault((kind, m.role, _key(ref)), Item(kind, m.role, _key(ref), ref[1] or ref[0]))
+                key = _key(ref)
+                it = found.setdefault((kind, m.role, key), Item(kind, m.role, key, ref[1] or ref[0]))
                 it.name = ref[1] or it.name              # the newest name the page gave
-    for (kind, role, key), it in found.items():
-        for m in per_role[role]:
-            used = any(_key(r) == key for r in _refs(m, kind))
-            res = result(m)
-            if used:
+                if key in seen:                          # the same item twice in one loadout counts once
+                    continue
+                seen.add(key)
                 it.n += 1
-            if res is not None:
-                (it.results if used else it.others).append(res)
-        it.share = it.n / len(per_role[role]) if per_role[role] else 0.0
+                if res is not None:
+                    it.results.append(res)
+    for (kind, role, key), it in found.items():
+        it.others_sum, it.others_n = total[role][0] - sum(it.results), total[role][1] - len(it.results)
+        it.share = it.n / count[role] if count[role] else 0.0
     return sorted(found.values(), key=lambda i: (-i.n, KINDS.index(i.kind), i.name.lower()))
 
 

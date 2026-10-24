@@ -26,6 +26,7 @@ import traceback
 from dataclasses import asdict, dataclass, field
 from functools import lru_cache
 
+from . import jsonlcache
 from .textnorm import fold
 
 log = logging.getLogger(__name__)
@@ -229,28 +230,26 @@ def script_version(path: str) -> int:
 
 
 # ------------------------------------------------------------------ official.jsonl
+def _match_line(line: str):
+    """One stored line → Match, None for a gap line or another value."""
+    d = json.loads(line)
+    if not isinstance(d, dict) or d.get("gap"):
+        return None
+    opp = [Player(**{k: str(o.get(k) or "") for k in ("role", "character", "status", "img")})
+           for o in d.get("opp") or [] if isinstance(o, dict)]
+    return Match(t=float(d["t"]), map=str(d.get("map") or ""), custom=bool(d.get("custom")),
+                 role=str(d.get("role") or ""), character=str(d.get("character") or ""),
+                 seconds=float(d.get("seconds") or 0), bp=int(d.get("bp") or 0),
+                 status=str(d.get("status") or ""), img=str(d.get("img") or ""), opp=opp, **_stored_extra(d))
+
+
+_LINES = jsonlcache.LineCache(_match_line)   # 1.11.10: parsed again only when the file changed
+
+
 def load(path: str) -> list:
-    """All stored matches, oldest first; broken lines and gap lines are skipped."""
-    out = []
-    try:
-        with open(path, encoding="utf-8") as fh:
-            for line in fh:
-                try:
-                    d = json.loads(line)
-                    if not isinstance(d, dict) or d.get("gap"):
-                        continue
-                    opp = [Player(**{k: str(o.get(k) or "") for k in ("role", "character", "status", "img")})
-                           for o in d.get("opp") or [] if isinstance(o, dict)]
-                    out.append(Match(t=float(d["t"]), map=str(d.get("map") or ""), custom=bool(d.get("custom")),
-                                     role=str(d.get("role") or ""), character=str(d.get("character") or ""),
-                                     seconds=float(d.get("seconds") or 0), bp=int(d.get("bp") or 0),
-                                     status=str(d.get("status") or ""), img=str(d.get("img") or ""), opp=opp,
-                                     **_stored_extra(d)))
-                except (ValueError, KeyError, TypeError):
-                    continue
-    except OSError:
-        return []
-    return sorted(out, key=lambda m: m.t)
+    """All stored matches, oldest first; broken lines and gap lines are skipped. Fresh objects each call (the
+    lists inside – opponents, loadout – are shared with the cache and never changed in place)."""
+    return sorted((jsonlcache.clone(m) for m in _LINES.items(path)), key=lambda m: m.t)
 
 
 def _stored_extra(d) -> dict:
