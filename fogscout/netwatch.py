@@ -9,8 +9,10 @@ the network card is not switched to promiscuous mode (and there is no
 fallback to it). Only the IPv4/UDP headers are looked at (addresses,
 ports); packet contents are never read or stored. Nothing is sent, nothing is
 changed, and the game process is not touched. Once a second the busiest
-UDP partners on public addresses are written to the result file; the
-program decides which one is the game server.
+UDP partners on public addresses are written to the result file, each with the
+local ports it talked to (1.11.6: the program matches them against the ports
+Windows lists for DBD's process); the program decides which one is the game
+server.
 
 The helper stops by itself when the control file is gone, asks it to stop,
 or has not been refreshed for STALE seconds (program closed or crashed).
@@ -66,31 +68,39 @@ def is_public(ip: str) -> bool:
     return r
 
 
+LPORTS_KEPT = 4             # 1.11.6: local ports listed per partner (a game server talks to one)
+SNAPSHOT_LIMIT = 8          # 1.11.6: partners written (5 before) – the game server may not be the busiest one
+
+
 class FlowTable:
     """UDP packet counts per remote public address over the last WINDOW seconds."""
 
     def __init__(self, window: float = WINDOW):
         self.window = window
-        self.flows = {}          # remote ip -> {"sent": deque[t], "recv": deque[t], "ports": {port: n}}
+        # remote ip -> {"sent": deque[t], "recv": deque[t], "ports": {remote port: n}, "lports": {local port: n}}
+        self.flows = {}
 
     def add(self, t: float, local: str, p) -> None:
         src, dst, sport, dport = p
         if src == local:
-            remote, port, way = dst, dport, "sent"
+            remote, port, lport, way = dst, dport, sport, "sent"
         elif dst == local:
-            remote, port, way = src, sport, "recv"
+            remote, port, lport, way = src, sport, dport, "recv"
         else:
             return
         if port in IGNORE_PORTS or not is_public(remote):
             return
         f = self.flows.get(remote)
         if f is None:
-            f = self.flows[remote] = {"sent": collections.deque(), "recv": collections.deque(), "ports": {}}
+            f = self.flows[remote] = {"sent": collections.deque(), "recv": collections.deque(), "ports": {},
+                                      "lports": {}}
         f[way].append(t)
         f["ports"][port] = f["ports"].get(port, 0) + 1
+        f["lports"][lport] = f["lports"].get(lport, 0) + 1
 
-    def snapshot(self, now: float, limit: int = 5) -> list:
-        """Busiest partners first: [{"ip", "port", "pps", "sent", "recv"}] (sent/recv = packets in the window)."""
+    def snapshot(self, now: float, limit: int = SNAPSHOT_LIMIT) -> list:
+        """Busiest partners first: [{"ip", "port", "lports", "pps", "sent", "recv"}] (sent/recv = packets in the
+        window, lports = the local ports most used with this partner, busiest first)."""
         cut = now - self.window
         out = []
         for ip in list(self.flows):
@@ -103,8 +113,9 @@ class FlowTable:
             if not n:
                 del self.flows[ip]
                 continue
-            out.append({"ip": ip, "port": max(f["ports"], key=f["ports"].get), "pps": round(n / self.window, 1),
-                        "sent": len(f["sent"]), "recv": len(f["recv"])})
+            lports = sorted(f["lports"], key=lambda k: -f["lports"][k])[:LPORTS_KEPT]
+            out.append({"ip": ip, "port": max(f["ports"], key=f["ports"].get), "lports": lports,
+                        "pps": round(n / self.window, 1), "sent": len(f["sent"]), "recv": len(f["recv"])})
         out.sort(key=lambda x: -x["pps"])
         return out[:limit]
 

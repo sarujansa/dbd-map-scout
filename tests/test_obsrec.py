@@ -183,10 +183,18 @@ class FakeObs(threading.Thread):
                     inp = self.inputs[data["inputName"]]
                     inp["inputSettings"] = dict(inp.get("inputSettings") or {}, **data["inputSettings"])
             elif kind == "GetSceneItemList":           # 1.8.18 (1.8.89: with the transform OBS reports)
-                out = {"sceneItems": [dict(i, sceneItemTransform=dict(i.get("transform") or {},
-                                                                      sourceWidth=self.source_size[0],
-                                                                      sourceHeight=self.source_size[1]))
-                                      for i in self.scenes.get(data["sceneName"], [])]}
+                out = {"sceneItems": [dict(i, sceneItemIndex=n,                 # 1.11.7: 0 = bottom, as OBS
+                                           sceneItemTransform=dict(i.get("transform") or {},
+                                                                   sourceWidth=self.source_size[0],
+                                                                   sourceHeight=self.source_size[1]))
+                                      for n, i in enumerate(self.scenes.get(data["sceneName"], []))]}
+            elif kind == "SetSceneItemIndex":          # 1.11.7: only our overlay item is ever moved
+                items = self.scenes.get(data["sceneName"], [])
+                hits = [i for i in items if i["sceneItemId"] == data["sceneItemId"]]
+                ok = bool(hits)
+                if ok:
+                    items.remove(hits[0])
+                    items.insert(data["sceneItemIndex"], hits[0])
             elif kind == "CreateSceneItem":
                 ok = data["sourceName"] in self.inputs
                 if ok:
@@ -1750,3 +1758,58 @@ def test_indexes_written_under_the_old_name_are_taken_over(tmp_path):
     assert [c.file for c in obsrec.load_clips(cdir)] == ["c.mp4"]
     assert obsrec.list_clips(cdir, recs) == []
     assert sorted(os.listdir(cdir)) == [obsrec.OLD_CLIPS_INDEX, obsrec.CLIPS_INDEX]
+
+
+def test_obs_game_capture_can_be_chosen_and_the_overlay_stays_on_top(obs, tmp_path):
+    """1.11.7 (user: "Spielaufnahme ist auch in Ordnung"): our picture source can be OBS's game capture – a second
+    source of ours (OBS cannot change a source's kind), window mode on DBD, its own sound off, OBS's anti-cheat
+    hook; the window capture is then only hidden. Switching back shows the window capture again. Nothing is deleted;
+    our overlay item is moved above the game capture and placed by its transform; the user's sources stay."""
+    obs.inputs["Bildschirmaufnahme"] = {"inputKind": "monitor_capture", "video": True}
+    obs._item("Szene", "Bildschirmaufnahme")
+    obs.windows = ["DeadByDaylight  :UnrealWindow:DeadByDaylight-EGS-Shipping.exe"]
+    file = str(tmp_path / "cache" / "obs-overlay.png")
+    r, posted = _recorder(obs, str(tmp_path), pre=False, audio=False, window=True, overlay=True, overlay_file=file)
+    r._game_changed(True)                                       # window capture first, overlay on top of it
+    items = obs.scenes["Szene"]
+    order = lambda: [i["sourceName"] for i in items]             # noqa: E731
+    assert order() == ["Bildschirmaufnahme", obsrec.WINDOW_SOURCE, obsrec.OVERLAY_SOURCE]
+    r.cfg.capture = "game"
+    r._game_changed(False)
+    r._game_changed(True)
+    game = obs.inputs[obsrec.GAME_SOURCE]
+    assert game["inputKind"] == "game_capture"
+    st = game["inputSettings"]
+    assert st["capture_mode"] == "window" and st["capture_audio"] is False and st["anti_cheat_hook"] is True
+    assert st["capture_cursor"] is False and st["window"] == obs.windows[0]       # Epic, not the Steam default
+    by = {i["sourceName"]: i for i in items}
+    assert not by[obsrec.WINDOW_SOURCE]["sceneItemEnabled"] and by[obsrec.GAME_SOURCE]["sceneItemEnabled"]
+    assert by[obsrec.GAME_SOURCE]["transform"]["boundsType"] == "OBS_BOUNDS_SCALE_INNER"          # fitted
+    assert order().index(obsrec.OVERLAY_SOURCE) > order().index(obsrec.GAME_SOURCE)              # raised
+    moved = [d for k, d in obs.requests if k == "SetSceneItemIndex"]
+    assert moved and all(d["sceneItemId"] == by[obsrec.OVERLAY_SOURCE]["sceneItemId"] for d in moved)
+    by[obsrec.GAME_SOURCE]["transform"] = dict(by[obsrec.GAME_SOURCE]["transform"], positionX=200.0)
+    r._overlay_moved((20, 300, 400, 900))                       # placed by the game item, not the hidden window
+    s = 2560 / 3440
+    assert abs(by[obsrec.OVERLAY_SOURCE]["transform"]["positionX"] - (200 + 20 * s)) < 0.1
+    r.cfg.capture = "window"                                    # and back
+    r._game_changed(False)
+    r._game_changed(True)
+    assert by[obsrec.WINDOW_SOURCE]["sceneItemEnabled"] and not by[obsrec.GAME_SOURCE]["sceneItemEnabled"]
+    assert len(moved) == len([d for k, d in obs.requests if k == "SetSceneItemIndex"])   # already above: not moved
+    assert [d["inputName"] for k, d in obs.requests if k == "CreateInput"] == [
+        obsrec.WINDOW_SOURCE, obsrec.OVERLAY_SOURCE, obsrec.GAME_SOURCE]
+    assert not any(k in ("RemoveInput", "RemoveSceneItem") for k, _d in obs.requests)
+    assert items[0]["sceneItemEnabled"] and "transform" not in items[0]          # the monitor capture untouched
+    r.cfg.window = False                                        # off: both of ours only hidden
+    r._game_changed(False)
+    r._game_changed(True)
+    assert not by[obsrec.WINDOW_SOURCE]["sceneItemEnabled"] and not by[obsrec.GAME_SOURCE]["sceneItemEnabled"]
+    assert r.status.startswith("OBS bereit")
+
+
+def test_game_capture_alone_is_created_without_a_window_capture(obs, tmp_path):
+    r, posted = _recorder(obs, str(tmp_path), pre=False, audio=False, window=True, capture="game")
+    r._game_changed(True)
+    assert obsrec.GAME_SOURCE in obs.inputs and obsrec.WINDOW_SOURCE not in obs.inputs
+    assert obsrec.video_source("anything")[0] == obsrec.WINDOW_SOURCE          # unknown value: the window capture

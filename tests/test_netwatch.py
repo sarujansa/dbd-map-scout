@@ -52,6 +52,7 @@ def test_flow_table_rates_and_filters():
     assert [f["ip"] for f in snap] == [SERVER]
     assert snap[0]["port"] == 7777 and snap[0]["pps"] == 60.0
     assert snap[0]["sent"] == 150 and snap[0]["recv"] == 150
+    assert snap[0]["lports"] == [50000]                       # 1.11.6: the local port it talked to
 
 
 def test_flow_table_forgets_old_traffic():
@@ -371,3 +372,97 @@ def test_ping_once_icmp_first_then_udp_beacon(monkeypatch):
     assert connwatch.regions.measure("eu-central-1")["ms"] is None
     monkeypatch.setattr(connwatch.regions, "resolve", lambda name: [])
     assert connwatch.regions.measure("eu-central-1")["error"] == "Name nicht auflösbar"
+
+
+# ------------------------------------------------------------------ 1.11.6: DBD's own UDP ports
+def _udp_table(rows, family=socket.AF_INET):
+    """A MIB_UDP(6)TABLE_OWNER_PID as Windows fills it: count, then rows with the port in network byte order."""
+    out = struct.pack("<I", len(rows))
+    for port, pid in rows:
+        if family == socket.AF_INET:
+            out += struct.pack("<I", 0) + struct.pack(">H", port) + b"\0\0" + struct.pack("<I", pid)
+        else:
+            out += b"\0" * 16 + struct.pack("<I", 0) + struct.pack(">H", port) + b"\0\0" + struct.pack("<I", pid)
+    return out
+
+
+def test_the_udp_table_gives_the_ports_of_one_process():
+    """1.11.6 (user: "Spielserver klingt gut"): GetExtendedUdpTable's rows, IPv4 and IPv6 – only DBD's ports, the
+    port read in network byte order, a count larger than the buffer cannot read past it."""
+    buf = _udp_table([(7777, 4242), (50000, 4242), (53, 1000), (61000, 7)])
+    assert connwatch.parse_udp_table(buf, socket.AF_INET, 4242) == {7777, 50000}
+    assert connwatch.parse_udp_table(buf, socket.AF_INET, 999) == set()
+    six = _udp_table([(52000, 4242), (443, 1)], connwatch.AF_INET6)
+    assert connwatch.parse_udp_table(six, connwatch.AF_INET6, 4242) == {52000}
+    lying = struct.pack("<I", 1000) + buf[4:]                  # claims 1000 rows, holds 4
+    assert connwatch.parse_udp_table(lying, socket.AF_INET, 4242) == {7777, 50000}
+    assert connwatch.parse_udp_table(b"", socket.AF_INET, 1) == set()
+
+
+def test_with_dbds_ports_only_its_partners_count():
+    """Another AWS partner busier than the game server (other game, launcher …) is not chosen once DBD's ports are
+    known; no DBD port among the partners = not in a match; unknown ports or an old result file: as before."""
+    other = {"ip": "52.1.1.1", "port": 7000, "lports": [61000], "pps": 90.0}
+    game = {"ip": SERVER, "port": 7777, "lports": [50000], "pps": 40.0}
+    known = {SERVER: "eu-central-1", "52.1.1.1": "us-east-1"}.get
+    assert pick_server([other, game], known)["ip"] == "52.1.1.1"                 # unknown ports: the busiest
+    assert pick_server([other, game], known, {50000, 50001})["ip"] == SERVER
+    assert pick_server([other], known, {50000}) is None
+    assert pick_server([other, game], known, set()) is None                      # DBD has no UDP socket
+    old = [{k: v for k, v in other.items() if k != "lports"}]
+    assert pick_server(old, known, {50000})["ip"] == "52.1.1.1"                  # older helper: judged as before
+
+
+def test_poll_asks_windows_for_dbds_ports_and_says_where_they_came_from(tmp_path, monkeypatch):
+    """The ports of the DBD window's process are looked up every PORTS_EVERY s – one window → process lookup per
+    window; without a window, a process or the table the old guess runs, and the diagnosis says which."""
+    w, control, result = _watch(tmp_path, monkeypatch)
+    w._rdns = {SERVER: ("eu-central-1", time.time()), "52.1.1.1": ("us-east-1", time.time())}
+    pids, asked = [], []
+    monkeypatch.setattr(connwatch, "window_pid", lambda hwnd: pids.append(hwnd) or 4242)
+    monkeypatch.setattr(connwatch, "udp_ports", lambda pid: asked.append(pid) or {50000})
+    flows = [{"ip": "52.1.1.1", "port": 7000, "lports": [61000], "pps": 90.0, "sent": 1, "recv": 1},
+             {"ip": SERVER, "port": 7777, "lports": [50000], "pps": 40.0, "sent": 1, "recv": 1}]
+    result.write_text(json.dumps({"ok": True, "t": 1000.0, "flows": flows}))
+    w.poll(1000.5, game_hwnd=77)
+    assert w.server["ip"] == SERVER and w.ports == {50000} and pids == [77] and asked == [4242]
+    w.poll(1001.0, game_hwnd=77)
+    assert asked == [4242]                                     # within PORTS_EVERY: not asked again
+    w.poll(1000.5 + connwatch.PORTS_EVERY, game_hwnd=77)
+    assert asked == [4242, 4242] and pids == [77]              # same window: its process is known
+    text = "\n".join(w.diag_lines(1003.0))
+    assert "DBD-Ports: 1 aus der Verbindungstabelle von Windows" in text
+    assert "52.1.x.x Port 7000 · 90.0/s" in text and "nicht DBD" in text and "3.120.x.x Port 7777 · 40.0/s" in text
+    assert "4242" not in text
+    w.poll(1004.0, game_hwnd=None)                             # no DBD window: the busiest partner again
+    assert w.ports is None and w.server["ip"] == "52.1.1.1" and "kein DBD-Fenster" in w.ports_why
+    monkeypatch.setattr(connwatch, "udp_ports", lambda pid: None)
+    w.poll(1010.0, game_hwnd=78)
+    assert w.ports is None and "nicht lesbar" in w.ports_why and pids == [77, 78]
+
+
+def test_off_windows_no_port_lookup_is_tried():
+    assert connwatch.window_pid(123) is None or sys.platform == "win32"
+    assert connwatch.udp_ports(123) is None or sys.platform == "win32"
+    assert connwatch.window_pid(0) is None and connwatch.udp_ports(0) is None
+
+
+def test_the_process_exception_stays_narrow():
+    """1.11.6 loosened "no PID" for exactly one path: the DBD window's process id and Windows' UDP table, in connwatch
+    only. Nothing anywhere opens a process (OpenProcess, ReadProcessMemory, module/handle queries)."""
+    import re
+    root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "fogscout")
+    calls = re.compile(r"\b(OpenProcess|ReadProcessMemory|EnumProcessModules|CreateToolhelp32Snapshot|"
+                       r"GetWindowThreadProcessId|GetExtendedUdpTable)\b")
+    found = {}
+    for name in sorted(os.listdir(root)):
+        if not name.endswith(".py"):
+            continue
+        with open(os.path.join(root, name), encoding="utf-8") as fh:
+            for line in fh:
+                code = line.split("#", 1)[0]
+                if "windll" in code or "ctypes" in code or "." in code:
+                    for m in calls.finditer(code):
+                        if re.search(r"\.\s*" + m.group(1) + r"\b", code):          # an attribute = a real call
+                            found.setdefault(m.group(1), set()).add(name)
+    assert found == {"GetWindowThreadProcessId": {"connwatch.py"}, "GetExtendedUdpTable": {"connwatch.py"}}

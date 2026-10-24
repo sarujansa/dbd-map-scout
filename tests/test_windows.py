@@ -468,3 +468,26 @@ def test_the_window_carries_relaunch_icon_name_and_command(root):
     finally:
         win.close()
         pump()
+
+
+def test_the_udp_table_and_the_window_process_on_windows(root):
+    """1.11.6: GetExtendedUdpTable lists our own UDP socket under our process id (IPv4 and IPv6 rows parsed with the
+    real layout), GetWindowThreadProcessId gives our own window's process id – neither opens a process."""
+    import socket
+    from fogscout import connwatch
+    s4 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s4.bind(("127.0.0.1", 0))
+    s6 = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+    s6.bind(("::1", 0))
+    try:
+        ports = connwatch.udp_ports(os.getpid())
+        assert ports is not None and s4.getsockname()[1] in ports and s6.getsockname()[1] in ports
+        assert s4.getsockname()[1] not in (connwatch.udp_ports(4) or set())     # the System process: not ours
+    finally:
+        s4.close()
+        s6.close()
+    w, hwnd = _window(50, 60, 320, 200)
+    try:
+        assert connwatch.window_pid(hwnd) == os.getpid()
+    finally:
+        w.close()

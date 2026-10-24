@@ -2436,3 +2436,23 @@ def test_a_round_without_hwinfo_is_said_once_per_dbd_start(app_root):
         assert told() == 2
     finally:
         app.quit()
+
+
+def test_the_game_capture_box_reaches_the_setting_and_the_recorder(app_root):
+    """1.11.7: "Dafür die OBS-Spielaufnahme verwenden" → setting rec_capture "game" → Config.capture; off again
+    → "window". The setting comes back after a restart."""
+    import json
+    from fogscout.app import App
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True, "rec_capture": "game"}),
+                                            encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        assert app.rec_game_var.get() and app._rec_cfg().capture == "game"
+        app.rec_game_var.set(False)
+        app._rec_setting()
+        assert app.settings.get("rec_capture") == "window" and app._rec_cfg().capture == "window"
+        app.rec_game_var.set(True)
+        app._rec_setting()
+        assert app.settings.get("rec_capture") == "game"
+    finally:
+        app.quit()
