@@ -96,3 +96,51 @@ def test_emblems_scores_and_ratings_per_role_from_the_real_layout():
     assert sc[("killer", "Hunter")].mean == 9000 and sc[("killer", "Hunter")].full == 0.5
     assert sc[("killer", "Brutality")].n == 1 and sc[("survivor", "Objectives")].full == 0.0
     assert builds.ratings(pairs) == [("The Entity Hungers...", 2), ("Brutal Killer", 1)]
+
+
+
+def _items_before_1_11_10(pairs):
+    """The algorithm until 1.11.10 (every item through every match of its role), kept as the reference."""
+    matches = [m for _r, m in pairs if m.role in ("killer", "survivor") and builds.has_loadout(m)]
+    per_role = {role: [m for m in matches if m.role == role] for role in ("killer", "survivor")}
+    found = {}
+    for m in matches:
+        for kind in builds.KINDS:
+            for ref in builds._refs(m, kind):
+                it = found.setdefault((kind, m.role, builds._key(ref)), [ref[1] or ref[0], 0, [], []])
+                it[0] = ref[1] or it[0]
+    for (kind, role, key), it in found.items():
+        for m in per_role[role]:
+            used = any(builds._key(r) == key for r in builds._refs(m, kind))
+            res = builds.result(m)
+            if used:
+                it[1] += 1
+            if res is not None:
+                (it[2] if used else it[3]).append(res)
+    return {k: (v[0], v[1], (sum(v[2]) / len(v[2]) if v[2] else None), (sum(v[3]) / len(v[3]) if v[3] else None))
+            for k, v in found.items()}
+
+
+def test_the_one_pass_items_give_what_the_old_loop_gave():
+    """1.11.10: items() in one pass (190 → ~20 ms with 3000 matches) – the same counts, names and averages with and
+    without each item as the old loop, on random loadouts incl. the same perk twice, unknown results, both roles."""
+    import random
+    rnd = random.Random(11)
+    perks = [[f"p{i}", f"Perk {i}"] for i in range(12)]
+    ms = []
+    for i in range(300):
+        role = rnd.choice(["killer", "survivor"])
+        opp = ([Player(role="survivor", status=rnd.choice(["Sacrificed", "Escaped", "Killed", ""]))
+                for _ in range(4)] if role == "killer" else [])
+        ms.append(Match(t=float(i), map="M", role=role, status=rnd.choice(["Escaped", "Sacrificed", ""]),
+                          opp=opp, perks=[rnd.choice(perks) for _ in range(rnd.randint(0, 4))],
+                          addons=[[f"a{rnd.randint(0, 5)}", ""]] if rnd.random() < 0.5 else [],
+                          offering=[f"o{rnd.randint(0, 3)}", "Opfer"] if rnd.random() < 0.3 else []))
+    pairs = [(None, m) for m in ms]
+    old = _items_before_1_11_10(pairs)
+    new = {(it.kind, it.role, it.key): (it.name, it.n, it.mean, it.mean_without) for it in builds.items(pairs)}
+    assert new.keys() == old.keys()
+    for k in old:
+        assert new[k][:2] == old[k][:2], k
+        for a, c in zip(new[k][2:], old[k][2:]):
+            assert (a is None and c is None) or abs(a - c) < 1e-9, k
