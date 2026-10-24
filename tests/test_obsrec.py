@@ -811,9 +811,10 @@ def test_select_recordings_filters_the_index():
     assert files(obsrec.select_recordings(recs)) == ["d.mkv", "c.mkv", "b.mkv", "a.mkv"]       # newest first
     assert files(obsrec.select_recordings(recs, since=25.0)) == ["d.mkv", "c.mkv"]
     assert files(obsrec.select_recordings(recs, map_label="Gas Heaven")) == ["b.mkv"]
-    assert files(obsrec.select_recordings(recs, role="killer")) == ["d.mkv", "a.mkv"]          # farming not a killer round
+    assert files(obsrec.select_recordings(recs, role="killer")) == ["d.mkv", "c.mkv", "a.mkv"]   # 1.11.5: farming counts
+    assert files(obsrec.select_recordings(recs, role="killer", hide_farming=True)) == ["d.mkv", "a.mkv"]
     assert files(obsrec.select_recordings(recs, role="farming")) == ["c.mkv"]
-    assert files(obsrec.select_recordings(recs, role="normal")) == ["d.mkv", "b.mkv", "a.mkv"]    # 1.8.71
+    assert files(obsrec.select_recordings(recs, hide_farming=True)) == ["d.mkv", "b.mkv", "a.mkv"]
     assert files(obsrec.select_recordings(recs, only="marked")) == ["b.mkv"]
     assert files(obsrec.select_recordings(recs, only="kept")) == ["c.mkv"]
     assert files(obsrec.select_recordings(recs, only="bad")) == ["d.mkv"]
@@ -1331,7 +1332,8 @@ def test_the_clips_list_knows_the_programs_clips_and_their_rounds_and_filters_th
     assert [c.t for c in clips] == sorted((c.t for c in clips), reverse=True)    # newest first
     pick = lambda **kw: {c.file for c in obsrec.select_clips(clips, **kw)}          # noqa: E731
     assert pick(role="killer") == {"new.mp4", editor.file, hunt.file}
-    assert pick(role="survivor") == {f8.file}                                     # farming rounds apart
+    assert pick(role="survivor") == {f8.file, still.file}                         # 1.11.5: farming counts
+    assert pick(role="survivor", hide_farming=True) == {f8.file}                  # … until the switch hides it
     assert pick(role="farming") == {still.file}
     assert pick(killer="Nurse") == {"new.mp4", editor.file}
     assert pick(kind="still") == {still.file} and pick(kind="instant") == {f8.file, hunt.file}

@@ -131,6 +131,7 @@ DEFAULTS = {
     "seen_version": "",                 # 1.8.79: the version last run – the overview lists what is new since
     "killer_aliases": {},               # killer names as read (skins, new killers): {fold(name): "The Nurse"}
     "stats_mode": "",                   # 1.8.51: game-mode filter of the statistics, "" = all modes
+    "hide_farming": False,              # 1.11.5: "Farming ausblenden" – statistics, recordings and clips without farming rounds
     "export_columns": [],               # 1.8.91: columns of the export dialog ([] = roundexport.DEFAULT_COLUMNS)
     "export_format": "csv",             # 1.8.91: csv | text
     "official_open_after_dbd": False,   # open stats.deadbydaylight.com once DBD was closed (userscript saves the matches)

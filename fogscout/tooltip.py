@@ -129,8 +129,11 @@ TIPS = {
     "Survivor": "Diese Runde als Survivor-Runde zählen (falls die Erkennung falsch lag).",
     "Custom Game": "Diese Runde als Custom Game zählen – sie fliesst dann nicht in die Wartezeit ein.",
     "Farming an/aus": "Diese Runde als Farming-Runde zählen bzw. wieder als normale Runde – Farming-Runden "
-                      "erscheinen nur unter dem Filter „Farming“. Runden auf der Farming-Region (Einstellungen → "
-                      "Match-Daten) bleiben Farming.",
+                      "zählen überall mit, bis „Farming ausblenden“ sie heraushält; der Reiter „Farming“ listet sie "
+                      "immer. Runden auf der Farming-Region (Einstellungen → Match-Daten) bleiben Farming.",
+    "Farming ausblenden": "An: Farming-Runden (Crossplay aus, Farming-Region, Farming-Gegner) bleiben aus Statistik, "
+                          "Aufnahmen und Clips draussen – ein Schalter für alle drei. Aus: sie zählen wie jede andere "
+                          "Runde. Der Reiter Statistik → Farming zeigt sie immer.",
     "Runden ohne Crossplay als Farming zählen": "Zeigt die Lobby die Weltkugel mit rotem Kreuz (Crossplay aus), "
                                                  "zählt die nächste Runde als Farming-Runde.",
     "Spielstatus in Discord anzeigen (Rich Presence)": "Dein Discord-Status zeigt Map, Rolle, Killer und die Rundenzeit "

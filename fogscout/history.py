@@ -188,8 +188,8 @@ def today(rounds, now: float) -> dict:
     most played killer, median ping; 1.8.56 ``normal`` / ``farming`` = public rounds / farming rounds (cross-play
     off) apart."""
     since = period_start("day", now)
-    farming = select(rounds, since=since, role="farming")     # 1.8.56: select() leaves them out otherwise
-    rs = select(rounds, since=since)
+    farming = select(rounds, since=since, role="farming")     # 1.8.56: apart from the others (1.11.5: by farming=False)
+    rs = select(rounds, since=since, farming=False)
     waits = [r.wait for r in rs if r.wait is not None and normal(r)]
     killers = killers_used(rs)
     return {"count": len(rs) + len(farming), "total": sum(r.seconds for r in rs + farming),
@@ -203,14 +203,14 @@ def today(rounds, now: float) -> dict:
 
 
 def roles_per_map(rounds) -> dict:
-    """{map label: (killer rounds, survivor rounds)} – custom games, farming rounds and unknown roles count
-    for neither."""
+    """{map label: (killer rounds, survivor rounds)} – custom games and unknown roles count for neither
+    (1.11.5: farming rounds count; whoever wants them out leaves them out of ``rounds``, select(farming=False))."""
     out = {}
     for r in rounds:
         k, s = out.get(r.map, (0, 0))
-        if normal(r) and r.role == "killer":
+        if not r.custom and r.role == "killer":
             k += 1
-        elif normal(r) and r.role == "survivor":
+        elif not r.custom and r.role == "survivor":
             s += 1
         out[r.map] = (k, s)
     return out
@@ -252,19 +252,21 @@ ROLES = ("killer", "survivor")
 ROLE_FILTERS = ("all", "killer", "survivor", "custom", "farming")
 
 
-def select(rounds, since=None, region=None, role="all", killer=None, map_label=None) -> list:
+def select(rounds, since=None, region=None, role="all", killer=None, map_label=None, farming=None) -> list:
     """Rounds from ``since`` on; ``region``: None = all, NO_REGION = rounds without a known server;
-    ``role``: all | killer | survivor | custom (custom games only) | farming (1.2.20: farming rounds only –
-    every other filter leaves them out, they are not normal rounds); ``killer``: None = all, else only
+    ``role``: all | killer | survivor | custom (custom games only) | farming (1.2.20: farming rounds only);
+    ``farming`` (1.11.5, user: "die Filterung von Farming find ich kacke"): None = farming rounds count like
+    any other round, False = leave them out (the switch "Farming ausblenden"), True = only them (like role
+    "farming"); 1.2.20–1.11.4 every role filter but "farming" left them out. ``killer``: None = all, else only
     killer rounds with this killer; ``map_label`` (1.2.16): only this map (the label as the tables group it)."""
     out = [r for r in rounds if since is None or r.t >= since]
     if map_label:
         out = [r for r in out if r.map == map_label]
     if killer:
-        out = [r for r in out if r.killer == killer and r.role == "killer" and normal(r)]
-    if role == "farming":
+        out = [r for r in out if r.killer == killer and r.role == "killer" and not r.custom]
+    if role == "farming" or farming is True:  # a custom game is never a farming round
         out = [r for r in out if r.farming and not r.custom]
-    else:                                    # a custom game is never a farming round
+    elif farming is False:
         out = [r for r in out if not (r.farming and not r.custom)]
     if role == "custom":
         out = [r for r in out if r.custom]

@@ -118,14 +118,14 @@ EN = {
     "Farming-Runden": "Farming rounds",
     "Runden ohne Crossplay als Farming zählen": "Count rounds without cross-play as farming",
     "Alle Runden auf": "All rounds on",
-    "Farming-Runden zählen nicht zu den normalen Runden (Rollen-Filter, Wartezeiten, Bilanz, Ergebnisse) – "
-    "die Statistik hat dafür den Filter „Farming“. Crossplay aus erkennt das Programm an der Weltkugel mit "
-    "rotem Kreuz neben dem Lobby-Knopf; Runden auf der gewählten Region zählen immer als Farming, auch "
-    "ältere. Einzelne Runden: „Farming an/aus“ unter „Letzte Runden“.":
-        "Farming rounds do not count as normal rounds (role filters, waiting times, record, results) – the "
-        "statistics have their own filter \"Farming\". Cross-play off is read from the globe with the red cross next "
-        "to the lobby button; rounds on the chosen region always count as farming, older ones too. Single rounds: "
-        "\"Farming on/off\" under \"Last rounds\".",
+    "Farming-Runden zählen in Statistik und Aufnahmen überall mit; das Häkchen „Farming ausblenden“ (bei den "
+    "Filtern) hält sie heraus, der Reiter Statistik → Farming listet sie immer. Crossplay aus erkennt das "
+    "Programm an der Weltkugel mit rotem Kreuz neben dem Lobby-Knopf; Runden auf der gewählten Region zählen "
+    "immer als Farming, auch ältere. Einzelne Runden: „Farming an/aus“ unter „Letzte Runden“.":
+        "Farming rounds count everywhere in the statistics and recordings; the box \"Hide farming\" (next to the "
+        "filters) keeps them out, the tab Statistics → Farming always lists them. Cross-play off is read from the "
+        "globe with the red cross next to the lobby button; rounds on the chosen region always count as farming, "
+        "older ones too. Single rounds: \"Farming on/off\" under \"Last rounds\".",
     "{map} ({when}) zählt jetzt als Farming-Runde.": "{map} ({when}) now counts as a farming round.",
     "{map} ({when}) zählt wieder als normale Runde.": "{map} ({when}) counts as a normal round again.",
     "Hinweis: Runden auf {region} zählen laut Einstellung weiter als Farming.":
@@ -144,10 +144,19 @@ EN = {
         "No lobby for this round ({why}) – it does not count as farming.",
     "Lobby zu alt": "lobby too old",
     "Lobby nicht gesehen": "lobby not seen",
-    "Diese Runde als Farming-Runde zählen bzw. wieder als normale Runde – Farming-Runden erscheinen nur unter dem "
-    "Filter „Farming“. Runden auf der Farming-Region (Einstellungen → Match-Daten) bleiben Farming.":
-        "Count this round as a farming round, or as a normal round again – farming rounds show only under the "
-        "filter \"Farming\". Rounds on the farming region (Settings → Match data) stay farming.",
+    "Diese Runde als Farming-Runde zählen bzw. wieder als normale Runde – Farming-Runden zählen überall mit, bis "
+    "„Farming ausblenden“ sie heraushält; der Reiter „Farming“ listet sie immer. Runden auf der Farming-Region "
+    "(Einstellungen → Match-Daten) bleiben Farming.":
+        "Count this round as a farming round or as a normal round again – farming rounds count everywhere until "
+        "\"Hide farming\" keeps them out; the tab \"Farming\" always lists them. Rounds on the farming region "
+        "(Settings → Match data) stay farming.",
+    "Farming ausblenden": "Hide farming",
+    "An: Farming-Runden (Crossplay aus, Farming-Region, Farming-Gegner) bleiben aus Statistik, Aufnahmen und Clips "
+    "draussen – ein Schalter für alle drei. Aus: sie zählen wie jede andere Runde. Der Reiter Statistik → Farming "
+    "zeigt sie immer.":
+        "On: farming rounds (cross-play off, farming region, farming partners) stay out of the statistics, "
+        "recordings and clips – one switch for all three. Off: they count like any other round. The tab "
+        "Statistics → Farming always shows them.",
     "Zeigt die Lobby die Weltkugel mit rotem Kreuz (Crossplay aus), zählt die nächste Runde als Farming-Runde.":
         "If the lobby shows the globe with the red cross (cross-play off), the next round counts as a farming round.",
     "Custom Game – keine Wartezeit.": "Custom game – no waiting time.",
@@ -157,7 +166,6 @@ EN = {
     "Suche abgebrochen.": "Search cancelled.",
     "Lobby gefunden nach {time}{role}.": "Lobby found after {time}{role}.",
     "Lobby gefunden{role}.": "Lobby found{role}.",
-    "Alle inkl. Farming": "All incl. farming",
     "Lobby nur kurz gesehen – Rolle und Crossplay von dort, ohne Wartezeit.": "Lobby seen only briefly – role and cross-play from there, no waiting time.",
     "Wartezeit {time}": "waited {time}",
     "Ergebnisbildschirm: gespielt als {role}.": "Results screen: played as {role}.",
@@ -1292,13 +1300,13 @@ EN = {
     'Läuft DBD in einem kleinen Fenster (Bild kleiner als 1920×1080 oder schmaler als 16:9), zeigt das Programm im Spiel nichts – wie der Hauptschalter. Map-Erkennung, Statistik und OBS-Aufnahmen laufen weiter. Wird das Fenster wieder gross, erscheint das Overlay von selbst.': 'If DBD runs in a small window (picture smaller than 1920×1080 or narrower than 16:9), the program shows nothing in the game – like the master switch. Map detection, statistics and OBS recordings go on. When the window is big again, the overlay comes back by itself.',
     'Kleines DBD-Fenster ({w}×{h}) – Overlay ausgeblendet, Runden werden weiter gezählt und aufgenommen.': 'Small DBD window ({w}×{h}) – overlay hidden, rounds are still counted and recorded.',
     'Update gesperrt: eine Runde läuft. Nach dem Rundenende noch einmal auf „Aktualisieren und neu starten“ klicken.': 'Update locked: a round is running. Click “Update and restart” again after the round ends.',
-    'Alle Farming-Runden der Auswahl (Zeitraum, Region, Map, Modus) – unabhängig vom Rollen-Filter, der sie sonst aus den übrigen Auswertungen heraushält. Farming = Crossplay war in der Lobby aus (oder die eingestellte Farming-Region); korrigieren unter „Letzte Runden“ mit „Farming an/aus“. Aufnahmen liegen im Unterordner „Farming“ des Aufnahmeordners. Wartezeit „sofort“: die Lobby war voll, bevor eine Suchzeit messbar war. Server nur, wenn „Verbunden mit“ auf der Seite Server läuft.': 'All farming rounds of the selection (period, region, map, mode) – whatever the role filter says, which otherwise keeps them out of the other evaluations. Farming = cross-play was off in the lobby (or the farming region you set); correct it under “Last rounds” with “Farming on/off”. Recordings are in the “Farming” subfolder of the recordings folder. Wait "instant": the lobby was full before a search time could be measured. Server only while "Connected to" runs on the Server page.',
+    'Alle Farming-Runden der Auswahl (Zeitraum, Region, Map, Modus) – unabhängig vom Rollen-Filter und von „Farming ausblenden“. Farming = Crossplay war in der Lobby aus (oder die eingestellte Farming-Region); korrigieren unter „Letzte Runden“ mit „Farming an/aus“. Aufnahmen liegen im Unterordner „Farming“ des Aufnahmeordners. Wartezeit „sofort“: die Lobby war voll, bevor eine Suchzeit messbar war. Server nur, wenn „Verbunden mit“ auf der Seite Server läuft.': 'All farming rounds of the selection (period, region, map, mode) – whatever the role filter and "Hide farming" say. Farming = cross-play was off in the lobby (or the farming region you set); correct it under “Last rounds” with “Farming on/off”. Recordings are in the “Farming” subfolder of the recordings folder. Wait "instant": the lobby was full before a search time could be measured. Server only while "Connected to" runs on the Server page.',
     'Keine Farming-Runden in dieser Auswahl.': 'No farming rounds in this selection.',
     '{n} als Killer · {m} als Survivor': '{n} as killer · {m} as survivor',
     'Spielzeit': 'Play time',
     'vom Map-Banner bis zum Rundenende': 'from the map banner to the end of the round',
     'BP': 'BP',
-    '{n} gespeicherte Matches haben ein Loadout, aber keines davon ist in dieser Auswahl. Custom Games und Farming-Runden zählen nur mit dem Rollen-Filter „Custom Games“ bzw. „Farming“, Matches ohne erkannte Runde gar nicht.': '{n} saved matches have a loadout, but none of them is in this selection. Custom games and farming rounds only count with the role filter “Custom games” or “Farming”, matches without a detected round not at all.',
+    '{n} gespeicherte Matches haben ein Loadout, aber keines davon ist in dieser Auswahl. Custom Games zählen nur mit dem Rollen-Filter „Custom Games“, Farming-Runden nicht mit „Farming ausblenden“, Matches ohne erkannte Runde gar nicht.': '{n} saved matches have a loadout, but none of them is in this selection. Custom games only count with the role filter “Custom games”, farming rounds not with “Hide farming”, matches without a detected round not at all.',
     'DBD-Fenster wieder gross genug – Overlay wieder an.': 'DBD window big enough again – overlay back on.',
     "Overlay anzeigen": "Show the overlay",
     'Hauptschalter: aus = das Programm zeigt im Spiel nichts (Karte, Systemwerte, Heute, Musik). Erkennung, '
@@ -1822,7 +1830,7 @@ EN = {
     'BP/h': 'BP/h',
     'BP/h mit Wartezeit': 'BP/h with waiting',
     'Bloodpoints': 'Bloodpoints',
-    'Bloodpoints laut Stats-Seite. BP/h = je Stunde im Match; mit Wartezeit = je Stunde aus Match und Suche zusammen. Mit dem Rollen-Filter „Farming“ steht hier, was das Farmen bringt.': 'Bloodpoints from the stats page. BP/h = per hour in the match; with waiting = per hour of match and search together. With the role filter "Farming" this shows what farming earns.',
+    'Bloodpoints laut Stats-Seite. BP/h = je Stunde im Match; mit Wartezeit = je Stunde aus Match und Suche zusammen. Was das Farmen allein bringt, steht im Reiter „Farming“; „Farming ausblenden“ rechnet hier ohne Farming-Runden.': 'Bloodpoints from the stats page. BP/h = per hour in the match; with waiting = per hour of match and search together. What farming alone earns is on the "Farming" tab; "Hide farming" leaves farming rounds out here.',
     'Bloodpoints pro Stunde': 'Bloodpoints per hour',
     'Summe': 'Total',
     'mit Wartezeit {bp}': 'with waiting {bp}',

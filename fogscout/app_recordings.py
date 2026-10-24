@@ -18,11 +18,10 @@ from .i18n import N_, _
 from .lobby import killer_label
 from .textnorm import fmt_duration
 
-# 1.8.71 (user: "Farming und normale Runden sollen bei Aufnahmen separiert werden"): "Alle Rollen" = the normal
-# rounds, as in the statistics; the farming rounds only under "Farming", both together only on request
-REC_ROLES = [("all", N_("Alle Rollen")), ("killer", N_("Killer")), ("survivor", N_("Survivor")),
-             ("farming", N_("Farming")), ("everything", N_("Alle inkl. Farming"))]
-ROLE_ARG = {"all": "normal", "everything": None}
+# 1.11.5 (user: "die Filterung von Farming find ich kacke" → "überall mitzählen, Schalter zum Ausblenden"): the
+# roles only; farming rounds count with them until the box "Farming ausblenden" (shared with the statistics,
+# setting hide_farming) takes them out. 1.8.71–1.11.4 had "Farming" and "Alle inkl. Farming" in this list.
+REC_ROLES = [("all", N_("Alle Rollen")), ("killer", N_("Killer")), ("survivor", N_("Survivor"))]
 REC_ONLY = [("all", N_("Alle Aufnahmen")), ("marked", N_("Mit Marke")), ("kept", N_("Behalten")),
             ("bad", N_("Beschädigt"))]
 CLIP_KINDS = [("all", N_("Alle Arten")), ("clip", N_("Clips")), ("instant", N_("Sofort-Clips (F8)")),
@@ -91,6 +90,7 @@ class RecordingsTab:
                          state="readonly", width=13)
         cb.pack(side="left", padx=(8, 0))
         cb.bind("<<ComboboxSelected>>", lambda e: self._rec_render(force=True))
+        self._farming_box(fr).pack(side="left", padx=(8, 0))                                    # 1.11.5
         self._rec_onlys = [(k, _(label)) for k, label in REC_ONLY]
         self.rec_only_var = ui.StringVar(value=self._rec_onlys[0][1])
         cb = ui.Combobox(fr, textvariable=self.rec_only_var, values=[lbl for _k, lbl in self._rec_onlys],
@@ -158,6 +158,7 @@ class RecordingsTab:
                          state="readonly", width=13)
         cb.pack(side="left", padx=(8, 0))
         cb.bind("<<ComboboxSelected>>", lambda e: self._clips_render())
+        self._farming_box(fr).pack(side="left", padx=(8, 0))                                    # 1.11.5
         self._clip_killers = [(None, _("Alle Killer"))]
         self.clip_killer_var = ui.StringVar(value=self._clip_killers[0][1])
         self.clip_killer_cb = ui.Combobox(fr, textvariable=self.clip_killer_var, state="readonly", width=16,
@@ -217,7 +218,7 @@ class RecordingsTab:
         map_label = next((m for m, lbl in self._rec_maps if lbl == self.rec_map_var.get()), None)
         role = next((k for k, lbl in self._rec_roles if lbl == self.rec_role_var.get()), "all")
         only = next((k for k, lbl in self._rec_onlys if lbl == self.rec_only_var.get()), "all")
-        return period, map_label, ROLE_ARG.get(role, role), None if only == "all" else only
+        return period, map_label, None if role == "all" else role, None if only == "all" else only
 
     def _rec_tab_tick(self):
         """From App._rec_tick (4×/s): a change from the recorder or the refresh interval re-reads the index –
@@ -256,7 +257,8 @@ class RecordingsTab:
                 self.rec_map_var.set(maps[0][1])
         period, map_label, role, only = self._rec_filters()
         since = history.period_start(period, time.time()) if period != "all" else None
-        shown = obsrec.select_recordings(recs, since=since, map_label=map_label, role=role, only=only)
+        shown = obsrec.select_recordings(recs, since=since, map_label=map_label, role=role, only=only,
+                                         hide_farming=self._farming_hidden())
         j = self._joined()
         by_t = {r.t: r for r in j.rounds}
         t = self.rec_table
@@ -312,8 +314,8 @@ class RecordingsTab:
         since = history.period_start(period, time.time()) if period != "all" else None
         for c in clips:
             c.killer = self._killer_of(c.killer) if c.killer else ""
-        shown = obsrec.select_clips(clips, since=since, role=ROLE_ARG.get(role, role), killer=killer,
-                                    kind=None if kind == "all" else kind)
+        shown = obsrec.select_clips(clips, since=since, role=None if role == "all" else role, killer=killer,
+                                    kind=None if kind == "all" else kind, hide_farming=self._farming_hidden())
         if not folder:
             self.clip_summary_var.set(_("Kein Aufnahmeordner – die Clips liegen in seinem Ordner „Clips“."))
         elif not clips:
@@ -498,7 +500,7 @@ class RecordingsTab:
             for var, opts in ((self.rec_period_var, self._rec_periods), (self.rec_map_var, self._rec_maps),
                               (self.rec_role_var, self._rec_roles), (self.rec_only_var, self._rec_onlys)):
                 var.set(opts[0][1])
-            self.rec_role_var.set(dict(self._rec_roles)["everything"])    # 1.8.71: "all" leaves farming out
+            self._farming_set(False)                                  # 1.11.5: "Farming ausblenden" off too
             self._rec_render()
         if not self.rec_table.exists(iid):
             self._log(_("Die Aufnahme dieser Runde gibt es nicht mehr."), "System")

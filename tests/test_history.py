@@ -247,17 +247,24 @@ def test_last_days_periods_map_filter_and_csv_export(tmp_path):
     assert text.splitlines()[1] == "2026-10-16 15:30:00;Coal Tower;600;;;;;;;;3;;25000"
 
 
-def test_farming_rounds_count_only_in_their_own_filter(tmp_path):
-    """1.2.20 (user: rounds without cross-play / on the farming region are farming rounds, not normal ones)."""
+def test_farming_rounds_count_everywhere_until_the_switch_hides_them(tmp_path):
+    """1.2.20 (user: rounds without cross-play / on the farming region are farming rounds, not normal ones) –
+    until 1.11.4 every role filter left them out. 1.11.5 (user: "die Filterung von Farming find ich kacke" →
+    "überall mitzählen, Schalter zum Ausblenden"): they count like any other round; ``farming=False`` is the switch
+    "Farming ausblenden", ``farming=True`` / role "farming" = only them. Waiting times stay a thing of public
+    searches (a farming lobby is arranged)."""
     rs = [h.Round(100, 600, "a", "A", "eu-central-1", wait=60, role="killer"),
           h.Round(200, 600, "a", "A", "ap-southeast-1", wait=30, role="killer", farming=True),
           h.Round(300, 600, "a", "A", role="survivor", farming=True),
           h.Round(400, 600, "a", "A", custom=True, farming=True)]
-    assert [r.t for r in h.select(rs)] == [100, 400]                       # "all" leaves farming out
-    assert [r.t for r in h.select(rs, role="killer")] == [100]
-    assert [r.t for r in h.select(rs, role="farming")] == [200, 300]       # custom stays custom
+    assert [r.t for r in h.select(rs)] == [100, 200, 300, 400]             # "all" has farming in
+    assert [r.t for r in h.select(rs, farming=False)] == [100, 400]        # the switch; custom stays custom
+    assert [r.t for r in h.select(rs, role="killer")] == [100, 200]
+    assert [r.t for r in h.select(rs, role="killer", farming=False)] == [100]
+    assert [r.t for r in h.select(rs, role="farming")] == [200, 300] == [r.t for r in h.select(rs, farming=True)]
     assert [r.t for r in h.select(rs, role="custom")] == [400]
-    assert h.wait_summary(rs)["count"] == 1 and h.roles_per_map(rs) == {"A": (1, 0)}
+    assert h.wait_summary(rs)["count"] == 1 and h.roles_per_map(rs) == {"A": (2, 1)}
+    assert h.roles_per_map(h.select(rs, farming=False)) == {"A": (1, 0)}
     assert [h.normal(r) for r in rs] == [True, False, False, False]
     assert "farming" in h.LOST_KEYS and "farming" in h.CSV_COLUMNS
     path = str(tmp_path / "rounds.jsonl")
