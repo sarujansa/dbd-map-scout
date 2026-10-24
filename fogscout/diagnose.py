@@ -140,6 +140,10 @@ def collect(app) -> str:
         seen = list(getattr(w, "banner_history", []))
         lines.append(f"Letzte Banner ({len(seen)}):" if seen else "Letzte Banner: keine")
         lines.extend("  " + h for h in seen)
+        miss = list(getattr(w, "role_misses", []))           # 1.11.1
+        lines.append(f"Rolle nicht gelesen (Ergebnisbildschirm, debug/result, {len(miss)}):" if miss
+                     else "Rolle nicht gelesen: nie seit Start")
+        lines.extend("  " + m for m in miss)
         hist = list(getattr(w, "end_history", []))
         lines.append(f"Letzte Prüfungen ({len(hist)}):" if hist else "Letzte Prüfungen: keine")
         lines.extend("  " + h for h in hist[-40:])

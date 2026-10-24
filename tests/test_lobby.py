@@ -460,3 +460,20 @@ def test_a_lobby_seen_only_briefly_still_gives_its_round_role_and_cross_play():
     q.round_started(30)
     run(q, [(700, V("custom"))])
     assert q.lobby_for_round(720) is None
+
+
+def test_a_result_screen_without_a_role_is_kept_for_the_diagnosis(tmp_path, monkeypatch):
+    """1.11.1 (user: farming rounds stored without a role, though the round ended on the result screen): what the
+    reader saw goes to the diagnosis and the picture of the category zone to debug/result – the newest
+    RESULT_MISSES_KEPT only."""
+    import collections
+    from fogscout import worker
+    w = worker.DetectionWorker.__new__(worker.DetectionWorker)
+    w.root_dir, w.role_misses = str(tmp_path), collections.deque(maxlen=5)
+    monkeypatch.setattr(worker, "RESULT_MISSES_KEPT", 2)
+    stamps = iter(["20261022-140000", "20261022-140100", "20261022-140200"])
+    monkeypatch.setattr(worker.time, "strftime", lambda fmt, *a: next(stamps) if "%Y" in fmt else "14:00:00")
+    for _ in range(3):
+        w._result_miss(np.zeros((30, 200, 3), np.uint8), "SCOREBOARD")
+    assert sorted(os.listdir(tmp_path / "debug" / "result")) == ["20261022-140100.jpg", "20261022-140200.jpg"]
+    assert len(w.role_misses) == 3 and "„SCOREBOARD“" in w.role_misses[0] and "200×30" in w.role_misses[0]

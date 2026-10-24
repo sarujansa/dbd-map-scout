@@ -30,6 +30,24 @@ def test_letterboxed_banner_is_read():
     sep, res = reader.read(cv2.imread(CROP), *FRAME, letterboxed=True)
     assert sep is not None and res is not None
     assert res.best == ("badham-preschool", 1) and res.name_fit > -1
+    # 1.11.1: the realm's first letter is no longer cut off (before "PRINGWOOD": the fixed crop began at the line's
+    # faded left end, right of the text)
+    assert res.realm_text.startswith("SPRINGWOOD")
+
+
+def test_a_first_letter_touching_clutter_still_starts_the_line():
+    """1.11.1 (user log: "ASHEAVEN" for GAS HEAVEN, "4OTHER'S DWELLING"): a first letter merged with background
+    clutter is not letter-shaped; the line found from the second letter now reaches left over it – not over a gap
+    of more than LEFT_GAP letter heights, nor over a blob much wider than a letter."""
+    h = 20
+    letters = [(100 + 25 * k, 50, 18, h, 200) for k in range(6)]
+    clutter_g = (29, 48, 66, 23, 600)                       # "G" + a grass blade: wider than a letter
+    chains = detector._chains(sorted([clutter_g] + letters), 10, 40, start_limit=200)
+    assert chains[0].x0 == 29 and chains[0].n == 6
+    far = (0, 50, 50, h, 300)                               # 50 px gap = 2.5 letter heights: another thing
+    assert detector._chains(sorted([far] + letters), 10, 40, start_limit=200)[0].x0 == 100
+    blob = (0, 45, 95, 28, 2000)                            # background, wider than LEFT_WIDE letters
+    assert detector._chains(sorted([blob] + letters), 10, 40, start_limit=200)[0].x0 == 100
 
 
 def test_letterbox_bars_measured_and_used_only_when_fresh():

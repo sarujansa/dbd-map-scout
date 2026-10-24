@@ -416,7 +416,7 @@ class OverlayTab:
             return
         o["map_style"] = key
         self._save_soon()
-        self._preview_pic = None                 # the preview's sample and the maps page picture anew
+        self._preview_drop()                     # the preview's sample and the maps page picture anew
         self._qt_preview_cache = None
         self._style_warm()
         self._log(_("Kartenstil: {style}.", style=_(dict(MAP_STYLES)[key])), "Overlay")

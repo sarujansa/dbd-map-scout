@@ -2082,6 +2082,46 @@ def test_recordings_keep_farming_and_normal_rounds_apart(app_root):
         app.quit()
 
 
+def test_a_map_is_decoded_once_and_the_preview_sample_loads_in_a_thread(app_root, monkeypatch):
+    """1.11.1 (user diagnosis: "Takt: layout 74 ms" at the start, "Takt: overlay 84 ms"): show_map decoded every map
+    picture twice (App and PictureOverlay.set_map, ~80 ms each time a banner was read) – now once; the preview's
+    sample picture (WebP decode + thumbnail, 250 ms measured in the first layout tick) is loaded in a thread, the
+    tick only starts it, and a picture of a dropped sample (map style changed meanwhile) is not taken."""
+    from fogscout import app as app_mod, overlay_win32
+    from fogscout.app import App
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        calls = []
+        real = app_mod.load_frames
+
+        def counted(*a, **k):
+            calls.append(a[0])
+            return real(*a, **k)
+        monkeypatch.setattr(app_mod, "load_frames", counted)
+        monkeypatch.setattr(overlay_win32, "load_frames", counted)
+        mid = next(iter(app.catalog.maps))
+        app.show_map(mid, 1, "manual")
+        assert len(calls) == 1 and app.overlay._frames
+
+        started = []
+        monkeypatch.setattr(app_mod.threading, "Thread",
+                            lambda target, args, **k: type("T", (), {"start": lambda s: started.append((target, args))})())
+        app._preview_drop()
+        assert app._preview_sample() is None and len(started) == 1        # the tick does not wait for the picture
+        assert app._preview_sample() is None and len(started) == 1        # started once
+        target, args = started[0]
+        target(*args)                                                       # the thread's work
+        assert app._preview_sample() is not None
+        app._preview_drop()
+        app._preview_sample()
+        target, args = started[1]
+        app._preview_drop()                                                # style changed while it loaded
+        target(*args)
+        assert getattr(app, "_preview_pic", None) is None                  # the old picture is not taken
+    finally:
+        app.quit()
+
+
 def test_a_search_on_the_maps_page_filters_at_once_without_building_the_tiles_anew(app_root):
     """1.8.72: the page's search went into the event queue and showed its hits with the next overlay tick
     (≤ 250 ms later) by building every tile anew; now the App filters the one grid as soon as the event is in."""

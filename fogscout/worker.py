@@ -31,6 +31,7 @@ VBAR_LOOKS = 5                    # looks (1/s) whose smallest black bar above/b
 MID_MATCH_AFTER = 30.0            # s after the map appeared: a "banner" now is in the game world -> strict reading
 MID_MATCH_SPAN = 2.0              # … and it must stay on screen this long (a real banner stands still for ~5 s,
                                   # light strips in the world move with the camera)
+RESULT_MISSES_KEPT = 10           # 1.11.1: result screens without a role kept in debug/result
 SIGHTINGS_KEPT = 20               # mid-match sightings kept in debug/midmatch (picture + text each), newest first
 GLOBE_KEPT = 10                   # 1.5.4: unreadable cross-play globe crops kept in debug/lobby
 GLOBE_SAVE_EVERY = 120.0          # s between two saved crops (one per lobby is enough)
@@ -110,6 +111,7 @@ class DetectionWorker(threading.Thread):
         self.match_start = MatchStart()                      # 1.6: end of the loading screen (recording start)
         self.lobby_info = "–"                                # last look at the lobby button (diagnosis)
         self.banner_history = collections.deque(maxlen=20)  # every banner-like sighting and its outcome (diagnosis)
+        self.role_misses = collections.deque(maxlen=5)      # 1.11.1: result screens without a role read (diagnosis)
         self._scanner = None
         self._reported = set()
         self._fail_text, self._fail_logged = "", 0.0     # 1.8.38: last tick error logged, when
@@ -519,7 +521,10 @@ class DetectionWorker(threading.Thread):
                             if look is not None and ev[1] == "Ergebnisbildschirm":
                                 try:     # categories BRUTALITY … / OBJECTIVES … (our overlay blacked out: 2 of 4 words do)
                                     rx, ry, rw, rh = result_box(fw, fh)
-                                    role = lobby_reader.result_role(look[ry:ry + rh, rx:rx + rw])
+                                    crop = look[ry:ry + rh, rx:rx + rw]
+                                    role = lobby_reader.result_role(crop)
+                                    if role is None:     # 1.11.1: keep what was seen (user: farming rounds no role)
+                                        self._result_miss(crop, getattr(lobby_reader, "last_result_text", ""))
                                 except Exception:
                                     self._report("Rolle", traceback.format_exc())
                             self.post("match_end", reason=ev[1], gen=tracker.generation, t=tracker.end_t, role=role)
@@ -693,6 +698,21 @@ class DetectionWorker(threading.Thread):
             name = time.strftime("%Y%m%d-%H%M%S") + f"-crossplay-{button or 'x'}.png"
             cv2.imencode(".png", img)[1].tofile(os.path.join(d, name))
             for old in sorted(f for f in os.listdir(d) if "-crossplay-" in f)[:-GLOBE_KEPT]:
+                os.remove(os.path.join(d, old))
+        except Exception:
+            pass
+
+    def _result_miss(self, crop, text):
+        """1.11.1: the result screen gave no role – what was read goes to the diagnosis, the picture of the category
+        zone to debug/result (only the newest RESULT_MISSES_KEPT)."""
+        self.role_misses.append(f"{time.strftime('%H:%M:%S')} Bild {crop.shape[1]}×{crop.shape[0]} · "
+                                f"gelesen „{text[:60]}“")
+        try:
+            d = os.path.join(self.root_dir, "debug", "result")
+            os.makedirs(d, exist_ok=True)
+            cv2.imencode(".jpg", crop, [cv2.IMWRITE_JPEG_QUALITY, 90])[1].tofile(
+                os.path.join(d, time.strftime("%Y%m%d-%H%M%S") + ".jpg"))
+            for old in sorted(os.listdir(d))[:-RESULT_MISSES_KEPT]:
                 os.remove(os.path.join(d, old))
         except Exception:
             pass

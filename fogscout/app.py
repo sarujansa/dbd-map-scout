@@ -366,7 +366,7 @@ class App(ServerTab, StatsTab, ExportDialog, RecordingsTab, DiscordPresence, Spo
         self.source = source
         if prev is not None:                     # 1.8.39: another map/layout in the same round – the round follows
             self._hist_follow(map_id, m.label(shown))
-        self.overlay.set_map(path, m.label(shown), rotation, realm=self._realm_name(m))
+        self.overlay.set_map(path, m.label(shown), rotation, realm=self._realm_name(m), frames=frames)
         if not same_map:                         # a new map/round starts as set, the same one keeps its floor
             self._floor = None if self.settings["overlay"].get("floor_auto", True) else 0
         self._apply_floor()
@@ -718,7 +718,7 @@ class App(ServerTab, StatsTab, ExportDialog, RecordingsTab, DiscordPresence, Spo
 
     def _style_ready(self, path):
         """A styled picture is there now: the previews take it, the map on display is loaded again."""
-        self._preview_pic = None
+        self._preview_drop()
         self._qt_preview_cache = None
         self._qt_maps_rev = getattr(self, "_qt_maps_rev", 0) + 1
         if self.current and self.catalog.image_path(*self.current)[0] == path:
@@ -754,7 +754,7 @@ class App(ServerTab, StatsTab, ExportDialog, RecordingsTab, DiscordPresence, Spo
         except Exception as e:
             self._log(_("Bild konnte nicht geladen werden: {path} ({error})", path=path, error=e), "Fehler")
             return
-        self.overlay.set_map(path, m.label(self.current[1]), rotation, realm=self._realm_name(m))
+        self.overlay.set_map(path, m.label(self.current[1]), rotation, realm=self._realm_name(m), frames=frames)
         self._apply_floor()
         self._set_thumb(frames[0][0])
         self._tick_overlay(reschedule=False)
@@ -1104,22 +1104,33 @@ class App(ServerTab, StatsTab, ExportDialog, RecordingsTab, DiscordPresence, Spo
 
     def _preview_sample(self):
         """A map picture for the preview while none is on display (the first one of the catalog), loaded once –
-        1.8.21: the original until the map style's picture is made (``_style_ready`` drops it then)."""
-        if getattr(self, "_preview_pic", None) is None:
-            from PIL import Image
-            for mid in self.catalog.maps:
-                path, _v = self._map_file(mid, 1)
-                if path:
-                    try:
-                        with Image.open(path) as im:
-                            im.seek(0)
-                            pic = im.convert("RGBA")
-                        pic.thumbnail((480, 480))
-                        self._preview_pic = pic
-                        break
-                    except (OSError, ValueError):
-                        continue
-        return getattr(self, "_preview_pic", None)
+        1.8.21: the original until the map style's picture is made (``_style_ready`` drops it then). 1.11.1 (user
+        diagnosis "Takt: layout 74 ms" at the start; measured 250 ms here: WebP decode + convert + thumbnail): loaded
+        in a thread – the preview goes without a map picture for the few ticks until it is there."""
+        pic = getattr(self, "_preview_pic", None)
+        if pic is None and getattr(self, "_preview_token", None) is None:
+            path = next((p for p in (self._map_file(mid, 1)[0] for mid in self.catalog.maps) if p), None)
+            if path:
+                token = self._preview_token = object()
+                threading.Thread(target=self._preview_load, args=(path, token), daemon=True,
+                                 name="preview-sample").start()
+        return pic
+
+    def _preview_load(self, path, token):
+        from PIL import Image
+        try:
+            with Image.open(path) as im:
+                im.seek(0)
+                pic = im.convert("RGBA")
+            pic.thumbnail((480, 480))
+        except (OSError, ValueError):
+            pic = None
+        if self._preview_token is token:            # not dropped meanwhile (map style changed)
+            self._preview_pic = pic
+
+    def _preview_drop(self):
+        """The sample picture anew (map style changed / its styled picture is there)."""
+        self._preview_pic, self._preview_token = None, None
 
     def _preview_pick(self, value):
         if value[0] == "menu":                    # 1.8.10: right click on an element
