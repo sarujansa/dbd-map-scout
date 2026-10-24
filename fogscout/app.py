@@ -914,10 +914,13 @@ class App(ServerTab, StatsTab, ExportDialog, RecordingsTab, DiscordPresence, Spo
                 self._tick_overlay(reschedule=False)
             # 1.8.38: the round is saved after the overlay is hidden – an error in the statistics (history file,
             # stats page) must not keep the map up: the worker sends no second match_end
+            self._closed_round = (d.get("gen"), (self._hist or {}).get("t"))      # 1.11.8: for a later role
             try:
                 self._hist_close(d.get("t") or time.time(), d.get("role"))
             except Exception:
                 self._report_once("Rundenverlauf", traceback.format_exc())
+        elif k == "result_role":                  # 1.11.8: the result screen's role on a second look
+            self._result_role(d)
         elif k == "menu":
             if d.get("on"):
                 if self.overlay.has_map() and not self.hidden_after_match and not self.menu_paused:

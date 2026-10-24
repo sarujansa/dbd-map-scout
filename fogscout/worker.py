@@ -32,6 +32,9 @@ MID_MATCH_AFTER = 30.0            # s after the map appeared: a "banner" now is 
 MID_MATCH_SPAN = 2.0              # … and it must stay on screen this long (a real banner stands still for ~5 s,
                                   # light strips in the world move with the camera)
 RESULT_MISSES_KEPT = 10           # 1.11.1: result screens without a role kept in debug/result
+# 1.11.8 (user's crops: the category bar there, its words not yet): no role at the end → looks again this many seconds
+# after it (the result screen fades its headers in after the bar)
+ROLE_RETRY_S = (1.5, 3.0, 5.0)
 SIGHTINGS_KEPT = 20               # mid-match sightings kept in debug/midmatch (picture + text each), newest first
 GLOBE_KEPT = 10                   # 1.5.4: unreadable cross-play globe crops kept in debug/lobby
 GLOBE_SAVE_EVERY = 120.0          # s between two saved crops (one per lobby is enough)
@@ -201,6 +204,7 @@ class DetectionWorker(threading.Thread):
         wcap_failed = None                # hwnd the window capture could not be started for
         wcap_told = False
         via = {"screen": True}            # last picture came from the screen (-> our overlay is in it)
+        role_retry = None                 # 1.11.8: {"gen", "t", "due": [tick …], "crop", "text"} after a role-less end
         self.hidden_looks = 0
         self.scan_rate = 0.0                                 # 1.6.4: banner scans per second right now (diagnosis)
         self._globe_saved = 0.0           # 1.5.4: last saved cross-play crop             # looks skipped: DBD in the background, another window over it
@@ -523,8 +527,10 @@ class DetectionWorker(threading.Thread):
                                     rx, ry, rw, rh = result_box(fw, fh)
                                     crop = look[ry:ry + rh, rx:rx + rw]
                                     role = lobby_reader.result_role(crop)
-                                    if role is None:     # 1.11.1: keep what was seen (user: farming rounds no role)
-                                        self._result_miss(crop, getattr(lobby_reader, "last_result_text", ""))
+                                    if role is None:     # 1.11.8: look again in a moment (1.11.1: kept then)
+                                        role_retry = {"gen": tracker.generation, "t": tracker.end_t,
+                                                      "due": [tick + s for s in ROLE_RETRY_S], "crop": crop,
+                                                      "text": getattr(lobby_reader, "last_result_text", "")}
                                 except Exception:
                                     self._report("Rolle", traceback.format_exc())
                             self.post("match_end", reason=ev[1], gen=tracker.generation, t=tracker.end_t, role=role)
@@ -540,6 +546,10 @@ class DetectionWorker(threading.Thread):
                 elif not self.map_on_screen:
                     self.watch_status = (_("Runde vorbei – wartet auf die nächste Map") if tracker.ended
                                          else _("keine Map angezeigt"))
+
+                if role_retry is not None and role_retry["due"] and tick >= role_retry["due"][0]:
+                    role_retry = self._role_again(role_retry, tick, grab if (window is not None or source is not None)
+                                                  else None, fw, fh, origin, via, source, lobby_reader)
 
                 in_match = self.map_on_screen and tracker.in_trial
                 rate = scan_rate(float(self.settings.get("scans_per_second", 5)), in_match=in_match, session=session,
@@ -701,6 +711,37 @@ class DetectionWorker(threading.Thread):
                 os.remove(os.path.join(d, old))
         except Exception:
             pass
+
+    def _role_again(self, retry, tick, grab, fw, fh, origin, via, source, lobby_reader):
+        """1.11.8: one more look at the result screen's categories after a role-less end. A role → event
+        "result_role" (the app corrects the round just saved); after the last look without one the crop goes to
+        debug/result as before (1.11.1) and, with debug pictures on, the whole screen to debug/frames ("rolle").
+        Returns the retry state to keep, or None."""
+        retry["due"].pop(0)
+        role, frame = None, None
+        try:
+            frame = grab((0, 0, fw, fh)) if grab is not None else None
+            if frame is not None:
+                if source is None and via["screen"] and (self.overlay_rect or self.hud_rect or self.media_rect
+                                                         or self.today_rect or self.info_rect or self.guide_rects
+                                                         or self.toast_rect):
+                    self._mask_overlay(frame, origin[0], origin[1])
+                rx, ry, rw, rh = result_box(fw, fh)
+                crop = frame[ry:ry + rh, rx:rx + rw]
+                role = lobby_reader.result_role(crop)
+                retry["crop"], retry["text"] = crop, getattr(lobby_reader, "last_result_text", "")
+        except Exception:
+            self._report("Rolle", traceback.format_exc())
+        if role:
+            self.post("result_role", gen=retry["gen"], t=retry["t"], role=role,
+                      after=round(len(ROLE_RETRY_S) - len(retry["due"])))
+            return None
+        if retry["due"]:
+            return retry
+        self._result_miss(retry["crop"], retry["text"])
+        if frame is not None and self.settings.get("save_debug_images"):
+            self._save_frame(frame, "rolle")
+        return None
 
     def _result_miss(self, crop, text):
         """1.11.1: the result screen gave no role – what was read goes to the diagnosis, the picture of the category

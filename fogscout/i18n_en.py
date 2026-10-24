@@ -168,6 +168,7 @@ EN = {
     "Lobby gefunden{role}.": "Lobby found{role}.",
     "Lobby nur kurz gesehen – Rolle und Crossplay von dort, ohne Wartezeit.": "Lobby seen only briefly – role and cross-play from there, no waiting time.",
     "Wartezeit {time}": "waited {time}",
+    "Ergebnisbildschirm (zweiter Blick): gespielt als {role}.": "Result screen (second look): played as {role}.",
     "Ergebnisbildschirm: gespielt als {role}.": "Results screen: played as {role}.",
     "Wartezeit": "Waiting time",
     "Regionen": "Regions",

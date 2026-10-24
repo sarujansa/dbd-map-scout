@@ -477,3 +477,63 @@ def test_a_result_screen_without_a_role_is_kept_for_the_diagnosis(tmp_path, monk
         w._result_miss(np.zeros((30, 200, 3), np.uint8), "SCOREBOARD")
     assert sorted(os.listdir(tmp_path / "debug" / "result")) == ["20261022-140100.jpg", "20261022-140200.jpg"]
     assert len(w.role_misses) == 3 and "„SCOREBOARD“" in w.role_misses[0] and "200×30" in w.role_misses[0]
+
+
+def _retry_worker(tmp_path, debug=False):
+    import collections
+    from fogscout import worker
+    w = worker.DetectionWorker.__new__(worker.DetectionWorker)
+    w.root_dir, w.role_misses, w.posted = str(tmp_path), collections.deque(maxlen=5), []
+    w.settings = {"save_debug_images": debug}
+    w.post = lambda kind, **d: w.posted.append((kind, d))
+    w._report = lambda where, text: (_ for _ in ()).throw(AssertionError(text))
+    for name in ("overlay_rect", "hud_rect", "media_rect", "today_rect", "info_rect", "toast_rect"):
+        setattr(w, name, None)
+    w.guide_rects = []
+    return w
+
+
+def _result_frame(words):
+    """A 3440×1440 screen with the category bar: empty (the words not faded in yet) or with the reference words."""
+    frame = np.zeros((H, W, 3), np.uint8)
+    x, y, w, h = lobby.result_box(W, H)
+    frame[y:y + h, x:x + w] = (55, 49, 46)
+    if words:
+        crop = cv2.imread(os.path.join(DATA, "k_result.result.jpg"))
+        frame[y:y + h, x:x + w] = cv2.resize(crop, (w, h))
+    return frame
+
+
+def test_a_role_less_end_looks_at_the_result_screen_again(reader, tmp_path):
+    """1.11.8 (user's crops from debug/result: the category bar there, its words not yet): the first look after the
+    end saw an empty bar – one of the next looks (ROLE_RETRY_S) reads the words and posts "result_role" with the
+    round's end; nothing goes to debug/result then."""
+    from fogscout import worker
+    w = _retry_worker(tmp_path)
+    frames = iter([_result_frame(False), _result_frame(True)])
+    retry = {"gen": (3, "auto"), "t": 500.0, "due": [500.0 + s for s in worker.ROLE_RETRY_S], "crop": None,
+             "text": ""}
+    retry = w._role_again(retry, 501.5, lambda box: next(frames), W, H, (0, 0), {"screen": False}, "sim", reader)
+    assert retry is not None and len(retry["due"]) == 2 and not w.posted
+    assert w._role_again(retry, 503.0, lambda box: next(frames), W, H, (0, 0), {"screen": False}, "sim",
+                         reader) is None
+    assert w.posted == [("result_role", {"gen": (3, "auto"), "t": 500.0, "role": "killer", "after": 2})]
+    assert not (tmp_path / "debug").exists()
+
+
+def test_after_the_last_look_without_a_role_the_crop_and_the_screen_are_kept(reader, tmp_path):
+    """No words on any look: as 1.11.1 the crop goes to debug/result once (after the last look), and with debug
+    pictures on the whole screen to debug/frames tagged "rolle" – the picture that tells timing from layout."""
+    from fogscout import worker
+    w = _retry_worker(tmp_path, debug=True)
+    retry = {"gen": 1, "t": 9.0, "due": [9.0 + s for s in worker.ROLE_RETRY_S], "crop": None, "text": ""}
+    for tick in (10.5, 12.0, 14.0):
+        retry = w._role_again(retry, tick, lambda box: _result_frame(False), W, H, (0, 0), {"screen": False},
+                              "sim", reader)
+    assert retry is None and not w.posted and len(w.role_misses) == 1
+    assert len(os.listdir(tmp_path / "debug" / "result")) == 1
+    assert [f for f in os.listdir(tmp_path / "debug" / "frames") if f.endswith("-rolle.jpg")]
+    w2 = _retry_worker(tmp_path / "gone")
+    retry = {"gen": 1, "t": 9.0, "due": [10.5], "crop": np.zeros((4, 4, 3), np.uint8), "text": "X"}
+    assert w2._role_again(retry, 10.5, None, W, H, (0, 0), {"screen": False}, None, reader) is None   # DBD gone
+    assert len(w2.role_misses) == 1

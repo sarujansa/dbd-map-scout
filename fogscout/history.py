@@ -371,6 +371,20 @@ def set_role(path: str, t: float, role: str):
     return hit
 
 
+def set_result_role(path: str, t: float, role: str):
+    """1.11.8: the role the result screen showed a moment after the round was saved – only the role changes (a
+    custom game stays one, farming stays). Returns the changed round, or None (no such round / already that role)."""
+    if role not in ROLES:
+        raise ValueError(role)
+    rounds = load(path)
+    hit = next((r for r in rounds if abs(r.t - t) < 1e-6), None)
+    if hit is None or hit.role == role:
+        return None
+    hit.role = role
+    _rewrite(path, rounds, _lost_lines(path))
+    return hit
+
+
 def set_farming(path: str, t: float, farming: bool):
     """1.2.20: mark / unmark the round that started at ``t`` as a farming round (the role stays).
     1.5.5: marking a round as farming also drops "custom game" – a farming round is a public round, and a

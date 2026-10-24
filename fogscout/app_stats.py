@@ -1367,6 +1367,24 @@ class StatsTab:
         if self.nb.select() == str(self.tab_stats):
             self._stats_render()
 
+    def _result_role(self, d):
+        """1.11.8: the worker read the role on a second look at the result screen, after the round was saved –
+        the round of that end gets it (only the role; a custom game stays one)."""
+        gen, t = getattr(self, "_closed_round", (None, None))
+        role = d.get("role")
+        if role not in history.ROLES or t is None or d.get("gen") != gen:
+            return
+        self._queue = dict(self._queue, role=role)
+        try:
+            r = history.set_result_role(self._hist_path(), t, role)
+        except OSError as e:
+            self._report_once("history", f"{e}")
+            return
+        self._log(_("Ergebnisbildschirm (zweiter Blick): gespielt als {role}.", role=self._role_name(role)),
+                  "Erkennung")
+        if r is not None and self.nb.select() == str(self.tab_stats):
+            self._stats_render()
+
     def _hist_path(self):
         return os.path.join(self.root_dir, history.FILE)
 

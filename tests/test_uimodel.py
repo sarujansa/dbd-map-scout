@@ -2456,3 +2456,25 @@ def test_the_game_capture_box_reaches_the_setting_and_the_recorder(app_root):
         assert app.settings.get("rec_capture") == "game"
     finally:
         app.quit()
+
+
+def test_a_role_read_on_the_second_look_corrects_the_round_just_saved(app_root):
+    """1.11.8: match_end without a role saves the round with the lobby's role (here none); the worker's later
+    "result_role" for that end sets it – only for the round of that end (gen), a custom game stays one."""
+    from types import SimpleNamespace as NS
+    from fogscout import history
+    from fogscout.app import App
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        t0 = time.time() - 700
+        app._hist = {"t": t0, "map_id": "coal", "map": "Coal Tower", "custom": True}
+        app._event(NS(kind="match_end", data={"gen": None, "t": t0 + 600, "role": None}))
+        assert history.load(str(app_root / "rounds.jsonl"))[0].role == ""
+        app._event(NS(kind="result_role", data={"gen": (99, "x"), "t": t0 + 600, "role": "killer"}))
+        assert history.load(str(app_root / "rounds.jsonl"))[0].role == ""          # another end: ignored
+        app._event(NS(kind="result_role", data={"gen": None, "t": t0 + 600, "role": "killer"}))
+        r = history.load(str(app_root / "rounds.jsonl"))[0]
+        assert (r.role, r.custom) == ("killer", True) and app._queue.get("role") == "killer"
+        assert any("zweiter Blick" in e[2] for e in app._log_entries)
+    finally:
+        app.quit()
