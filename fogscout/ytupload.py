@@ -819,7 +819,7 @@ class Uploader(threading.Thread):
                 self._uploaded(job, at, access, now)
                 return
             self._sent[job.rel] = at
-        deadline = time.time() + TICK_BUDGET_S
+        deadline = time.monotonic() + TICK_BUDGET_S          # monotonic: Windows' time.time() steps 15 ms
         while not self.paused and self.cmds.empty():
             start = self._sent[job.rel]
             how, at = send_chunk(access, job.session, path, start, size)
@@ -830,7 +830,7 @@ class Uploader(threading.Thread):
             self._tell("progress", (job.rel, at, size))
             self._say(_("YouTube: lädt {file} hoch ({pct} %)", file=os.path.basename(job.rel),
                         pct=int(100 * at / max(1, size))), True)
-            if time.time() > deadline:
+            if time.monotonic() > deadline:
                 self._active = True                       # more to send: the next tick must not wait
                 return
 
