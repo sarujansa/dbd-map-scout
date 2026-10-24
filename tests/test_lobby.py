@@ -8,8 +8,8 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dbdmapscout import lobby  # noqa: E402
-from dbdmapscout.lobby import Found, LobbyView, QueueTracker  # noqa: E402
+from fogscout import lobby  # noqa: E402
+from fogscout.lobby import Found, LobbyView, QueueTracker  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, "tests", "data", "lobby")
@@ -18,7 +18,7 @@ W, H = 3440, 1440
 
 @pytest.fixture(scope="module")
 def reader():
-    from dbdmapscout.ocr import Recognizer
+    from fogscout.ocr import Recognizer
     return lobby.LobbyReader(Recognizer(os.path.join(ROOT, "models", "ch_PP-OCRv4_rec_infer.onnx")))
 
 
@@ -409,7 +409,7 @@ def test_any_multiplier_without_a_globe_means_cross_play_on():
     from PIL import Image, ImageDraw, ImageFont
     on = cv2.imread(os.path.join(DATA, "crossplay_on.png"))
     off = cv2.imread(os.path.join(DATA, "crossplay_off_2.png"))
-    font = ImageFont.truetype(os.path.join(os.path.dirname(DATA), "..", "..", "dbdmapscout", "fonts",
+    font = ImageFont.truetype(os.path.join(os.path.dirname(DATA), "..", "..", "fogscout", "fonts",
                                            "Inter-Medium.otf"), 14)
 
     def draw(base, clear, text, right):
@@ -463,11 +463,11 @@ def test_a_lobby_seen_only_briefly_still_gives_its_round_role_and_cross_play():
 
 
 def test_a_result_screen_without_a_role_is_kept_for_the_diagnosis(tmp_path, monkeypatch):
-    """1.8.72 (user: farming rounds stored without a role, though the round ended on the result screen): what the
+    """1.11.1 (user: farming rounds stored without a role, though the round ended on the result screen): what the
     reader saw goes to the diagnosis and the picture of the category zone to debug/result – the newest
     RESULT_MISSES_KEPT only."""
     import collections
-    from dbdmapscout import worker
+    from fogscout import worker
     w = worker.DetectionWorker.__new__(worker.DetectionWorker)
     w.root_dir, w.role_misses = str(tmp_path), collections.deque(maxlen=5)
     monkeypatch.setattr(worker, "RESULT_MISSES_KEPT", 2)

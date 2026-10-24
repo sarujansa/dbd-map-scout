@@ -10,7 +10,7 @@ import time
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from dbdmapscout import clipedit, obsrec  # noqa: E402
+from fogscout import clipedit, obsrec  # noqa: E402
 
 FF = obsrec.ffmpeg_exe()
 pytestmark = pytest.mark.skipif(FF is None, reason="imageio-ffmpeg not installed")
@@ -162,7 +162,7 @@ def test_the_clip_window_mixes_the_sound_only_with_the_tracks_for_it(clip, four_
     one-track recording only the hint."""
     pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
     from PySide6.QtWidgets import QApplication
-    from dbdmapscout import qt_clip
+    from fogscout import qt_clip
     app = QApplication.instance() or QApplication([])
     settings = {}
     win = qt_clip.ClipWindow(four_track, [], str(tmp_path / "Clips"), sound=False,
@@ -229,7 +229,7 @@ def test_the_clip_window_shows_frames_cuts_at_the_marks_and_saves(clip, tmp_path
     pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)     # platform: conftest (offscreen on Linux only –
     # setting it here too made the Win32 window tests after this file run offscreen on Windows CI)
     from PySide6.QtWidgets import QApplication
-    from dbdmapscout import qt_clip
+    from fogscout import qt_clip
     app = QApplication.instance() or QApplication([])
     saved, settings, logs = [], {}, []
     clips = str(tmp_path / "Clips")
@@ -305,7 +305,7 @@ def test_the_clip_window_offers_discord_and_plays_just_the_clip(clip, tmp_path):
     out, "Clip ansehen" plays the clip and lands on its start again, the saved clip can be shown."""
     pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
     from PySide6.QtWidgets import QApplication
-    from dbdmapscout import qt_clip
+    from fogscout import qt_clip
     app = QApplication.instance() or QApplication([])
     saved, settings = [], {}
     win = qt_clip.ClipWindow(clip, [], str(tmp_path / "Clips"), mode="discord", sound=False, on_saved=saved.append,
@@ -398,7 +398,7 @@ def test_the_clip_window_censors_with_remembered_boxes(clip, tmp_path):
     from PySide6.QtCore import QPointF, Qt
     from PySide6.QtGui import QMouseEvent
     from PySide6.QtWidgets import QApplication
-    from dbdmapscout import qt_clip
+    from fogscout import qt_clip
     app = QApplication.instance() or QApplication([])
     settings, saved = {}, []
     win = qt_clip.ClipWindow(clip, [], str(tmp_path / "Clips"), mode="copy", sound=False, on_saved=saved.append,
@@ -488,8 +488,8 @@ def test_marking_a_recording_shows_the_compact_editor_beside_the_table(four_trac
     import json
     import shutil
     from PySide6.QtWidgets import QApplication
-    from dbdmapscout.app import App
-    from dbdmapscout.app_qt import ui_shown
+    from fogscout.app import App
+    from fogscout.app_qt import ui_shown
     root = os.path.join(os.path.dirname(__file__), "..")
     for name in ("maps", "models", "maps.json"):
         os.symlink(os.path.abspath(os.path.join(root, name)), tmp_path / name)
@@ -546,7 +546,7 @@ def test_the_timeline_menu_sets_start_and_end_and_saves_a_still(clip, tmp_path):
     from PySide6.QtGui import QContextMenuEvent
     from PySide6.QtWidgets import QApplication
     from PIL import Image
-    from dbdmapscout import qt_clip
+    from fogscout import qt_clip
     app = QApplication.instance() or QApplication([])
     clips = str(tmp_path / "Clips")
     win = qt_clip.ClipWindow(clip, [], clips, sound=False)
@@ -582,7 +582,7 @@ def test_a_source_obs_did_not_have_says_so_instead_of_silent(four_track, tmp_pat
     that was not there (microphone off, no background source) is not reported as "OBS recorded nothing"."""
     pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
     from PySide6.QtWidgets import QApplication
-    from dbdmapscout import qt_clip
+    from fogscout import qt_clip
     app = QApplication.instance() or QApplication([])
     win = qt_clip.ClipWindow(four_track, [], str(tmp_path / "Clips"), sound=False, sources=["dbd", "discord"])
     try:
@@ -609,8 +609,8 @@ def test_threads_never_touch_qt_and_a_closed_editor_ignores_them(clip, four_trac
     levels, scrub and playback threads run) leaves no exception in any thread."""
     pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
     from PySide6.QtCore import QCoreApplication, QEvent, QObject
-    from dbdmapscout import qt_clip, qt_window
-    from dbdmapscout.qt_pages import HostView
+    from fogscout import qt_clip, qt_window
+    from fogscout.qt_pages import HostView
     app = qt_window.application()
     win = qt_clip.ClipWindow(clip, [], str(tmp_path / "Clips"), sound=False)
     assert not isinstance(win.bridge, QObject)                       # nothing Qt for the threads to hit

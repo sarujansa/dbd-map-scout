@@ -4,7 +4,7 @@ cd /d "%~dp0"
 set "VENV=%~dp0.venv"
 if exist "%VENV%\installed.ok" goto update
 
-echo === DbD Map Scout: Ersteinrichtung (einmalig, ca. 2-4 Minuten) ===
+echo === Fog Scout: Ersteinrichtung (einmalig, ca. 2-4 Minuten) ===
 rem Python 3.12 bis 3.14: fuer neuere gibt es noch nicht alle Pakete (onnxruntime, pywinrt). Der Launcher
 rem "py" nimmt gezielt eine passende Version, auch wenn daneben eine neuere installiert ist (Eingabe aus
 rem nul: nie auf eine Rueckfrage des Python-Installationsmanagers warten).
@@ -23,30 +23,30 @@ if errorlevel 1 goto piperror
 echo ok> "%VENV%\installed.ok"
 
 :update
-rem Neuen Stand von GitHub holen (dbdmapscout\update.py: nur auf main, nur ohne eigene Aenderungen,
+rem Neuen Stand von GitHub holen (fogscout\update.py: nur auf main, nur ohne eigene Aenderungen,
 rem nur Nachziehen). Exit-Code 3 = aktualisiert. Weil cmd diese Datei waehrend der Ausfuehrung
 rem weiterliest, das Update sie aber geaendert haben kann, startet sie sich IN DERSELBEN ZEILE neu.
-if not defined DBDMS_UPDATED ("%VENV%\Scripts\python.exe" "%~dp0dbdmapscout\update.py" & if errorlevel 3 (set "DBDMS_UPDATED=1" & cmd /c "".\%~nx0" %*" & exit /b))
+if not defined DBDMS_UPDATED ("%VENV%\Scripts\python.exe" "%~dp0fogscout\update.py" & if errorlevel 3 (set "DBDMS_UPDATED=1" & cmd /c "".\%~nx0" %*" & exit /b))
 
 rem Pakete nachinstallieren, wenn sich requirements.txt / requirements-extra.txt geaendert haben
 rem (Zusatzpaket ohne Abhaengigkeiten, siehe requirements-extra.txt). Fehlschlag: Start trotzdem.
-"%VENV%\Scripts\python.exe" "%~dp0dbdmapscout\update.py" --deps
+"%VENV%\Scripts\python.exe" "%~dp0fogscout\update.py" --deps
 
 :run
 if /i "%~1"=="debug" (
-  "%VENV%\Scripts\python.exe" -m dbdmapscout
+  "%VENV%\Scripts\python.exe" -m fogscout
   pause
   exit /b 0
 )
-rem "tray": Autostart mit Windows (Aufgabe "DbD Map Scout (Autostart)") - im Infobereich starten
+rem "tray": Autostart mit Windows (Aufgabe "Fog Scout (Autostart)") - im Infobereich starten
 set "ARGS="
 if /i "%~1"=="tray" set "ARGS=--tray"
-start "" "%VENV%\Scripts\pythonw.exe" -m dbdmapscout %ARGS%
+start "" "%VENV%\Scripts\pythonw.exe" -m fogscout %ARGS%
 exit /b 0
 
 :nopython
 echo.
-echo Kein passendes Python gefunden: DbD Map Scout braucht Python 3.12, 3.13 oder 3.14.
+echo Kein passendes Python gefunden: Fog Scout braucht Python 3.12, 3.13 oder 3.14.
 echo Fuer Python 3.15 und neuer gibt es noch nicht alle Pakete (z. B. onnxruntime fuer die Texterkennung).
 where py >nul 2>nul && (echo Installiert: & py --list <nul)
 echo.

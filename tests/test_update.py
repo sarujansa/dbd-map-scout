@@ -1,4 +1,4 @@
-"""Update on start (dbdmapscout/update.py) against real git repositories in a temp folder."""
+"""Update on start (fogscout/update.py) against real git repositories in a temp folder."""
 import json
 import os
 import subprocess
@@ -8,7 +8,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dbdmapscout import update as up  # noqa: E402
+from fogscout import update as up  # noqa: E402
 
 pytestmark = pytest.mark.skipif(up.shutil.which("git") is None, reason="git not installed")
 
@@ -31,7 +31,7 @@ def repos(tmp_path):
     origin, dev, user = tmp_path / "origin.git", tmp_path / "dev", tmp_path / "user"
     git(tmp_path, "init", "--bare", "-b", "main", str(origin))
     git(tmp_path, "clone", str(origin), str(dev))
-    write(dev / "dbdmapscout" / "__init__.py", '__version__ = "1.0.0"\n')
+    write(dev / "fogscout" / "__init__.py", '__version__ = "1.0.0"\n')
     write(dev / "start.bat", "echo old\n")
     git(dev, "add", "-A")
     git(dev, "commit", "-m", "first")
@@ -39,7 +39,7 @@ def repos(tmp_path):
     git(tmp_path, "clone", str(origin), str(user))
 
     def release(version="1.1.0", subject="Neue Funktion"):
-        write(dev / "dbdmapscout" / "__init__.py", f'__version__ = "{version}"\n')
+        write(dev / "fogscout" / "__init__.py", f'__version__ = "{version}"\n')
         write(dev / "start.bat", f"echo {version}\n")
         git(dev, "commit", "-am", subject)
         git(dev, "push", "origin", "HEAD:main")
@@ -150,10 +150,10 @@ def test_failed_install_is_retried_next_start(tmp_path):
 
 
 def test_run_as_script_like_start_bat(repos):
-    """start.bat runs `python dbdmapscout\\update.py`: standalone, exit code 3 after an update, status for the log."""
+    """start.bat runs `python fogscout\\update.py`: standalone, exit code 3 after an update, status for the log."""
     user, release = repos
-    src = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dbdmapscout", "update.py")
-    script = user / "dbdmapscout" / "update.py"
+    src = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fogscout", "update.py")
+    script = user / "fogscout" / "update.py"
     script.write_text(open(src, encoding="utf-8").read(), encoding="utf-8")   # untracked copy: does not block
     (user / ".venv").mkdir()
     release("2.0.0", "Große Änderung")
@@ -198,3 +198,17 @@ def test_button_update_works_even_if_start_update_is_off(repos, monkeypatch):
     assert up.update(str(user))[0] == up.SKIPPED
     monkeypatch.setenv("DBDMS_FORCE_UPDATE", "1")                    # set by "Aktualisieren und neu starten"
     assert up.update(str(user))[0] == up.UPDATED
+
+
+def test_the_version_of_a_revision_before_the_rename_is_read(repos):
+    """1.9: up to 1.8.91 the package was dbdmapscout/ – the update message names both versions across the rename."""
+    user, _release = repos
+    dev = user.parent / "dev"
+    git(dev, "mv", "fogscout", "dbdmapscout")
+    write(dev / "dbdmapscout" / "__init__.py", '__version__ = "1.8.91"\n')
+    git(dev, "commit", "-am", "old layout")
+    git(dev, "push", "origin", "HEAD:main")
+    assert up._version(str(user), "HEAD") == "1.0.0"
+    git(user, "fetch", "origin", "main")
+    assert up._version(str(user), "FETCH_HEAD") == "1.8.91"
+    assert up._version(str(user), "HEAD~9") == "?"

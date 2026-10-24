@@ -7,7 +7,7 @@ import time
 
 import pytest
 
-from dbdmapscout import uimodel as ui
+from fogscout import uimodel as ui
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -108,7 +108,7 @@ def test_notebook_and_table():
 # ------------------------------------------------------------------ what the window reads and does
 def test_tab_structure_state_and_clicks():
     pytest.importorskip("PySide6")
-    from dbdmapscout.app_qt import ui_act, ui_layout, ui_shown, ui_state
+    from fogscout.app_qt import ui_act, ui_layout, ui_shown, ui_state
     root = ui.Root()
     nb = ui.Notebook(root)
     tab = ui.Frame(nb)
@@ -151,7 +151,7 @@ def test_how_tables_and_notebooks_are_packed_reaches_the_window():
     """A notebook packed to fill (statistics) takes the page's height; a table packed without expand (server
     regions) is as tall as its rows; the stretching column is the model's, not always the first."""
     pytest.importorskip("PySide6")
-    from dbdmapscout.app_qt import ui_layout, ui_state
+    from fogscout.app_qt import ui_layout, ui_state
     root = ui.Root()
     tab = ui.Frame(root)
     nb = ui.Notebook(tab)
@@ -176,7 +176,7 @@ def test_how_tables_and_notebooks_are_packed_reaches_the_window():
 
 def test_dialog_structure():
     pytest.importorskip("PySide6")
-    from dbdmapscout.app_qt import ui_act, ui_layout, ui_shown, ui_state
+    from fogscout.app_qt import ui_act, ui_layout, ui_shown, ui_state
     dlg = ui.Toplevel(ui.Root())
     body = ui.Frame(dlg)
     body.pack()
@@ -212,9 +212,9 @@ def test_dialog_structure():
 # ------------------------------------------------------------------ the Qt overlay (fallback / not Windows)
 def test_qt_overlay_shows_the_map_and_reports_a_drag():
     pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
-    from dbdmapscout import qt_window
-    from dbdmapscout.mainloop import MainLoop
-    from dbdmapscout.overlay_qt import QtOverlay
+    from fogscout import qt_window
+    from fogscout.mainloop import MainLoop
+    from fogscout.overlay_qt import QtOverlay
     loop = MainLoop(qt_window.application())
     ov = QtOverlay(loop)
     ov.set_map(os.path.join(ROOT, "maps", "McMillan", "Coal Tower.webp"), "Coal Tower")
@@ -253,8 +253,8 @@ def app_root(tmp_path):
 def test_the_program_starts_shows_every_page_and_quits(app_root):
     """Smoke test of the whole program (Qt offscreen): every page and both dialogs are drawn from the model,
     clicks go through the event queue, nothing reports an error, quitting ends the loop."""
-    from dbdmapscout import qt_window, tooltip
-    from dbdmapscout.app import App
+    from fogscout import qt_window, tooltip
+    from fogscout.app import App
     app = App(str(app_root), simulate=str(app_root / "sim"))
     errors = []
     app._report_once = lambda key, text: errors.append((key, text))
@@ -314,7 +314,7 @@ def test_the_program_starts_shows_every_page_and_quits(app_root):
             assert (app.settings["color_theme"], app.settings["accent_custom"]) == ("custom", "#e0508f")
             assert app.swatches.current == "#e0508f" and app.theme_var.get() == "Eigene Farbe"
             order = app.settings["card_order"]["settings"]["0"]
-            assert order[0] == "st.updates"
+            assert order[0] == "st.more.folders"               # 1.8.90: the last card of the tab "Allgemein" first
             app._card_order_reset()                            # "Anordnung zurücksetzen"
             assert app.settings["card_order"] == {} and app.qt.forms["settings"].columns[0].ids()[0] == "st.look"
             for key in list(app.qt.dialogs):
@@ -339,7 +339,7 @@ def test_the_program_starts_shows_every_page_and_quits(app_root):
 def test_events_reach_the_app_in_order():
     """Clicks from the window are queued like the detection's events (one place handles both)."""
     q = queue.Queue()
-    from dbdmapscout.app_qt import QtShell
+    from fogscout.app_qt import QtShell
 
     class Shell(QtShell):
         events = q
@@ -351,8 +351,8 @@ def test_events_reach_the_app_in_order():
 def test_quitting_ends_the_loop_although_the_window_refuses_to_close():
     """QApplication.quit() would ask the windows first – the control window says no (its X = quit through the App)."""
     pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
-    from dbdmapscout import qt_window
-    from dbdmapscout.mainloop import MainLoop
+    from fogscout import qt_window
+    from fogscout.mainloop import MainLoop
     loop = MainLoop(qt_window.application())
     win = qt_window.MainWindow(lambda a, arg=None: None)
     win.show()
@@ -370,8 +370,8 @@ def test_quitting_ends_the_loop_although_the_window_refuses_to_close():
 
 def test_slow_callbacks_are_noted_for_the_diagnosis():
     pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
-    from dbdmapscout import diagnose, qt_window
-    from dbdmapscout.mainloop import MainLoop
+    from fogscout import diagnose, qt_window
+    from fogscout.mainloop import MainLoop
     loop = MainLoop(qt_window.application())
 
     def slow():
@@ -392,7 +392,7 @@ def test_the_longest_hangs_survive_a_flood_of_short_ones():
     """1.8.69 (user: Bloodpoints takes 1–3 min, but the diagnosis copied in a match showed only the tick's 30–48 ms):
     the last 40 are gone after ~10 s of such ticks – the longest since the start stay in a list of their own."""
     pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
-    from dbdmapscout import diagnose, mainloop, qt_window
+    from fogscout import diagnose, mainloop, qt_window
     loop = mainloop.MainLoop(qt_window.application())
     loop.note("Statistik-Reiter: Bloodpoints", 90000)
     for i in range(mainloop.SLOW_KEPT + 5):
@@ -410,8 +410,8 @@ def test_slow_steps_of_the_tick_and_the_statistics_are_named_for_the_diagnosis(a
     matches open the page in 60 ms, the slowest tab ~130 ms – and the diagnosis only said "App._tick_overlay
     6005 ms"): each step of the 250 ms tick and each part of the statistics that holds the window up gets a line of
     its own in "Fenster-Hänger"; quick ones do not."""
-    from dbdmapscout import diagnose
-    from dbdmapscout.app import App
+    from fogscout import diagnose
+    from fogscout.app import App
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
         app.root.slow.clear()
@@ -422,7 +422,7 @@ def test_slow_steps_of_the_tick_and_the_statistics_are_named_for_the_diagnosis(a
         assert all(n.startswith("Takt: ") for n in names)                 # nothing else noted for this tick
         app.root.slow.clear()
         monkeypatch.setattr(app, "_stats_part_records", lambda c: time.sleep(0.05))
-        app.stats_nb.select(str(app.stats_records.master))
+        app._stats_select(str(app.stats_records.master))
         app._stats_render()
         names = [s[1] for s in app.root.slow]
         assert "Statistik-Reiter: Rekorde" in names and "Statistik: Auswahl berechnen" in names
@@ -435,7 +435,7 @@ def test_slow_steps_of_the_tick_and_the_statistics_are_named_for_the_diagnosis(a
 def test_moving_without_a_map_shows_a_test_map(app_root):
     """1.64.3 (user: "die Map wird beim Verschieben nicht angezeigt"): "Mit der Maus verschieben" without a map
     shows a test map to grab – in the game too; "Fertig" hides it again, a map chosen meanwhile stays."""
-    from dbdmapscout.app import App
+    from fogscout.app import App
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
         assert not app.overlay.has_map()
@@ -465,8 +465,8 @@ def test_moving_without_a_map_shows_a_test_map(app_root):
 def test_limiter_lines_are_switched_on_dragged_alike_and_undone(app_root, monkeypatch):
     """1.8.14 (user: "Limiter … oben und unten, wo die GUI-Elemente nicht überschreiten dürfen"): the switch,
     dragging a line in the preview (both bars alike, or one alone), reset, undo, and the preview data."""
-    from dbdmapscout import app_layout
-    from dbdmapscout.app import App
+    from fogscout import app_layout
+    from fogscout.app import App
     app = App(str(app_root), simulate=str(app_root / "sim"))
     clock = [100.0]
     monkeypatch.setattr(app_layout.time, "monotonic", lambda: clock[0])
@@ -506,8 +506,8 @@ def test_limiter_lines_are_switched_on_dragged_alike_and_undone(app_root, monkey
 def test_undo_arrow_keys_and_a_layout_per_window_size(app_root, monkeypatch):
     """1.65 (user: fine-tune, undo, one layout per window size)."""
     from types import SimpleNamespace
-    from dbdmapscout import app_layout, layoutmem
-    from dbdmapscout.app import App
+    from fogscout import app_layout, layoutmem
+    from fogscout.app import App
     app = App(str(app_root), simulate=str(app_root / "sim"))
     clock = [100.0]
     monkeypatch.setattr(app_layout.time, "monotonic", lambda: clock[0])
@@ -557,7 +557,7 @@ def test_undo_arrow_keys_and_a_layout_per_window_size(app_root, monkeypatch):
         app._select("map")
         app._size_cap_tick()                                  # 60 % in the 440-px bar: the bar holds it back
         assert "Balken" in app.size_cap_var.get()
-        from dbdmapscout import app_qt, qt_pages
+        from fogscout import app_qt, qt_pages
         st = app_qt.ui_state(app.sel_scale)                   # 1.8.24: the slider marks where it stops growing
         assert 20 < st["cap"] < 60 and st["text"] == f"60 % → {st['cap']:.0f} %"
         w, extra = qt_pages.make_control("slider", "ov.sel_size", lambda *a: None)
@@ -575,7 +575,7 @@ def test_undo_arrow_keys_and_a_layout_per_window_size(app_root, monkeypatch):
 
 def test_size_changes_with_a_map_on_display_are_for_that_map(app_root):
     """1.65.5 (user: "sobald ich eine Map in der Runde bearbeite, zählt dies nur für die Map")."""
-    from dbdmapscout.app import App
+    from fogscout.app import App
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
         o = app.settings["overlay"]
@@ -605,10 +605,10 @@ def test_size_changes_with_a_map_on_display_are_for_that_map(app_root):
 
 def test_position_sliders_only_for_an_own_position_and_folded_cards_are_gone(app_root):
     """1.66.3 (user: "GUI user friendly"): the sliders "Horizontal/Vertikal" stood there at 1 % with "automatisch";
-    the cards under "Mehr" showed as empty headings while folded."""
-    from dbdmapscout import uimodel as ui
-    from dbdmapscout.app import App, anchor_label
-    from dbdmapscout.app_qt import ui_shown, ui_state
+    the cards under "Mehr" showed as empty headings while folded (the fold is gone since 1.8.90)."""
+    from fogscout import uimodel as ui
+    from fogscout.app import App, anchor_label
+    from fogscout.app_qt import ui_shown, ui_state
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
         x, y = (app._qt_reg[k] for k in ("ov.posx", "ov.posy"))
@@ -626,10 +626,8 @@ def test_position_sliders_only_for_an_own_position_and_folded_cards_are_gone(app
         assert not ui_shown(x)
         app._overlay_dragged(500, 300)                        # dragged in the game: own position, sliders there
         assert ui_shown(x) and app.settings["overlay"]["anchor"] == "custom"
-        card = app._qt_reg["st.more.backup"]
-        assert isinstance(card, ui.LabelFrame) and not ui_state(card)["visible"]
-        app._toggle_more()
-        assert ui_state(card)["visible"]
+        card = app._qt_reg["st.more.backup"]                 # 1.8.90: no fold any more – always there (tab Allgemein)
+        assert isinstance(card, ui.LabelFrame) and ui_state(card)["visible"]
     finally:
         app.quit()
 
@@ -640,7 +638,7 @@ _KEEP = []
 def test_a_card_is_hidden_with_its_frame():
     """The window hides a card whose model frame is folded away (its title says so) and shows it again."""
     pytest.importorskip("PySide6")
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     qt_window.application()
     page = qt_window.FormPage(lambda *a: None, "T", (("card", "c1", (("hint", "h"),)),))
     _KEEP.append(page)                         # a page without a parent freed by Python mid-run crashes Qt later
@@ -655,8 +653,8 @@ def test_a_card_is_hidden_with_its_frame():
 def test_a_slider_rows_labels_are_not_drawn_twice():
     """1.2.15 (Erkennung → Erweitert showed "Scans/Sek. Scans/Sek." and the value twice): the name and value
     labels of App._slider belong to the slider control – ui_layout leaves them out."""
-    from dbdmapscout import uimodel as ui
-    from dbdmapscout.app_qt import ui_layout
+    from fogscout import uimodel as ui
+    from fogscout.app_qt import ui_layout
     root = ui.Frame(None)
     row = ui.Frame(root)
     row.pack(fill="x")
@@ -676,8 +674,8 @@ def test_the_clips_sub_tab_lists_filters_and_deletes_the_programs_clips(app_root
     the program's clips with their round, filters for role / killer / kind, a right-click menu, deleting through
     the recorder; a clip the editor saves joins the list with the recording's round."""
     import json
-    from dbdmapscout import obsrec
-    from dbdmapscout.app import App
+    from fogscout import obsrec
+    from fogscout.app import App
     folder = app_root / "rec"
     cdir = folder / obsrec.CLIPS_DIR
     cdir.mkdir(parents=True)
@@ -723,9 +721,9 @@ def test_the_clips_sub_tab_lists_filters_and_deletes_the_programs_clips(app_root
         t.selection_set("nurse.mp4")
         t.event_generate("<<TreeviewSelect>>")
         assert app.clip_delete_btn.cget("state") == "normal"
-        ui_act = __import__("dbdmapscout.app_qt", fromlist=["ui_act"]).ui_act
+        ui_act = __import__("fogscout.app_qt", fromlist=["ui_act"]).ui_act
         ui_act(t, ("menu", (1, 2)))
-        assert [i[0] for i in shown[-1] if i] == ["play", "edit", "explorer", "copy", "round", "delete"]
+        assert [i[0] for i in shown[-1] if i] == ["play", "edit", "explorer", "copy", "round", "youtube", "delete"]
         app._confirmed = True
         app._menu_act("delete")                                # → recorder thread
         deadline = time.time() + 5
@@ -752,8 +750,8 @@ def test_the_recordings_tab_lists_the_index_and_acts_on_the_marked_row(app_root)
     """1.5: the tab shows the OBS recording index with filters; play / Explorer / keep / delete work on the marked
     row through the recorder thread; the summary names room and folder."""
     import json
-    from dbdmapscout import obsrec
-    from dbdmapscout.app import App
+    from fogscout import obsrec
+    from fogscout.app import App
     folder = app_root / "rec"
     folder.mkdir()
     for name in ("one.mkv", "two.mkv"):
@@ -817,8 +815,8 @@ def test_farming_rounds_have_a_tab_of_their_own_whatever_the_role_filter(app_roo
     """1.8.64 (user: "ich finde es bei letzten Runden nicht" → "wir haben so viele Kategorien, warum keine für
     Farming"): with "Alle Rollen" the farming rounds are left out of every evaluation – the tab "Farming" lists them
     anyway, with tiles; the other filters (map) still apply."""
-    from dbdmapscout import history
-    from dbdmapscout.app import App
+    from fogscout import history
+    from fogscout.app import App
     t1, t2, t3 = time.time() - 7200, time.time() - 3600, time.time() - 1800
     path = str(app_root / "rounds.jsonl")
     history.append(path, history.Round(t=t1, seconds=600, map_id="coal", map="Coal Tower", role="killer",
@@ -828,16 +826,22 @@ def test_farming_rounds_have_a_tab_of_their_own_whatever_the_role_filter(app_roo
     history.append(path, history.Round(t=t3, seconds=700, map_id="coal", map="Coal Tower", role="killer"))
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
-        app.stats_nb.select(str(app.stats_last.master.master))
+        app._stats_select(str(app.stats_last.master.master))
         app._stats_render()
         assert list(app.stats_last.get_children()) == [repr(t3)]      # "Alle Rollen": the normal round only
         farm_tab = app.stats_farm.master.master
-        assert app.stats_nb.tab(str(farm_tab), "text") == "Farming"
-        app.stats_nb.select(str(farm_tab))
+        assert app._stats_parts[str(farm_tab)][0] == "Farming"
+        app._stats_select(str(farm_tab))
         app._stats_render()
         assert list(app.stats_farm.get_children()) == [repr(t2), repr(t1)]   # newest first
         row = app.stats_farm.item(repr(t1), "values")
         assert row[1] == "Coal Tower" and "Nurse" in row[4] and row[5] == "–"   # no official match: no BP
+        # 1.8.85 (user: "Wartezeit, wenn's instant ist, kann man das hinschreiben"): a farming round without a
+        # measured search time filled its lobby at once; a normal round without one stays unknown
+        assert row[3] == "sofort" and row[6] == "–"
+        assert app._wait_text(history.Round(0, 1, "coal", "Coal Tower", wait=12.0, farming=True)) == "00:12"
+        assert app._wait_text(history.Round(0, 1, "coal", "Coal Tower", farming=True, custom=True)) == "–"
+        assert app._wait_text(history.Round(0, 1, "coal", "Coal Tower")) == "–"
         tiles = {x.title: x for x in app.stats_farm_tiles.data}
         assert tiles["Farming-Runden"].value == "2" and "1 als Killer · 1 als Survivor" in tiles["Farming-Runden"].sub
         app.stats_map_var.set("Coal Tower")
@@ -856,8 +860,8 @@ def test_several_rounds_can_be_marked_as_farming_at_once_and_the_recordings_foll
     Aufnahmen nicht"): Ctrl-selection in "Letzte Runden", one click sets every marked round; the recorder moves
     the matching recordings into "Farming"."""
     import json
-    from dbdmapscout import history, obsrec
-    from dbdmapscout.app import App
+    from fogscout import history, obsrec
+    from fogscout.app import App
     folder = app_root / "rec"
     folder.mkdir()
     t1, t2 = time.time() - 7200, time.time() - 3600
@@ -872,7 +876,7 @@ def test_several_rounds_can_be_marked_as_farming_at_once_and_the_recordings_foll
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
         t = app.stats_last
-        app.stats_nb.select(str(t.master.master))             # the sub-tab "Letzte Runden" (only it is drawn)
+        app._stats_select(str(t.master.master))               # the sub-tab "Letzte Runden" (only it is drawn)
         app._stats_render()
         assert str(t.cget("selectmode")) == "extended" and len(t.get_children()) == 2
         t.selection_set(repr(t1), repr(t2))
@@ -913,9 +917,9 @@ def test_the_match_start_and_f8_reach_the_recorder(app_root):
     """1.6: the worker's match_start event starts the early recording (with the found lobby's role and farming),
     F8 asks for an instant clip even without a running recording; the new boxes are saved."""
     import json
-    from dbdmapscout.app import App
-    from dbdmapscout.lobby import Found
-    from dbdmapscout.worker import Event
+    from fogscout.app import App
+    from fogscout.lobby import Found
+    from fogscout.worker import Event
     (app_root / "settings.json").write_text(json.dumps({"rec_on": True, "welcome_seen": True}), encoding="utf-8")
     app = App(str(app_root), simulate=str(app_root / "sim"))
     calls = []
@@ -962,8 +966,8 @@ def test_custom_rounds_that_were_public_matches_are_offered_as_farming(app_root)
     cross-play off before 1.5.5), are shown with a button: all become farming rounds (custom dropped); "Ignorieren"
     hides them for good."""
     import json
-    from dbdmapscout import history, official
-    from dbdmapscout.app import App
+    from fogscout import history, official
+    from fogscout.app import App
     t0 = time.time() - 3 * 3600
     for i, (custom, page_custom) in enumerate([(True, False), (True, True), (False, False), (True, False)]):
         history.append(str(app_root / history.FILE), history.Round(t=t0 + i * 900, seconds=600, map_id="coal-tower",
@@ -978,7 +982,8 @@ def test_custom_rounds_that_were_public_matches_are_offered_as_farming(app_root)
     try:
         assert [r.t for r in app._stats_farm_candidates()] == [t0, t0 + 2700]
         app._stats_render()
-        assert "2 Runden sind als Custom Game gespeichert" in app.stats_farm_var.get()
+        text = app.stats_farm_var.get()                       # 1.8.88: the hint names the reason
+        assert "2 Runden sehen nach Farming aus: 2 als Custom Game gespeichert" in text and "kurze" not in text
         assert app.stats_farm_row.winfo_manager()
         app._confirmed = True
         app._stats_farm_found()
@@ -996,14 +1001,177 @@ def test_custom_rounds_that_were_public_matches_are_offered_as_farming(app_root)
         app.quit()
 
 
+def test_short_rounds_against_the_same_killer_are_offered_as_farming_and_the_overview_asks(app_root):
+    """1.8.88 (user: farming rounds the lobby look missed had to be marked by hand): three short rounds in a row
+    against the same killer (stats page) are offered with their reason – on the statistics' overview and as the
+    tile "Farming?" of the overview page, whose button opens that overview; one answer marks them all, nothing
+    is marked by itself."""
+    import json
+    from fogscout import history, official, overview
+    from fogscout.app import App
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    t0 = time.time() - 7200
+    ms = []
+    for i, (seconds, killer) in enumerate([(120, "Slasher"), (120, "Slasher"), (150, "Slasher"), (600, "Nurse")]):
+        history.append(str(app_root / history.FILE), history.Round(t0 + i * 300, seconds, "coal", "Coal Tower",
+                                                                   role="survivor"))
+        ms.append(official.Match(t=t0 + i * 300 - 38, map="Coal Tower", role="survivor", seconds=seconds,
+                                 status="Escaped", opp=[official.Player(role="killer", character=killer)]))
+    official.merge(str(app_root / official.FILE), ms)
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    moved = []
+    app.recorder.set_farming = lambda t, on: moved.append((t, on))
+    try:
+        assert [r.t for r in app._stats_farm_candidates()] == [t0, t0 + 300, t0 + 600]
+        assert [r.farming for r in app._joined().rounds] == [False] * 4           # a suggestion, no verdict
+        app._stats_render()
+        text = app.stats_farm_var.get()
+        assert text.startswith("3 Runden sehen nach Farming aus: 3 kurze Runden (bis 3 min) hintereinander gegen "
+                               "denselben Charakter. Zuletzt: Coal Tower")
+        assert app.stats_farm_row.winfo_manager()
+        facts, _note = overview.today(app, time.time())
+        ask = [f for f in facts if f.title == "Farming?"]
+        assert ask and ask[0].value == "3" and (ask[0].action, ask[0].action_label) == ("farm_suggest",
+                                                                                           "Farming prüfen …")
+        app._qt_event("farm_suggest")
+        assert app.qt.current_key() == "stats" and app._stats_current_title() == "Übersicht"
+        app._confirmed = True
+        app._stats_farm_found()
+        saved = {r.t: r for r in history.load(str(app_root / history.FILE))}
+        assert [saved[t0 + i * 300].farming for i in range(4)] == [True, True, True, False]
+        assert sorted(moved) == [(t0, True), (t0 + 300, True), (t0 + 600, True)]
+        assert not app._stats_farm_candidates() and not [f for f in overview.today(app, time.time())[0]
+                                                        if f.title == "Farming?"]
+    finally:
+        app.quit()
+
+
+def test_the_visible_elements_go_to_obs_as_one_picture_over_the_dbd_window(app_root):
+    """1.8.89 (user: "nur das DBD-Fenster aufnehmen und das Overlay im Spiel"): with recordings, the window capture
+    and the tick on, every shown element (its picture at the worker's rect) goes to the writer as one picture; the
+    recorder gets the picture's box relative to the DBD window; tick off → one transparent picture, no box."""
+    import json
+    from types import SimpleNamespace
+    from PIL import Image
+    from fogscout import obsoverlay
+    from fogscout.app import App
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True, "rec_on": True, "rec_window": True,
+                                                        "rec_overlay": True}), encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    boxes = []
+    try:
+        app.recorder.set_overlay = boxes.append
+        app.game = SimpleNamespace(minimized=False, width=3440, rect=(100, 0, 3440, 1440))
+        app._game_rect = lambda: (100, 0, 3440, 1440)
+        card = Image.new("RGBA", (400, 900), (255, 0, 0, 255))
+        app.overlay._shown, app.overlay.picture = True, lambda: card
+        app.worker.overlay_rect = (120, 300, 400, 900)
+        hud_pic = Image.new("RGBA", (300, 200), (0, 0, 255, 255))
+        app.hud = SimpleNamespace(shown=True, opacity=0.5, fade=1.0, picture=lambda: hud_pic,
+                                  destroy=lambda: None, hide=lambda: None)
+        app.worker.hud_rect = (3100, 10, 300, 200)
+        app.today_win = SimpleNamespace(shown=False, picture=lambda: card,        # hidden: not in the picture
+                                        destroy=lambda: None, hide=lambda: None)
+        app.worker.today_rect = None
+        app._overlay_feed()
+        w = app._overlay_writer
+        end = time.time() + 5
+        while w.writes < 1 and time.time() < end:
+            time.sleep(0.02)
+        assert boxes == [(20, 10, 3280, 1190)] and not w.last_error            # relative to the window at x=100
+        with Image.open(obsoverlay.path(str(app_root))) as img:
+            assert img.size == (3280, 1190) and img.getpixel((0, 290)) == (255, 0, 0, 217)   # opacity 0.85 baked in
+            assert img.getpixel((3279, 0))[3] == 128                             # the HUD's 0.5 as well
+        app._overlay_feed()                                                      # nothing changed: no new picture
+        time.sleep(0.1)
+        assert w.writes == 1
+        app.rec_overlay_var.set(False)                                           # the tick off, as the user does
+        app._rec_setting()
+        app._overlay_feed()
+        end = time.time() + 5
+        while w.writes < 2 and time.time() < end:
+            time.sleep(0.02)
+        assert boxes[-1] is None
+        assert app._rec_cfg().overlay is False and app._rec_cfg().overlay_file == obsoverlay.path(str(app_root))
+    finally:
+        app.quit()
+
+
+def test_the_export_dialog_filters_rounds_and_writes_csv_or_a_text_list(app_root):
+    """1.8.91 (user: "ein Fenster, wo ich alles auswählen kann, Killer, Zeit etc."): Statistik → "Exportieren …"
+    opens the dialog with the statistics' filters preset; presets fill Von/Bis, typing there makes the range a
+    custom one, columns and format are remembered, the list goes to the clipboard or into a file."""
+    import json
+    from fogscout import history, official, roundexport, tooltip
+    from fogscout.app import App
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    day = history.period_start("day", time.time())
+    t_old, t1, t2 = day - 7200, day + 10 * 3600, day + 11 * 3600          # yesterday evening, today 10:00, 11:00
+    for t, kw in ((t_old, {"role": "killer", "killer": "The Trapper"}), (t1, {"role": "killer", "killer": "The Nurse"}),
+                  (t2, {"role": "survivor", "farming": True})):
+        history.append(str(app_root / history.FILE), history.Round(t, 600, "coal", "Coal Tower", **kw))
+    official.merge(str(app_root / official.FILE), [official.Match(t=t1 - 38, map="Coal Tower", role="killer", bp=25000,
+                                                                  opp=[official.Player(role="survivor", character="Meg Thomas",
+                                                                                       status="Sacrificed")])])
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    copied = []
+    app.root.clipboard_set = copied.append
+    try:
+        app._stats_render()
+        app._export_open()
+        assert app._export_dlg.winfo_exists() and str(app._export_dlg) in app._qt_dialogs
+        assert tooltip.missing(app.ui_root) == []                           # every button/box of the dialog has a tip
+        assert app.export_preset_var.get() == "Gesamter Zeitraum" or app.export_preset_var.get() == "Alles"
+        assert app.export_count_var.get() == "3 Runden, 8 Spalten"
+        app.export_preset_var.set("Heute")
+        app._export_preset_changed()
+        assert app.export_from_var.get() == roundexport.fmt_when(day) and app.export_to_var.get() == ""
+        assert app.export_count_var.get() == "2 Runden, 8 Spalten"
+        for key, var in app.export_col_vars.items():
+            var.set(key in ("start", "map", "killer", "kills"))
+        app.export_format_var.set("text")
+        app._export_refresh()
+        assert app.settings.get("export_columns") == ["start", "map", "killer", "kills"]
+        assert app.settings.get("export_format") == "text"
+        # the round with match data carries the page's layout ("Coal Tower I", official.correct_maps), as the tables do
+        assert app.export_preview_var.get().splitlines() == [roundexport.fmt_when(t1) + " · Coal Tower I · Nurse · 1",
+                                                             roundexport.fmt_when(t2) + " · Coal Tower"]
+        app._export_copy()
+        assert copied[-1].splitlines() == app.export_preview_var.get().splitlines()
+        assert app.export_msg_var.get() == "2 Runden in die Zwischenablage kopiert."
+        app.export_farming_var.set(False)                                    # the farming round out
+        app._export_refresh()
+        assert app.export_count_var.get() == "1 Runden, 4 Spalten"
+        app.export_farming_var.set(True)
+        app.export_from_var.set(time.strftime("%H:%M", time.localtime(t2 - 60)))   # typed: a time alone (today)
+        assert app.export_preset_var.get() == "Eigener Zeitraum"
+        assert app.export_count_var.get() == "1 Runden, 4 Spalten"
+        app.export_from_var.set("irgendwann")
+        assert app.export_count_var.get() == "" and "nicht lesbar" in app.export_msg_var.get()
+        app.export_from_var.set("")
+        app.export_format_var.set("csv")
+        app._export_refresh()
+        app._export_save(str(app_root / "out.csv"))
+        text = (app_root / "out.csv").read_text(encoding="utf-8-sig").splitlines()
+        assert text[0] == "Start;Map;Killer;Kills" and len(text) == 4 and text[2].endswith(";Coal Tower I;Nurse;1")
+        assert app.export_msg_var.get().startswith("3 Runden exportiert")
+        app._qt_event("dlg_close", str(app._export_dlg))                  # X / Esc of the window
+        assert not app._export_dlg.winfo_exists()
+        app._export_open()                                                   # remembered: columns and format
+        assert [k for k, v in app.export_col_vars.items() if v.get()] == ["start", "map", "killer", "kills"]
+        assert app.export_format_var.get() == "csv"
+    finally:
+        app.quit()
+
+
 def test_the_discord_state_follows_round_and_lobby_and_the_records_tab_draws(app_root):
     """1.7: the game state for the Rich Presence comes from the open round (map, realm, role, killer, start),
     else from the lobby, else the menu; the Discord boxes are saved and passed to the thread; the statistics'
     sub-tab "Rekorde" renders from the same selection as the others."""
     import json
-    from dbdmapscout import discordrpc, history
-    from dbdmapscout.app import App
-    from dbdmapscout.lobby import Found
+    from fogscout import discordrpc, history
+    from fogscout.app import App
+    from fogscout.lobby import Found
     t0 = time.time() - 3600
     history.append(str(app_root / history.FILE), history.Round(t=t0, seconds=600, map_id="coal-tower",
                                                                map="Coal Tower", role="killer", killer="The Nurse"))
@@ -1036,8 +1204,8 @@ def test_the_discord_state_follows_round_and_lobby_and_the_records_tab_draws(app
         app._discord_status("Discord: verbunden", True)
         assert app.dc_status_var.get() == "Discord: verbunden"
         app._stats_render()
-        i = next(i for i, tab in enumerate(app.stats_nb.tabs()) if app.stats_nb.tab(tab, "text") == "Rekorde")
-        app._stats_render_tab(i)
+        app._stats_select("Rekorde")
+        app._stats_render_tab()
         titles = [t.title for t in app.stats_records.data]
         assert titles[:2] == ["4K-Serie", "Entkommen-Serie"] and "Längste Runde" in titles
     finally:
@@ -1048,17 +1216,19 @@ def test_the_statistics_tabs_keep_their_meaning_when_moved(app_root):
     """1.7.6: a moved sub-tab of the statistics still selects its own model tab (the model index travels with the
     widget), the order is saved as a setting and restored on apply, "Anordnung zurücksetzen" clears it."""
     import json
-    from dbdmapscout.app import App
+    from fogscout.app import App
     (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
         app.qt.show_page("stats")                                   # the page gets its texts when shown
         app._qt_refresh(force=True)
         page = app.qt.forms["stats"]
-        tabs_id, tw, ids = page._tabsets[0]
+        tabs_id, tw, ids = next(s for s in page._tabsets                 # 1.8.76: the group "Runden" holds "Rekorde"
+                                if "Rekorde" in [s[1].tabText(i) for i in range(s[1].count())])
         names = [tw.tabText(i) for i in range(tw.count())]
-        assert tw.tabBar().isMovable() and "Rekorde" in names and page._tab_ids(tw, ids) == [str(i) for i in range(tw.count())]
-        tw.tabBar().moveTab(0, 2)                                   # "Übersicht" behind "Killer"
+        assert tw.tabBar().isMovable() and names == ["Übersicht", "Letzte Runden", "Rekorde", "Verlauf"]
+        assert page._tab_ids(tw, ids) == [str(i) for i in range(tw.count())]
+        tw.tabBar().moveTab(0, 2)                                   # "Übersicht" behind "Rekorde"
         ev = []
         while not app.events.empty():
             ev.append(app.events.get())
@@ -1072,7 +1242,7 @@ def test_the_statistics_tabs_keep_their_meaning_when_moved(app_root):
             ev.append(app.events.get())
         assert ("ui", "act", (tabs_id, 1)) in ev
         app._qt_event("act", (tabs_id, 1))
-        assert app.stats_nb.index("current") == 1
+        assert app._stats_current_title() == "Letzte Runden"
         app._qt_refresh(force=True)
         assert [tw.tabText(i) for i in range(3)] == [names[1], names[2], names[0]] and tw.currentIndex() == 0
         tw.setCurrentIndex(2)                                        # a click on the moved "Übersicht"
@@ -1096,19 +1266,26 @@ def test_the_statistics_tabs_are_short_and_the_last_rounds_come_second(app_root)
     "Gegner" last – the saved order of moved tabs keeps its meaning; 1.8.48: twelve with "Builds"; 1.8.64: thirteen
     with "Farming")."""
     import json
-    from dbdmapscout import history
-    from dbdmapscout.app import App
+    from fogscout import history
+    from fogscout.app import App
     (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
     history.append(str(app_root / "rounds.jsonl"), history.Round(time.time() - 900, 600, "coal", "Coal Tower"))
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
-        texts = [app.stats_nb.tab(t, "text") for t in app.stats_nb.tabs()]
-        assert texts[:3] == ["Übersicht", "Letzte Runden", "Maps"] and texts[-3:] == ["Gegner", "Builds", "Farming"]
-        assert len(texts) == 13
+        groups = [app.stats_nb.tab(t, "text") for t in app.stats_nb.tabs()]      # 1.8.76: four groups
+        assert groups == ["Runden", "Gegner & Builds", "Maps & Server", "Sonstiges"]
+        parts = {g: [nb.tab(t, "text") for t in nb.tabs()] for g, nb in zip(groups, app._stats_groups.values())}
+        assert parts["Runden"] == ["Übersicht", "Letzte Runden", "Rekorde", "Verlauf"]
+        assert parts["Gegner & Builds"] == ["Killer", "Gegner", "Builds"]
+        assert parts["Maps & Server"] == ["Maps", "Regionen", "Wartezeit"]
+        assert parts["Sonstiges"] == ["Bloodpoints", "System", "Farming"]
+        assert sum(len(v) for v in parts.values()) == 13 and app._stats_current_title() == "Übersicht"
         app._stats_render()
-        app._stats_render_tab(1)
+        app._stats_select("Letzte Runden")
+        app._stats_render_tab()
         assert len(app.stats_last.get_children()) == 1
-        assert "Spotify" in app.more_btn.cget("text") and "Discord" in app.more_btn.cget("text")
+        tabs = [c[1] for k, c in app.qt.forms["settings"].controls.items() if c[0] == "tab"]   # 1.8.90
+        assert tabs and tabs[0].count() == 6 and not hasattr(app, "more_btn")
     finally:
         app.quit()
 
@@ -1116,8 +1293,8 @@ def test_the_statistics_tabs_are_short_and_the_last_rounds_come_second(app_root)
 def test_the_builds_tab_lists_the_own_loadout_with_its_results(app_root):
     """1.8.48: sub-tab "Builds" – perks, add-ons, offering, power from the stats page (userscript 3)."""
     import json
-    from dbdmapscout import history, official
-    from dbdmapscout.app import App
+    from fogscout import history, official
+    from fogscout.app import App
     (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
     perks = [["P1", "Lethal Pursuer"], ["P2", "Pop Goes the Weasel"], ["P3", "Grim Embrace"], ["P4", "Deadlock"]]
     sac = official.Player(role="survivor", character="Meg Thomas", status="SACRIFICED", img="VE_Sacrificed")
@@ -1133,8 +1310,8 @@ def test_the_builds_tab_lists_the_own_loadout_with_its_results(app_root):
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
         app._stats_render()
-        i = next(i for i, tab in enumerate(app.stats_nb.tabs()) if app.stats_nb.tab(tab, "text") == "Builds")
-        app._stats_render_tab(i)
+        app._stats_select("Builds")
+        app._stats_render_tab()
         rows = {app.stats_items.item(c, "values")[0]: app.stats_items.item(c, "values")
                 for c in app.stats_items.get_children()}
         assert rows["Lethal Pursuer"][1:6] == ("Perk", "Killer", 2, "100%", "Ø 3.00")
@@ -1152,8 +1329,8 @@ def test_the_builds_hint_says_when_the_selection_leaves_the_loadouts_out(app_roo
     leaves them out (farming / custom games count only with their role filter). Now it says which; the diagnosis
     counts the userscript 3 fields of the saved matches."""
     import json
-    from dbdmapscout import history, official
-    from dbdmapscout.app import App
+    from fogscout import history, official
+    from fogscout.app import App
     (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
     t = time.time() - 3600
     history.append(str(app_root / "rounds.jsonl"), history.Round(t, 600, "coal", "Coal Tower", role="killer",
@@ -1163,8 +1340,7 @@ def test_the_builds_hint_says_when_the_selection_leaves_the_loadouts_out(app_roo
         perks=[["P1", "Lethal Pursuer"]])])
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
-        i = next(i for i, tab in enumerate(app.stats_nb.tabs()) if app.stats_nb.tab(tab, "text") == "Builds")
-        app.stats_nb.select(app.stats_nb.tabs()[i])
+        app._stats_select("Builds")
         app._stats_render()
         assert app.stats_items.get_children() == ()
         hint = app.stats_build_var.get()
@@ -1188,8 +1364,8 @@ def test_the_mode_filter_appears_with_known_modes_and_filters_the_rounds(app_roo
     """1.8.49: the game mode of the stats page as a filter – hidden while no match names one, "Alle Modi" by default
     (nothing changes on its own), a picked mode keeps only its rounds."""
     import json
-    from dbdmapscout import history, official
-    from dbdmapscout.app import App
+    from fogscout import history, official
+    from fogscout.app import App
     (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
     ms = []
     for i, mode in enumerate((["Online", "Public Match"], ["Online", "Public Match"], ["2v8", "2v8"], [])):
@@ -1232,18 +1408,19 @@ def test_a_saved_tab_order_survives_a_new_tab(app_root):
     """1.8.46: the statistics got an eleventh tab – an order saved with ten keeps it, the new tab goes to the end
     (before, any list that was not a full permutation fell back to the built-in order)."""
     import json
-    from dbdmapscout.app import App
+    from fogscout.app import App
     (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
         app.qt.show_page("stats")
         app._qt_refresh(force=True)
         page = app.qt.forms["stats"]
-        tabs_id, tw, ids = page._tabsets[0]
-        old = ["1", "0"] + [str(i) for i in range(2, 10)] + ["99"]          # ten known ids and a vanished one
+        tabs_id, tw, ids = next(s for s in page._tabsets                 # 1.8.76: the group "Runden" (four tabs)
+                                if "Rekorde" in [s[1].tabText(i) for i in range(s[1].count())])
+        old = ["1", "0", "2", "99"]                                          # three known ids and a vanished one
         page.apply_tab_order({tabs_id: old})
-        assert page._tab_ids(tw, ids) == ["1", "0"] + [str(i) for i in range(2, len(ids))]   # new tabs at the end
-        assert tw.tabBar().property("dense") is True                         # eleven tabs and more: less padding
+        assert page._tab_ids(tw, ids) == ["1", "0", "2", "3"]                # the new tab at the end
+        assert tw.tabBar().property("dense") is not True                     # 1.8.76: no row has eleven tabs now
     finally:
         app.quit()
 
@@ -1251,8 +1428,8 @@ def test_a_saved_tab_order_survives_a_new_tab(app_root):
 def test_the_opponents_tab_shows_how_the_survivors_matches_ended(app_root):
     """1.8.46: sub-tab "Gegner" – the characters met from the stats page, the fates as tiles, the clean kills."""
     import json
-    from dbdmapscout import history, official
-    from dbdmapscout.app import App
+    from fogscout import history, official
+    from fogscout.app import App
     (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
     t = time.time() - 1800
     history.append(str(app_root / "rounds.jsonl"), history.Round(t, 600, "coal", "Coal Tower", role="killer"))
@@ -1264,8 +1441,8 @@ def test_the_opponents_tab_shows_how_the_survivors_matches_ended(app_root):
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
         app._stats_render()
-        i = next(i for i, tab in enumerate(app.stats_nb.tabs()) if app.stats_nb.tab(tab, "text") == "Gegner")
-        app._stats_render_tab(i)
+        app._stats_select("Gegner")
+        app._stats_render_tab()
         rows = [app.stats_opp.item(c, "values") for c in app.stats_opp.get_children()]
         assert rows[0][:5] == ("Meg Thomas", "Survivor", 3, "0%", "100%") and rows[1][0] == "Feng Min"
         tiles = {x.title: x for x in app.stats_opp_tiles.data}
@@ -1279,8 +1456,8 @@ def test_recording_and_clip_menus_copy_mark_farming_and_go_to_the_round(app_root
     """1.8.60 (user: "Contextactions wären da auch noch praktisch bei Aufnahmen und Clips"): copy the file for
     Discord, a recording's round as farming (statistics and folder follow), from a clip to its round's recording."""
     import json
-    from dbdmapscout import history, obsrec
-    from dbdmapscout.app import App
+    from fogscout import history, obsrec
+    from fogscout.app import App
     from PySide6.QtGui import QGuiApplication
     folder = app_root / "rec"
     (folder / "Clips").mkdir(parents=True)
@@ -1332,9 +1509,9 @@ def test_right_click_menus_of_recordings_last_rounds_and_the_overlay_preview(app
     """1.8.10 (user: "context actions"): a right click on a recording / a last round / an element of the overlay
     preview opens a menu with the actions of the buttons nearby; a picked line does the same as the button."""
     import json
-    from dbdmapscout import history, obsrec
-    from dbdmapscout.app import App
-    from dbdmapscout.app_qt import ui_act
+    from fogscout import history, obsrec
+    from fogscout.app import App
+    from fogscout.app_qt import ui_act
     folder = app_root / "rec"
     folder.mkdir()
     (folder / "one.mkv").write_bytes(b"\0" * 2048)
@@ -1355,7 +1532,7 @@ def test_right_click_menus_of_recordings_last_rounds_and_the_overlay_preview(app
         ui_act(app.rec_table, ("menu", (5, 6)))
         items, pos = shown[-1]
         assert pos == (5, 6) and [i[0] for i in items if i] == ["play", "clip", "explorer", "copy", "keep", "farming",
-                                                                  "delete"]
+                                                                  "youtube", "delete"]                   # 1.10
         assert dict((i[0], i) for i in items if i)["keep"][3] is False          # a tick: not kept yet
         app._menu_act("keep")                                                   # → recorder thread
         deadline = time.time() + 5
@@ -1363,7 +1540,7 @@ def test_right_click_menus_of_recordings_last_rounds_and_the_overlay_preview(app
             time.sleep(0.05)
         assert obsrec.load_index(str(folder))[0].keep
 
-        app.stats_nb.select(str(app.stats_last.master.master))   # the sub-tab "Letzte Runden" (only it is drawn)
+        app._stats_select(str(app.stats_last.master.master))     # the sub-tab "Letzte Runden" (only it is drawn)
         app._stats_render()
         app.stats_last.selection_set(repr(t2))
         app.stats_last.event_generate("<<TreeviewSelect>>")
@@ -1375,7 +1552,7 @@ def test_right_click_menus_of_recordings_last_rounds_and_the_overlay_preview(app
         # 1.8.12 (user: "rechtsklick auf eine zeile – kommt nichts"): a real right click on the drawn table
         from PySide6.QtGui import QContextMenuEvent
         from PySide6.QtWidgets import QApplication
-        from dbdmapscout import qt_views
+        from fogscout import qt_views
         app.qt.show()
         app.qt.show_page("stats")
         QApplication.processEvents()
@@ -1413,8 +1590,8 @@ def test_right_click_menus_of_recordings_last_rounds_and_the_overlay_preview(app
 def test_no_update_restart_while_a_round_runs(app_root, monkeypatch):
     """1.8.63 (user: "mach eine Sperre rein, dass wenn es in einer Runde ist, kein Update stattfinden kann"):
     "Aktualisieren und neu starten" restarts the program – not while a round is open or OBS records."""
-    from dbdmapscout import restart
-    from dbdmapscout.app import App
+    from fogscout import restart
+    from fogscout.app import App
     spawned = []
     monkeypatch.setattr(restart, "spawn_helper", lambda root: spawned.append(root) or False)   # False: no quit
     app = App(str(app_root), simulate=str(app_root / "sim"))
@@ -1437,11 +1614,11 @@ def test_a_small_dbd_window_hides_the_overlay_and_the_round_still_counts(app_roo
     """1.8.62 (user: "wenn das Fenster so klein ist, soll das Overlay automatisch aus sein, aber die Runden soll es
     zählen und aufnehmen"): DBD at 1714×1360 hides every overlay window like the master switch; the detected round
     is saved and OBS starts and stops; a big window or the box off shows it again; the change is logged once."""
-    from dbdmapscout import history
-    from dbdmapscout.app import App
-    from dbdmapscout.app_place import small_window
-    from dbdmapscout.capture import GameWindow
-    from dbdmapscout.worker import Event
+    from fogscout import history
+    from fogscout.app import App
+    from fogscout.app_place import small_window
+    from fogscout.capture import GameWindow
+    from fogscout.worker import Event
     assert small_window(1714, 1360) and small_window(1600, 900) and not small_window(3440, 1440)
     assert not small_window(1920, 1080) and not small_window(2560, 1440)
     app = App(str(app_root), simulate=str(app_root / "sim"))
@@ -1483,9 +1660,9 @@ def test_the_master_switch_hides_every_overlay_window_and_detection_goes_on(app_
     """1.8.18 (user: "eine Einstellung, dass man das Overlay deaktiviert, evtl. im Overview"): a button on the
     overview and a box on the overlay page – off hides the map and every card, the detection keeps watching the
     map; "Overlay testen" shows it all the same; the switch is remembered."""
-    from dbdmapscout import overview
-    from dbdmapscout.app import App
-    from dbdmapscout.app_qt import ui_act
+    from fogscout import overview
+    from fogscout.app import App
+    from fogscout.app_qt import ui_act
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
         app.settings["overlay"]["fade"] = False
@@ -1519,8 +1696,8 @@ def test_a_map_style_click_never_makes_a_picture_in_the_window_thread(app_root, 
     overlay preview's sample and the maps page picture made the styled picture in the window thread – ~2 s per
     floor style. Now the original shows at once, a thread makes it, ``_style_ready`` takes it."""
     import threading
-    from dbdmapscout import mapstyle
-    from dbdmapscout.app import App
+    from fogscout import mapstyle
+    from fogscout.app import App
     calls = []
     real = mapstyle.styled_path
 
@@ -1561,8 +1738,8 @@ def test_a_map_style_click_never_makes_a_picture_in_the_window_thread(app_root, 
 def test_both_midwich_floors_at_an_own_place_stay_between_the_limiter_lines(app_root):
     """1.8.22 (user: "Midwich ignoriert die Regel"): at an own place the map was only moved to the top line, not
     made smaller – both floors one below the other ran past the bottom line. The fixed positions already fitted."""
-    from dbdmapscout import layout
-    from dbdmapscout.app import App
+    from fogscout import layout
+    from fogscout.app import App
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
         app._game_rect = lambda: (0, 0, 3440, 1440)
@@ -1632,8 +1809,8 @@ class _InfoWin:
 def test_the_maps_lines_are_their_own_window_and_only_the_map_follows_its_size(app_root):
     """1.8.24 (user: "Zeit etc. nicht mehr mit der Map verbunden – ich will ab und zu nur die eigentliche Map-Grösse
     ändern"): timer and record in a window of their own right below the map, the map makes room for them."""
-    from dbdmapscout import layout
-    from dbdmapscout.app import App
+    from fogscout import layout
+    from fogscout.app import App
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
         app.info_win = _InfoWin()
@@ -1678,8 +1855,8 @@ def test_the_maps_lines_never_sit_on_the_map_in_any_layout(app_root):
     the map over the whole free height – a tall map left room neither below nor above for its lines. Map + lines
     now go as one block; checked in the App and the preview over the combinations that matter."""
     import itertools
-    from dbdmapscout import layout, preview
-    from dbdmapscout.app import App
+    from fogscout import layout, preview
+    from fogscout.app import App
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
         app.info_win = _InfoWin()
@@ -1721,8 +1898,8 @@ def test_an_element_dropped_on_the_map_moves_off_it_and_keeps_out_of_discords_wi
     """1.8.25 (user screenshots: the lines dragged onto Midwich's top floor; Discord's overlay): an element at an
     own place that lies on the map moves to the nearest free place – shown there at once and in later ticks
     without going back and forth; the bars' lines keep out of Discord's voice widget / notifications."""
-    from dbdmapscout import layout
-    from dbdmapscout.app import App
+    from fogscout import layout
+    from fogscout.app import App
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
         app.info_win = _InfoWin()
@@ -1758,9 +1935,9 @@ def test_a_farming_lobby_that_looked_custom_and_the_pages_role_and_killer_win(ap
     normal round; a real custom game stays custom. The page's role and killer win over the lobby reading, also
     for a killer not on our list; the overlay's "Heute" leaves farming rounds out of Ø kills like the overview."""
     import json
-    from dbdmapscout import app_sysinfo, history, official
-    from dbdmapscout.app import App
-    from dbdmapscout.lobby import Found
+    from fogscout import app_sysinfo, history, official
+    from fogscout.app import App
+    from fogscout.lobby import Found
     (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
     app = App(str(app_root), simulate=str(app_root / "sim"))
     starts = []
@@ -1817,10 +1994,10 @@ def test_a_dragged_statistics_tab_shows_its_content_at_once(app_root, monkeypatc
     model's tab index with the position in the row – the tab on display counted as hidden and was never filled; its
     content came only with the next page switch. A real click in the reordered row fills the table at once."""
     import json
-    from dbdmapscout import history
-    from dbdmapscout.app import App
-    from dbdmapscout.app_qt import QtShell
-    from dbdmapscout.qt_views import Table
+    from fogscout import history
+    from fogscout.app import App
+    from fogscout.app_qt import QtShell
+    from fogscout.qt_views import Table
     monkeypatch.setattr(QtShell, "_qt_warm", lambda self: None)       # it fills every page once – not the click
     now = time.time()
     for i in range(5):
@@ -1852,7 +2029,7 @@ def test_a_dragged_statistics_tab_shows_its_content_at_once(app_root, monkeypatc
         try:
             tw = seen["tw"]
             assert tw.currentWidget() is seen["want"]
-            assert app.stats_nb.index("current") == 1 and len(app.stats_last.get_children()) == 2
+            assert app._stats_current_title() == "Letzte Runden" and len(app.stats_last.get_children()) == 2
             seen["rows"] = [t.topLevelItemCount() for t in tw.currentWidget().findChildren(Table)]
         except BaseException as e:
             failed.append(e)
@@ -1869,8 +2046,8 @@ def test_a_round_from_a_briefly_seen_lobby_with_cross_play_off_is_a_farming_roun
     """1.8.71 (user log: farming rounds stored as normal rounds, "No lobby for this round (lobby not seen)"): the
     worker sends what it saw of the lobby with the banner; with no confirmed lobby here the round takes role and
     cross-play from it. A confirmed lobby still wins."""
-    from dbdmapscout.app import App
-    from dbdmapscout.lobby import Found
+    from fogscout.app import App
+    from fogscout.lobby import Found
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
         now = time.time()
@@ -1893,7 +2070,7 @@ def test_recordings_keep_farming_and_normal_rounds_apart(app_root):
     """1.8.71 (user: "Farming und normale Runden sollen bei Aufnahmen separiert werden"): in the tab "Aufnahmen"
     "Alle Rollen" means the normal rounds (as in the statistics), "Farming" the farming rounds, both together only
     with "Alle inkl. Farming" – for the recordings and the clips."""
-    from dbdmapscout.app import App
+    from fogscout.app import App
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
         assert app.rec_role_var.get() == "Alle Rollen" and app._rec_filters()[2] == "normal"
@@ -1906,12 +2083,12 @@ def test_recordings_keep_farming_and_normal_rounds_apart(app_root):
 
 
 def test_a_map_is_decoded_once_and_the_preview_sample_loads_in_a_thread(app_root, monkeypatch):
-    """1.8.72 (user diagnosis: "Takt: layout 74 ms" at the start, "Takt: overlay 84 ms"): show_map decoded every map
+    """1.11.1 (user diagnosis: "Takt: layout 74 ms" at the start, "Takt: overlay 84 ms"): show_map decoded every map
     picture twice (App and PictureOverlay.set_map, ~80 ms each time a banner was read) – now once; the preview's
     sample picture (WebP decode + thumbnail, 250 ms measured in the first layout tick) is loaded in a thread, the
     tick only starts it, and a picture of a dropped sample (map style changed meanwhile) is not taken."""
-    from dbdmapscout import app as app_mod, overlay_win32
-    from dbdmapscout.app import App
+    from fogscout import app as app_mod, overlay_win32
+    from fogscout.app import App
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
         calls = []
@@ -1941,5 +2118,272 @@ def test_a_map_is_decoded_once_and_the_preview_sample_loads_in_a_thread(app_root
         app._preview_drop()                                                # style changed while it loaded
         target(*args)
         assert getattr(app, "_preview_pic", None) is None                  # the old picture is not taken
+    finally:
+        app.quit()
+
+
+def test_a_search_on_the_maps_page_filters_at_once_without_building_the_tiles_anew(app_root):
+    """1.8.72: the page's search went into the event queue and showed its hits with the next overlay tick
+    (≤ 250 ms later) by building every tile anew; now the App filters the one grid as soon as the event is in."""
+    import json
+    from fogscout.app import App
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        app.qt.show_page("maps")
+        app._qt_refresh(force=True)
+        page = app.qt.maps
+        tiles = dict(page._tiles)
+        assert len(tiles) == len(app._qt_map_items(search=False)) and len(page.visible_tiles()) == len(tiles)
+        app._qt_event("search", "coal")                      # what _poll does with the page's ("search", text)
+        shown = [t.key for t in page.visible_tiles()]
+        assert shown and all("coal" in app.catalog.maps[m].name.lower() for m, _v in shown)
+        assert page._tiles == tiles                           # filtered, not rebuilt
+        assert app._list_items[0] == shown[0]                 # the hotkeys walk the hits
+        app._qt_event("search", "")
+        assert len(page.visible_tiles()) == len(tiles) and page._tiles == tiles
+    finally:
+        app.quit()
+
+
+def test_rounds_with_a_farming_partner_count_as_farming_by_a_right_click_on_the_opponent(app_root):
+    """1.8.73 (user: the opponents tab showed "Slasher 38×" – "das kommt safe vom Farmen"): a character picked in
+    "Gegner" as farming partner makes every match with that character a farming round (older ones too, display
+    only like the farming region) – out of the normal statistics, into the filter "Farming"."""
+    import json
+    from fogscout import history, official
+    from fogscout.app import App
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    t = time.time() - 7200
+    ms = []
+    for i, killer in enumerate(("Slasher", "The Nurse")):
+        history.append(str(app_root / "rounds.jsonl"), history.Round(t + i * 1800, 600, "coal", "Coal Tower",
+                                                                     role="survivor"))
+        ms.append(official.Match(t=t + i * 1800 - 38, map="Coal Tower", role="survivor", seconds=560,
+                                 status="Escaped", opp=[official.Player(role="killer", character=killer,
+                                                                        status="Escaped")]))
+    official.merge(str(app_root / official.FILE), ms)
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        app._stats_select("Gegner")
+        app._stats_render()
+        rows = lambda: [app.stats_opp.item(c, "values")[0] for c in app.stats_opp.get_children()]   # noqa: E731
+        assert rows() == ["Slasher", "Nurse"] and app.stats_opp.get_children()[0] == "killer\tSlasher"   # by name
+        app.stats_opp.selection_set("killer\tSlasher")
+        items = app._stats_opp_menu_items()
+        assert [it[0] for it in items] == ["opp_on:Slasher"] and "Farming" in items[0][1]
+        app._stats_opp_menu_act("opp_on:Slasher")
+        assert app.settings.get("farming_opponents") == ["Slasher"]
+        j = app._joined()
+        assert [r.farming for r in j.rounds] == [True, False]
+        # 1.8.81: the partner stays listed – its rounds move from "Begegnungen" into the column "Farming"
+        vals = lambda: {c.split("\t")[1]: app.stats_opp.item(c, "values") for c in app.stats_opp.get_children()}  # noqa: E731
+        assert rows() == ["Slasher", "Nurse"] and vals()["Slasher"][2] == 0 and vals()["Slasher"][7] == 1
+        assert vals()["The Nurse"][2] == 1 and vals()["The Nurse"][7] == "–"
+        assert any("„Slasher“ gilt jetzt als Farming-Gegner – 1 Runden" in e[2] for e in app._log_entries)
+        assert "Slasher" in app.farm_opp_var.get()
+        app.stats_role_var.set("Farming")
+        app._stats_render()
+        assert rows() == ["Slasher"] and vals()["Slasher"][2] == 1 and vals()["Slasher"][7] == "–"   # not twice
+        app.stats_role_var.set("Alle Rollen")
+        app._stats_render()
+        app.stats_opp.selection_set("killer\tThe Nurse")
+        assert [it[0] for it in app._stats_opp_menu_items()] == ["opp_on:The Nurse"]
+        app._stats_opp_menu_act("opp_off:Slasher")                        # not marked: taken off again
+        assert app.settings.get("farming_opponents") == [] and [r.farming for r in app._joined().rounds] == [False, False]
+        assert rows() == ["Slasher", "Nurse"] and "(keine)" in app.farm_opp_var.get()
+    finally:
+        app.quit()
+
+
+def test_the_right_click_on_an_opponent_reaches_the_menu_through_the_qt_table(app_root):
+    """1.8.74 (user: "das geht nicht"): the opponents table was not selectable, and the Qt table opens no row menu
+    on a NoSelection table – the right click of 1.8.73 never reached the App. The whole chain: Qt row menu →
+    events → the model's marking → the App's menu → the picked entry marks the farming partner."""
+    import json
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QTreeWidget
+    from fogscout import history, official
+    from fogscout.app import App
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    t = time.time() - 7200
+    history.append(str(app_root / "rounds.jsonl"), history.Round(t, 600, "coal", "Coal Tower", role="survivor"))
+    official.merge(str(app_root / official.FILE), [official.Match(
+        t=t - 38, map="Coal Tower", role="survivor", seconds=560, status="Escaped",
+        opp=[official.Player(role="killer", character="Slasher", status="Escaped")])])
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        qapp = app.qapp
+        app.qt.show_page("stats")
+        app._stats_select("Gegner")
+        app._stats_render()
+        for _n in range(3):                       # the tab row follows the model, then the table gets its rows
+            app._qt_refresh(force=True)
+            qapp.processEvents()
+        kind, table, _extra = app.qt.forms["stats"].controls[str(app.stats_opp)]
+        assert kind == "table" and table.selectionMode() != QTreeWidget.NoSelection
+        item = next(table.topLevelItem(k) for k in range(table.topLevelItemCount())
+                    if table.topLevelItem(k).data(0, Qt.UserRole) == "killer\tSlasher")
+        menus = []
+        app.qt.popup_menu = lambda items, pos: menus.append(items)
+        table._row_menu(table.visualItemRect(item).center())            # the right click on the row
+        app._poll()                                                       # the events it posted
+        assert menus and [it[0] for it in menus[-1]] == ["opp_on:Slasher"]
+        app._menu_act("opp_on:Slasher")                                   # the entry picked in the menu
+        assert app.settings.get("farming_opponents") == ["Slasher"]
+        assert [r.farming for r in app._joined().rounds] == [True]
+    finally:
+        app.quit()
+
+
+def test_the_detection_page_went_into_the_settings_and_the_log(app_root):
+    """1.8.78 (UI review point 3: nine pages, "Erkennung" held three check boxes, the game languages and the
+    technical part): the detection's cards are on the settings page, "Erweitert" at the foot of the log page
+    (folded, as before), the stats check in the card "Offizielle Match-Daten" and filled when the settings open."""
+    import json
+    from fogscout import qt_window
+    from fogscout.app import App
+    from fogscout.app_qt import ui_layout, ui_shown
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        assert not hasattr(app, "tab_detect") and "detect" not in dict(qt_window.PAGES)
+        assert "detect" not in qt_window.AUTO_PAGES and len(app.nb.tabs()) == len(qt_window.PAGES) - 1   # no overview tab
+        keys = qt_window.page_keys("settings")
+        assert {"st.detect", "st.det_auto", "st.det_hide", "st.det_menu", "st.langs", "det.lang.en", "det.lang.tr",
+                "st.more.off_check"} <= keys
+        assert all(k in app._qt_reg for k in keys)                       # every key names a widget the App made
+        # the technical options: in the log tab's model, hidden until "Erweitert" is unfolded
+        reg = {}
+        ui_layout(app.tab_log, reg)
+        assert str(app.adv_frame) in reg and not ui_shown(app.adv_frame)
+        app._toggle_advanced()
+        assert ui_shown(app.adv_frame) and app.settings["show_advanced"] is True
+        # opening the settings fills the stats check (no data: one line, no pointer to a page that is gone)
+        assert app.off_check_var.get() == ""
+        app.nb.select(app.tab_settings)
+        app._tab_changed()
+        assert app.off_check_var.get() == "Noch keine offiziellen Daten."
+    finally:
+        app.quit()
+
+
+def test_an_update_shows_what_is_new_once(app_root):
+    """1.8.79: the first start only remembers the version; a start with another version remembered lists the
+    HISTORY.md rows after it on the overview until "Verstanden"."""
+    import json
+    from fogscout import __version__, overview
+    from fogscout.app import App
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        assert app.settings["seen_version"] == __version__ and app._news == []
+    finally:
+        app.quit()
+    (app_root / "HISTORY.md").write_text("| A 1.0.1 (alt) | x |\n| B 1.0.2 (neu) | x |\n", encoding="utf-8")
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True, "seen_version": "1.0.1"}),
+                                            encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        assert app._news == [("1.0.2", "B", "neu")] and app.settings["seen_version"] == "1.0.1"
+        o = overview.overview_model(app, time.time(), is_win=False)
+        assert o.news == [("1.0.2", "B", "neu")] and o.news_since == "Neu seit 1.0.1"
+        app._qt_event("news_seen")
+        assert app._news == [] and app.settings["seen_version"] == __version__
+        assert overview.overview_model(app, time.time(), is_win=False).news == []
+    finally:
+        app.quit()
+
+
+def test_the_history_is_copied_before_it_is_cleared(app_root):
+    """1.8.80: the start copies rounds.jsonl/official.jsonl to backup/ (in a thread; here the worker is run in
+    line), the settings' hint counts the copies, and "Verlauf löschen" takes one more copy first."""
+    import json
+    from fogscout import backups, history
+    from fogscout.app import App
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    history.append(str(app_root / "rounds.jsonl"), history.Round(time.time() - 900, 600, "coal", "Coal Tower"))
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        end = time.time() + 10
+        while time.time() < end and not os.path.isdir(app_root / "backup"):       # the start's thread
+            time.sleep(0.05)
+        app._backup_done(backups.snapshot(str(app_root)))                       # nothing new: only the hint
+        names = sorted(os.listdir(app_root / "backup"))
+        assert len(names) == 1 and names[0].startswith("rounds-") and "1 Dateien" in app.backup_var.get()
+        app._ask = lambda *a, **k: True
+        app._stats_clear()
+        names = sorted(os.listdir(app_root / "backup"))
+        assert len(names) == 2 and any(n.endswith("-vorher.jsonl") for n in names)
+        assert not os.path.exists(app_root / "rounds.jsonl")
+        assert "2 Dateien" in app.backup_var.get()
+        assert any("Sicherung: rounds-" in e[2] and "-vorher.jsonl" in e[2] for e in app._log_entries)
+    finally:
+        app.quit()
+
+
+def test_the_search_finds_statistics_tabs_and_log_categories(app_root):
+    """1.8.82 (UI review idea 5): the search field (Ctrl+F) also lists the statistics' groups and parts and the
+    log's categories; going to a statistics part opens its group and the part, and the model follows."""
+    import json
+    from fogscout.app import App
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        app._qt_event("search_open")                                      # every page built and filled
+        app.qapp.processEvents()
+        app._qt_refresh(force=True)
+        app.qt.update_search_index()
+        found = app.qt._found
+        assert "Gegner  ·  Statistik" in found and "Gegner & Builds  ·  Statistik" in found
+        assert "Letzte Runden  ·  Statistik" in found and "Overlay  ·  Log" in found      # a log category
+        assert app._stats_current_title() == "Übersicht"
+        app.qt.go_to_found("Gegner  ·  Statistik")
+        for _i in range(5):
+            app.qapp.processEvents()
+            app._poll()
+        assert app.qt.current_key() == "stats" and app._stats_current_title() == "Gegner"
+        assert app.stats_nb.tab(app.stats_nb.select(), "text") == "Gegner & Builds"
+    finally:
+        app.quit()
+
+
+def test_a_round_without_hwinfo_is_said_once_per_dbd_start(app_root):
+    """1.8.86 (user: empty CPU columns in the statistics): with the system values on and DBD running, the log says
+    once per DBD start that HWiNFO is not running – after HWINFO_WAIT_S, not again until DBD was closed."""
+    import json
+    from fogscout import app_sysinfo
+    from fogscout.app import App
+    from fogscout.sysinfo import Snapshot
+    (app_root / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        told = lambda: sum(1 for e in app._log_entries if "HWiNFO läuft nicht" in e[2])   # noqa: E731
+        now = time.time()
+        app.game = object()
+        app.sysmon.active = True
+        app.sysmon.snapshot = Snapshot(cpu_load=10, t=now)
+        app._hwinfo_check(now)
+        app._hwinfo_check(now + app_sysinfo.HWINFO_WAIT_S - 1)
+        assert told() == 0
+        app.sysmon.snapshot = Snapshot(cpu_load=10, t=now + app_sysinfo.HWINFO_WAIT_S)
+        app._hwinfo_check(now + app_sysinfo.HWINFO_WAIT_S)
+        app._hwinfo_check(now + app_sysinfo.HWINFO_WAIT_S + 30)
+        assert told() == 1                                               # once
+        app.game = None
+        app._hwinfo_check(now + 100)                                     # DBD gone: the next start may say it again
+        app.game = object()
+        app.sysmon.snapshot = Snapshot(cpu_load=10, t=now + 200)
+        app._hwinfo_check(now + 200)
+        app.sysmon.snapshot = Snapshot(cpu_load=10, t=now + 200 + app_sysinfo.HWINFO_WAIT_S)   # a fresh reading
+        app._hwinfo_check(now + 200 + app_sysinfo.HWINFO_WAIT_S)
+        assert told() == 2
+        app.sysmon.snapshot = Snapshot(cpu_load=10, t=now + 300, hwinfo=True)       # HWiNFO there: never
+        app.game = None
+        app._hwinfo_check(now + 300)
+        app.game = object()
+        app._hwinfo_check(now + 300)
+        app._hwinfo_check(now + 400)
+        assert told() == 2
     finally:
         app.quit()

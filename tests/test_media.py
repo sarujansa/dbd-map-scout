@@ -4,7 +4,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dbdmapscout import media  # noqa: E402
+from fogscout import media  # noqa: E402
 
 DIM, WHITE = (1,), (2,)
 
@@ -64,7 +64,7 @@ def test_cover_is_decoded_small_and_broken_data_is_none():
 
 
 def test_music_card_places():
-    from dbdmapscout import layout
+    from fogscout import layout
     game, size, m = (0, 0, 3440, 1440), (270, 90), 17
     # 1.65.2 (user: "untereinander und mittig"): centred under the system values / in the middle of the bar
     assert layout.media_xy("below", game, size, m, hud=(3130, 17, 290, 300)) == (3140, 17 + 300 + 8)
@@ -92,7 +92,7 @@ def test_progress_runs_on_from_the_last_report():
 
 def test_music_card_styles_and_progress_strip():
     from PIL import Image
-    from dbdmapscout.overlay_win32 import render_music
+    from fogscout.overlay_win32 import render_music
     rows = [[("Blinding Lights", (255, 255, 255, 255))], [("The Weeknd", (150, 156, 170, 255))]]
     cover = Image.new("RGBA", (160, 160), (200, 30, 60, 255))
     big = render_music(rows, cover, 1440, "big")
@@ -106,8 +106,8 @@ def test_music_card_styles_and_progress_strip():
 
 def test_hud_values_stand_in_one_column():
     """1.64.7 (user: "alles schön untereinander"): the values of all labelled rows start at the same x."""
-    from dbdmapscout import sysinfo
-    from dbdmapscout.overlay_win32 import render_hud
+    from fogscout import sysinfo
+    from fogscout.overlay_win32 import render_hud
     W = sysinfo.WHITE
 
     def first_value_x(label):
@@ -121,7 +121,7 @@ def test_hud_values_stand_in_one_column():
 def test_old_settings_move_the_music_card_out_of_the_system_values(tmp_path):
     """1.64.7: "below the system values" was the old default – once moved to bottom right; chosen later, it stays."""
     import json
-    from dbdmapscout.config import Settings
+    from fogscout.config import Settings
     p = tmp_path / "settings.json"
     p.write_text(json.dumps({"settings_version": 3, "overlay": {"media_pos": "below"}, "hotkeys": {}}))
     assert Settings(str(p))["overlay"]["media_pos"] == "bottom_right"
@@ -146,7 +146,7 @@ def test_the_whole_title_wraps_instead_of_being_cut():
 
 def test_a_long_title_gets_smaller_text_before_it_wraps():
     """1.65.2 (user: "lieber die Schrift kleiner statt Zeilenumbruch")."""
-    from dbdmapscout.overlay_win32 import fit_lines, render_hud
+    from fogscout.overlay_win32 import fit_lines, render_hud
     white = (255, 255, 255, 255)
     short, longer = [[("Blinding Lights", white)]], [[("Somebody That I Used To Know", white)]]
     full = render_hud(longer, 1440)
@@ -173,7 +173,7 @@ def test_accent_colour_from_the_cover():
 def test_music_card_look_options():
     """1.2.4 (user's pick 4–7): accent bar, time left, dark area behind the card."""
     from PIL import Image
-    from dbdmapscout.overlay_win32 import CARD_BACKDROP, progress_strip, render_music
+    from fogscout.overlay_win32 import CARD_BACKDROP, progress_strip, render_music
     rows = [[("Blinding Lights", (255, 255, 255, 255))], [("The Weeknd", (150, 156, 170, 255))]]
     cover = Image.new("RGBA", (160, 160), (200, 30, 60, 255))
     plain = render_music(rows, cover, 1440, "big", (70, 200))
@@ -202,7 +202,7 @@ def test_fader_eases_in_and_out():
 def test_an_own_place_of_the_music_card_is_its_centre():
     """1.2.5 (user: a wider card for a long title moved and was no longer centred): the own place is where the
     card's centre is, so a card of another width or height stays around the same spot."""
-    from dbdmapscout import layout
+    from fogscout import layout
     game = (0, 0, 3440, 1440)
     own = layout.media_own(3440, 1440, (270, 90), 1585, 600)
     assert own == (0.5, round(645 / 1440, 4))
@@ -216,7 +216,7 @@ def test_an_own_place_of_the_music_card_is_its_centre():
 def test_old_today_at_its_own_place_becomes_a_card_at_that_place(tmp_path):
     """1.2.6: "today" alone (system values off) dragged somewhere → its own card at that place."""
     import json
-    from dbdmapscout.config import Settings
+    from fogscout.config import Settings
     p = tmp_path / "settings.json"
     p.write_text(json.dumps({"settings_version": 4, "sysinfo": "off", "today_side": "custom",
                              "sysinfo_pos": [0.2, 0.7], "overlay": {}, "hotkeys": {}}))
@@ -231,7 +231,7 @@ def test_old_today_at_its_own_place_becomes_a_card_at_that_place(tmp_path):
 def test_old_single_opacity_becomes_every_cards_opacity(tmp_path):
     """1.2.7: one opacity for everything → each card keeps that value as its own; music "below" under "today"."""
     import json
-    from dbdmapscout.config import Settings
+    from fogscout.config import Settings
     p = tmp_path / "settings.json"
     p.write_text(json.dumps({"settings_version": 5, "overlay": {"opacity": 0.6, "media_pos": "below"}, "hotkeys": {}}))
     o = Settings(str(p))["overlay"]
@@ -243,12 +243,12 @@ def test_old_settings_turn_the_pre_roll_and_the_joining_off(tmp_path):
     """1.5.5 (user: no lobby in the recording; the joined file played too fast in the round): both off once,
     switched on again later they stay on."""
     import json
-    from dbdmapscout.config import Settings, DEFAULTS
+    from fogscout.config import Settings, DEFAULTS, SETTINGS_VERSION
     assert DEFAULTS["rec_pre"] is False and DEFAULTS["rec_merge"] is False
     p = tmp_path / "settings.json"
     p.write_text(json.dumps({"settings_version": 6, "rec_pre": True, "rec_merge": True, "hotkeys": {}}))
     s = Settings(str(p))
-    assert s["rec_pre"] is False and s["rec_merge"] is False and s["settings_version"] == 8
+    assert s["rec_pre"] is False and s["rec_merge"] is False and s["settings_version"] == SETTINGS_VERSION
     p.write_text(json.dumps({"settings_version": 7, "rec_pre": True, "rec_merge": True, "hotkeys": {}}))
     assert Settings(str(p))["rec_pre"] is True
 
@@ -257,7 +257,7 @@ def test_the_limiter_lines_of_each_bar_are_its_own_after_the_update(tmp_path):
     """1.8.17 (user: "nicht gleich auf beiden Seiten … links eigene und rechts eigene"): off by default and
     switched off once for older settings; switched on again later it stays on."""
     import json
-    from dbdmapscout.config import Settings, DEFAULTS
+    from fogscout.config import Settings, DEFAULTS
     assert DEFAULTS["overlay"]["bar_limits_same"] is False
     p = tmp_path / "settings.json"
     p.write_text(json.dumps({"settings_version": 7, "overlay": {"bar_limits_same": True}, "hotkeys": {}}))
@@ -268,7 +268,7 @@ def test_the_limiter_lines_of_each_bar_are_its_own_after_the_update(tmp_path):
 
 def test_alignment_in_the_bar_and_the_stack_gap():
     """1.2.8 (user's picks 22 + 24): left / centred / right in the bar and under the card above; one gap."""
-    from dbdmapscout import layout
+    from fogscout import layout
     game, size, m = (0, 0, 3440, 1440), (270, 90), 17
     assert layout.hud_x("right", 0, 3440, m, 300, 440, "left") == 3000 + 17
     assert layout.hud_x("right", 0, 3440, m, 300, 440, "right") == 3440 - 17 - 300
@@ -287,7 +287,7 @@ def test_alignment_in_the_bar_and_the_stack_gap():
 def _reference_hud(rows, height):
     """render_hud as it was before 1.2.13: every character with ImageDraw.text (no cache)."""
     from PIL import Image, ImageDraw, ImageFilter, ImageFont
-    from dbdmapscout.overlay_win32 import DIM_LABEL, FIRA
+    from fogscout.overlay_win32 import DIM_LABEL, FIRA
     size = max(13, height // 60)
     font = ImageFont.truetype(FIRA, size)
     gap, blur, halo = max(3, height // 160), max(2, height // 300), max(1, height // 400)
@@ -328,9 +328,9 @@ def _reference_hud(rows, height):
 def test_text_is_drawn_exactly_like_character_by_character():
     """1.2.13 (analysis points 5/6): the glyph cache draws the system values pixel for pixel like the
     character-by-character ImageDraw.text of 1.49 – cold and warm – in every size."""
-    from dbdmapscout import sysinfo
-    from dbdmapscout.overlay_win32 import _GLYPHS, render_hud
-    from dbdmapscout.preview import sample_snapshot
+    from fogscout import sysinfo
+    from fogscout.overlay_win32 import _GLYPHS, render_hud
+    from fogscout.preview import sample_snapshot
     hud = sysinfo.hud_rows(sample_snapshot(), None)
     text = [[("Blinding Lights – jäöü ÄÖÜ ß é 12:34 °C %", sysinfo.WHITE)], [("The Weeknd", sysinfo.DIM)]]
     _GLYPHS.clear()
@@ -347,7 +347,7 @@ def test_music_card_is_its_body_plus_the_progress_strip():
     """1.2.13: HudWindow keeps the body (cover + text) while a song plays and only draws the strip – the card
     from the parts equals the card drawn in one go, for every style and look."""
     from PIL import Image
-    from dbdmapscout.overlay_win32 import music_body, music_card, render_music
+    from fogscout.overlay_win32 import music_body, music_card, render_music
     rows = [[("Blinding Lights", (255, 255, 255, 255))], [("The Weeknd", (150, 156, 170, 255))]]
     cover = Image.new("RGBA", (160, 160), (200, 30, 60, 255))
     for style in ("big", "compact"):
@@ -366,7 +366,7 @@ def test_the_fast_premultiply_gives_the_same_bytes_and_the_cover_colour_is_worke
     byte the same; the cover's accent colour and the scaled covers are kept on the cover."""
     import numpy as np
     from PIL import Image
-    from dbdmapscout import overlay_win32 as ow, preview, skin
+    from fogscout import overlay_win32 as ow, preview, skin
     rng = np.random.default_rng(1)
     px = rng.integers(0, 256, (37, 53, 4), dtype=np.uint8)
     px[0, :, 3], px[1, :, 3], px[2, :, 3] = 0, 255, 1                  # the edges of alpha

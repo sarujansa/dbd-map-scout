@@ -1,4 +1,4 @@
-"""Streaks and records (dbdmapscout/records.py, 1.7) – pure logic."""
+"""Streaks and records (fogscout/records.py, 1.7) – pure logic."""
 import datetime
 import os
 import sys
@@ -6,9 +6,9 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dbdmapscout import records  # noqa: E402
-from dbdmapscout.history import Round  # noqa: E402
-from dbdmapscout.official import Match, Player  # noqa: E402
+from fogscout import records  # noqa: E402
+from fogscout.history import Round  # noqa: E402
+from fogscout.official import Match, Player  # noqa: E402
 
 
 def _t(day, hour=20, minute=0):

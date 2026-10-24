@@ -1,4 +1,4 @@
-"""Spotify "Als nächstes" (dbdmapscout/spotify.py, 1.8): PKCE and the queue (pure), the token store, the login
+"""Spotify "Als nächstes" (fogscout/spotify.py, 1.8): PKCE and the queue (pure), the token store, the login
 listener, the thread against a fake Spotify on 127.0.0.1 (token endpoint + queue), the list on the music card."""
 import json
 import os
@@ -14,7 +14,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dbdmapscout import spotify  # noqa: E402
+from fogscout import spotify  # noqa: E402
 
 CID, CID1 = "a" * 32, "b" * 32                 # Spotify client ids are 32 hex characters
 QUEUE = {"currently_playing": {"type": "track", "name": "Blinding Lights", "artists": [{"name": "The Weeknd"}]},
@@ -290,7 +290,7 @@ def test_the_login_listener_takes_only_its_callback_with_the_right_state(monkeyp
         assert get("/callback?code=abc&state=wrong")[0] == 400 and srv.code is None
         assert get("/callback?state=good-state")[0] == 400
         status, page = get("/callback?code=abc&state=good-state")
-        assert status == 200 and "DbD Map Scout" in page and "schliessen" in page
+        assert status == 200 and "Fog Scout" in page and "schliessen" in page
         assert srv.code == "abc" and srv.done()
     finally:
         srv.stop()
@@ -434,9 +434,9 @@ def test_no_id_a_busy_port_and_a_forbidden_account_are_reported(fake, monkeypatc
 
 # ------------------------------------------------------------------ the list on the music card
 def test_the_music_card_grows_by_the_list_below_or_to_the_right_in_every_style():
-    from dbdmapscout import skin, sysinfo
-    from dbdmapscout.overlay_win32 import render_music
-    from dbdmapscout.preview import sample_cover
+    from fogscout import skin, sysinfo
+    from fogscout.overlay_win32 import render_music
+    from fogscout.preview import sample_cover
     rows = [[("Blinding Lights", sysinfo.WHITE)], [("The Weeknd", sysinfo.DIM)]]
     up = ("ALS NÄCHSTES", (("Save Your Tears", "The Weeknd"), ("Levitating", "Dua Lipa")))
     cover = sample_cover()
@@ -462,9 +462,9 @@ def test_the_music_card_grows_by_the_list_below_or_to_the_right_in_every_style()
 def test_a_song_change_slides_the_rows_and_cross_fades_the_card_at_the_same_size():
     """1.8.1 (user: "smoother … die Liste rutscht hoch"): the frames of a song change keep the final size in every
     style; blend_cards is the old card at t = 0 and the new one at t = 1; the Transition eases 0 → 1."""
-    from dbdmapscout import media, skin, sysinfo
-    from dbdmapscout.overlay_win32 import blend_cards, music_picture
-    from dbdmapscout.preview import sample_cover
+    from fogscout import media, skin, sysinfo
+    from fogscout.overlay_win32 import blend_cards, music_picture
+    from fogscout.preview import sample_cover
     rows_old = [[("Blinding Lights", sysinfo.WHITE)], [("The Weeknd", sysinfo.DIM)]]
     rows_new = [[("Save Your Tears", sysinfo.WHITE)], [("The Weeknd", sysinfo.DIM)]]
     items = (("Save Your Tears", "The Weeknd"), ("Levitating", "Dua Lipa"), ("As It Was", "Harry Styles"))
@@ -532,8 +532,8 @@ class _FakeWin:
 
 def test_the_app_cross_fades_a_song_change_and_the_list_slides(app_root):
     import json as _json
-    from dbdmapscout.app import App
-    from dbdmapscout import media
+    from fogscout.app import App
+    from fogscout import media
     (app_root / "settings.json").write_text(_json.dumps({"welcome_seen": True, "spotify_on": True,
                                                          "spotify_client_id": "a" * 32}), encoding="utf-8")
     app = App(str(app_root), simulate=str(app_root / "sim"))
@@ -583,8 +583,8 @@ def test_the_app_cross_fades_a_song_change_and_the_list_slides(app_root):
 
 
 def test_the_preview_and_the_app_pass_the_list_to_the_music_card(tmp_path):
-    from dbdmapscout import preview, sysinfo
-    from dbdmapscout.config import DEFAULTS
+    from fogscout import preview, sysinfo
+    from fogscout.config import DEFAULTS
     import copy
     o = copy.deepcopy(DEFAULTS["overlay"])
     o["media_pos"] = "bottom_right"
@@ -600,8 +600,8 @@ def test_the_preview_and_the_app_pass_the_list_to_the_music_card(tmp_path):
 
 def test_the_app_shows_the_list_only_when_spotify_plays_the_same_song(app_root):
     import json as _json
-    from dbdmapscout.app import App
-    from dbdmapscout import app_spotify, media
+    from fogscout.app import App
+    from fogscout import app_spotify, media
     (app_root / "settings.json").write_text(_json.dumps({"welcome_seen": True}), encoding="utf-8")
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
@@ -643,7 +643,7 @@ def test_the_app_shows_the_list_only_when_spotify_plays_the_same_song(app_root):
         assert app._upnext(other)[1][0][0] == "Save Your Tears"
         app.spotify.upnext = fresh
         app.media.now = media.NowPlaying("Starboy", "The Weeknd", True, time.time(), app=store)
-        assert "gleich=False, Player=Spotify:True" in __import__("dbdmapscout.diagnose").diagnose.spotify_match(app)
+        assert "gleich=False, Player=Spotify:True" in __import__("fogscout.diagnose").diagnose.spotify_match(app)
         app._spotify_event("token", "plain:eC1yZWY=")
         assert app.settings.get("spotify_token") == "plain:eC1yZWY="
         app._spotify_event("status", ("Spotify: verbunden", True))
@@ -652,7 +652,7 @@ def test_the_app_shows_the_list_only_when_spotify_plays_the_same_song(app_root):
         app.media_next_n_var.set(4)
         app._media_next_changed()
         assert app.settings["overlay"]["media_next_pos"] == "right" and app.settings["overlay"]["media_next_n"] == 4
-        from dbdmapscout import diagnose
+        from fogscout import diagnose
         text = diagnose.collect(app)
         assert "Spotify:" in text and "Blinding" not in text and "Save Your" not in text
     finally:

@@ -12,8 +12,8 @@ import pytest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from dbdmapscout import config, worker  # noqa: E402
-from dbdmapscout.catalog import Catalog  # noqa: E402
+from fogscout import config, worker  # noqa: E402
+from fogscout.catalog import Catalog  # noqa: E402
 
 
 def _events(q, timeout, until):
@@ -88,7 +88,7 @@ def app(tmp_path):
         os.symlink(os.path.join(ROOT, name), tmp_path / name)
     (tmp_path / "sim").mkdir()
     (tmp_path / "settings.json").write_text(json.dumps({"welcome_seen": True}), encoding="utf-8")
-    from dbdmapscout.app import App
+    from fogscout.app import App
     a = App(str(tmp_path), simulate=str(tmp_path / "sim"))
     yield a
     a.quit()
@@ -109,7 +109,7 @@ def test_the_map_is_hidden_at_the_round_end_even_when_saving_the_round_fails(app
 
 
 def test_a_crashed_detection_shows_in_the_status_line(app):
-    from dbdmapscout import status
+    from fogscout import status
     app._dispatch(worker.Event("error", {"text": "Traceback …\nRuntimeError: boom"}))
     assert status.is_problem(app._worker_status) and "neu starten" in app._worker_status
 
@@ -162,3 +162,26 @@ def test_a_map_shown_after_the_round_ended_does_not_rename_it(app):
     app._dispatch(worker.Event("match_end", {"t": time.time() + 300, "reason": "Ergebnisbildschirm"}))
     assert app._hist is None
     app.next_variant()                                         # looking at the other layout in the lobby
+
+
+def test_stopping_the_worker_does_not_wait_for_its_nap(tmp_path, monkeypatch):
+    """1.8.84 (idea 8 of the UI review): without a picture the simulation slept half a second per loop and
+    quitting waited for it – the nap now ends with the stop command."""
+    import time
+    w, events, calls = _worker(tmp_path, monkeypatch, fails=None)
+
+    class Empty:
+        def __init__(self, folder):
+            pass
+
+        def current(self):
+            return None
+    monkeypatch.setattr(worker, "ImageSource", Empty)
+    w = worker.DetectionWorker(ROOT, config.Settings(str(tmp_path / "settings.json")), Catalog(ROOT, ["en"]),
+                               events, simulate=str(tmp_path))
+    w.start()
+    time.sleep(0.3)                                       # well inside a nap
+    t0 = time.perf_counter()
+    w.stop()
+    w.join(timeout=4)
+    assert not w.is_alive() and time.perf_counter() - t0 < 0.3

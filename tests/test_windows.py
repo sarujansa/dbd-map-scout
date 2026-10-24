@@ -19,20 +19,20 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def test_every_module_imports():
-    import dbdmapscout
-    names = [m.name for m in pkgutil.iter_modules(dbdmapscout.__path__)]
+    import fogscout
+    names = [m.name for m in pkgutil.iter_modules(fogscout.__path__)]
     assert "overlay_win32" in names and "toast" in names
     for name in names:
         if name == "__main__":
             continue
-        importlib.import_module(f"dbdmapscout.{name}")
+        importlib.import_module(f"fogscout.{name}")
 
 
 @pytest.fixture(scope="module")
 def root():
     """The program's main loop (Qt) – what the overlays and the notification window get as ``root``."""
-    from dbdmapscout import qt_window
-    from dbdmapscout.mainloop import MainLoop
+    from fogscout import qt_window
+    from fogscout.mainloop import MainLoop
     return MainLoop(qt_window.application())
 
 
@@ -58,7 +58,7 @@ def _window(x, y, w, h):
 
 
 def test_native_overlay_renders_and_shows(root):
-    from dbdmapscout.overlay_win32 import Win32Overlay, make_overlay
+    from fogscout.overlay_win32 import Win32Overlay, make_overlay
     ov = make_overlay(root, prefer_native=True)
     assert isinstance(ov, Win32Overlay), getattr(ov, "last_error", "")
     ov.set_map(os.path.join(ROOT, "maps", "McMillan", "Coal Tower.webp"), "Coal Tower", 90)
@@ -77,8 +77,8 @@ def test_native_overlay_renders_and_shows(root):
 
 def test_notification_window_never_takes_the_focus(root):
     import ctypes
-    from dbdmapscout.overlay import GWL_EXSTYLE, WS_EX_NOACTIVATE, _GetLong
-    from dbdmapscout.toast import Toast
+    from fogscout.overlay import GWL_EXSTYLE, WS_EX_NOACTIVATE, _GetLong
+    from fogscout.toast import Toast
     t = Toast(root)
     t.show("Lobby gefunden", "nach 04:12 – READY drücken.", seconds=5)
     pump()
@@ -90,7 +90,7 @@ def test_notification_window_never_takes_the_focus(root):
 
 
 def test_window_and_cursor_queries():
-    from dbdmapscout import capture
+    from fogscout import capture
     assert capture.find_game_window() is None                # no DBD on the runner
     cur = capture.cursor_state()
     assert cur is None or len(cur) == 3
@@ -98,7 +98,7 @@ def test_window_and_cursor_queries():
 
 
 def test_window_geometry_of_a_real_window(root):
-    from dbdmapscout import capture
+    from fogscout import capture
     w, hwnd = _window(50, 60, 640, 400)
     r = w.devicePixelRatioF()
     client, outer, window, monitor = capture.window_geometry(hwnd)
@@ -111,8 +111,8 @@ def test_window_geometry_of_a_real_window(root):
 
 
 def test_windows_above_see_what_covers_a_window(root):
-    from dbdmapscout import capture
-    from dbdmapscout.overlay_win32 import Win32Overlay, make_overlay
+    from fogscout import capture
+    from fogscout.overlay_win32 import Win32Overlay, make_overlay
     low, lo = _window(80, 80, 400, 300)
     high, hi = _window(150, 150, 200, 150)
     high.raise_()
@@ -138,8 +138,8 @@ def test_windows_above_see_what_covers_a_window(root):
 
 def test_hotkeys_register_and_stop():
     import time
-    from dbdmapscout.config import DEFAULTS
-    from dbdmapscout.hotkeys import HotkeyThread
+    from fogscout.config import DEFAULTS
+    from fogscout.hotkeys import HotkeyThread
     t = HotkeyThread(DEFAULTS["hotkeys"], lambda name: None)
     t.start()
     time.sleep(1.0)
@@ -149,15 +149,15 @@ def test_hotkeys_register_and_stop():
 
 
 def test_own_taskbar_identity():
-    from dbdmapscout import appid
+    from fogscout import appid
     assert appid.set_process_app_id()
     assert appid.process_app_id() == appid.APP_ID
 
 
 def test_shortcut_app_id_is_written_and_read_back(tmp_path):
-    from dbdmapscout import appid
-    from dbdmapscout.autostart import powershell
-    lnk = str(tmp_path / "DbD Map Scout.lnk")
+    from fogscout import appid
+    from fogscout.autostart import powershell
+    lnk = str(tmp_path / "Fog Scout.lnk")
     ok, out = powershell(f"$s = (New-Object -ComObject WScript.Shell).CreateShortcut('{lnk}')\n"
                          "$s.TargetPath = \"$env:SystemRoot\\System32\\schtasks.exe\"\n$s.Save()")
     assert ok and os.path.exists(lnk), out
@@ -191,14 +191,14 @@ def _locked_mutex(name):
 
 def test_single_instance_also_against_a_copy_with_more_rights():
     import ctypes
-    from dbdmapscout.__main__ import _claim_mutex
-    from dbdmapscout.restart import _program_running
-    free = f"Local\\DbDMapScout.Test.{os.getpid()}.free"
+    from fogscout.__main__ import _claim_mutex
+    from fogscout.restart import _program_running
+    free = f"Local\\FogScout.Test.{os.getpid()}.free"
     assert not _program_running(free)
     assert _claim_mutex(free)                                  # first copy
     assert _program_running(free)
     assert not _claim_mutex(free)                              # second copy: ERROR_ALREADY_EXISTS
-    locked = f"Local\\DbDMapScout.Test.{os.getpid()}.locked"
+    locked = f"Local\\FogScout.Test.{os.getpid()}.locked"
     h = _locked_mutex(locked)
     try:
         assert not _claim_mutex(locked)                        # ERROR_ACCESS_DENIED is another copy, too
@@ -214,7 +214,7 @@ def test_window_capture_package_is_the_checked_version():
 
 
 def test_native_overlay_stacks_the_floors(root):
-    from dbdmapscout.overlay_win32 import Win32Overlay, make_overlay
+    from fogscout.overlay_win32 import Win32Overlay, make_overlay
     ov = make_overlay(root, prefer_native=True)
     assert isinstance(ov, Win32Overlay), getattr(ov, "last_error", "")
     ov.set_map(os.path.join(ROOT, "maps", "Other", "Midwich.gif"), "Midwich")
@@ -238,7 +238,7 @@ def test_native_overlay_stacks_the_floors(root):
 def test_single_key_hotkeys_only_while_dbd_is_in_front():
     import ctypes
     import time
-    from dbdmapscout.hotkeys import VK, HotkeyThread
+    from fogscout.hotkeys import VK, HotkeyThread
     user32 = ctypes.windll.user32
 
     def free(vk):                      # can another program still take the key?
@@ -265,7 +265,7 @@ def test_single_key_hotkeys_only_while_dbd_is_in_front():
 
 
 def test_system_values_window_can_be_dragged_in_edit_mode(root):
-    from dbdmapscout import overlay_win32 as ow
+    from fogscout import overlay_win32 as ow
     hud = ow.HudWindow()
     rows = [[("CPU ", (210, 214, 224, 255)), ("62°C", (134, 239, 172, 255))]]
     w, h = hud.render(rows, 1440)
@@ -302,7 +302,7 @@ def test_window_gets_real_clicks_while_the_timers_run(root):
     over (post), and the timers (MainLoop.after) keep running."""
     import ctypes
     from PySide6.QtCore import QPoint
-    from dbdmapscout import qt_window
+    from fogscout import qt_window
     posted = []
     win = qt_window.MainWindow(lambda a, arg=None: posted.append(a))
     win.apply_theme(True, 1.0)
@@ -339,7 +339,7 @@ def test_media_controls_are_read_without_error():
     """1.64 "Läuft gerade": the checked pywinrt version reads the Windows media controls (the runner plays
     nothing: no title, but no error either)."""
     from importlib.metadata import version
-    from dbdmapscout import media
+    from fogscout import media
     assert version("winrt-Windows.Media.Control") == version("winrt-runtime") == "3.2.1"
     assert version("winrt-Windows.Storage.Streams") == "3.2.1"
     from winrt.windows.storage.streams import Buffer, InputStreamOptions     # the cover is read with these
@@ -362,8 +362,8 @@ def test_media_controls_are_read_without_error():
 def test_a_second_start_asks_the_running_copy_for_its_window():
     """1.65.1 (user: "es läuft bereits", but no window): the running copy answers a second start's request;
     one that does not answer (hung) is reported as such."""
-    from dbdmapscout import restart
-    name = f"Local\\DbDMapScout.Test.{os.getpid()}.show"
+    from fogscout import restart
+    name = f"Local\\FogScout.Test.{os.getpid()}.show"
     assert not restart.ask_running_copy_to_show(name, wait=0.2)          # no running copy at all
     h = restart.show_event_create(name)
     assert h and not restart.show_requested(h)
@@ -412,7 +412,7 @@ def test_task_and_restart_start_bat_in_a_folder_with_and_and_percent(tmp_path):
     it at "&"."""
     import re
     import subprocess
-    from dbdmapscout import autostart, restart
+    from fogscout import autostart, restart
     folder = tmp_path / ODD_FOLDER
     folder.mkdir()
     (folder / "start.bat").write_text('@echo off\r\necho run %*> "%~dp0started.txt"\r\n')
@@ -447,9 +447,24 @@ def test_start_bat_restarts_itself_in_a_folder_with_and_and_percent(tmp_path):
 def test_the_window_list_and_the_obs_lookup_work_on_windows():
     """1.8.47: before starting OBS the program looks for an open OBS window (EnumWindows, no process opened) and
     for obs64.exe (registry, Program Files) – both must run on a real Windows, with or without OBS installed."""
-    from dbdmapscout import capture, obsrec
+    from fogscout import capture, obsrec
     wins = capture.top_windows()
     assert wins and all(isinstance(t, str) and isinstance(c, str) for t, c in wins)
     assert isinstance(obsrec.obs_window_open(wins), bool)
     exe = obsrec.obs_exe()
     assert exe is None or (os.path.isabs(exe) and exe.endswith(obsrec.OBS_EXE))
+
+
+def test_the_window_carries_relaunch_icon_name_and_command(root):
+    """1.9.1 (user's screenshot: the Python icon on the taskbar after the rename): the main window tells the
+    taskbar its icon, name and pin command itself, before any Start menu shortcut exists."""
+    from fogscout import appid, autostart
+    win, hwnd = _window(40, 40, 300, 200)
+    try:
+        assert appid.window_relaunch(hwnd) == (None, None, None)
+        assert appid.set_window_relaunch(hwnd, autostart.relaunch_command(), r"C:\x\fogscout-2.ico", "Fog Scout")
+        cmd, ico, name = appid.window_relaunch(hwnd)
+        assert cmd.endswith('/run /tn "Fog Scout"') and ico == r"C:\x\fogscout-2.ico,0" and name == "Fog Scout"
+    finally:
+        win.close()
+        pump()

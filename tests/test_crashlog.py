@@ -5,7 +5,7 @@ import os
 import subprocess
 import sys
 
-from dbdmapscout import diagnose
+from fogscout import diagnose
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -20,12 +20,12 @@ def test_a_hard_crash_is_kept_for_the_diagnosis_and_a_normal_end_leaves_nothing(
     crash, last = tmp_path / diagnose.CRASH_FILE, tmp_path / diagnose.CRASH_LAST
     assert diagnose.crash_lines(str(tmp_path)) == ["Letzter harter Absturz: keiner aufgezeichnet"]
     r = _run("import sys, faulthandler, threading\n"
-             "from dbdmapscout import __main__ as m\n"
+             "from fogscout import __main__ as m\n"
              "m._enable_crash_log(sys.argv[1])\n"
              "threading.Thread(target=lambda: __import__('time').sleep(30), name='clip-player', daemon=True).start()\n"
              "faulthandler._sigsegv()\n", tmp_path)
     assert r.returncode != 0 and crash.stat().st_size > 0                  # the process died, the stacks are there
-    r = _run("import sys\nfrom dbdmapscout import __main__ as m\n"
+    r = _run("import sys\nfrom fogscout import __main__ as m\n"
              "m._enable_crash_log(sys.argv[1])\nm._crash_log_clear(sys.argv[1])\n", tmp_path)
     assert r.returncode == 0, r.stderr
     assert not crash.exists() and last.stat().st_size > 0                  # kept at the start, a normal end after

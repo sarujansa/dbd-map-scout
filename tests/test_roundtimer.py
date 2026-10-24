@@ -4,7 +4,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dbdmapscout.roundtimer import RoundTimer  # noqa: E402
+from fogscout.roundtimer import RoundTimer  # noqa: E402
 
 
 def test_idle():

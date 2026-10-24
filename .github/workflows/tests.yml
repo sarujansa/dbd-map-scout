@@ -29,7 +29,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pytest pyflakes
       - name: pyflakes
-        run: python -m pyflakes dbdmapscout tests
+        run: python -m pyflakes fogscout tests
       - name: pytest
         run: python -m pytest -q tests
 

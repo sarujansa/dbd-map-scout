@@ -1,0 +1,1172 @@
+"""The control window (Qt): navigation on the left, one page per area.
+
+The window only shows and reports: every button calls ``post`` (→ App.events, handled in App._poll, in order
+with the detection's events), and the App pushes its state from its own ticks (``show_model``, ``show_states``).
+The pages draw the App's UI model (uimodel.py; app_qt.ui_state). No modal dialogs: ``exec()`` would run a second
+event loop inside a click.
+"""
+from __future__ import annotations
+
+import base64
+import collections
+import sys
+
+from PySide6.QtCore import QByteArray, QEvent, QModelIndex, QObject, QSize, Qt, QTimer
+from PySide6.QtGui import QColor, QFontDatabase, QIcon, QPalette, QPixmap, QStandardItem
+from PySide6.QtWidgets import (QAbstractItemView, QAbstractScrollArea, QAbstractSlider, QAbstractSpinBox, QApplication,
+                               QComboBox, QCompleter,
+                               QHBoxLayout, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QPushButton,
+                               QScrollArea, QStackedWidget, QTabWidget, QVBoxLayout, QWidget)
+
+from . import i18n, qt_theme
+from .i18n import N_, _
+from .mapimage import FONT as FIRA
+from .qt_common import (SLIDER_MAX, pixmap_from_pil, _label, _tip, _card, _set, _scroll_page)
+from .qt_views import (FactBox, CHECKS, _check, Table, LogView, HotkeyButton, Chart, HEAT_RAMP, BAR_NEUTRAL,
+                       heat_colour, ink_on, MapBars, Heatmap, SwatchView, TilesView, DashboardView)
+from .qt_preview import (PREVIEW_NAMES, PreviewView)
+from .qt_maps import (TILE_W, TILE_H, TILE_PIC, ALL_MAPS, RECENT, MapTile, RealmDelegate, MapsPage)
+from .qt_pages import (THUMB_H, SETUP_W, GAME_LANGS, SETUP_HOTKEYS, SETUP, OverviewPage, make_control, show_control,
+                       Grip, CardColumn, _card_head, _Arranged, FitTabs, FormPage, FLOW_KINDS, _grows, _fills,
+                       AutoPage, DialogWindow, MessageBox, SetupPage)
+
+
+# The classes and helpers moved to qt_common / qt_views / qt_preview / qt_maps / qt_pages (1.2.14, analysis point 2)
+# stay reachable here (the App, the tests)
+__all__ = (
+    'SLIDER_MAX',
+    'pixmap_from_pil',
+    '_label',
+    '_tip',
+    '_card',
+    '_set',
+    '_scroll_page',
+    'FactBox',
+    'CHECKS',
+    '_check',
+    'Table',
+    'LogView',
+    'HotkeyButton',
+    'Chart',
+    'HEAT_RAMP',
+    'BAR_NEUTRAL',
+    'heat_colour',
+    'ink_on',
+    'MapBars',
+    'Heatmap',
+    'SwatchView',
+    'TilesView',
+    'DashboardView',
+    'PREVIEW_NAMES',
+    'PreviewView',
+    'TILE_W',
+    'TILE_H',
+    'TILE_PIC',
+    'ALL_MAPS',
+    'RECENT',
+    'MapTile',
+    'RealmDelegate',
+    'MapsPage',
+    'THUMB_H',
+    'SETUP_W',
+    'GAME_LANGS',
+    'SETUP_HOTKEYS',
+    'SETUP',
+    'OverviewPage',
+    'make_control',
+    'show_control',
+    'Grip',
+    'CardColumn',
+    '_card_head',
+    '_Arranged',
+    'FitTabs',
+    'FormPage',
+    'FLOW_KINDS',
+    '_grows',
+    '_fills',
+    'AutoPage',
+    'DialogWindow',
+    'SetupPage',
+)
+
+# key, label (the navigation's icons are drawn by nav_icon: same size and place for all)
+PAGES = (("overview", N_("Übersicht")), ("maps", "Maps"), ("overlay", N_("Overlay")), ("stats", N_("Statistik")),
+         ("recordings", N_("Aufnahmen")), ("server", N_("Server")), ("settings", N_("Einstellungen")),
+         ("log", "Log"))          # 1.8.78: "Erkennung" went into the settings (cards) and the log ("Erweitert")
+
+
+NAV_ICON = 18                     # px (logical): every icon of the navigation in the same box
+
+
+NAV_W, NAV_COMPACT_W = 190, 62    # px (logical): navigation with names / only icons
+
+
+NAV_COMPACT_BELOW = 960           # px (logical) window width from which the navigation shows only icons
+
+
+AUTO_PAGES = ("stats", "recordings", "server", "log")   # built from the tab's structure (app_qt.ui_layout)
+
+
+FOUND_MS = 1800                   # ms a search hit's card stays lit
+STYLE_IDLE_MS = 120               # ms between restyling two hidden pages after a theme/zoom change (1.3.4)
+
+
+# Hand-made pages: every key names a widget of the UI model registered with App._reg; texts, values,
+# enabled/shown come from it (App._qt_refresh → show_states), a click is done on it (post("act", (key, value))).
+# ("card", frame key, rows) – a row is one control or ("row", [controls]); controls: ("check"|"button"|"combo"|
+# "slider"|"label"|"hint", key), ("stretch",). ("panel", rows) = a card without title; ("tabs", [(frame key, tab
+# label, rows)]) = one tab per frame (hidden with the frame); ("side", (panels)) = panels next to each other on a
+# wide page, below each other on a narrow one (qt_pages.SideBySide).
+SPECS = {
+    "overlay": (
+        # 1.66.4 (user: "6 passt"): the preview stays on top; 1.2.12 (analysis point 9): below it the tools for the
+        # element picked (list, size, opacity, move/test/undo – on every tab), then one tab per element and
+        # "Allgemein"; a click on an element in the preview opens its tab (MainWindow.open_tab)
+        # 1.8.2: preview and the tools of the picked element side by side when the page is wide enough – the
+        # tabs with the settings were below the fold on a 760-px window, every change needed scrolling
+        ("side", (
+            ("panel", (("preview", "ov.preview"),)),
+            ("panel", (
+                ("row", (("label", "ov.sel.label"), ("combo", "ov.sel"), ("stretch",))), ("slider", "ov.sel_size"),
+                ("slider", "ov.opacity"), ("hint", "ov.size_scope"), ("hint", "ov.size_cap"),
+                ("row", (("button", "ov.edit"), ("button", "ov.test"), ("button", "ov.undo"), ("stretch",))))))),
+        ("tabs", (
+            ("ov.look", N_("Karte"), (
+                ("row", (("label", "ov.anchor.label"), ("combo", "ov.anchor"), ("stretch",), ("button", "ov.reset"))),
+                ("slider", "ov.posx"), ("slider", "ov.posy"), ("hint", "ov.pos_hint"),
+                ("row", (("hint", "ov.map_size"), ("stretch",), ("button", "ov.map_size_reset"))),
+                ("row", (("label", "ov.map_style.label"), ("combo", "ov.map_style"), ("stretch",))),
+                ("row", (("label", "ov.info_pos.label"), ("combo", "ov.info_pos"), ("stretch",))),     # 1.8.24
+                ("sub", N_("Darstellung")), ("check", "ov.show_map"), ("check", "ov.caption"), ("check", "ov.floors"),
+                ("check", "ov.transparent"), ("check", "ov.map_backdrop"), ("check", "ov.keep_bar"), ("check", "ov.grow"),
+                ("sub", N_("Infos (Timer, Bilanz, Server)")), ("check", "ov.timer"), ("check", "ov.server"), ("check", "ov.record"), ("check", "ov.notes"),
+                ("sub", N_("Wann zeigen")), ("check", "ov.focus"), ("check", "ov.waiting"))),
+            ("ov.sys", N_("Systemwerte"), (
+                ("row", (("label", "ov.sysinfo.label"), ("combo", "ov.sysinfo"), ("stretch",))),
+                ("hint", "ov.sys_text"), ("hint", "ov.sys_hint"), ("check", "ov.hud_backdrop"),
+                ("check", "ov.hud_row_cpu"), ("check", "ov.hud_row_gpu"), ("check", "ov.hud_row_spot"),
+                ("check", "ov.hud_row_vram"), ("check", "ov.hud_row_ram"))),
+            ("ov.today_f", N_("Heute"), (
+                ("check", "ov.today"),
+                ("row", (("label", "ov.today_pos.label"), ("combo", "ov.today_pos"), ("stretch",))),
+                ("check", "ov.today_backdrop"))),
+            ("ov.music_f", N_("Musik"), (
+                ("check", "ov.media"), ("row", (("label", "ov.media_pos.label"), ("combo", "ov.media_pos"), ("stretch",))),
+                ("row", (("label", "ov.media_style.label"), ("combo", "ov.media_style"), ("stretch",))),
+                ("check", "ov.media_cover"),
+                ("row", (("label", "ov.media_shape.label"), ("combo", "ov.media_shape"), ("stretch",))),   # 1.8.24
+                ("check", "ov.media_progress"), ("check", "ov.media_accent"),
+                ("check", "ov.media_remaining"), ("check", "ov.media_backdrop"), ("check", "ov.media_fade"),
+                ("check", "ov.media_videos"),
+                ("row", (("label", "ov.media_next.label"), ("combo", "ov.media_next"), ("stretch",))),   # 1.8
+                ("slider", "ov.media_next_n"), ("hint", "ov.media_next_hint"))),
+            ("ov.pos", N_("Allgemein"), (
+                ("check", "ov.master"),                                                          # 1.8.18
+                ("check", "ov.small_off"),                                                       # 1.8.62
+                ("row", (("label", "ov.style.label"), ("combo", "ov.style"), ("stretch",))),     # 1.3
+                ("slider", "ov.gap"),
+                ("row", (("label", "ov.bar_align.label"), ("combo", "ov.bar_align"), ("stretch",))),
+                ("check", "ov.limits"),                                                          # 1.8.14
+                ("row", (("check", "ov.limits_same"), ("button", "ov.limits_reset"), ("stretch",))),
+                ("hint", "ov.limits_hint"), ("check", "ov.keep_out"),                         # 1.8.25
+                ("row", (("check", "ov.same_width"), ("button", "ov.merge_column"), ("stretch",))),   # 1.8.29
+                ("row", (("label", "ov.preset.label"), ("combo", "ov.preset"), ("button", "ov.preset_apply"),
+                         ("stretch",))),
+                ("check", "ov.fade"), ("check", "ov.per_size"), ("hint", "ov.per_size_hint"))))),
+    ),
+    "settings": (
+        # 1.8.90 (user: "Bei Settings ist es riesig geworden"): six tabs instead of one column of 15 cards and the
+        # fold "Mehr" (shut 1.8 window heights, open 3.9 on a 820-px window) – every tab fits about one screen
+        ("tabs", (
+            ("st.tab.general", N_("Allgemein"), (
+                ("card", "st.look", (
+                    ("row", (("label", "st.lang.label"), ("combo", "st.lang"), ("stretch",))), ("hint", "st.lang_note"),
+                    ("check", "st.dark"),
+                    ("row", (("label", "st.theme.label"), ("combo", "st.theme"), ("stretch",))), ("swatches", "st.swatches"),
+                    ("check", "st.oled"),
+                    ("row", (("label", "st.zoom.label"), ("combo", "st.zoom"), ("stretch",))),
+                    ("row", (("button", "st.card_reset"), ("hint", "st.card_hint"))))),
+                ("card", "st.start", (("check", "st.tray"), ("check", "st.autostart"), ("hint", "st.autostart_info"),
+                                      ("row", (("button", "st.setup_again"), ("stretch",))))),
+                ("card", "st.updates", (
+                    ("check", "st.update"), ("hint", "st.update_note"),
+                    ("row", (("button", "st.upd_btn"), ("button", "st.upd_apply"), ("stretch",))), ("hint", "st.upd_status"),
+                    ("hint", "st.version"))),                 # 1.2.19: the version where the updates are
+                ("card", "st.more.backup", (("row", (("button", "st.more.export"), ("button", "st.more.import"), ("stretch",),
+                                                     ("button", "st.more.clear_hist"), ("button", "st.more.reset_all"))),
+                                            ("hint", "st.more.backup_hint"))),
+                ("card", "st.more.folders", (("row", (("button", "st.more.dir"), ("button", "st.more.maps_dir"), ("stretch",))),)))),
+            ("st.tab.detect", N_("Erkennung"), (
+                # 1.8.78: the page "Erkennung" is gone – its cards live here, "Erweitert" on the log page
+                ("card", "st.detect", (("check", "st.det_auto"), ("check", "st.det_hide"), ("hint", "st.det_hide_hint"),
+                                       ("check", "st.det_menu"), ("hint", "st.det_menu_hint"))),
+                ("card", "st.langs", (("grid", 5, tuple(("check", f"det.lang.{code}") for code in GAME_LANGS)),)),
+                ("card", "st.more.own", (("row", (("hint", "st.more.aliases"), ("button", "st.more.aliases_clear"))),)),
+                ("card", "st.notify", (
+                    ("check", "st.lobby_notify"), ("check", "st.lobby_remind"), ("check", "st.notify_background_only"),
+                    ("hint", "st.notify_text"), ("row", (("button", "st.notify_test"), ("stretch",))))))),
+            ("st.tab.hotkeys", N_("Hotkeys"), (
+                ("card", "st.hotkeys", (
+                    ("grid", 2, tuple(("row", (("label", f"st.hk.{k}.label"), ("stretch",), ("hotkey", f"st.hk.{k}")))
+                                      for k in ("toggle_overlay", "next_variant", "scan_now", "prev_map", "next_map",
+                                                "bigger", "smaller", "edit_position", "rotate_map", "next_floor",
+                                                "reject_map", "mark_clip"))),
+                    ("row", (("button", "st.hk_defaults"), ("hint", "st.hk_status"))))),)),
+            ("st.tab.data", N_("Match-Daten"), (
+                ("card", "st.more.official", (("check", "st.more.off_open"), ("check", "st.more.off_notify"),
+                                              ("row", (("button", "st.more.script"), ("button", "st.more.resave"),
+                                                       ("button", "st.more.structure"), ("stretch",))), ("hint", "st.more.off_text"),
+                                              ("label", "st.more.off_check.label"), ("hint", "st.more.off_check"))),
+                ("card", "st.more.farming", (("check", "st.more.farm_cross"),                       # 1.2.20
+                                             ("row", (("label", "st.more.farm_region.label"), ("combo", "st.more.farm_region"),
+                                                      ("stretch",))),
+                                             ("hint", "st.more.farm_text"), ("hint", "st.more.farm_opp"))))),
+            ("st.tab.rec", N_("Aufnahmen"), (
+                # 1.4: OBS recordings – 1.8.90 in five groups (the card was 686 px of 24 controls)
+                ("card", "st.more.rec", (
+                    ("sub", N_("Verbindung")), ("check", "st.more.rec_on"),
+                    ("row", (("label", "st.more.rec_port.label"), ("entry", "st.more.rec_port"),
+                             ("label", "st.more.rec_pw.label"), ("entry", "st.more.rec_pw"),
+                             ("button", "st.more.rec_test"), ("stretch",))),
+                    ("row", (("button", "st.more.rec_dir"), ("hint", "st.more.rec_folder"))),
+                    ("row", (("label", "st.more.rec_limit.label"), ("combo", "st.more.rec_limit"), ("stretch",))),
+                    ("check", "st.more.rec_obs_start"),
+                    ("sub", N_("Aufnahme")), ("check", "st.more.rec_early"), ("check", "st.more.rec_pre"),
+                    ("check", "st.more.rec_buffer"), ("check", "st.more.rec_merge"),
+                    ("row", (("label", "st.more.rec_tail.label"), ("combo", "st.more.rec_tail"), ("stretch",))),
+                    ("check", "st.more.rec_window"), ("check", "st.more.rec_overlay"),
+                    ("sub", N_("Ton")), ("check", "st.more.rec_audio"),
+                    ("row", (("check", "st.more.rec_audio_dbd"), ("check", "st.more.rec_audio_discord"),
+                             ("check", "st.more.rec_audio_desktop"), ("check", "st.more.rec_audio_mic"), ("stretch",))),
+                    ("check", "st.more.rec_tracks"), ("hint", "st.more.rec_tracks_hint"),      # 1.8.6
+                    ("sub", N_("Clips")),
+                    ("row", (("check", "st.more.rec_instant"), ("combo", "st.more.rec_clip"),
+                             ("check", "st.more.rec_clip_notify"), ("stretch",))),
+                    ("row", (("label", "st.more.rec_clip_src.label"), ("check", "st.more.rec_clip_dbd"),
+                             ("check", "st.more.rec_clip_discord"), ("check", "st.more.rec_clip_mic"),
+                             ("check", "st.more.rec_clip_other"), ("stretch",))),
+                    ("sub", N_("Aufräumen")), ("check", "st.more.rec_farming"),
+                    ("row", (("label", "st.more.rec_farming_days.label"),           # 1.8.23
+                             ("combo", "st.more.rec_farming_days"), ("stretch",))),
+                    ("hint", "st.more.rec_ffmpeg"), ("hint", "st.more.rec_status"), ("hint", "st.more.rec_text"))),)),
+            ("st.tab.links", N_("Verbindungen"), (
+                ("card", "st.more.discord", (("check", "st.more.dc_on"),                             # 1.7: Rich Presence
+                                             ("row", (("label", "st.more.dc_id.label"), ("entry", "st.more.dc_id"),
+                                                      ("button", "st.more.dc_test"), ("button", "st.more.dc_portal"),
+                                                      ("stretch",))),
+                                             ("check", "st.more.dc_killer"), ("check", "st.more.dc_lobby"),
+                                             ("hint", "st.more.dc_status"), ("hint", "st.more.dc_text"))),
+                ("card", "st.more.spotify", (("check", "st.more.sp_on"),                             # 1.8: "Als nächstes"
+                                             ("row", (("label", "st.more.sp_id.label"), ("entry", "st.more.sp_id"),
+                                                      ("button", "st.more.sp_dash"), ("stretch",))),
+                                             ("row", (("button", "st.more.sp_login"), ("button", "st.more.sp_logout"),
+                                                      ("stretch",))),
+                                             ("hint", "st.more.sp_status"), ("hint", "st.more.sp_text"))),
+                ("card", "st.more.youtube", (("check", "st.more.yt_on"),                             # 1.10: upload
+                                             ("row", (("label", "st.more.yt_id.label"), ("entry", "st.more.yt_id"),
+                                                      ("label", "st.more.yt_secret.label"), ("entry", "st.more.yt_secret"),
+                                                      ("button", "st.more.yt_file"), ("button", "st.more.yt_console"),
+                                                      ("stretch",))),
+                                             ("row", (("label", "st.more.yt_privacy.label"), ("combo", "st.more.yt_privacy"),
+                                                      ("button", "st.more.yt_login"), ("button", "st.more.yt_logout"),
+                                                      ("stretch",))),
+                                             ("row", (("check", "st.more.yt_pl_on"), ("button", "st.more.yt_pl_load"),
+                                                      ("stretch",))),                                  # 1.11: playlists
+                                             ("row", (("label", "st.more.yt_pl_clip.label"), ("combo", "st.more.yt_pl_clip"),
+                                                      ("label", "st.more.yt_pl_round.label"), ("combo", "st.more.yt_pl_round"),
+                                                      ("stretch",))),
+                                             ("hint", "st.more.yt_status"), ("hint", "st.more.yt_text"))))))),
+    ),
+}
+
+
+def _spec_keys(items):
+    for it in items:
+        kind = it[0]
+        if kind == "card":
+            yield it[1]
+            yield from _spec_keys(it[2])
+        elif kind in ("row", "panel", "side"):
+            yield from _spec_keys(it[1])
+        elif kind == "tabs":
+            for frame, _label_, rows in it[1]:
+                yield frame
+                yield from _spec_keys(rows)
+        elif kind == "grid":
+            yield from _spec_keys(it[2])
+        elif kind in ("check", "button", "combo", "slider", "label", "hint", "value", "plain", "hotkey", "preview", "entry",
+                      "swatches"):
+            yield it[1]
+
+
+def page_keys(page: str | None = None) -> set:
+    """Widget keys a hand-made page shows (all pages without ``page``) – also the whitelist for its clicks."""
+    if page == "setup":
+        return {k for _t, items in SETUP for k in _spec_keys(items)}
+    pages = [page] if page else list(SPECS) + ["setup"]
+    return {k for p in pages for k in (page_keys("setup") if p == "setup" else _spec_keys(SPECS.get(p, ())))}
+
+
+def application() -> QApplication:
+    """The one QApplication of the process (main thread, before any widget)."""
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv[:1])
+        app.setStyle("Fusion")
+        app.setQuitOnLastWindowClosed(False)          # closing goes through the App (quit / tray)
+        QFontDatabase.addApplicationFont(FIRA)         # map names like on the map pictures
+    global _WHEEL_GUARD
+    if _WHEEL_GUARD is None:
+        _WHEEL_GUARD = WheelGuard(app)
+        app.installEventFilter(_WHEEL_GUARD)
+    return app
+
+
+_WHEEL_GUARD = None                                    # kept here: Python would free the filter otherwise
+
+
+class WheelGuard(QObject):
+    """The mouse wheel scrolls the page, never a setting (1.64.8, user: scrolling the page changed some random
+    field). Qt hands the wheel to the combo box or slider under the mouse; here it goes to the page's scroll bar."""
+
+    def eventFilter(self, obj, event):
+        if event.type() != QEvent.Wheel or not isinstance(obj, (QComboBox, QAbstractSlider, QAbstractSpinBox)):
+            return False
+        if isinstance(obj, QAbstractSlider) and obj.inherits("QScrollBar"):
+            return False                               # the scroll bars themselves scroll as usual
+        area = obj.parentWidget()
+        while area is not None and not isinstance(area, QAbstractScrollArea):
+            area = area.parentWidget()
+        if area is not None:
+            QApplication.sendEvent(area.verticalScrollBar(), event)
+        return True                                    # the setting never changes
+
+
+def nav_icon(key: str, colour: str, ratio: float = 1.0, alert: bool = False) -> QPixmap:
+    """One icon of the navigation, drawn as lines (not a font character: symbols from different fonts came out
+    in different sizes and places). All in a NAV_ICON box, 1.6 px lines; ``alert`` = amber dot (log)."""
+    from PySide6.QtCore import QPointF, QRectF
+    from PySide6.QtGui import QPainter, QPen
+    size = NAV_ICON
+    pm = QPixmap(round(size * ratio), round(size * ratio))
+    pm.setDevicePixelRatio(ratio)
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.Antialiasing)
+    col = QColor(colour)
+    pen = QPen(col, 1.6)
+    pen.setCapStyle(Qt.RoundCap)
+    pen.setJoinStyle(Qt.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.NoBrush)
+    m, c = 2.5, size / 2                       # margin, centre
+    full = QRectF(m, m, size - 2 * m, size - 2 * m)
+    if key == "overview":                      # target: ring + dot
+        p.drawEllipse(QPointF(c, c), 6.5, 6.5)
+        p.setBrush(col)
+        p.drawEllipse(QPointF(c, c), 2.4, 2.4)
+    elif key == "maps":                        # four tiles
+        g = (size - 2 * m - 2) / 2
+        for x in (m, m + g + 2):
+            for y in (m, m + g + 2):
+                p.drawRoundedRect(QRectF(x, y, g, g), 1.5, 1.5)
+    elif key == "overlay":                     # a screen with a picture in its left part
+        p.drawRoundedRect(full, 2, 2)
+        p.setBrush(col)
+        p.drawRoundedRect(QRectF(m + 2.5, m + 2.5, (size - 2 * m) * 0.4, size - 2 * m - 5), 1, 1)
+    elif key == "stats":                       # three columns on a base line
+        base = size - m
+        for i, h in enumerate((5, 11, 8)):
+            x = m + 1.5 + i * 4.6
+            p.drawLine(QPointF(x, base - 1.5), QPointF(x, base - 1.5 - h))
+        p.drawLine(QPointF(m, base), QPointF(size - m, base))
+    elif key == "server":                      # globe
+        p.drawEllipse(QPointF(c, c), 6.5, 6.5)
+        p.drawEllipse(QPointF(c, c), 2.8, 6.5)
+        p.drawLine(QPointF(c - 6.5, c), QPointF(c + 6.5, c))
+    elif key == "settings":                    # gear: ring + eight teeth
+        import math
+        p.drawEllipse(QPointF(c, c), 4.6, 4.6)
+        p.drawEllipse(QPointF(c, c), 1.7, 1.7)
+        tooth = QPen(col, 2.6)
+        tooth.setCapStyle(Qt.FlatCap)
+        p.setPen(tooth)
+        for i in range(8):
+            a = i * math.pi / 4 + math.pi / 8
+            p.drawLine(QPointF(c + 5.2 * math.cos(a), c + 5.2 * math.sin(a)),
+                       QPointF(c + 7.4 * math.cos(a), c + 7.4 * math.sin(a)))
+    elif key == "recordings":                  # 1.5: a clapper/film frame with a REC dot
+        p.drawRoundedRect(QRectF(m, m + 1.5, size - 2 * m, size - 2 * m - 3), 2.5, 2.5)
+        p.drawLine(QPointF(m, m + 5.5), QPointF(size - m, m + 5.5))
+        p.setBrush(col)
+        p.drawEllipse(QPointF(c, c + 2.2), 2.4, 2.4)
+    elif key == "search":                      # magnifier
+        p.drawEllipse(QPointF(c - 1.5, c - 1.5), 5.0, 5.0)
+        p.drawLine(QPointF(c + 2.2, c + 2.2), QPointF(size - m, size - m))
+    elif key == "log":                         # lines of text
+        for i, w in enumerate((1.0, 0.75, 0.9)):
+            y = m + 2 + i * 5
+            p.drawLine(QPointF(m, y), QPointF(m + (size - 2 * m) * w, y))
+    if alert:
+        from .theme import DOT
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(DOT["warn"]))
+        p.drawEllipse(QPointF(size - 3.5, size - 3.5), 3.5, 3.5)
+    p.end()
+    return pm
+
+
+SEARCH_KINDS = ("check", "radio", "button", "title", "label", "slider", "tab")   # what the search finds on a page
+# 1.8.38 (QA audit: "autostart", "Tastenkürzel", "Backup" … found nothing): words people search with that the
+# labels do not use – a label (either language, folded) containing the key is also found by the words
+SEARCH_ALSO = {"tast": "hotkey shortcut tastenkürzel", "hotkey": "taste tastenkürzel shortcut",
+               "mit windows starten": "autostart", "start with windows": "autostart",
+               "farb": "color colour theme", "colour": "color farbe theme", "theme": "farbe color",
+               "sicherung": "backup", "backup": "sicherung", "deckkraft": "opacity transparenz transparency",
+               "opacity": "deckkraft transparenz transparency", "grösse": "size zoom", "size": "grösse zoom",
+               "cross-play": "crossplay", "crossplay": "cross-play", "aufnahme": "obs recording",
+               "recording": "obs aufnahme", "einrichtung": "setup assistent wizard",
+               "setup": "einrichtung assistent wizard", "aktualis": "update", "update": "aktualisieren"}
+HAYSTACK_ROLE = Qt.UserRole + 1           # what a search hit is matched against (the list shows the entry)
+POPUP_W = (320, 720)                      # 1.8.38: the hit list as wide as its longest entry within these
+
+
+def _haystack(*texts) -> str:
+    """Folded label, its other-language name, its tooltip and SEARCH_ALSO words – with ß/ss both ways, so
+    "Größe" finds "Grösse"."""
+    base = " ".join(" ".join(t.split()) for t in texts if t).casefold()
+    base = " ".join([base] + [v for k, v in SEARCH_ALSO.items() if k in base])
+    return " | ".join(dict.fromkeys((base, base.replace("ß", "ss"), base.replace("ss", "ß"))))
+
+
+class _SearchCompleter(QCompleter):
+    """Matches the hidden haystack, shows the entry; the field keeps what was typed while moving in the list."""
+
+    def pathFromIndex(self, index):
+        w = self.widget()
+        return w.text() if w is not None else ""
+
+
+def _tab_of(w):
+    """[(QTabWidget, its tab page holding w)] for every tab widget above w, innermost first."""
+    out, child, p = [], w, w.parentWidget()
+    while p is not None:
+        if isinstance(p, QStackedWidget) and isinstance(p.parentWidget(), QTabWidget):
+            out.append((p.parentWidget(), child))
+        child, p = p, p.parentWidget()
+    return out
+
+
+def _reachable(w, page) -> bool:
+    """Shown on the page, or on a tab that is not open now (the search goes there)."""
+    tabs = _tab_of(w)
+    if not tabs:
+        return w.isVisibleTo(page)
+    return (w.isVisibleTo(tabs[0][1]) and all(tw.isTabVisible(tw.indexOf(body)) for tw, body in tabs)
+            and tabs[-1][0].isVisibleTo(page))
+
+
+def _open_tabs(w):
+    for tw, body in reversed(_tab_of(w)):
+        tw.setCurrentWidget(body)
+
+
+def _node_has(node: dict, key: str) -> bool:
+    """Whether a layout node (app_qt.ui_layout) or one below it carries ``key``."""
+    if node.get("key") == key:
+        return True
+    return any(_node_has(c, key) for c in node.get("children", ()))
+
+
+class _Forms(dict):
+    """page key -> FormPage/AutoPage (1.8.72): ``forms[key]`` builds the page on first access, ``get``, ``in`` and
+    ``items`` only know the pages built so far."""
+
+    def __init__(self, build):
+        super().__init__()
+        self._build = build
+
+    def __missing__(self, key):
+        page = self._build(key)
+        if page is None:
+            raise KeyError(key)
+        return page
+
+
+class _NavList(QListWidget):
+    """The navigation. Qt's list view makes the first row current as soon as it gets the keyboard focus while no
+    row is current – on the first start that threw the user out of the setup assistant about a second after it
+    came up (1.8.2: the window's first focus went to the list). With no row chosen, the focus changes nothing."""
+
+    def focusInEvent(self, e):
+        if self.currentRow() < 0:
+            QWidget.focusInEvent(self, e)
+            self.viewport().update()
+            return
+        super().focusInEvent(e)
+
+
+class MainWindow(QMainWindow):
+    def __init__(self, post, icon_path: str | None = None, layouts: dict | None = None, thumb_cache: str | None = None):
+        super().__init__()
+        self._post = post
+        self.allow_close = False          # closing = quitting the program, through the App
+        self.geometry_changed = False     # read and reset by the App (it saves the geometry, debounced)
+        self.minimised = False
+        self.setWindowTitle("Fog Scout")
+        if icon_path:
+            self.setWindowIcon(QIcon(icon_path))
+        central = QWidget()
+        lay = QHBoxLayout(central)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+        self.nav = _NavList()
+        self.nav.setObjectName("nav")
+        self.nav.setFixedWidth(NAV_W)
+        self._nav_compact = False
+        self._nav_kept = False
+        self.nav.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.stack = QStackedWidget()
+        self.overview = OverviewPage(post)
+        self.maps = MapsPage(post, thumb_cache)
+        # 1.8.72: the hand-made and the model-built pages are made when first needed (a visit, the search, the
+        # idle warm-up – app_qt._qt_warm) instead of all before the window shows (measured: 11 pages ≈ 250 ms of
+        # the 400 ms App() took); ``forms[key]`` builds on access, ``forms.get``/``items`` see the built ones
+        self._layouts = dict(layouts or {})
+        self._card_orders, self._tab_orders, self._hidden_cols = {}, {}, {}
+        self._qss = ""                    # the style sheet, set per part (_style_lazily)
+        self._stale = []                  # pages still waiting for it
+        self.forms = _Forms(self._build_form)
+        self.nav.setIconSize(QSize(NAV_ICON, NAV_ICON))
+        self._pages = {}                   # page key -> its widget in the stack (the nav rows can be reordered)
+        for key, label in PAGES:
+            item = QListWidgetItem(_(label))
+            item.setData(Qt.UserRole, key)
+            self.nav.addItem(item)
+            page = {"overview": self.overview, "maps": self.maps}.get(key) or QWidget()   # a stand-in until built
+            self._pages[key] = page
+            self.stack.addWidget(page)
+        self.setup = SetupPage(post)
+        self.stack.addWidget(self.setup)
+        self._setup_on = False
+        self.nav.setCurrentRow(0)
+        self.nav.currentRowChanged.connect(self._page_changed)
+        # 1.7.6 (user: "move the windows on the left as I like"): the rows can be dragged into another order
+        self.nav.setDragDropMode(QAbstractItemView.InternalMove)
+        self.nav.setDefaultDropAction(Qt.MoveAction)
+        self.nav.model().rowsMoved.connect(lambda *_a: self._post("nav_order", self.nav_keys()))
+        # search over the settings of all pages (1.60): a field above the navigation, Ctrl+F
+        side = QWidget()
+        side.setObjectName("navside")
+        self._side = side
+        sl = QVBoxLayout(side)
+        sl.setContentsMargins(0, 0, 0, 0)
+        sl.setSpacing(0)
+        self.search = QLineEdit()
+        self.search.setObjectName("navsearch")
+        self.search.setPlaceholderText(_("Einstellung suchen …"))
+        self.search.setClearButtonEnabled(True)
+        self.search.setFocusPolicy(Qt.ClickFocus)  # not the window's first focus: only by a click or Ctrl+F
+        self.search_btn = QPushButton()
+        self.search_btn.setObjectName("navsearchbtn")
+        self.search_btn.setToolTip(_("Einstellung suchen (Strg+F)"))
+        self.search_btn.clicked.connect(self.focus_search)
+        self.search_btn.hide()
+        sl.addWidget(self.search)
+        sl.addWidget(self.search_btn)
+        sl.addWidget(self.nav, 1)
+        self._found = {}                  # completer text -> (page key, widget)
+        from PySide6.QtGui import QStandardItemModel
+        self._search_model = QStandardItemModel(self)
+        self.completer = _SearchCompleter(self._search_model, self)
+        self.completer.setCompletionRole(HAYSTACK_ROLE)
+        self.completer.setCaseSensitivity(Qt.CaseInsensitive)
+        self.completer.setFilterMode(Qt.MatchContains)
+        self.completer.setMaxVisibleItems(12)
+        self.completer.activated[QModelIndex].connect(lambda i: self.go_to_found(i.data(Qt.DisplayRole)))
+        self.search.setCompleter(self.completer)
+        self.search.installEventFilter(self)
+        self.search.returnPressed.connect(self._search_first)
+        from PySide6.QtGui import QKeySequence, QShortcut
+        QShortcut(QKeySequence.Find, self, activated=self.focus_search)
+        # 1.65: undo of place/size on the overlay page (a text field keeps its own Ctrl+Z)
+        QShortcut(QKeySequence.Undo, self, activated=lambda: self.current_key() == "overlay" and self._post("undo"))
+        lay.addWidget(side)
+        right = QVBoxLayout()
+        right.setContentsMargins(0, 0, 0, 0)
+        right.setSpacing(0)
+        # OK/Cancel or a note (App._ask/_inform): 1.8.44 a small window to answer, not a bar at the top
+        self.message = MessageBox(self, post)
+        self._question = None
+        right.addWidget(self.stack, 1)
+        lay.addLayout(right, 1)
+        self.setCentralWidget(central)
+        self.resize(1100, 760)
+        self.setMinimumSize(560, 480)            # narrower: the navigation shows only icons, the pages wrap
+        self._log_alert = False
+        self._dark = True
+        self._nav_icons()
+        self.dialogs = {}                 # dialog path (UI model) -> DialogWindow
+        self._qss = ""                    # the style sheet, set per part (_style_lazily)
+        self._stale = []                  # pages still waiting for it
+        self._style_timer = QTimer(self)  # owned by the window: it dies with it (a test deletes windows)
+        self._style_timer.setSingleShot(True)
+        self._style_timer.setInterval(STYLE_IDLE_MS)
+        self._style_timer.timeout.connect(self._style_next)
+
+    # ------------------------------------------------------------- pages built when first needed (1.8.72)
+    def _form_kind(self, key):
+        if key in SPECS:
+            return "form"
+        if key in AUTO_PAGES and self._layouts.get(key):
+            return "auto"
+        return None
+
+    def _build_form(self, key):
+        """The FormPage/AutoPage ``key`` – built now, put into the stack in place of its stand-in, with the
+        user's card/tab order, hidden columns and the style sheet; None for a key that is no such page."""
+        if dict.__contains__(self.forms, key):
+            return dict.__getitem__(self.forms, key)
+        kind = self._form_kind(key)
+        if kind is None:
+            return None
+        label = _(dict(PAGES)[key])
+        page = FormPage(self._post, label, SPECS[key], key) if kind == "form" \
+            else AutoPage(self._post, label, self._layouts[key], key)
+        dict.__setitem__(self.forms, key, page)
+        page.apply_order(self._card_orders.get(key, {}))
+        page.apply_tab_order(self._tab_orders.get(key, {}))
+        if self._hidden_cols:
+            from .qt_views import Table
+            for t in page.findChildren(Table):
+                t.set_hidden_map(self._hidden_cols)
+        if self._qss:
+            page.setStyleSheet(self._qss)
+        old = self._pages.get(key)
+        if old is not None and old is not page:
+            i = self.stack.indexOf(old)
+            self.stack.removeWidget(old)
+            self.stack.insertWidget(i, page)
+            if old in self._stale:
+                self._stale.remove(old)
+            old.deleteLater()
+        self._pages[key] = page
+        return page
+
+    def _form(self, key):
+        """The page ``key`` built (None: not a form page)."""
+        return self._build_form(key)
+
+    def _page(self, key):
+        """The stack widget of page ``key`` – a form page is built here if it is not yet."""
+        return self._form(key) or self._pages.get(key)
+
+    def pending_pages(self) -> list:
+        """The form pages not built yet, in navigation order."""
+        return [k for k in self.nav_keys() if self._form_kind(k) and not dict.__contains__(self.forms, k)]
+
+    def build_next(self) -> bool:
+        """Build one more page (the idle warm-up); False when all are there."""
+        todo = self.pending_pages()
+        if not todo:
+            return False
+        self._build_form(todo[0])
+        return True
+
+    def build_all(self):
+        """Every page now (the search reads them all)."""
+        while self.build_next():
+            pass
+
+    def _page_changed(self, row):
+        self._setup_on = False                                     # the navigation leaves the assistant
+        if row < 0:
+            return
+        key = self.nav.item(row).data(Qt.UserRole)
+        page = self._page(key)
+        if page is not None:
+            self._style_page(page)
+            self.stack.setCurrentWidget(page)
+        self._post("page", key)                                    # the App fills it now
+
+    def nav_keys(self) -> list:
+        """The page keys in the order the navigation shows them (1.7.6: the user's order)."""
+        return [self.nav.item(i).data(Qt.UserRole) for i in range(self.nav.count())]
+
+    def _nav_row(self, key) -> int:
+        keys = self.nav_keys()
+        return keys.index(key) if key in keys else -1
+
+    def set_nav_order(self, keys):
+        """Put the navigation into ``keys`` order (unknown keys ignored, missing pages follow in the built-in
+        order); [] = as built. The page on display stays."""
+        built = [k for k, _l in PAGES]
+        want = [k for k in (keys or []) if k in built] + [k for k in built if k not in (keys or [])]
+        if want == self.nav_keys():
+            return
+        current = self.current_key()
+        self.nav.blockSignals(True)
+        try:
+            items = {}
+            while self.nav.count():
+                item = self.nav.takeItem(0)
+                items[item.data(Qt.UserRole)] = item
+            for k in want:
+                self.nav.addItem(items[k])
+            row = self._nav_row(current)
+            self.nav.setCurrentRow(row if row >= 0 else -1)
+        finally:
+            self.nav.blockSignals(False)
+        self._nav_icons()
+        self._nav_texts()
+
+    def set_tab_order(self, orders: dict):
+        """1.7.6: the user's order of the tab rows ({page: {tabs id: [ids]}}, setting tab_order) – the pages
+        built later get it when they are built."""
+        self._tab_orders = dict(orders or {})
+        for key, page in self.forms.items():
+            page.apply_tab_order(self._tab_orders.get(key, {}))
+
+    def current_key(self) -> str:
+        if self._setup_on:
+            return "setup"
+        item = self.nav.currentItem()
+        return item.data(Qt.UserRole) if item is not None else PAGES[0][0]
+
+    def show_setup(self, on: bool = True):
+        """The setup assistant instead of a page (first start); the navigation still leads away from it."""
+        self._setup_on = bool(on)
+        if on:
+            self.setup.go(0)
+            self._style_page(self.setup)
+            self.stack.setCurrentWidget(self.setup)
+            self.nav.blockSignals(True)                # 1.2.19: no page is highlighted behind the assistant
+            self.nav.setCurrentRow(-1)
+            self.nav.blockSignals(False)
+        else:
+            if self.nav.currentRow() < 0:
+                self.nav.setCurrentRow(0)              # posts "page" → the App fills the overview
+            page = self._page(self.current_key()) or self.stack.widget(0)
+            self._style_page(page)
+            self.stack.setCurrentWidget(page)
+
+    # ------------------------------------------------------------- search over the settings
+    def search_index(self) -> dict:
+        """{shown text: (page key, widget, folded)} – every tick box, button, slider, card title, label and tab the
+        pages show now (a tab that is not open counts as shown: the search opens it). 1.8.38: a label shown more
+        than once on a page carries its tab ("Position (Musik)") – before, only the first of them could be found."""
+        return {entry: hit[:3] for entry, hit in self._search_hits().items()}
+
+    def _search_hits(self) -> dict:
+        """{entry: (page key, widget, folded, haystack)}."""
+        found = []
+        labels = dict(PAGES)
+        for key, page in self.forms.items():
+            for ckey, (kind, w, extra) in page.controls.items():
+                if kind not in SEARCH_KINDS:
+                    continue
+                if kind == "tab":                         # a tab: its name, going there opens it
+                    tw, w = w, extra
+                    text = tw.tabText(tw.indexOf(w)).replace("&&", "&")
+                    folded = not (tw.isTabVisible(tw.indexOf(w)) and _reachable(tw, page))
+                else:
+                    target = extra[0] if kind == "slider" else w
+                    text = target.text()
+                    folded = not _reachable(w, page)
+                text = " ".join(text.split())
+                if len(text) < 3 or text.startswith("▸"):
+                    continue
+                if folded:
+                    continue
+                found.append((text, key, w, folded, _haystack(text, i18n.other(text))))
+        count = collections.Counter((text, key) for text, key, *_rest in found)
+        out = {}
+        for text, key, w, folded, hay in found:
+            where = ""
+            if count[(text, key)] > 1:
+                tabs = _tab_of(w)
+                if tabs:
+                    tw, body = tabs[0]
+                    where = " (" + tw.tabText(tw.indexOf(body)).replace("&&", "&") + ")"
+            out.setdefault(f"{text}{where}  ·  {_(labels[key])}", (key, w, folded, hay))
+        return out
+
+    def eventFilter(self, obj, e):
+        if obj is self.search and e.type() == QEvent.FocusIn:
+            self._post("search_open")             # the App fills every page once (texts come from the model)
+        return super().eventFilter(obj, e)
+
+    def update_search_index(self):
+        """After the App filled the pages: what the search offers (open parts, the language now …)."""
+        hits = self._search_hits()
+        self._found = {entry: hit[:3] for entry, hit in hits.items()}
+        self._search_model.clear()
+        for entry in sorted(hits, key=str.lower):
+            item = QStandardItem(entry)
+            item.setData(hits[entry][3], HAYSTACK_ROLE)
+            item.setEditable(False)
+            self._search_model.appendRow(item)
+        fm = self.completer.popup().fontMetrics()                  # 1.8.38: 190 px cut ⅔ of the entries off
+        widest = max((fm.horizontalAdvance(e) for e in hits), default=0) + 48
+        self.completer.popup().setMinimumWidth(max(POPUP_W[0], min(POPUP_W[1], widest)))
+
+    def focus_search(self):
+        if self._nav_compact:
+            self._compact_nav(False, keep=True)                    # room for the field while searching
+        self.search.setFocus()
+        self.search.selectAll()
+
+    def _search_first(self):
+        if self.completer.completionCount():
+            self.completer.setCurrentRow(0)
+            self.go_to_found(self.completer.currentIndex().data(Qt.DisplayRole))
+        elif self.search.text().strip():                           # 1.8.38: say so instead of doing nothing
+            from PySide6.QtWidgets import QToolTip
+            QToolTip.showText(self.search.mapToGlobal(self.search.rect().bottomLeft()), _("Nichts gefunden"),
+                              self.search)
+
+    def go_to_found(self, entry: str):
+        """Open the page of a search hit, scroll to it and light up its card for a moment."""
+        hit = self._found.get(entry)
+        if hit is None:
+            return
+        key, w, folded = hit
+        self.show_page(key)
+        self.search.clear()
+        self.search.clearFocus()
+        if self._nav_kept:
+            self._nav_kept = False
+            self._compact_nav(self.width() < NAV_COMPACT_BELOW)
+        self._reveal_widget(w, delay=150 if folded else 0)
+
+    def reveal(self, page: str, key: str):
+        """1.2.15: open ``page``, scroll to the control ``key`` of a hand-made page and light up its card (the
+        overview's "Match-Daten einrichten" leads to the card on the tab "Match-Daten"; its tab is opened)."""
+        form = self._form(page)
+        ctl = form.controls.get(key) if form is not None else None
+        if ctl is None:
+            return
+        self.show_page(page)
+        self._reveal_widget(ctl[1], delay=50)          # after the App's refresh has shown the card
+
+    def _reveal_widget(self, w, delay: int = 0):
+        def scroll():
+            _open_tabs(w)
+            sa = w.parentWidget()
+            while sa is not None and not isinstance(sa, QScrollArea):
+                sa = sa.parentWidget()
+            if sa is not None:
+                sa.ensureWidgetVisible(w, 0, 120)
+            card = w
+            while card is not None and card.property("class") != "card" and card.objectName() != "formtabs":
+                card = card.parentWidget()
+            target = card or w
+            target.setProperty("found", True)
+            target.style().unpolish(target)
+            target.style().polish(target)
+
+            def done():
+                target.setProperty("found", False)
+                target.style().unpolish(target)
+                target.style().polish(target)
+            QTimer.singleShot(FOUND_MS, done)
+        QTimer.singleShot(delay, scroll)
+
+    def show_states(self, page, states):
+        if page == "setup":
+            self.setup.show_states(states)
+        else:
+            form = self._form(page)
+            if form is not None:
+                form.show_states(states)
+
+    def visible_keys(self, page) -> set:
+        f = self._form(page)
+        return f.visible_keys() if isinstance(f, AutoPage) else set()
+
+    def open_dialog(self, key, title, node):
+        self.close_dialog(key)
+        dlg = DialogWindow(self, self._post, key, title, node)
+        dlg.setStyleSheet(self._qss)
+        self.dialogs[key] = dlg
+        dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
+
+    def close_dialog(self, key):
+        dlg = self.dialogs.pop(key, None)
+        if dlg is not None:
+            dlg.closing_from_app = True
+            dlg.close()
+
+    def show_dialog_states(self, key, states):
+        dlg = self.dialogs.get(key)
+        if dlg is not None:
+            dlg.page.show_states(states)
+
+    def choose_file(self, mode, title, initial, pattern="JSON (*.json)"):
+        """Non-modal file dialog (Qt's own, not the system one: no second message loop); the result goes out as
+        post("file", path or None)."""
+        from PySide6.QtWidgets import QFileDialog
+        dlg = QFileDialog(self, title, initial, "" if mode == "dir" else f"{pattern};;* (*.*)")
+        dlg.setOption(QFileDialog.DontUseNativeDialog, True)
+        dlg.setAcceptMode(QFileDialog.AcceptSave if mode == "save" else QFileDialog.AcceptOpen)
+        if mode == "dir":                             # 1.4: a folder (the recordings)
+            dlg.setFileMode(QFileDialog.Directory)
+            dlg.setOption(QFileDialog.ShowDirsOnly, True)
+        else:
+            dlg.setFileMode(QFileDialog.AnyFile if mode == "save" else QFileDialog.ExistingFile)
+        if mode == "save":
+            dlg.setDefaultSuffix("json")
+        dlg.fileSelected.connect(lambda path: self._post("file", path))
+        dlg.rejected.connect(lambda: self._post("file", None))
+        dlg.open()
+        self._file_dialog = dlg                       # keep it alive while it is open
+
+    def show_question(self, q, activate: bool = True):
+        """q = (title, text, ask) or None; ask False = only a note with OK. 1.8.44: shown in MessageBox; it waits
+        while this window is hidden or minimised (tray) and opens without the focus when ``activate`` is False."""
+        if q is None:
+            if self._question is not None:
+                self._question = None
+                self.message.withdraw()
+            return
+        if q == self._question or not self.isVisible() or self.isMinimized():
+            return
+        self._question = q
+        self.message.ask(q[0], q[1], bool(q[2]), activate)
+
+    def set_hidden_columns(self, hidden: dict):
+        """1.3.6: the columns the user hid, per table ({column ids joined by "|": [hidden ids]}, setting
+        hidden_columns)."""
+        from .qt_views import Table
+        self._hidden_cols = dict(hidden or {})
+        for t in self.findChildren(Table):
+            t.set_hidden_map(hidden)
+
+    def set_card_order(self, orders: dict):
+        """The user's order of the cards ({page: {run: [ids]}}, setting card_order); {} = as built. The pages
+        built later get it when they are built."""
+        self._card_orders = dict(orders or {})
+        for key, page in self.forms.items():
+            page.apply_order(self._card_orders.get(key, {}))
+
+    def show_maps(self, items, current, preview=None, thumbs=None, recent=None, marks=None, style=None, found=None):
+        self.maps.show_maps(items, current, thumbs, recent, marks, style, found)
+        self.maps.show_preview(preview)
+
+    def warm_pages(self):
+        """1.3.4 (user: the window should feel smoother): lay out every page once while the window is idle – the
+        first visit of a page polished and laid out all its widgets (settings ~110 ms), later visits ~10 ms."""
+        from PySide6.QtWidgets import QWidget
+        for i in range(self.stack.count()):
+            page = self.stack.widget(i)
+            if page is self.stack.currentWidget():
+                continue
+            page.resize(self.stack.size())
+            for w in [page] + page.findChildren(QWidget):
+                w.ensurePolished()
+            if page.layout() is not None:
+                page.layout().activate()
+
+    def show_page(self, key, search=None):
+        """Go to a page (e.g. the maps with a search: a scan found only the realm)."""
+        if self._setup_on:
+            self.show_setup(False)
+        if search is not None:
+            self.maps.search.blockSignals(True)
+            self.maps.search.setText(search)
+            self.maps.search.blockSignals(False)
+        row = self._nav_row(key)
+        if row >= 0:
+            self.nav.setCurrentRow(row)
+
+    def popup_menu(self, items, pos):
+        """1.8.10: a context menu at screen ``pos``; a picked line posts ("menu_act", id). Not modal (popup)."""
+        from PySide6.QtCore import QPoint
+        from PySide6.QtWidgets import QMenu
+        menu = QMenu(self)
+        if self._qss:
+            menu.setStyleSheet(self._qss)
+        for it in items:
+            if it is None:
+                menu.addSeparator()
+                continue
+            ident, label, enabled = it[:3]
+            a = menu.addAction(label)
+            a.setEnabled(bool(enabled))
+            if len(it) > 3 and it[3] is not None:
+                a.setCheckable(True)
+                a.setChecked(bool(it[3]))
+            a.triggered.connect(lambda _c=False, i=ident: self._post("menu_act", i))
+        self._menu = menu                                  # kept alive while open
+        menu.popup(QPoint(int(pos[0]), int(pos[1])))
+        return menu
+
+    def host(self, key: str):
+        """1.8.8: the HostView of a model Host (recordings tab: the clip preview), None if no page holds it.
+        1.8.72: the page that holds it is built for it when it is not yet (only that one)."""
+        for page in self.findChildren(AutoPage):
+            ctl = page.controls.get(key)
+            if ctl is not None and ctl[0] == "host":
+                return ctl[1]
+        for page_key, node in self._layouts.items():
+            if _node_has(node, key):
+                form = self._form(page_key)
+                ctl = form.controls.get(key) if form is not None else None
+                if ctl is not None and ctl[0] == "host":
+                    return ctl[1]
+        return None
+
+    def open_tab(self, page: str, frame: str):
+        """1.2.12 (analysis point 10): open the tab of a hand-made page that holds ``frame`` (an element picked in
+        the overlay preview opens its settings)."""
+        form = self._form(page)
+        ctl = form.controls.get(frame) if form is not None else None
+        if ctl is not None and ctl[0] == "tab" and ctl[1].currentWidget() is not ctl[2]:
+            ctl[1].setCurrentWidget(ctl[2])                 # 1.7.6: by widget – the tabs can be reordered
+
+    def apply_theme(self, dark: bool, zoom: float):
+        pal = QPalette()
+        for role, colour in qt_theme.palette_roles(dark).items():
+            pal.setColor(getattr(QPalette.ColorRole, role), QColor(colour))
+        pal.setColor(QPalette.Disabled, QPalette.Text, QColor(qt_theme.colours(dark)["fg_dis"]))
+        pal.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(qt_theme.colours(dark)["fg_dis"]))
+        QApplication.setPalette(pal)
+        self._style_lazily(qt_theme.stylesheet(dark, zoom))
+        self._dark = bool(dark)
+        self._nav_icons()
+        try:
+            hints = QApplication.styleHints()
+            hints.setColorScheme(Qt.ColorScheme.Dark if dark else Qt.ColorScheme.Light)   # title bar (Qt 6.8+)
+        except AttributeError:
+            pass
+
+    def _style_lazily(self, qss: str):
+        """1.3.4: the style sheet per part, not on the window – Qt repolishes every widget of a window whose sheet
+        changes, hidden pages too (1236 widgets ≈ 250 ms for a theme/zoom click). Navigation, message window and the
+        page on display get it at once, the other pages one after another while idle or when they are opened."""
+        if qss == self._qss:
+            return
+        self._qss = qss
+        for w in (self._side, self.message, self.completer.popup()):
+            w.setStyleSheet(qss)
+        current = self.stack.currentWidget()
+        self._stale = [self.stack.widget(i) for i in range(self.stack.count())]
+        self._style_page(current)
+        if self._stale and self.isVisible():        # a hidden window gets its pages styled when shown
+            self._style_timer.start()
+
+    def _style_page(self, page):
+        if page in self._stale:
+            self._stale.remove(page)
+            page.setStyleSheet(self._qss)
+
+    def _style_next(self):
+        if self._stale:
+            self._style_page(self._stale[0])
+        if self._stale and self.isVisible():
+            self._style_timer.start()
+
+    def show_model(self, o, thumb=None, tips=None):
+        self.overview.update_page(o, thumb, tips)
+        self.show_log_alert(o.log_alert)
+
+    def show_log_alert(self, on: bool):
+        """An amber dot on the log's icon while there is an error the user has not looked at."""
+        if on != self._log_alert:
+            self._log_alert = on
+            self._nav_icons()
+
+    def _nav_icons(self):
+        """The navigation's icons in the colours of the theme: grey, the page on display in the accent colour."""
+        c = qt_theme.colours(self._dark)
+        ratio = self.devicePixelRatioF() or 1.0
+        for row in range(self.nav.count()):
+            key = self.nav.item(row).data(Qt.UserRole)
+            alert = key == "log" and self._log_alert
+            icon = QIcon()
+            icon.addPixmap(nav_icon(key, c["dim"], ratio, alert), QIcon.Normal)
+            icon.addPixmap(nav_icon(key, c["accent"], ratio, alert), QIcon.Selected)
+            icon.addPixmap(nav_icon(key, c["fg"], ratio, alert), QIcon.Active)
+            self.nav.item(row).setIcon(icon)
+
+    def geometry_b64(self) -> str:
+        return base64.b64encode(bytes(self.saveGeometry())).decode("ascii")
+
+    def restore_b64(self, text: str) -> bool:
+        try:
+            return bool(text) and self.restoreGeometry(QByteArray(base64.b64decode(text)))
+        except (ValueError, TypeError):
+            return False
+
+    def bring_to_front(self):
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def hwnd(self) -> int:
+        try:
+            return int(self.winId())
+        except (TypeError, ValueError, RuntimeError):
+            return 0
+
+    # events: only flags and post() – see the module docstring
+    def showEvent(self, e):
+        super().showEvent(e)
+        if self._stale and not self._style_timer.isActive():
+            self._style_timer.start()
+
+    def closeEvent(self, e):
+        if self.allow_close:
+            e.accept()
+        else:
+            e.ignore()
+            self._post("quit")
+
+    def changeEvent(self, e):
+        if e.type() == QEvent.WindowStateChange:
+            minimised = bool(self.windowState() & Qt.WindowMinimized)
+            if minimised and not self.minimised:
+                self._post("minimised")
+            self.minimised = minimised
+        super().changeEvent(e)
+
+    def moveEvent(self, e):
+        self.geometry_changed = True
+        super().moveEvent(e)
+
+    def resizeEvent(self, e):
+        self.geometry_changed = True
+        super().resizeEvent(e)
+        self._compact_nav(self.width() < NAV_COMPACT_BELOW)
+
+    def _compact_nav(self, on: bool, keep: bool = False):
+        """A narrow window: the navigation shows only its icons (names as hover text) – the page gets the room.
+        ``keep``: opened for a search (Ctrl+F) – stays open until a hit is chosen."""
+        if keep:
+            self._nav_kept = True
+        elif self._nav_kept:
+            return
+        if on == self._nav_compact:
+            return
+        self._nav_compact = on
+        self.search.setVisible(not on)
+        self.search_btn.setVisible(on)
+        if on:
+            self.search_btn.setIcon(QIcon(nav_icon("search", qt_theme.colours(self._dark)["dim"],
+                                                   self.devicePixelRatioF() or 1.0)))
+        self.nav.setFixedWidth(NAV_COMPACT_W if on else NAV_W)
+        self.search.setFixedWidth(NAV_W)
+        self.search_btn.setFixedWidth(NAV_COMPACT_W)
+        self._nav_texts()
+
+    def _nav_texts(self):
+        """Names in the rows (or as hover text while the navigation is narrow), whatever their order."""
+        labels = dict(PAGES)
+        on = self._nav_compact
+        for row in range(self.nav.count()):
+            item = self.nav.item(row)
+            label = labels.get(item.data(Qt.UserRole), "")
+            item.setText("" if on else _(label))
+            item.setToolTip(_(label) if on else "")

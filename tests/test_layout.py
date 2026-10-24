@@ -1,10 +1,10 @@
-"""Overlay stays inside the black bar on ultrawide (dbdmapscout/layout.py)."""
+"""Overlay stays inside the black bar on ultrawide (fogscout/layout.py)."""
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dbdmapscout import layout as L  # noqa: E402
+from fogscout import layout as L  # noqa: E402
 
 GX, GW, GH, M = 0, 3440, 1440, 17
 BAR = L.bar_width(GW, GH)

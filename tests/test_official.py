@@ -1,4 +1,4 @@
-"""Official match data (dbdmapscout/official.py) and the userscript that saves it (matchexport.user.js)."""
+"""Official match data (fogscout/official.py) and the userscript that saves it (matchexport.user.js)."""
 import json
 import os
 import shutil
@@ -10,9 +10,9 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dbdmapscout import history  # noqa: E402
-from dbdmapscout import official as o  # noqa: E402
-from dbdmapscout.textnorm import fold  # noqa: E402
+from fogscout import history  # noqa: E402
+from fogscout import official as o  # noqa: E402
+from fogscout.textnorm import fold  # noqa: E402
 
 T0 = 1791030420.0           # 3 Oct 2026, 12:27 UTC
 SCRIPT = os.path.join(os.path.dirname(o.__file__), o.SCRIPT)
@@ -165,10 +165,10 @@ def test_merge_keeps_the_newest(tmp_path, monkeypatch):
 def test_take_downloads_reads_ours_and_deletes_only_ours(tmp_path):
     dl, store = tmp_path / "Downloads", str(tmp_path / o.FILE)
     dl.mkdir()
-    a = write(dl, "dbdmapscout-matches.json", export(entry(T0), entry(T0 + 600)))
-    b = write(dl, "dbdmapscout-matches (1).json", export(entry(T0 + 600), entry(T0 + 1200), script=2))
-    foreign = write(dl, "dbdmapscout-matches (2).json", {"something": "else"})
-    half = write(dl, "DBDMAPSCOUT-MATCHES (3).json", '{"format": "dbdmapscout-matches", "matc')
+    a = write(dl, "fogscout-matches.json", export(entry(T0), entry(T0 + 600)))
+    b = write(dl, "fogscout-matches (1).json", export(entry(T0 + 600), entry(T0 + 1200), script=2))
+    foreign = write(dl, "fogscout-matches (2).json", {"something": "else"})
+    half = write(dl, "FOGSCOUT-MATCHES (3).json", '{"format": "fogscout-matches", "matc')
     other = write(dl, "other.json", export(entry(T0 + 5000)))
     res = o.take_downloads(str(dl), store, now=T0 + 3600)
     assert (res.files, res.matches, res.new, res.script) == (2, 4, 3, 1)
@@ -185,9 +185,9 @@ def test_an_odd_file_never_blocks_the_import_of_the_others(tmp_path):
     dl, store = tmp_path / "Downloads", str(tmp_path / o.FILE)
     dl.mkdir()
     odd = dict(entry(T0), player={"role": [], "character": {}, "status": 5, "seconds": "x"})
-    mixed = write(dl, "dbdmapscout-matches.json", export(odd, entry(T0 + 600)))
-    deep = write(dl, "dbdmapscout-matches (1).json", "[" * 100000 + "]" * 100000)
-    later = write(dl, "dbdmapscout-matches (2).json", export(entry(T0 + 1200)))
+    mixed = write(dl, "fogscout-matches.json", export(odd, entry(T0 + 600)))
+    deep = write(dl, "fogscout-matches (1).json", "[" * 100000 + "]" * 100000)
+    later = write(dl, "fogscout-matches (2).json", export(entry(T0 + 1200)))
     os.utime(mixed, (T0, T0)), os.utime(deep, (T0 + 1, T0 + 1)), os.utime(later, (T0 + 2, T0 + 2))
     res = o.take_downloads(str(dl), store, now=T0 + 3600)
     assert res.foreign == [deep] and os.path.exists(deep)                     # not ours: left alone
@@ -198,7 +198,7 @@ def test_an_odd_file_never_blocks_the_import_of_the_others(tmp_path):
 
 def test_take_downloads_skips_huge_files(tmp_path, monkeypatch):
     monkeypatch.setattr(o, "MAX_FILE", 10)
-    big = write(tmp_path, "dbdmapscout-matches.json", export(entry(T0)))
+    big = write(tmp_path, "fogscout-matches.json", export(entry(T0)))
     res = o.take_downloads(str(tmp_path), str(tmp_path / o.FILE), now=T0)
     assert res.files == 0 and res.foreign == [big] and os.path.exists(big)
 
@@ -410,7 +410,7 @@ function run(hash, store) {
   return files;
 }
 const store = {};
-const asked = run('#dbdmapscout-structure', store);
+const asked = run('#fogscout-structure', store);
 setTimeout(() => {
   const again = run('', store);              // the request is used up: matches only
   const plain = run('', {});
@@ -426,7 +426,7 @@ def _without_clock(body: str) -> str:
 
 
 def test_userscript_saves_the_structure_only_on_request_and_without_values(tmp_path):
-    """1.8.46: opened with #dbdmapscout-structure the script saves once the shape of the page's answer – field
+    """1.8.46: opened with #fogscout-structure the script saves once the shape of the page's answer – field
     names and types, no value, no id-like or name-like field name."""
     node = shutil.which("node")
     if not node:
@@ -448,18 +448,18 @@ def test_userscript_saves_the_structure_only_on_request_and_without_values(tmp_p
     assert out.returncode == 0, out.stderr
     res = json.loads(out.stdout)
     names = [n for n, _body in res["asked"]]
-    assert "dbdmapscout-structure.json" in names and "dbdmapscout-matches.json" in names
-    body = dict(res["asked"])["dbdmapscout-structure.json"]
+    assert "fogscout-structure.json" in names and "fogscout-matches.json" in names
+    body = dict(res["asked"])["fogscout-structure.json"]
     for secret in ("MyOwnName", "SomeoneElse", "765611", "secret-match-id", "Pop Goes", "241377", "Mother",
                    "0123456789abcdef", "Some Name"):
         assert secret not in _without_clock(body)
     shape = json.loads(body)
-    assert shape["format"] == "dbdmapscout-structure" and shape["script"] == o.script_version(SCRIPT)
+    assert shape["format"] == "fogscout-structure" and shape["script"] == o.script_version(SCRIPT)
     match = shape["shape"]["data"][0]
     assert match["matchStat"]["matchStartTime"] == "number" and match["matchStat"]["extra"] == "string"
     assert match["playerStat"]["perks"] == [{"name": "string", "tier": "number"}]
     assert match["byPlayer"] == {"<key>": {"score": "number"}}
-    assert [n for n, _b in res["again"]] == [] and [n for n, _b in res["plain"]] == ["dbdmapscout-matches.json"]
+    assert [n for n, _b in res["again"]] == [] and [n for n, _b in res["plain"]] == ["fogscout-matches.json"]
 
 
 RESAVE_RUNS = r"""
@@ -467,7 +467,7 @@ const store = {};
 const first = run('', store);                          // a new match: saved
 setTimeout(() => {
   const again = run('', store);                        // nothing new: nothing saved, and the console says why
-  const resave = run('#dbdmapscout-resave', store);    // asked: saved once more although nothing is new
+  const resave = run('#fogscout-resave', store);    // asked: saved once more although nothing is new
   setTimeout(() => {
     const after = run('', store);                      // the request is used up
     setTimeout(() => process.stdout.write(JSON.stringify({ first, again, resave, after, logs })), 20);
@@ -478,7 +478,7 @@ setTimeout(() => {
 
 def test_userscript_4_saves_all_matches_again_on_request_and_says_what_it_does(tmp_path):
     """1.8.52: after a new install the user had to reset the script's memory in the browser console to get a file
-    without a new match – #dbdmapscout-resave does it once; the console tells that the script runs and why it saved
+    without a new match – #fogscout-resave does it once; the console tells that the script runs and why it saved
     nothing (the user saw an empty console and could not tell whether the script ran at all)."""
     node = shutil.which("node")
     if not node:
@@ -495,12 +495,12 @@ def test_userscript_4_saves_all_matches_again_on_request_and_says_what_it_does(t
     assert out.returncode == 0, out.stderr
     res = json.loads(out.stdout)
     names = {k: [n for n, _b in res[k]] for k in ("first", "again", "resave", "after")}
-    assert names == {"first": ["dbdmapscout-matches.json"], "again": [], "resave": ["dbdmapscout-matches.json"],
+    assert names == {"first": ["fogscout-matches.json"], "again": [], "resave": ["fogscout-matches.json"],
                      "after": []}
     assert o.parse(json.loads(res["resave"][0][1]), now=T0)[0][0].map == "Coal Tower"
-    assert sum("userscript 4 active" in m for m in res["logs"]) == 4                 # once per page load
+    assert sum("userscript 5 active" in m for m in res["logs"]) == 4                 # once per page load
     assert sum("no new match" in m for m in res["logs"]) == 2                       # "again" and "after"
-    assert o.RESAVE_HASH == "#dbdmapscout-resave" and o.RESAVE_SCRIPT == o.script_version(SCRIPT)
+    assert o.RESAVE_HASH == "#fogscout-resave" and o.RESAVE_SCRIPT == o.script_version(SCRIPT)
 
 
 # ------------------------------------------------------------------ map correction, trend
@@ -545,7 +545,7 @@ def test_trend_keeps_empty_buckets_and_the_newest_30(monkeypatch):
 
 
 def test_chart_columns_stay_thin():
-    trendchart = pytest.importorskip("dbdmapscout.trendchart")
+    trendchart = pytest.importorskip("fogscout.trendchart")
     cols = trendchart.columns(3, 600)
     assert len(cols) == 3 and all(x1 - x0 <= trendchart.BAR_MAX + 1e-9 for x0, x1 in cols)
     assert all(a[1] < b[0] for a, b in zip(cols, cols[1:]))     # air between columns
@@ -571,10 +571,10 @@ def test_a_second_round_inside_a_match_is_a_false_detection():
 
 def test_take_downloads_hands_over_the_new_matches(tmp_path):
     store = str(tmp_path / o.FILE)
-    write(str(tmp_path), "dbdmapscout-matches.json", export(entry(T0), entry(T0 + 900)))
+    write(str(tmp_path), "fogscout-matches.json", export(entry(T0), entry(T0 + 900)))
     assert [m.t for m in o.take_downloads(str(tmp_path), store, now=T0 + 3600).fresh] == [T0, T0 + 900]
-    write(str(tmp_path), "dbdmapscout-matches.json", export(entry(T0 + 900), entry(T0 + 1800)))
-    write(str(tmp_path), "dbdmapscout-matches (1).json", export(entry(T0 + 1800)))      # the same match twice
+    write(str(tmp_path), "fogscout-matches.json", export(entry(T0 + 900), entry(T0 + 1800)))
+    write(str(tmp_path), "fogscout-matches (1).json", export(entry(T0 + 1800)))      # the same match twice
     res = o.take_downloads(str(tmp_path), store, now=T0 + 3600)
     assert [m.t for m in res.fresh] == [T0 + 1800] and res.new == 1                      # only the unknown one
 
@@ -681,3 +681,68 @@ def test_modes_seen_most_played_first_and_unknown_left_out():
           enumerate((["Online", "Public Match"], ["Online", "Public Match"], ["2v8", "2v8 Mode"], [], ["", "Event"]))]
     assert o.modes_seen(ms) == [("Online", "Public Match"), ("2v8", "2v8 Mode"), ("Event", "Event")]
     assert o.mode_key(ms[3]) == "" and o.mode_key(None) == ""
+
+
+def test_opponent_names_are_the_other_players_characters():
+    """1.8.73: the setting farming_opponents names farming partners by character."""
+    m = o.Match(t=T0, map="Coal Tower", role="survivor", opp=[
+        o.Player(role="killer", character="Slasher", status="Escaped"),
+        o.Player(role="survivor", character="Meg Thomas"), o.Player(role="survivor", character="")])
+    assert o.opponent_names(m) == {"Slasher", "Meg Thomas"}
+    assert o.opponent_names(o.Match(t=T0, map="Coal Tower")) == set()
+
+
+def test_runs_of_short_rounds_against_the_same_character_look_like_farming():
+    """1.8.88 (user: farming rounds the lobby look missed had to be marked by hand): three short rounds in a row
+    against the same character are offered as farming – as survivor the same killer, as killer two of the same
+    survivors; a long round, a longer pause, another role or another character ends the run; two are not a run."""
+    def pair(t, seconds, role, names, m_seconds=None):
+        r = history.Round(t, seconds, "coal", "Coal Tower", role=role)
+        other = "killer" if role == "survivor" else "survivor"
+        m = o.Match(t=t - 38, map="Coal Tower", role=role, seconds=m_seconds if m_seconds is not None else seconds,
+                    opp=[o.Player(role=other, character=n) for n in names])
+        return r, m
+
+    surv = [pair(T0 + i * 200, 120, "survivor", ["Slasher"]) for i in range(3)]
+    assert [r.t for r in o.farming_runs(surv)] == [T0, T0 + 200, T0 + 400]
+    assert [r.t for r in o.farming_runs(surv[::-1])] == [T0, T0 + 200, T0 + 400]            # order does not matter
+    assert o.farming_runs(surv[:2]) == []                                                   # two are not a run
+    assert o.farming_runs(surv[:2] + [pair(T0 + 400, 120, "survivor", ["Nurse"])]) == []    # another killer
+    assert o.farming_runs(surv[:2] + [pair(T0 + 400, 120, "killer", ["Slasher"])]) == []    # another role
+    assert o.farming_runs(surv[:2] + [pair(T0 + 400, 120, "survivor", [])]) == []           # no opponent known
+    assert o.farming_runs(surv[:2] + [pair(T0 + 400, 0, "survivor", ["Slasher"])]) == []    # no length
+    long = pair(T0 + 400, 600, "survivor", ["Slasher"])                                     # a real round between
+    late = [pair(T0 + 1100 + i * 200, 120, "survivor", ["Slasher"]) for i in range(3)]
+    assert [r.t for r in o.farming_runs(surv[:2] + [long] + late)] == [r.t for r, _m in late]
+    pause = surv[:2] + [pair(T0 + 200 + 120 + o.FARM_RUN_GAP_S + 1, 120, "survivor", ["Slasher"])]
+    assert o.farming_runs(pause) == []                                                      # pause too long
+    pause[2][0].t -= 2                                                                      # just inside the gap
+    assert len(o.farming_runs(pause)) == 3
+    # as killer: at least two of the same survivors (bots change one or two between the rounds)
+    crews = (["Meg", "Dwight", "Claudette", "Jake"], ["Meg", "Dwight", "Nea", "Ace"], ["Meg", "Dwight", "Bill", "Feng"])
+    kill = [pair(T0 + i * 200, 150, "killer", crew) for i, crew in enumerate(crews)]
+    assert len(o.farming_runs(kill)) == 3
+    kill[2] = pair(T0 + 400, 150, "killer", ["Meg", "Bill", "Feng", "Yui"])                 # only one in common
+    assert o.farming_runs(kill) == []
+    duo = [pair(T0 + i * 200, 150, "killer", ["Meg"]) for i in range(3)]                    # one survivor known
+    assert len(o.farming_runs(duo)) == 3
+    assert len(o.farming_runs(surv, max_seconds=100)) == 0 and len(o.farming_runs(surv, min_run=4)) == 0
+
+
+def test_files_of_the_old_program_name_are_still_taken(tmp_path):
+    """1.9: userscript 1–4 (installed as "DbD Map Scout – match export") saves dbdmapscout-matches.json with the old
+    format marker – read, stored and deleted like our own files until the user installs script 5."""
+    dl, store = tmp_path / "Downloads", str(tmp_path / o.FILE)
+    dl.mkdir()
+    a = write(dl, "dbdmapscout-matches.json", dict(export(entry(T0), script=4), format=o.OLD_FORMAT))
+    b = write(dl, "DbDMapScout-matches (1).json", dict(export(entry(T0 + 600), script=3), format=o.OLD_FORMAT))
+    c = write(dl, "fogscout-matches.json", export(entry(T0 + 1200), script=5))
+    wrong = write(dl, "fogscout-matches (1).json", dict(export(entry(T0 + 1800)), format="someone-elses"))
+    res = o.take_downloads(str(dl), store, now=T0 + 3600)
+    assert (res.files, res.matches, res.new, res.script) == (3, 3, 3, 3)
+    assert not any(os.path.exists(p) for p in (a, b, c)) and os.path.exists(wrong) and res.foreign == [wrong]
+    assert [m.t for m in o.load(store)] == [T0, T0 + 600, T0 + 1200]
+    with pytest.raises(ValueError):
+        o.parse({"format": "someone-elses", "matches": []})
+    assert o.PREFIX == o.FORMAT == "fogscout-matches" and o.STRUCTURE_HASH == "#fogscout-structure"
+    assert o.STRUCTURE_SCRIPT == o.RESAVE_SCRIPT == o.script_version(SCRIPT) == 5      # the hashes carry the new name

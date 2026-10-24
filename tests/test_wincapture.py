@@ -9,7 +9,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dbdmapscout.wincapture import CapturePolicy, WindowCapture, describe  # noqa: E402
+from fogscout.wincapture import CapturePolicy, WindowCapture, describe  # noqa: E402
 
 
 # ------------------------------------------------------------------ policy
