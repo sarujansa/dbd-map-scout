@@ -234,7 +234,7 @@ SPECS = {
                     ("sub", N_("Aufnahme")), ("check", "st.more.rec_early"), ("check", "st.more.rec_pre"),
                     ("check", "st.more.rec_buffer"), ("check", "st.more.rec_merge"),
                     ("row", (("label", "st.more.rec_tail.label"), ("combo", "st.more.rec_tail"), ("stretch",))),
-                    ("check", "st.more.rec_window"), ("check", "st.more.rec_overlay"),
+                    ("check", "st.more.rec_window"), ("check", "st.more.rec_game"), ("check", "st.more.rec_overlay"),
                     ("sub", N_("Ton")), ("check", "st.more.rec_audio"),
                     ("row", (("check", "st.more.rec_audio_dbd"), ("check", "st.more.rec_audio_discord"),
                              ("check", "st.more.rec_audio_desktop"), ("check", "st.more.rec_audio_mic"), ("stretch",))),

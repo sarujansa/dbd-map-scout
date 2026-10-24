@@ -1603,6 +1603,16 @@ EN = {
     # 1.4.1
     'Wiederholungspuffer mit DBD starten und stoppen': "Start and stop the replay buffer with DBD",
     "Nur das DBD-Fenster aufnehmen": "Record only the DBD window",
+    "Dafür die OBS-Spielaufnahme verwenden": "Use OBS's game capture for it",
+    "Statt der Fensteraufnahme legt das Programm in OBS eine Spielaufnahme „Fog Scout – DBD-Spiel“ an und blendet "
+    "die Fensteraufnahme aus. Die Spielaufnahme braucht etwas weniger Leistung; OBS hängt sich dafür mit seinem "
+    "Anti-Cheat-kompatiblen Hook ins Spiel – das macht OBS, nicht dieses Programm. Ihr eigener Ton bleibt aus, der "
+    "Spielton kommt weiter über die Tonquelle „Fog Scout – DBD“. Nur zusammen mit „Nur das DBD-Fenster aufnehmen“.":
+        "Instead of the window capture the program creates a game capture \"Fog Scout – DBD-Spiel\" in OBS and hides "
+        "the window capture. The game capture needs a little less power; for it OBS hooks into the game with its "
+        "anti-cheat-compatible hook – OBS does that, not this program. Its own sound stays off, the game sound still "
+        "comes through the audio source \"Fog Scout – DBD\". Only together with \"Record only the DBD window\".",
+    "Bildquelle {name} über {over} gelegt": "Picture source {name} put over {over}",
     "Bildquelle angelegt: {name} (Szene „{scene}“)": "Picture source created: {name} (scene \"{scene}\")",
     "Bildquelle in der Szene „{scene}“ ausgeblendet: {name}": "Picture source hidden in the scene \"{scene}\": {name}",
     "Bildquelle zur Szene „{scene}“ hinzugefügt: {name}": "Picture source added to the scene \"{scene}\": {name}",
@@ -1612,8 +1622,8 @@ EN = {
     "DBD-Fenster in OBS nicht eingerichtet: {error}": "DBD window not set up in OBS: {error}",
     "OBS konnte den Wiederholungspuffer nicht starten (OBS meldet einen Fehler der Ausgabe, meist des Kodierers – Details im OBS-Log). Das Programm versucht es erst beim nächsten DBD-Start wieder; bis dahin keine Sofort-Clips (F8) und kein Vorlauf.":
         "OBS could not start the replay buffer (OBS reports an output error, mostly the encoder – details in the OBS log). The program tries again only at the next DBD start; until then no instant clips (F8) and no pre-roll.",
-    "Das Programm legt in OBS eine Fensteraufnahme „Fog Scout – DBD-Fenster“ an (oben in der laufenden Szene, auf die Leinwand eingepasst) und stellt sie auf Steam, Epic oder Store um. Aufgenommen wird dann nur das Spiel – ohne Discord, Benachrichtigungen und ohne das Overlay dieses Programms. OBS nimmt über Windows auf (wie die Fensteraufnahme), nicht über die Spielaufnahme, die sich ins Spiel hängt. Aus: die Quelle wird nur ausgeblendet, deine eigene Bildschirmaufnahme bleibt unangetastet.":
-        "The program creates a window capture \"Fog Scout – DBD-Fenster\" in OBS (on top of the scene on air, fitted to the canvas) and switches it to Steam, Epic or the Store. Only the game is recorded then – without Discord, notifications and without this program's overlay. OBS captures through Windows (like the window capture), not through game capture, which hooks into the game. Off: the source is only hidden, your own display capture stays untouched.",
+    "Das Programm legt in OBS eine Fensteraufnahme „Fog Scout – DBD-Fenster“ an (oben in der laufenden Szene, auf die Leinwand eingepasst) und stellt sie auf Steam, Epic oder Store um. Aufgenommen wird dann nur das Spiel – ohne Discord, Benachrichtigungen und ohne das Overlay dieses Programms. OBS nimmt dabei über Windows auf; die Spielaufnahme gibt es als Häkchen darunter. Aus: die Quelle wird nur ausgeblendet, deine eigene Bildschirmaufnahme bleibt unangetastet.":
+        "The program creates a window capture \"Fog Scout – DBD-Fenster\" in OBS (on top of the scene on air, fitted to the canvas) and switches it to Steam, Epic or the Store. Only the game is recorded then – without Discord, notifications and without this program's overlay. OBS captures through Windows here; game capture is the box below. Off: the source is only hidden, your own display capture stays untouched.",
     'Das Programm startet den Wiederholungspuffer in OBS, sobald DBD läuft, und stoppt ihn, wenn DBD zu ist – so kostet er ausserhalb des Spiels nichts und du musst nicht daran denken.': "The program starts OBS's replay buffer as soon as DBD runs and stops it when DBD is closed – so it costs nothing outside the game and you need not think of it.",
     'Nachlauf nach dem Rundenende': 'Tail after the end of the round',
     "Overlay mit in die Aufnahme": "Overlay into the recording",

@@ -279,6 +279,9 @@ class SettingsTab:
         self.rec_window_var = ui.BooleanVar(value=bool(self.settings.get("rec_window", False)))   # 1.8.41
         self._reg("st.more.rec_window", ui.Checkbutton(rc, text=_("Nur das DBD-Fenster aufnehmen"),
                                                         variable=self.rec_window_var, command=self._rec_setting)).pack(anchor="w")
+        self.rec_game_var = ui.BooleanVar(value=self.settings.get("rec_capture", "window") == "game")   # 1.11.7
+        self._reg("st.more.rec_game", ui.Checkbutton(rc, text=_("Dafür die OBS-Spielaufnahme verwenden"),
+                                                      variable=self.rec_game_var, command=self._rec_setting)).pack(anchor="w")
         self.rec_overlay_var = ui.BooleanVar(value=bool(self.settings.get("rec_overlay", False)))   # 1.8.89
         self._reg("st.more.rec_overlay", ui.Checkbutton(rc, text=_("Overlay mit in die Aufnahme"),
                                                          variable=self.rec_overlay_var, command=self._rec_setting)).pack(anchor="w")
@@ -556,6 +559,7 @@ class SettingsTab:
                              folder=str(self.settings.get("rec_folder", "")), limit_gb=limit,
                              pre=bool(self.rec_pre_var.get()), tail_s=tail, buffer_auto=bool(self.rec_buffer_var.get()),
                              window=bool(self.rec_window_var.get()), obs_start=bool(self.rec_obs_start_var.get()),
+                             capture="game" if self.rec_game_var.get() else "window",                # 1.11.7
                              overlay=bool(self.rec_overlay_var.get()), overlay_file=obsoverlay.path(self.root_dir),
                              merge=bool(self.rec_merge_var.get()), farming_sub=bool(self.rec_farming_var.get()),
                              early=bool(self.rec_early_var.get()), instant=bool(self.rec_instant_var.get()),
@@ -582,6 +586,7 @@ class SettingsTab:
             self.settings.set("rec_tail_s", int(cfg.tail_s))
             self.settings.set("rec_buffer_auto", cfg.buffer_auto)
             self.settings.set("rec_window", cfg.window)
+            self.settings.set("rec_capture", cfg.capture)
             self.settings.set("rec_overlay", cfg.overlay)
             self.settings.set("rec_obs_start", cfg.obs_start)
             self.settings.set("rec_merge", cfg.merge)

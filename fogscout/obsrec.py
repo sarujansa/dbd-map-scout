@@ -81,6 +81,13 @@ WINDOW_KIND = "window_capture"
 WINDOW_SOURCE = "Fog Scout – DBD-Fenster"
 WINDOW_PRIORITY_CLASS = 0              # OBS: 0 title, else same type · 1 title only · 2 title, else same program
 WINDOW_METHOD_WGC = 2                  # OBS window capture: 0 automatic · 1 BitBlt · 2 Windows 10 (1903 and up)
+# 1.11.7 (user's decision: "Spielaufnahme ist auch in Ordnung"): OBS's game capture as the other way – OBS hooks into
+# the game for it (its anti-cheat-compatible hook), this program still never touches DBD; it only asks OBS to do it.
+# OBS cannot change the kind of a source, so it is a second source of ours: the chosen one is shown, the other only
+# hidden, never deleted. Its own sound stays off – the game's sound comes from our application audio source.
+GAME_KIND = "game_capture"
+GAME_SOURCE = "Fog Scout – DBD-Spiel"
+CAPTURES = ("window", "game")          # Config.capture: which of our picture sources is shown
 # 1.8.89 (user: "nur das DBD-Fenster aufnehmen und das Overlay im Spiel"): the window capture has no overlay (our own
 # windows) – an image source of ours shows the picture obsoverlay writes, placed over the window item
 OVERLAY_KIND = "image_source"
@@ -88,7 +95,17 @@ OVERLAY_SOURCE = "Fog Scout – Overlay"
 # 1.9: the program was "DbD Map Scout" until 1.8.91 – a source OBS still holds under that name is ours and is renamed
 # once (SetInputName: only these four names, the scene items follow the input; the user's sources are never touched)
 OLD_SOURCE_NAME = "DbD Map Scout"
-OWN_SOURCES = (AUDIO_APPS["dbd"][0], AUDIO_APPS["discord"][0], WINDOW_SOURCE, OVERLAY_SOURCE)
+OWN_SOURCES = (AUDIO_APPS["dbd"][0], AUDIO_APPS["discord"][0], WINDOW_SOURCE, OVERLAY_SOURCE, GAME_SOURCE)
+
+
+def video_source(capture: str) -> tuple:
+    """(name, kind, settings when created) of our picture source for ``capture`` "window" / "game"."""
+    if capture == "game":
+        return GAME_SOURCE, GAME_KIND, {"capture_mode": "window", "window": AUDIO_APPS["dbd"][1],
+                                        "priority": WINDOW_PRIORITY_CLASS, "capture_cursor": False,
+                                        "capture_audio": False, "anti_cheat_hook": True}
+    return WINDOW_SOURCE, WINDOW_KIND, {"window": AUDIO_APPS["dbd"][1], "priority": WINDOW_PRIORITY_CLASS,
+                                        "method": WINDOW_METHOD_WGC, "cursor": False}
 RECHECK_S = 30.0                       # 1.8.41: while DBD runs, OBS is set up again this often if it was not ready
 # 1.8.47 (user: "OBS autostart" – when DBD starts, OBS keeps running after it): OBS started by the program, once per
 # DBD start, only when no OBS window is open; then looked for every OBS_START_POLL_S up to OBS_START_WAIT_S
@@ -889,6 +906,7 @@ class Config:
     clip_sources: tuple = DEFAULT_CLIP_SOURCES   # 1.8.6: what the F8 clip keeps when the buffer file has the tracks
     farming_days: int = DEFAULT_FARMING_DAYS     # 1.8.23: farming recordings go after this many days (0 = never)
     window: bool = False             # 1.8.41: our window capture of DBD in OBS (WINDOW_SOURCE) instead of the monitor
+    capture: str = "window"          # 1.11.7: … through OBS's window capture or its game capture (GAME_SOURCE)
     obs_start: bool = False          # 1.8.47: start OBS when DBD starts and OBS cannot be reached
     overlay: bool = False            # 1.8.89: our overlay as an image source over the window capture
     overlay_file: str = ""           # … the PNG obsoverlay writes (absolute)
@@ -1877,59 +1895,72 @@ class Recorder(threading.Thread):
             return ""
         return found[0].rsplit(":", 1)[-1]
 
+    def _capture(self) -> str:
+        """1.11.7: which of our picture sources is wanted – "window" (OBS window capture) or "game"."""
+        return self.cfg.capture if self.cfg.capture in CAPTURES else "window"
+
     def _video(self, c: ObsClient) -> str:
         """1.8.41: our window capture of DBD (WINDOW_SOURCE) in the scene on air – created on top of it and fitted
         to the canvas the first time, added to another scene the same way, shown again when hidden, pointed at the
         running DBD (Steam/Epic/Store). Switched off: only hidden in this scene, never deleted – the user's own
-        sources (the monitor capture) are never touched. Returns a problem for the status line, else ""."""
+        sources (the monitor capture) are never touched. 1.11.7: the same for our game capture (GAME_SOURCE) – the
+        one of the two that Config.capture names is shown, the other hidden. Returns a problem for the status line,
+        else ""."""
         notes = []
+        want = self._capture() if self.cfg.window else None
         try:
             names = self._input_names(c)
-            if WINDOW_SOURCE not in names and not self.cfg.window:
+            ours = [k for k in CAPTURES if video_source(k)[0] in names or k == want]
+            if not ours:
                 return ""                                 # never created, not wanted: nothing to do
             cur = c.request("GetCurrentProgramScene")
             scene = cur.get("currentProgramSceneName") or cur.get("sceneName") or ""
-            if WINDOW_SOURCE not in names:
-                made = c.request("CreateInput", {"sceneName": scene, "inputName": WINDOW_SOURCE,
-                                                 "inputKind": WINDOW_KIND, "sceneItemEnabled": True,
-                                                 "inputSettings": {"window": AUDIO_APPS["dbd"][1],
-                                                                   "priority": WINDOW_PRIORITY_CLASS,
-                                                                   "method": WINDOW_METHOD_WGC, "cursor": False}})
-                self._fit(c, scene, made.get("sceneItemId"))
-                notes.append(_("Bildquelle angelegt: {name} (Szene „{scene}“)", name=WINDOW_SOURCE, scene=scene))
-            elif scene:
-                items = [i for i in c.request("GetSceneItemList", {"sceneName": scene}).get("sceneItems", [])
-                         if i.get("sourceName") == WINDOW_SOURCE]
-                if not self.cfg.window:
-                    for i in items:
-                        if i.get("sceneItemEnabled", True):
-                            c.request("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": i.get("sceneItemId"),
-                                                              "sceneItemEnabled": False})
-                            notes.append(_("Bildquelle in der Szene „{scene}“ ausgeblendet: {name}", scene=scene,
-                                           name=WINDOW_SOURCE))
-                    for n in notes:
-                        log.info("OBS: %s", n)
-                    return ""
-                if not items:
-                    made = c.request("CreateSceneItem", {"sceneName": scene, "sourceName": WINDOW_SOURCE,
-                                                         "sceneItemEnabled": True})
-                    self._fit(c, scene, made.get("sceneItemId"))
-                    notes.append(_("Bildquelle zur Szene „{scene}“ hinzugefügt: {name}", scene=scene,
-                                   name=WINDOW_SOURCE))
-                elif not any(i.get("sceneItemEnabled", True) for i in items):
-                    c.request("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": items[0].get("sceneItemId"),
-                                                      "sceneItemEnabled": True})
-                    notes.append(_("Bildquelle in der Szene „{scene}“ wieder eingeblendet: {name}", scene=scene,
-                                   name=WINDOW_SOURCE))
-            exe = self._follow_window(c, "dbd", WINDOW_SOURCE, WINDOW_PRIORITY_CLASS)
-            if exe:
-                notes.append(_("Bildquelle {name} zeigt jetzt {exe}", name=WINDOW_SOURCE, exe=exe))
+            for key in sorted(ours, key=lambda k: k == want):  # hide the other one first, then show the wanted one
+                self._video_source(c, scene, names, key, key == want, notes)
         except ObsError as e:
             log.info("OBS: Bildquelle nicht eingerichtet (%s)", e)
             return _("DBD-Fenster in OBS nicht eingerichtet: {error}", error=e)
         for n in notes:
             log.info("OBS: %s", n)
         return ""
+
+    def _video_source(self, c: ObsClient, scene: str, names: set, capture: str, wanted: bool, notes: list):
+        """One of our picture sources: created / added to the scene / shown again and pointed at DBD when
+        ``wanted``, else only hidden in this scene."""
+        name, kind, settings = video_source(capture)
+        if name not in names:
+            if not wanted:
+                return
+            made = c.request("CreateInput", {"sceneName": scene, "inputName": name, "inputKind": kind,
+                                             "sceneItemEnabled": True, "inputSettings": settings})
+            self._fit(c, scene, made.get("sceneItemId"))
+            notes.append(_("Bildquelle angelegt: {name} (Szene „{scene}“)", name=name, scene=scene))
+        elif scene:
+            items = [i for i in c.request("GetSceneItemList", {"sceneName": scene}).get("sceneItems", [])
+                     if i.get("sourceName") == name]
+            if not wanted:
+                for i in items:
+                    if i.get("sceneItemEnabled", True):
+                        c.request("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": i.get("sceneItemId"),
+                                                          "sceneItemEnabled": False})
+                        notes.append(_("Bildquelle in der Szene „{scene}“ ausgeblendet: {name}", scene=scene,
+                                       name=name))
+                return
+            if not items:
+                made = c.request("CreateSceneItem", {"sceneName": scene, "sourceName": name,
+                                                     "sceneItemEnabled": True})
+                self._fit(c, scene, made.get("sceneItemId"))
+                notes.append(_("Bildquelle zur Szene „{scene}“ hinzugefügt: {name}", scene=scene, name=name))
+            elif not any(i.get("sceneItemEnabled", True) for i in items):
+                c.request("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": items[0].get("sceneItemId"),
+                                                  "sceneItemEnabled": True})
+                notes.append(_("Bildquelle in der Szene „{scene}“ wieder eingeblendet: {name}", scene=scene,
+                               name=name))
+        elif not wanted:
+            return
+        exe = self._follow_window(c, "dbd", name, WINDOW_PRIORITY_CLASS)
+        if exe:
+            notes.append(_("Bildquelle {name} zeigt jetzt {exe}", name=name, exe=exe))
 
     @staticmethod
     def _fit(c: ObsClient, scene: str, item_id):
@@ -2002,6 +2033,7 @@ class Recorder(threading.Thread):
                     c.request("SetInputSettings", {"inputName": OVERLAY_SOURCE,
                                                    "inputSettings": {"file": self.cfg.overlay_file, "unload": False}})
             self._overlay_placed = None
+            self._overlay_on_top(c, notes)
             self._place_overlay(c)
         except ObsError as e:
             log.info("OBS: Overlay-Bildquelle nicht eingerichtet (%s)", e)
@@ -2027,15 +2059,33 @@ class Recorder(threading.Thread):
         finally:
             c.close()
 
+    def _overlay_on_top(self, c: ObsClient, notes: list):
+        """1.11.7: our overlay item above our picture source – a game capture chosen later is created on top of the
+        scene, over the overlay. Only our own overlay item is moved (SetSceneItemIndex), never another source."""
+        if self._overlay_item is None:
+            return
+        scene, item_id = self._overlay_item
+        items = c.request("GetSceneItemList", {"sceneName": scene}).get("sceneItems", [])
+        index = {i.get("sceneItemId"): i.get("sceneItemIndex", n) for n, i in enumerate(items)}
+        pic = next((i for i in items if i.get("sourceName") == video_source(self._capture())[0]), None)
+        if pic is None or item_id not in index:
+            return
+        top = index[pic.get("sceneItemId")]
+        if index[item_id] < top:
+            c.request("SetSceneItemIndex", {"sceneName": scene, "sceneItemId": item_id, "sceneItemIndex": top})
+            notes.append(_("Bildquelle {name} über {over} gelegt", name=OVERLAY_SOURCE, over=pic.get("sourceName")))
+
     def _place_overlay(self, c: ObsClient):
         """Move our image item over the overlay's place: the window item's transform (GetSceneItemList, read
         only) says where OBS draws the DBD window on the canvas, obsoverlay.overlay_transform does the maths;
-        nothing is sent while the transform is the one sent last or OBS has no picture of the window yet."""
+        nothing is sent while the transform is the one sent last or OBS has no picture of the window yet.
+        1.11.7: the item of the picture source in use – window or game capture."""
         if self._overlay_item is None or self._overlay_box is None:
             return
         scene, item_id = self._overlay_item
         items = c.request("GetSceneItemList", {"sceneName": scene}).get("sceneItems", [])
-        win = next((i for i in items if i.get("sourceName") == WINDOW_SOURCE), None)
+        name = video_source(self._capture())[0]
+        win = next((i for i in items if i.get("sourceName") == name), None)
         if win is None:
             return
         tf = obsoverlay.overlay_transform(win.get("sceneItemTransform") or {}, self._overlay_box)

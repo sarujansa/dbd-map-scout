@@ -207,9 +207,15 @@ TIPS = {
     "Nur das DBD-Fenster aufnehmen":
         "Das Programm legt in OBS eine Fensteraufnahme „Fog Scout – DBD-Fenster“ an (oben in der laufenden Szene, "
         "auf die Leinwand eingepasst) und stellt sie auf Steam, Epic oder Store um. Aufgenommen wird dann nur das "
-        "Spiel – ohne Discord, Benachrichtigungen und ohne das Overlay dieses Programms. OBS nimmt über Windows auf "
-        "(wie die Fensteraufnahme), nicht über die Spielaufnahme, die sich ins Spiel hängt. Aus: die Quelle wird nur "
-        "ausgeblendet, deine eigene Bildschirmaufnahme bleibt unangetastet.",
+        "Spiel – ohne Discord, Benachrichtigungen und ohne das Overlay dieses Programms. OBS nimmt dabei über Windows "
+        "auf; die Spielaufnahme gibt es als Häkchen darunter. Aus: die Quelle wird nur ausgeblendet, deine eigene "
+        "Bildschirmaufnahme bleibt unangetastet.",
+    "Dafür die OBS-Spielaufnahme verwenden":
+        "Statt der Fensteraufnahme legt das Programm in OBS eine Spielaufnahme „Fog Scout – DBD-Spiel“ an und "
+        "blendet die Fensteraufnahme aus. Die Spielaufnahme braucht etwas weniger Leistung; OBS hängt sich dafür mit "
+        "seinem Anti-Cheat-kompatiblen Hook ins Spiel – das macht OBS, nicht dieses Programm. Ihr eigener Ton bleibt "
+        "aus, der Spielton kommt weiter über die Tonquelle „Fog Scout – DBD“. Nur zusammen mit „Nur das DBD-Fenster "
+        "aufnehmen“.",
     "Wiederholungspuffer mit DBD starten und stoppen": "Das Programm startet den Wiederholungspuffer in OBS, sobald "
                                                        "DBD läuft, und stoppt ihn, wenn DBD zu ist – so kostet er "
                                                        "ausserhalb des Spiels nichts und du musst nicht daran denken.",
