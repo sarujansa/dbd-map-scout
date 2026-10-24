@@ -2082,6 +2082,32 @@ def test_recordings_keep_farming_and_normal_rounds_apart(app_root):
         app.quit()
 
 
+def test_the_overview_shows_the_programs_own_load(app_root):
+    """1.11.3 (user: "wie viel Leistung braucht das Programm alleine?"): the system card's last row is the program's
+    own CPU share and memory – with the system values off and without the game too; the tick samples once a second
+    and the diagnosis names average and peak."""
+    from fogscout import diagnose, overview
+    from fogscout.app import App
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        app.settings.set("sysinfo", "off")
+        assert overview.self_row(app) is None                                   # one sample: no span yet
+        app.selfload.sample(100.0, 1.0, 150 << 20)
+        app.selfload.sample(101.0, 1.0 + 0.1 * app.selfload.cores, 160 << 20)   # 10 % of the machine
+        rows, note = overview.system(app, 101.0, False)
+        assert len(rows) == 1 and "aus" in note
+        name, text, frac, colour = rows[0]
+        assert (name, text, colour) == ("Fog Scout", "10.0 % CPU · 160 MB", None) and frac == pytest.approx(0.1)
+        assert any("Eigene Last (nur dieser Prozess" in line for line in diagnose.collect(app).split("\n"))
+        before = app.selfload.current.t
+        app._selfload_tick()                                                    # a real reading, a second later
+        assert app.selfload.current.t > before and app.selfload.current.rss > 0
+        app._selfload_tick()                                                    # within the second: nothing new
+        assert len(app.selfload.samples) == 2
+    finally:
+        app.quit()
+
+
 def test_a_map_is_decoded_once_and_the_preview_sample_loads_in_a_thread(app_root, monkeypatch):
     """1.11.1 (user diagnosis: "Takt: layout 74 ms" at the start, "Takt: overlay 84 ms"): show_map decoded every map
     picture twice (App and PictureOverlay.set_map, ~80 ms each time a banner was read) – now once; the preview's
