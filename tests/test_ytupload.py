@@ -3,6 +3,7 @@ OAuth with PKCE and client secret, the quota day, the queue, the resumable proto
 fake Google on 127.0.0.1 (the real one needs the user's own client)."""
 import json
 import os
+import queue
 import re
 import sys
 import threading
@@ -141,6 +142,7 @@ class FakeGoogle(threading.Thread):
                     pass                                         # a query: answer the state below
                 else:
                     a, b = re.match(r"^bytes (\d+)-(\d+)/\d+$", rng).groups()
+                    time.sleep(getattr(outer, "chunk_delay", 0.0))   # 1.11.2: a slow line, when a test needs one
                     if int(a) == len(sess["data"]):
                         sess["data"] += raw
                 if len(sess["data"]) >= total and total:
@@ -263,12 +265,22 @@ def test_the_quota_day_turns_at_pacific_midnight_and_counts_uploads():
     t = time.mktime(time.strptime("2026-10-23 07:59:00 UTC", "%Y-%m-%d %H:%M:%S %Z")) if False else None
     base = 1792000800.0                                                        # 2026-10-23 ~ 08:00 UTC? computed below
     import calendar
-    before = calendar.timegm((2026, 10, 23, 7, 59, 0, 0, 0, 0))
-    after = calendar.timegm((2026, 10, 23, 8, 1, 0, 0, 0, 0))
+    # 1.11.2: 23 October is US daylight time – Pacific midnight is 07:00 UTC there, 08:00 UTC in standard time
+    before = calendar.timegm((2026, 10, 23, 6, 59, 0, 0, 0, 0))
+    after = calendar.timegm((2026, 10, 23, 7, 1, 0, 0, 0, 0))
     assert yt.quota_day(before) == "2026-10-22" and yt.quota_day(after) == "2026-10-23"
-    assert yt.next_reset(before) == calendar.timegm((2026, 10, 23, 8, 0, 0, 0, 0, 0))
-    assert yt.next_reset(after) == calendar.timegm((2026, 10, 24, 8, 0, 0, 0, 0, 0))
+    assert yt.next_reset(before) == calendar.timegm((2026, 10, 23, 7, 0, 0, 0, 0, 0))
+    assert yt.next_reset(after) == calendar.timegm((2026, 10, 24, 7, 0, 0, 0, 0, 0))
+    winter = calendar.timegm((2026, 12, 1, 7, 30, 0, 0, 0, 0))
+    assert yt.quota_day(winter) == "2026-11-30" and yt.next_reset(winter) == calendar.timegm((2026, 12, 1, 8, 0, 0, 0, 0, 0))
+    g = calendar.timegm
+    assert yt.reset_hour_utc(g((2026, 3, 8, 9, 59, 0, 0, 0, 0))) == 8 and yt.reset_hour_utc(g((2026, 3, 8, 10, 0, 0, 0, 0, 0))) == 7
+    assert yt.reset_hour_utc(g((2026, 11, 1, 8, 59, 0, 0, 0, 0))) == 7 and yt.reset_hour_utc(g((2026, 11, 1, 9, 0, 0, 0, 0, 0))) == 8
+    assert yt.next_reset(g((2026, 10, 31, 12, 0, 0, 0, 0, 0))) == g((2026, 11, 1, 7, 0, 0, 0, 0, 0))    # last PDT midnight
+    assert yt.next_reset(g((2026, 11, 1, 12, 0, 0, 0, 0, 0))) == g((2026, 11, 2, 8, 0, 0, 0, 0, 0))     # first PST midnight
+    assert yt.next_reset(g((2026, 3, 7, 12, 0, 0, 0, 0, 0))) == g((2026, 3, 8, 8, 0, 0, 0, 0, 0))
     q = yt.Quota()
+    assert q.left(after, yt.UPLOAD_COST + yt.PLAYLIST_COST) == 6                   # 1.11.2: 6 × 1 650 = 9 900
     assert q.allows(after) and q.left(after) == 6
     for _i in range(6):
         q.spend(after)
@@ -356,9 +368,41 @@ def test_the_thread_uploads_a_queued_clip_and_tells_the_app(fake, tmp_path):
         up.join(timeout=3)
 
 
+def test_an_upload_in_progress_does_not_wait_between_ticks(fake, tmp_path, monkeypatch):
+    """1.11.2 (user: "Optimierungen für die YT-Funktion?"): after every TICK_BUDGET_S of sending, run() waited in
+    cmds.get(timeout=0.5) although no command was due – a fifth of the upload time idle. Mid-upload the wait is 0
+    now; once the queue is empty the thread sleeps 0.5 s again. Driven in this thread with a queue that records
+    the waits and ends the loop when the upload is through."""
+    monkeypatch.setattr(yt, "CHUNK", 64 * 1024)
+    monkeypatch.setattr(yt, "TICK_BUDGET_S", 0.0)                 # one chunk per tick
+    folder = str(tmp_path)
+    _path, data = _video(folder, "Clips/b.mp4", 8 * 64 * 1024)    # eight chunks
+    events, waits = [], []
+    up = yt.Uploader(lambda kind, d: events.append((kind, d)), opener=lambda url: False)    # not started
+
+    class Recording(queue.Queue):
+        def get(self, block=True, timeout=None):
+            waits.append(timeout)
+            if not self.empty():
+                return super().get(block=False)
+            if not up.jobs and up.uploaded:
+                return ("quit", None)
+            raise queue.Empty
+    up.cmds = Recording()
+    up.configure(True, CID, SECRET, "private", spotify.protect("ref-stored"), [], {})
+    up.set_folder(folder)
+    up.add(yt.Job(rel="Clips/b.mp4", kind="clip", title="B"))
+    up.run()
+    assert bytes(fake.sessions["s1"]["data"]) == data and up.uploaded == 1
+    assert waits[:3] == [0.5, 0.5, 0.5]                           # the three commands
+    assert waits.count(0.0) == 7                                  # between the eight chunks: no waiting
+    assert waits[-1] == 0.5                                       # queue empty: back to sleeping
+
+
 def test_a_round_pauses_the_upload_and_a_restart_resumes_the_session(fake, tmp_path, monkeypatch):
     monkeypatch.setattr(yt, "CHUNK", 64 * 1024)
     monkeypatch.setattr(yt, "TICK_BUDGET_S", 0.0)                 # one chunk per tick: the pause lands between chunks
+    fake.chunk_delay = 0.1          # 1.11.2: the ticks no longer wait between chunks – a slow fake keeps the pause mid-upload
     folder = str(tmp_path)
     _path, data = _video(folder, "r.mkv", 640 * 1024)
     events = []

@@ -155,7 +155,7 @@ TIPS = {
                                   "lässt sich die App unter Konto → Apps ebenfalls entfernen.",
     # 1.10: YouTube upload
     "Clips automatisch auf YouTube hochladen": "Jeder neue Clip (F8 und aus dem Editor) kommt in die Warteschlange und "
-                                                "geht auf deinen Kanal, sobald keine Runde läuft – mit der Sichtbarkeit "
+                                                "geht auf deinen Kanal, sobald du weder in einer Lobby noch in einer Runde bist – mit der Sichtbarkeit "
                                                 "rechts, Standard privat. Runden lädst du nur auf Wunsch hoch (Rechtsklick "
                                                 "unter Aufnahmen). Google erlaubt etwa sechs Uploads am Tag, der Rest "
                                                 "wartet bis zum nächsten Tag. Die Datei bleibt auf der Platte.",
@@ -180,7 +180,7 @@ TIPS = {
     "Playlists laden": "Holt die Liste deiner Playlists von YouTube (1 Einheit) in die beiden Auswahlfelder. Neue "
                        "Playlists legst du auf YouTube an und lädst die Liste danach neu.",
     "Auf YouTube hochladen": "Die markierte Datei in die YouTube-Warteschlange (Sichtbarkeit wie in den Einstellungen, "
-                             "Standard privat). Hochgeladen wird, sobald keine Runde läuft und das Tageskontingent "
+                             "Standard privat). Hochgeladen wird, sobald du weder in einer Lobby noch in einer Runde bist und das Tageskontingent "
                              "reicht; der Link erscheint danach im Rechtsklick-Menü.",
     "Auch Lobby, Suche und Menü anzeigen": "Aus = der Status erscheint nur während einer Runde; sonst auch „Sucht ein "
                                            "Match“, „In der Lobby“ und „Im Menü“, solange DBD läuft.",

@@ -24,6 +24,7 @@ these requests. Only files from the recordings folder (``Job.rel``) are uploaded
 """
 from __future__ import annotations
 
+import calendar
 import json
 import logging
 import os
@@ -58,7 +59,8 @@ REDIRECT_PATH = spotify.REDIRECT_PATH
 LOGIN_WAIT_S = 180.0
 QUOTA_DAY = 10000                 # units per project and day (Google's default)
 UPLOAD_COST = 1600                # videos.insert
-QUOTA_RESET_UTC_H = 8             # Pacific midnight in standard time; see the module docstring
+QUOTA_RESET_UTC_H = 8             # Pacific midnight in standard time (PST); see the module docstring
+QUOTA_RESET_DST_UTC_H = 7         # 1.11.2: … and in daylight time (PDT, second Sunday of March to first of November)
 CHUNK = 8 << 20                   # bytes per PUT – a multiple of 256 KiB (Google's rule)
 HTTP_TIMEOUT = 60.0               # a chunk of 8 MB needs a while on a slow line
 RETRY_S = 60.0                    # after a network error
@@ -231,16 +233,33 @@ def refresh(client_id: str, secret: str, refresh_token: str) -> GToken:
 
 
 # ------------------------------------------------------------------ quota (pure)
+def _nth_sunday(year: int, month: int, n: int) -> int:
+    """Day of the month of the n-th Sunday."""
+    first = next(d for d in range(1, 8) if calendar.weekday(year, month, d) == 6)
+    return first + 7 * (n - 1)
+
+
+def reset_hour_utc(now: float) -> int:
+    """1.11.2: the UTC hour Pacific midnight falls on at ``now`` – 7 in US daylight time (from the second Sunday of
+    March 02:00 PST = 10:00 UTC to the first Sunday of November 02:00 PDT = 09:00 UTC), else 8. Pure arithmetic:
+    Windows has no tz database and the program carries no tzdata; the US rule has been fixed since 2007."""
+    year = time.gmtime(now).tm_year
+    start = calendar.timegm((year, 3, _nth_sunday(year, 3, 2), 10, 0, 0, 0, 0, 0))
+    end = calendar.timegm((year, 11, _nth_sunday(year, 11, 1), 9, 0, 0, 0, 0, 0))
+    return QUOTA_RESET_DST_UTC_H if start <= now < end else QUOTA_RESET_UTC_H
+
+
 def quota_day(now: float) -> str:
-    """The quota day ``now`` falls into: Google counts per Pacific day, taken as 08:00 UTC to 08:00 UTC."""
-    return time.strftime("%Y-%m-%d", time.gmtime(now - QUOTA_RESET_UTC_H * 3600))
+    """The quota day ``now`` falls into: Google counts per Pacific day (reset_hour_utc to reset_hour_utc)."""
+    return time.strftime("%Y-%m-%d", time.gmtime(now - reset_hour_utc(now) * 3600))
 
 
 def next_reset(now: float) -> float:
     """When the next quota day begins (UTC timestamp)."""
-    shifted = now - QUOTA_RESET_UTC_H * 3600
+    shifted = now - reset_hour_utc(now) * 3600
     day_start = shifted - (shifted % 86400)
-    return day_start + 86400 + QUOTA_RESET_UTC_H * 3600
+    nxt = day_start + 86400
+    return nxt + reset_hour_utc(nxt + QUOTA_RESET_UTC_H * 3600) * 3600
 
 
 @dataclass
@@ -265,10 +284,10 @@ class Quota:
         self.roll(now)
         self.used = QUOTA_DAY
 
-    def left(self, now: float) -> int:
-        """Uploads still possible today."""
+    def left(self, now: float, cost: int = UPLOAD_COST) -> int:
+        """Uploads still possible today (``cost`` per upload – 1.11.2: with a playlist step 1 650, not 1 600)."""
         self.roll(now)
-        return max(0, (QUOTA_DAY - self.used) // UPLOAD_COST)
+        return max(0, (QUOTA_DAY - self.used) // max(1, cost))
 
     @classmethod
     def from_dict(cls, d) -> "Quota":
@@ -453,6 +472,7 @@ class Uploader(threading.Thread):
         self._redirect = ""
         self._retry_at = 0.0
         self._sent = {}                   # rel -> bytes Google confirmed (this session of the program)
+        self._active = False              # 1.11.2: a chunk loop stopped only because its tick budget was up
         self.uploaded = 0                 # videos done since start (diagnosis)
 
     # ---- UI thread
@@ -501,7 +521,9 @@ class Uploader(threading.Thread):
     def run(self):
         while True:
             try:
-                cmd, arg = self.cmds.get(timeout=0.5)
+                # 1.11.2: mid-upload the next tick follows at once – waiting the 0.5 s here after every
+                # TICK_BUDGET_S of sending idled a fifth of the time (measured in the tests with a fake Google)
+                cmd, arg = self.cmds.get(timeout=0.0 if self._active else 0.5)
             except queue.Empty:
                 cmd, arg = None, None
             if cmd == "quit":
@@ -726,6 +748,7 @@ class Uploader(threading.Thread):
     # ---- the work
     def _tick(self):
         now = time.time()
+        self._active = False
         if self._login is not None:
             self._finish_login()
             return
@@ -754,7 +777,7 @@ class Uploader(threading.Thread):
                 self._say(text, True)
             return
         if self.paused:
-            self._say(_("YouTube: {n} in der Warteschlange – wartet, bis die Runde vorbei ist", n=len(self.jobs)), True)
+            self._say(_("YouTube: {n} in der Warteschlange – wartet, bis Lobby und Runde vorbei sind", n=len(self.jobs)), True)
             return
         if now < self._retry_at:
             return
@@ -808,6 +831,7 @@ class Uploader(threading.Thread):
             self._say(_("YouTube: lädt {file} hoch ({pct} %)", file=os.path.basename(job.rel),
                         pct=int(100 * at / max(1, size))), True)
             if time.time() > deadline:
+                self._active = True                       # more to send: the next tick must not wait
                 return
 
     def _uploaded(self, job: Job, video_id: str, access: str, now: float):
