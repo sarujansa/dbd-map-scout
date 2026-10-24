@@ -133,6 +133,9 @@ class ServerTab:
             self._hist["region"] = srv["region"]           # region only, never the address
             if self.conn.ping_ms is not None:
                 self._hist.setdefault("pings", []).append(float(self.conn.ping_ms))
+        gaps = self.conn.take_gaps()                       # 1.11.9: the server's receive gaps for this round
+        if srv and self._hist is not None:
+            self._hist.setdefault("stalls", []).extend(gaps)
         key = (srv["ip"], srv["region"]) if srv else None
         if key != self._conn_last:
             self._conn_last = key
@@ -152,6 +155,16 @@ class ServerTab:
         show = self.settings["overlay"].get("show_server", True)
         self.overlay.set_server(connwatch.region_name(srv["region"]) if srv and show else "",
                                 self.conn.ping_ms)
+        self._lag_note(bool(srv and show and self.conn.lagging(now)))
+
+    def _lag_note(self, lag: bool):
+        """1.11.9: "Verbindung stockt" in the overlay's amber line while the server is silent – never over the
+        doubt about the detected map (that line wins)."""
+        was, self._lag_shown = getattr(self, "_lag_shown", False), lag
+        if (getattr(self, "_unsure", None) or {}).get("shown"):
+            return
+        if lag or was:                     # every tick while it lasts: back after the doubt line went away
+            self.overlay.set_note(_("Verbindung stockt") if lag else "")
 
     def _srv_toggle(self, iid):
         if not iid or self._srv_busy:

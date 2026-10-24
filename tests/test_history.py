@@ -353,3 +353,16 @@ def test_a_later_result_role_changes_only_the_role(tmp_path):
     assert h.set_result_role(path, 100, "killer") is None and h.set_result_role(path, 999, "killer") is None
     with pytest.raises(ValueError):
         h.set_result_role(path, 100, "custom")
+
+
+def test_a_rounds_dropouts_are_stored_and_read_back(tmp_path):
+    """1.11.9: stalls / stall_max per round; old lines without them and broken values read as not measured."""
+    import json
+    path = str(tmp_path / "rounds.jsonl")
+    h.append(path, h.Round(100, 600, "a", "A", region="eu-central-1", stalls=3, stall_max=0.8))
+    h.append(path, h.Round(200, 600, "a", "A"))
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps({"t": 300, "seconds": 600, "map_id": "a", "stalls": "x", "stall_max": 1}) + "\n")
+        fh.write(json.dumps({"t": 400, "seconds": 600, "map_id": "a", "stalls": True}) + "\n")
+    got = [(r.stalls, r.stall_max) for r in h.load(path)]
+    assert got == [(3, 0.8), (None, None), (None, None), (None, None)]

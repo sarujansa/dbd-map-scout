@@ -47,6 +47,9 @@ PING_KEEP = 3          # shown value = median of the last pings (one slow packet
 PEAK_KEEP = 1800.0     # diagnostics: busiest partners of the last 30 min (the match is over when it is copied)
 PEAK_MAX = 8
 PORTS_EVERY = 2.0      # 1.11.6: DBD's UDP ports looked up again this often (a new match may open a new socket)
+LAG_LIVE_S = 0.5       # 1.11.9: the server silent this long (or such a gap a moment ago) → "Verbindung stockt"
+LAG_HOLD_S = 3.0       # … shown this long after the gap ended (the poll runs once a second)
+GAPS_KEPT = 500        # diagnostics: gaps of the server kept since the start
 UNKNOWN = "?"          # region of a game server that AWS does not tell (see AWS_GLOBAL_EC2)
 # EC2 address ranges AWS publishes with region "GLOBAL" (ip-ranges.json, service EC2, as of 2026-10-09): machines
 # there have no reverse DNS name, so the region cannot be read from the address. GameLift runs DBD servers in
@@ -228,6 +231,11 @@ class ConnectionWatch:
         self.ports_why = "noch nicht gefragt"   # diagnostics: where the ports came from or why there are none
         self._ports_at = 0.0
         self._pid_of = (None, None)    # (hwnd, pid) – one lookup per DBD window
+        self.quiet = None              # 1.11.9: seconds since the last packet from the server (None: no server)
+        self._fresh = []               # gaps of the server (seconds) not handed out yet (take_gaps)
+        self._gap_keys = collections.deque(maxlen=GAPS_KEPT)     # (ip, end) already counted (written 5× each)
+        self._last_big = 0.0           # end of the last gap ≥ LAG_LIVE_S
+        self.gaps = collections.deque(maxlen=GAPS_KEPT)          # (end, seconds) of the server's gaps (diagnosis)
 
     @property
     def running(self) -> bool:
@@ -315,9 +323,41 @@ class ConnectionWatch:
         # (1.41.5, user saw "Singapore" while playing on Frankfurt).
         if found:
             self.server, self._seen = found, now
+            self._note_gaps(found, now, float(data.get("t", now)))
         elif self.server and now - self._seen > LOST_AFTER:
             self.server = None
+        if not self.server:
+            self.quiet = None
+        elif not found:                         # kept, but nothing from it in the result: silent since then
+            self.quiet = max(self.quiet or 0.0, now - self._seen)
         self._update_ping(now)
+
+    # --------------------------------------------------------------- 1.11.9: receive gaps of the server
+    def _note_gaps(self, flow, now: float, written: float) -> None:
+        quiet = flow.get("quiet")
+        self.quiet = None if quiet is None else float(quiet) + max(0.0, now - written)
+        for end, secs in flow.get("gaps") or ():
+            key = (flow["ip"], end)
+            if key in self._gap_keys:
+                continue                        # the helper lists a gap for WINDOW seconds
+            self._gap_keys.append(key)
+            self._fresh.append(float(secs))
+            self.gaps.append((float(end), float(secs)))
+            if secs >= LAG_LIVE_S:
+                self._last_big = max(self._last_big, float(end))
+
+    def take_gaps(self) -> list:
+        """The server's receive gaps (seconds) since the last call – for the round in progress."""
+        out, self._fresh = self._fresh, []
+        return out
+
+    def lagging(self, now: float | None = None) -> bool:
+        """The connection to the server stutters right now: silent ≥ LAG_LIVE_S, or such a gap ended within
+        LAG_HOLD_S."""
+        if not self.server:
+            return False
+        now = now or time.time()
+        return (self.quiet is not None and self.quiet >= LAG_LIVE_S) or now - self._last_big <= LAG_HOLD_S
 
     def _update_ports(self, now: float, hwnd) -> None:
         """1.11.6: DBD's own UDP ports, looked up every PORTS_EVERY s while its window is there."""
@@ -425,6 +465,10 @@ class ConnectionWatch:
                  f"schnittstelle={_mask_local(self._local)} ergebnis_vor="
                  f"{f'{now - self._result_t:.0f} s' if self._result_t else '—'} (Server ab {MIN_PPS:.0f}/s + AWS-EC2-Name)",
                  f"  DBD-Ports: {self.ports_why}"]
+        if self.gaps:                                                    # 1.11.9
+            g = [s for _e, s in self.gaps]
+            lines.append(f"  Aussetzer des Servers (Empfang ≥ {netwatch.STALL_S:.2f} s still) seit dem Start: {len(g)}, "
+                         f"längster {max(g):.2f} s, letzter vor {now - self.gaps[-1][0]:.0f} s")
         if not self.peaks:
             lines.append("  Gegenstellen: keine (kein UDP-Verkehr mit öffentlichen Adressen gesehen)")
             return lines

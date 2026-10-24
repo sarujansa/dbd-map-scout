@@ -29,6 +29,8 @@ class Round:
     ping: float | None = None   # median ping (ms) to the server region during the round
     killer: str = ""        # own killer, read in the lobby ("The Nurse"); counts only while role == killer
     sys: dict | None = None     # system values during the round (sysinfo.SysRecorder: averages and maxima)
+    stalls: int | None = None   # 1.11.9: receive gaps ≥ netwatch.STALL_S from the game server (None: not measured)
+    stall_max: float | None = None   # … the longest one in seconds
 
 
 def should_record(seconds: float) -> bool:
@@ -132,8 +134,16 @@ def load_lost_rounds(path: str) -> list:
                          role=str(d.get("role") or "") if d.get("role") in ROLES else "",
                          custom=bool(d.get("custom")), farming=bool(d.get("farming")),
                          ping=float(ping) if isinstance(ping, (int, float)) and ping >= 0 else None,
-                         killer=str(d.get("killer") or ""), sys=_sys(d.get("sys"))))
+                         killer=str(d.get("killer") or ""), sys=_sys(d.get("sys")), **_stalls(d)))
     return out
+
+
+def _stalls(d: dict) -> dict:
+    """1.11.9: stalls / stall_max of a stored line, None when missing or not numbers."""
+    n, m = d.get("stalls"), d.get("stall_max")
+    ok = isinstance(n, int) and not isinstance(n, bool) and n >= 0
+    return {"stalls": n if ok else None,
+            "stall_max": float(m) if ok and isinstance(m, (int, float)) and not isinstance(m, bool) and m >= 0 else None}
 
 
 def load(path: str) -> list:
@@ -155,7 +165,7 @@ def load(path: str) -> list:
                                      custom=bool(d.get("custom")), farming=bool(d.get("farming")),
                                      ping=float(d["ping"]) if isinstance(d.get("ping"), (int, float))
                                      and d["ping"] >= 0 else None,
-                                     killer=str(d.get("killer") or ""), sys=_sys(d.get("sys"))))
+                                     killer=str(d.get("killer") or ""), sys=_sys(d.get("sys")), **_stalls(d)))
                 except (ValueError, KeyError, TypeError):
                     continue
     except OSError:

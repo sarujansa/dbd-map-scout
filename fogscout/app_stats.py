@@ -704,8 +704,17 @@ class StatsTab:
                 time.strftime("%d.%m.%y %H:%M", time.localtime(r.t)), r.map, fmt_duration(r.seconds),
                 self._wait_text(r), role,
                 _bp(m.bp) if m is not None and m.bp > 0 else "–",
-                (_(regions.NAMES.get(r.region, r.region)) + (f" · {r.ping:.0f} ms" if r.ping is not None else ""))
-                if r.region else "–"))
+                self._server_cell(r)))
+
+    @staticmethod
+    def _server_cell(r) -> str:
+        """Server column: region · ping · 1.11.9 the receive gaps of the round ("3× Aussetzer"), "–" without."""
+        if not r.region:
+            return "–"
+        text = _(regions.NAMES.get(r.region, r.region)) + (f" · {r.ping:.0f} ms" if r.ping is not None else "")
+        if getattr(r, "stalls", None):
+            text += " · " + _("{n}× Aussetzer", n=r.stalls)
+        return text
 
     def _stats_part_records(self, c):
         self.stats_records_var.set("" if c.rounds else _("Noch keine Runden in dieser Auswahl."))
@@ -861,9 +870,7 @@ class StatsTab:
                                                        fmt_duration(r.seconds),
                                                        self._wait_text(r), role,
                                                        self._official_result(off.get(id(r))),
-                                                       (_(regions.NAMES.get(r.region, r.region))
-                                                        + (f" · {r.ping:.0f} ms" if r.ping is not None else ""))
-                                                       if r.region else "–"))
+                                                       self._server_cell(r)))
         kept = [k for k in keep if t.exists(k)]              # 1.5.4: every marked row stays marked
         if kept:
             t.selection_set(kept)
@@ -1355,6 +1362,12 @@ class StatsTab:
         ping = history.median(rec.pop("pings", []))
         if ping is not None:
             rec["ping"] = round(ping, 1)
+        stalls = rec.pop("stalls", None)                 # 1.11.9: measured while the server was known
+        if stalls is not None:
+            rec["stalls"], rec["stall_max"] = len(stalls), round(max(stalls), 2) if stalls else 0.0
+            if stalls:
+                self._log(_("Verbindung in dieser Runde: {n} × Aussetzer, längster {s} s.", n=len(stalls),
+                            s=f"{max(stalls):.1f}"), "System")
         seconds = max(0.0, t - rec["t"])
         if not history.should_record(seconds):
             return
