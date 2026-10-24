@@ -92,14 +92,27 @@ class _MemoryCounters(ctypes.Structure):
                 ("PagefileUsage", ctypes.c_size_t), ("PeakPagefileUsage", ctypes.c_size_t)]
 
 
+def _win_readers():
+    """(GetCurrentProcess, GetProcessMemoryInfo) with their prototypes: without them ctypes returns the pseudo
+    handle (-1) as a 32-bit int and passes it on as one – a 64-bit HANDLE of 0x00000000FFFFFFFF, which
+    GetProcessMemoryInfo rejects (1.11.3 on the Windows CI: working set 0)."""
+    k32, psapi = ctypes.windll.kernel32, ctypes.windll.psapi
+    k32.GetCurrentProcess.restype = ctypes.c_void_p
+    k32.GetCurrentProcess.argtypes = ()
+    psapi.GetProcessMemoryInfo.restype = ctypes.c_int
+    psapi.GetProcessMemoryInfo.argtypes = (ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32)
+    return k32.GetCurrentProcess, psapi.GetProcessMemoryInfo
+
+
 def rss_bytes() -> int:
     """Working set of this process in bytes (0 when it cannot be read)."""
     if IS_WIN:
         try:
+            current_process, memory_info = _win_readers()
             pmc = _MemoryCounters()
             pmc.cb = ctypes.sizeof(pmc)
-            me = ctypes.windll.kernel32.GetCurrentProcess()          # the pseudo handle (-1): never another process
-            if ctypes.windll.psapi.GetProcessMemoryInfo(me, ctypes.byref(pmc), pmc.cb):
+            me = current_process()                                   # the pseudo handle (-1): never another process
+            if memory_info(me, ctypes.byref(pmc), pmc.cb):
                 return int(pmc.WorkingSetSize)
         except (AttributeError, OSError):
             pass

@@ -43,3 +43,16 @@ def test_the_readers_see_this_process_only():
     s.tick(1001.0)
     assert s.current.cpu is not None and s.current.rss == rss or s.current.rss > 0
     assert s.cores >= 1
+
+
+def test_the_windows_readers_pass_the_pseudo_handle_as_a_64_bit_handle():
+    """The 1.11.3 Windows CI read a working set of 0: GetCurrentProcess() came back as a 32-bit int (-1) and went
+    into GetProcessMemoryInfo as 0x00000000FFFFFFFF. The prototypes are set before the first call (Windows only;
+    elsewhere ctypes has no windll)."""
+    import ctypes
+    if not hasattr(ctypes, "windll"):
+        pytest.skip("Windows only")
+    current_process, memory_info = selfload._win_readers()
+    assert current_process.restype is ctypes.c_void_p
+    assert memory_info.argtypes == (ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32)
+    assert current_process() == ctypes.c_void_p(-1).value and selfload.rss_bytes() > 10 << 20
