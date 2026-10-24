@@ -125,7 +125,7 @@ class ServerTab:
             elif act == "resume" and not self.conn.running:
                 self._conn_start()
         was_running = self.conn.running
-        self.conn.poll(now)
+        self.conn.poll(now, self.game.hwnd if self.game is not None else None)   # 1.11.6: DBD's own ports
         if was_running and not self.conn.running and self.conn.error:
             self._log(_("Spielserver-Anzeige beendet: {error}", error=self.conn.error), "Fehler")
         srv = self.conn.server

@@ -7,6 +7,13 @@ The game server is the busiest UDP partner on a public address whose
 reverse DNS name is an AWS EC2 machine (GameLift runs on EC2); the region
 is part of that name, e.g. ``ec2-3-120-1-2.eu-central-1.compute.amazonaws.com``.
 
+1.11.6 (user's decision): only partners on DBD's own UDP ports count. Windows
+lists which process owns each local UDP port (``GetExtendedUdpTable``); the
+process id comes from the DBD window (``GetWindowThreadProcessId``, window
+information like the title). Neither opens the game process – no
+``OpenProcess``, no handle, nothing read from it. Without the window or the
+table the busiest partner is taken as before.
+
 Ping: while connected, the region is measured every few seconds like in the
 Server tab (``regions.ping_once``: ICMP to ``gamelift.<region>.amazonaws.com``,
 else the UDP ping beacon). The game server is never sent anything.
@@ -14,6 +21,7 @@ else the UDP ping beacon). The game server is never sent anything.
 from __future__ import annotations
 
 import collections
+import ctypes
 import ipaddress
 import json
 import os
@@ -38,6 +46,7 @@ PING_EVERY = 5.0       # one ping to the region's beacon this often while connec
 PING_KEEP = 3          # shown value = median of the last pings (one slow packet does not jump the display)
 PEAK_KEEP = 1800.0     # diagnostics: busiest partners of the last 30 min (the match is over when it is copied)
 PEAK_MAX = 8
+PORTS_EVERY = 2.0      # 1.11.6: DBD's UDP ports looked up again this often (a new match may open a new socket)
 UNKNOWN = "?"          # region of a game server that AWS does not tell (see AWS_GLOBAL_EC2)
 # EC2 address ranges AWS publishes with region "GLOBAL" (ip-ranges.json, service EC2, as of 2026-10-09): machines
 # there have no reverse DNS name, so the region cannot be read from the address. GameLift runs DBD servers in
@@ -60,16 +69,83 @@ def region_from_ptr(name: str) -> str | None:
     return m.group(1) if m else None
 
 
-def pick_server(flows, region_of) -> dict | None:
+def pick_server(flows, region_of, ports=None) -> dict | None:
     """Busiest partner with enough traffic whose region is known. ``flows`` is sorted busiest first;
-    ``region_of(ip)`` returns a region code, or None when not an AWS server / not resolved yet."""
+    ``region_of(ip)`` returns a region code, or None when not an AWS server / not resolved yet. ``ports``
+    (1.11.6): DBD's own local UDP ports – then only partners that talked to one of them count (no ports = DBD has
+    no UDP socket = not in a match); None = unknown, the busiest partner as before. Flows without local ports (a
+    result file of an older helper) are judged the old way."""
     for f in flows:
         if f.get("pps", 0) < MIN_PPS:
             break
+        if ports is not None and "lports" in f and not set(f["lports"]) & ports:
+            continue
         code = region_of(f["ip"])
         if code:
             return {**f, "region": code}
     return None
+
+
+# ---------------------------------------------------------------- 1.11.6: DBD's own UDP ports
+AF_INET6 = 23                  # Windows' value (socket.AF_INET6 differs between platforms)
+UDP_TABLE_OWNER_PID = 1
+ERROR_INSUFFICIENT_BUFFER = 122
+ROW_SIZE = {socket.AF_INET: 12, AF_INET6: 28}   # MIB_UDPROW_OWNER_PID / MIB_UDP6ROW_OWNER_PID
+PORT_AT = {socket.AF_INET: 4, AF_INET6: 20}     # offset of dwLocalPort in a row (dwOwningPid follows it)
+
+
+def parse_udp_table(buf: bytes, family: int, pid: int) -> set:
+    """Local ports owned by ``pid`` in a MIB_UDP(6)TABLE_OWNER_PID as GetExtendedUdpTable fills it: a DWORD count,
+    then the rows; the port is the low word of dwLocalPort in network byte order. Pure, bounded by the buffer."""
+    if len(buf) < 4:
+        return set()
+    size, at = ROW_SIZE[family], PORT_AT[family]
+    n = min(int.from_bytes(buf[:4], "little"), (len(buf) - 4) // size)
+    out = set()
+    for i in range(n):
+        row = 4 + i * size
+        if int.from_bytes(buf[row + at + 4:row + at + 8], "little") == pid:
+            out.add(int.from_bytes(buf[row + at:row + at + 2], "big"))
+    return out
+
+
+def window_pid(hwnd) -> int | None:
+    """Process id of the window ``hwnd`` – window information (user32), the process is not opened."""
+    if not IS_WIN or not hwnd:
+        return None
+    try:
+        pid = ctypes.c_ulong(0)
+        ctypes.windll.user32.GetWindowThreadProcessId(ctypes.c_void_p(int(hwnd)), ctypes.byref(pid))
+        return int(pid.value) or None
+    except Exception:
+        return None
+
+
+def udp_ports(pid: int) -> set | None:
+    """Local UDP ports (IPv4 and IPv6) Windows lists for process ``pid`` (GetExtendedUdpTable, the same table as
+    netstat -abno), None when the table cannot be read. Reads the system's table only, never the process."""
+    if not IS_WIN or not pid:
+        return None
+    try:
+        api = ctypes.windll.iphlpapi.GetExtendedUdpTable
+        api.restype = ctypes.c_ulong
+        api.argtypes = (ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong), ctypes.c_int, ctypes.c_ulong,
+                        ctypes.c_int, ctypes.c_ulong)
+    except (AttributeError, OSError):
+        return None
+    out, read = set(), False
+    for family in (socket.AF_INET, AF_INET6):
+        size = ctypes.c_ulong(0)
+        for _attempt in range(3):                  # the table may grow between the two calls
+            buf = ctypes.create_string_buffer(max(size.value, 4))
+            err = api(buf, ctypes.byref(size), 0, family, UDP_TABLE_OWNER_PID, 0)
+            if err == 0:
+                out |= parse_udp_table(buf.raw[:size.value or len(buf)], family, pid)
+                read = True
+                break
+            if err != ERROR_INSUFFICIENT_BUFFER:
+                break
+    return out if read else None
 
 
 def aws_global(ip: str) -> bool:
@@ -148,6 +224,10 @@ class ConnectionWatch:
         self._local = ""               # address of the captured interface (diagnostics only)
         self._result_t = 0.0
         self.peaks = {}                # ip -> busiest moment {"pps", "port", "sent", "recv", "t"} (diagnostics)
+        self.ports = None              # 1.11.6: DBD's local UDP ports (None = unknown → busiest partner)
+        self.ports_why = "noch nicht gefragt"   # diagnostics: where the ports came from or why there are none
+        self._ports_at = 0.0
+        self._pid_of = (None, None)    # (hwnd, pid) – one lookup per DBD window
 
     @property
     def running(self) -> bool:
@@ -203,11 +283,12 @@ class ConnectionWatch:
         self._update_ping(0.0)
 
     # --------------------------------------------------------------- polling
-    def poll(self, now: float | None = None) -> None:
-        """Call about once a second from the UI thread."""
+    def poll(self, now: float | None = None, game_hwnd=None) -> None:
+        """Call about once a second from the UI thread. ``game_hwnd`` (1.11.6): the DBD window, for its ports."""
         if not self.running:
             return
         now = now or time.time()
+        self._update_ports(now, game_hwnd)
         if now - self._touched >= TOUCH_EVERY:
             try:
                 os.utime(self.control)
@@ -229,7 +310,7 @@ class ConnectionWatch:
         self.no_data = now - float(data.get("t", 0)) > NO_DATA_AFTER
         self._local, self._result_t = str(data.get("local") or ""), float(data.get("t", 0))
         self._note_peaks(data.get("flows") or [], now)
-        found = pick_server(data.get("flows") or [], self._region)
+        found = pick_server(data.get("flows") or [], self._region, self.ports)
         # No guess from the hosts file for UNKNOWN: in a friend's party their matchmaking picks the server
         # (1.41.5, user saw "Singapore" while playing on Frankfurt).
         if found:
@@ -237,6 +318,26 @@ class ConnectionWatch:
         elif self.server and now - self._seen > LOST_AFTER:
             self.server = None
         self._update_ping(now)
+
+    def _update_ports(self, now: float, hwnd) -> None:
+        """1.11.6: DBD's own UDP ports, looked up every PORTS_EVERY s while its window is there."""
+        if not hwnd:
+            self.ports, self.ports_why, self._pid_of = None, "kein DBD-Fenster (Schätzung)", (None, None)
+            return
+        if now - self._ports_at < PORTS_EVERY and self._pid_of[0] == hwnd:
+            return
+        self._ports_at = now
+        if self._pid_of[0] != hwnd:
+            self._pid_of = (hwnd, window_pid(hwnd))
+        pid = self._pid_of[1]
+        ports = udp_ports(pid) if pid else None
+        self.ports = ports
+        if pid is None:
+            self.ports_why = "Prozess des DBD-Fensters unbekannt (Schätzung)"
+        elif ports is None:
+            self.ports_why = "Verbindungstabelle von Windows nicht lesbar (Schätzung)"
+        else:
+            self.ports_why = f"{len(ports)} aus der Verbindungstabelle von Windows"
 
     # --------------------------------------------------------------- ping
     def _update_ping(self, now: float) -> None:
@@ -303,6 +404,8 @@ class ConnectionWatch:
             if p is None or f.get("pps", 0) >= p["pps"]:
                 p = self.peaks[f["ip"]] = {k: f.get(k, 0) for k in ("pps", "port", "sent", "recv")} | {"t": now}
             p["seen"] = now
+            if self.ports is not None and "lports" in f:     # 1.11.6: did it talk to one of DBD's ports?
+                p["dbd"] = p.get("dbd", False) or bool(set(f["lports"]) & self.ports)
         old = [ip for ip, p in self.peaks.items() if now - p["seen"] > PEAK_KEEP]
         for ip in old:
             del self.peaks[ip]
@@ -320,7 +423,8 @@ class ConnectionWatch:
         lines = [f"Verbunden mit: läuft={self.running} als_thread={self.in_process} keine_daten={self.no_data} "
                  f"fehler={self.error or '—'} server={srv['region'] if srv else '—'} ping={self.ping_ms} "
                  f"schnittstelle={_mask_local(self._local)} ergebnis_vor="
-                 f"{f'{now - self._result_t:.0f} s' if self._result_t else '—'} (Server ab {MIN_PPS:.0f}/s + AWS-EC2-Name)"]
+                 f"{f'{now - self._result_t:.0f} s' if self._result_t else '—'} (Server ab {MIN_PPS:.0f}/s + AWS-EC2-Name)",
+                 f"  DBD-Ports: {self.ports_why}"]
         if not self.peaks:
             lines.append("  Gegenstellen: keine (kein UDP-Verkehr mit öffentlichen Adressen gesehen)")
             return lines
@@ -333,8 +437,10 @@ class ConnectionWatch:
             if aws_global(ip):
                 code, name = "AWS EC2 GLOBAL (Region unbekannt)", "nicht gefragt"
             region = code or ("ausstehend" if name is None else "kein AWS-EC2-Name")
+            owner = {True: " · DBD", False: " · nicht DBD"}.get(p.get("dbd"), "")
             lines.append(f"  {_mask_ip(ip)} Port {p['port']} · {p['pps']}/s ({p['sent']} gesendet/{p['recv']} "
-                         f"empfangen in 5 s) vor {now - p['t']:.0f} s · rDNS {_mask_name(name) if name else '—'} → {region}")
+                         f"empfangen in 5 s) vor {now - p['t']:.0f} s · rDNS {_mask_name(name) if name else '—'} → "
+                         f"{region}{owner}")
         return lines
 
     # --------------------------------------------------------------- text
