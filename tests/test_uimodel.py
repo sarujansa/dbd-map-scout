@@ -768,10 +768,7 @@ def test_the_recordings_tab_lists_the_index_and_acts_on_the_marked_row(app_root)
     try:
         app._rec_render()
         t = app.rec_table
-        assert [t.item(i, "values")[1] for i in t.get_children()] == ["Coal Tower"]     # 1.8.71: no farming here
-        app.rec_role_var.set("Alle inkl. Farming")
-        app._rec_render()
-        rows = [t.item(i, "values") for i in t.get_children()]
+        rows = [t.item(i, "values") for i in t.get_children()]                          # 1.11.5: farming counts
         assert [r[1] for r in rows] == ["Gas Heaven", "Coal Tower"]                     # newest first
         assert rows[1][2] == "Nurse" and rows[1][4] == "10:00" and rows[1][6] == "2" and rows[0][2].endswith("Farming")
         assert rows[0][5] == "2 KB"                                                        # size column
@@ -785,11 +782,15 @@ def test_the_recordings_tab_lists_the_index_and_acts_on_the_marked_row(app_root)
         app._rec_render(force=True)
         assert [t.item(i, "values")[1] for i in t.get_children()] == ["Coal Tower"]
         app.rec_map_var.set("Alle Maps")
-        app.rec_role_var.set("Farming")
+        app.rec_role_var.set("Survivor")
         app._rec_render(force=True)
         assert [t.item(i, "values")[1] for i in t.get_children()] == ["Gas Heaven"]
         app.rec_role_var.set("Alle Rollen")
-        app._rec_render(force=True)
+        app._farming_vars[0].set(True)                                             # "Farming ausblenden"
+        app._farming_switch(app._farming_vars[0])
+        assert [t.item(i, "values")[1] for i in t.get_children()] == ["Coal Tower"]
+        app._farming_vars[0].set(False)
+        app._farming_switch(app._farming_vars[0])
         t.selection_set(repr(t1))
         app._rec_keep()                                        # → recorder thread → "changed" event
         deadline = time.time() + 5
@@ -813,8 +814,9 @@ def test_the_recordings_tab_lists_the_index_and_acts_on_the_marked_row(app_root)
 
 def test_farming_rounds_have_a_tab_of_their_own_whatever_the_role_filter(app_root):
     """1.8.64 (user: "ich finde es bei letzten Runden nicht" → "wir haben so viele Kategorien, warum keine für
-    Farming"): with "Alle Rollen" the farming rounds are left out of every evaluation – the tab "Farming" lists them
-    anyway, with tiles; the other filters (map) still apply."""
+    Farming"): the tab "Farming" lists the farming rounds with tiles, whatever the role filter; the other filters
+    (map) still apply. 1.11.5 (user: "die Filterung von Farming find ich kacke"): "Alle Rollen" has the farming
+    rounds in "Letzte Runden" too – the box "Farming ausblenden" (setting hide_farming) takes them out."""
     from fogscout import history
     from fogscout.app import App
     t1, t2, t3 = time.time() - 7200, time.time() - 3600, time.time() - 1800
@@ -828,7 +830,12 @@ def test_farming_rounds_have_a_tab_of_their_own_whatever_the_role_filter(app_roo
     try:
         app._stats_select(str(app.stats_last.master.master))
         app._stats_render()
-        assert list(app.stats_last.get_children()) == [repr(t3)]      # "Alle Rollen": the normal round only
+        assert list(app.stats_last.get_children()) == [repr(t3), repr(t2), repr(t1)]   # 1.11.5: all of them
+        assert len(app._farming_vars) == 3 and not any(v.get() for v in app._farming_vars)   # stats, recordings, clips
+        app._farming_vars[0].set(True)
+        app._farming_switch(app._farming_vars[0])
+        assert app.settings.get("hide_farming") is True and all(v.get() for v in app._farming_vars)
+        assert list(app.stats_last.get_children()) == [repr(t3)]      # hidden: the normal round only
         farm_tab = app.stats_farm.master.master
         assert app._stats_parts[str(farm_tab)][0] == "Farming"
         app._stats_select(str(farm_tab))
@@ -891,10 +898,7 @@ def test_several_rounds_can_be_marked_as_farming_at_once_and_the_recordings_foll
         recs = obsrec.load_index(str(folder))
         assert all(x.farming and x.file.startswith("Farming/") for x in recs)
         assert sorted(os.listdir(folder / "Farming")) == ["one.mkv", "two.mkv"]
-        # farming rounds show only under the filter "Farming"; marked there, the next click turns both back
-        assert t.get_children() == ()
-        app.stats_role_var.set("Farming")
-        app._stats_render()
+        # 1.11.5: farming rounds stay listed (the box "Farming ausblenden" is off); the next click turns both back
         assert len(t.get_children()) == 2
         t.selection_set(repr(t1), repr(t2))
         app._stats_toggle_farming()
@@ -903,7 +907,6 @@ def test_several_rounds_can_be_marked_as_farming_at_once_and_the_recordings_foll
         while time.time() < deadline and any(x.farming for x in obsrec.load_index(str(folder))):
             time.sleep(0.05)
         assert sorted(os.listdir(folder)) == ["Farming", obsrec.INDEX, "one.mkv", "two.mkv"]
-        app.stats_role_var.set("Alle Rollen")
         app._stats_render()
         t.selection_set(repr(t1), repr(t2))
         app._stats_set_role("survivor")
@@ -1326,8 +1329,8 @@ def test_the_builds_tab_lists_the_own_loadout_with_its_results(app_root):
 def test_the_builds_hint_says_when_the_selection_leaves_the_loadouts_out(app_root):
     """1.8.68 (user: "Statistik → Perk funktioniert nicht", screenshot: Builds empty with the userscript-3 hint and
     "All roles"): the hint blamed the userscript even when the saved matches have loadouts and only the selection
-    leaves them out (farming / custom games count only with their role filter). Now it says which; the diagnosis
-    counts the userscript 3 fields of the saved matches."""
+    leaves them out (custom games count only with their role filter, farming rounds not with "Farming ausblenden"
+    since 1.11.5). Now it says which; the diagnosis counts the userscript 3 fields of the saved matches."""
     import json
     from fogscout import history, official
     from fogscout.app import App
@@ -1341,11 +1344,12 @@ def test_the_builds_hint_says_when_the_selection_leaves_the_loadouts_out(app_roo
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
         app._stats_select("Builds")
+        app.settings.set("hide_farming", True)
         app._stats_render()
         assert app.stats_items.get_children() == ()
         hint = app.stats_build_var.get()
-        assert hint.startswith("1 gespeicherte Matches haben ein Loadout") and "Farming" in hint
-        app.stats_role_var.set("Farming")
+        assert hint.startswith("1 gespeicherte Matches haben ein Loadout") and "Farming ausblenden" in hint
+        app.settings.set("hide_farming", False)
         app._stats_render()
         assert [app.stats_items.item(c, "values")[0] for c in app.stats_items.get_children()] == ["Lethal Pursuer"]
         assert app.stats_build_var.get() == ""
@@ -1490,8 +1494,11 @@ def test_recording_and_clip_menus_copy_mark_farming_and_go_to_the_round(app_root
         app.rec_only_var.set(app._rec_onlys[1][1])                          # "Mit Marke" hides it
         app._rec_render()
         assert not app.rec_table.exists(repr(t1))
-        assert not app.clip_table.exists("c.mp4")                         # 1.8.71: its round is farming now …
-        app.clip_role_var.set("Alle inkl. Farming")                       # … so only with farming
+        assert app.clip_table.exists("c.mp4")                             # 1.11.5: its round is farming – still here
+        app.settings.set("hide_farming", True)
+        app._rec_render()
+        assert not app.clip_table.exists("c.mp4")                         # … unless "Farming ausblenden" is on
+        app.settings.set("hide_farming", False)
         app._rec_render()
         app.clip_table.selection_set("c.mp4")
         app.clip_table.event_generate("<<TreeviewSelect>>")
@@ -1972,7 +1979,8 @@ def test_a_farming_lobby_that_looked_custom_and_the_pages_role_and_killer_win(ap
         assert got[t1].farming and not got[t1].custom and got[t1].killer == "The Newcomer"
         assert got[t2].custom                                     # a real custom game stays one
         assert (got[t3].role, got[t3].killer) == ("killer", "The Nurse")      # the page over the lobby's survivor
-        assert [r.t for r in history.select(j.rounds)] == [t2, t3]            # "Alle Rollen": custom yes, farming no
+        assert [r.t for r in history.select(j.rounds)] == [t1, t2, t3]        # 1.11.5: "Alle Rollen" has farming in
+        assert [r.t for r in history.select(j.rounds, farming=False)] == [t2, t3]   # "Farming ausblenden"
         assert [r.t for r in history.select(j.rounds, role="farming")] == [t1]
         assert not app._stats_farm_candidates()
         rows = app_sysinfo.today_rows(j, time.time())
@@ -2066,18 +2074,57 @@ def test_a_round_from_a_briefly_seen_lobby_with_cross_play_off_is_a_farming_roun
         app.quit()
 
 
-def test_recordings_keep_farming_and_normal_rounds_apart(app_root):
-    """1.8.71 (user: "Farming und normale Runden sollen bei Aufnahmen separiert werden"): in the tab "Aufnahmen"
-    "Alle Rollen" means the normal rounds (as in the statistics), "Farming" the farming rounds, both together only
-    with "Alle inkl. Farming" – for the recordings and the clips."""
+def test_one_box_hides_farming_rounds_in_statistics_recordings_and_clips(app_root):
+    """1.8.71 (user: "Farming und normale Runden sollen bei Aufnahmen separiert werden") gave the recordings
+    "Farming" and "Alle inkl. Farming" as roles; 1.11.5 (user: "die Filterung von Farming find ich kacke" →
+    "überall mitzählen, Schalter zum Ausblenden"): the roles are roles again, one box "Farming ausblenden" per
+    filter row – statistics, recordings, clips – all on the setting hide_farming, a click on one sets the others,
+    and the setting survives a restart."""
+    import json
     from fogscout.app import App
     app = App(str(app_root), simulate=str(app_root / "sim"))
     try:
-        assert app.rec_role_var.get() == "Alle Rollen" and app._rec_filters()[2] == "normal"
-        for label, arg in (("Farming", "farming"), ("Alle inkl. Farming", None), ("Killer", "killer")):
-            app.rec_role_var.set(label)
-            assert app._rec_filters()[2] == arg
-        assert app.clip_role_var.get() == "Alle Rollen"
+        assert [lbl for _k, lbl in app._rec_roles] == ["Alle Rollen", "Killer", "Survivor"]
+        assert [lbl for _k, lbl in app._stats_roles] == ["Alle Rollen", "Killer", "Survivor", "Custom Games"]
+        assert app.rec_role_var.get() == "Alle Rollen" and app._rec_filters()[2] is None
+        app.rec_role_var.set("Killer")
+        assert app._rec_filters()[2] == "killer" and app.clip_role_var.get() == "Alle Rollen"
+        stats_box, rec_box, clip_box = app._farming_vars
+        assert not app._farming_hidden()
+        rec_box.set(True)
+        app._farming_switch(rec_box)
+        assert app._farming_hidden() and stats_box.get() and clip_box.get()
+        app.settings.save()
+        assert json.loads((app_root / "settings.json").read_text(encoding="utf-8"))["hide_farming"] is True
+        clip_box.set(False)
+        app._farming_switch(clip_box)
+        assert not app._farming_hidden() and not stats_box.get() and not rec_box.get()
+    finally:
+        app.quit()
+
+
+def test_the_overview_shows_the_programs_own_load(app_root):
+    """1.11.3 (user: "wie viel Leistung braucht das Programm alleine?"): the system card's last row is the program's
+    own CPU share and memory – with the system values off and without the game too; the tick samples once a second
+    and the diagnosis names average and peak."""
+    from fogscout import diagnose, overview
+    from fogscout.app import App
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        app.settings.set("sysinfo", "off")
+        assert overview.self_row(app) is None                                   # one sample: no span yet
+        app.selfload.sample(100.0, 1.0, 150 << 20)
+        app.selfload.sample(101.0, 1.0 + 0.1 * app.selfload.cores, 160 << 20)   # 10 % of the machine
+        rows, note = overview.system(app, 101.0, False)
+        assert len(rows) == 1 and "aus" in note
+        name, text, frac, colour = rows[0]
+        assert (name, text, colour) == ("Fog Scout", "10.0 % CPU · 160 MB", None) and frac == pytest.approx(0.1)
+        assert any("Eigene Last (nur dieser Prozess" in line for line in diagnose.collect(app).split("\n"))
+        before = app.selfload.current.t
+        app._selfload_tick()                                                    # a real reading, a second later
+        assert app.selfload.current.t > before and app.selfload.current.rss > 0
+        app._selfload_tick()                                                    # within the second: nothing new
+        assert len(app.selfload.samples) == 2
     finally:
         app.quit()
 
@@ -2149,7 +2196,8 @@ def test_a_search_on_the_maps_page_filters_at_once_without_building_the_tiles_an
 def test_rounds_with_a_farming_partner_count_as_farming_by_a_right_click_on_the_opponent(app_root):
     """1.8.73 (user: the opponents tab showed "Slasher 38×" – "das kommt safe vom Farmen"): a character picked in
     "Gegner" as farming partner makes every match with that character a farming round (older ones too, display
-    only like the farming region) – out of the normal statistics, into the filter "Farming"."""
+    only like the farming region). 1.11.5: it stays in the main count until "Farming ausblenden" moves it into the
+    column "Farming"."""
     import json
     from fogscout import history, official
     from fogscout.app import App
@@ -2176,16 +2224,17 @@ def test_rounds_with_a_farming_partner_count_as_farming_by_a_right_click_on_the_
         assert app.settings.get("farming_opponents") == ["Slasher"]
         j = app._joined()
         assert [r.farming for r in j.rounds] == [True, False]
-        # 1.8.81: the partner stays listed – its rounds move from "Begegnungen" into the column "Farming"
+        # 1.8.81: the partner stays listed; 1.11.5: in "Begegnungen" as long as farming counts, with "Farming
+        # ausblenden" its rounds move into the column "Farming"
         vals = lambda: {c.split("\t")[1]: app.stats_opp.item(c, "values") for c in app.stats_opp.get_children()}  # noqa: E731
-        assert rows() == ["Slasher", "Nurse"] and vals()["Slasher"][2] == 0 and vals()["Slasher"][7] == 1
+        assert rows() == ["Slasher", "Nurse"] and vals()["Slasher"][2] == 1 and vals()["Slasher"][7] == "–"
         assert vals()["The Nurse"][2] == 1 and vals()["The Nurse"][7] == "–"
         assert any("„Slasher“ gilt jetzt als Farming-Gegner – 1 Runden" in e[2] for e in app._log_entries)
         assert "Slasher" in app.farm_opp_var.get()
-        app.stats_role_var.set("Farming")
+        app.settings.set("hide_farming", True)
         app._stats_render()
-        assert rows() == ["Slasher"] and vals()["Slasher"][2] == 1 and vals()["Slasher"][7] == "–"   # not twice
-        app.stats_role_var.set("Alle Rollen")
+        assert rows() == ["Slasher", "Nurse"] and vals()["Slasher"][2] == 0 and vals()["Slasher"][7] == 1   # not twice
+        app.settings.set("hide_farming", False)
         app._stats_render()
         app.stats_opp.selection_set("killer\tThe Nurse")
         assert [it[0] for it in app._stats_opp_menu_items()] == ["opp_on:The Nurse"]

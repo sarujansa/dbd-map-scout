@@ -118,14 +118,14 @@ EN = {
     "Farming-Runden": "Farming rounds",
     "Runden ohne Crossplay als Farming zählen": "Count rounds without cross-play as farming",
     "Alle Runden auf": "All rounds on",
-    "Farming-Runden zählen nicht zu den normalen Runden (Rollen-Filter, Wartezeiten, Bilanz, Ergebnisse) – "
-    "die Statistik hat dafür den Filter „Farming“. Crossplay aus erkennt das Programm an der Weltkugel mit "
-    "rotem Kreuz neben dem Lobby-Knopf; Runden auf der gewählten Region zählen immer als Farming, auch "
-    "ältere. Einzelne Runden: „Farming an/aus“ unter „Letzte Runden“.":
-        "Farming rounds do not count as normal rounds (role filters, waiting times, record, results) – the "
-        "statistics have their own filter \"Farming\". Cross-play off is read from the globe with the red cross next "
-        "to the lobby button; rounds on the chosen region always count as farming, older ones too. Single rounds: "
-        "\"Farming on/off\" under \"Last rounds\".",
+    "Farming-Runden zählen in Statistik und Aufnahmen überall mit; das Häkchen „Farming ausblenden“ (bei den "
+    "Filtern) hält sie heraus, der Reiter Statistik → Farming listet sie immer. Crossplay aus erkennt das "
+    "Programm an der Weltkugel mit rotem Kreuz neben dem Lobby-Knopf; Runden auf der gewählten Region zählen "
+    "immer als Farming, auch ältere. Einzelne Runden: „Farming an/aus“ unter „Letzte Runden“.":
+        "Farming rounds count everywhere in the statistics and recordings; the box \"Hide farming\" (next to the "
+        "filters) keeps them out, the tab Statistics → Farming always lists them. Cross-play off is read from the "
+        "globe with the red cross next to the lobby button; rounds on the chosen region always count as farming, "
+        "older ones too. Single rounds: \"Farming on/off\" under \"Last rounds\".",
     "{map} ({when}) zählt jetzt als Farming-Runde.": "{map} ({when}) now counts as a farming round.",
     "{map} ({when}) zählt wieder als normale Runde.": "{map} ({when}) counts as a normal round again.",
     "Hinweis: Runden auf {region} zählen laut Einstellung weiter als Farming.":
@@ -144,10 +144,19 @@ EN = {
         "No lobby for this round ({why}) – it does not count as farming.",
     "Lobby zu alt": "lobby too old",
     "Lobby nicht gesehen": "lobby not seen",
-    "Diese Runde als Farming-Runde zählen bzw. wieder als normale Runde – Farming-Runden erscheinen nur unter dem "
-    "Filter „Farming“. Runden auf der Farming-Region (Einstellungen → Match-Daten) bleiben Farming.":
-        "Count this round as a farming round, or as a normal round again – farming rounds show only under the "
-        "filter \"Farming\". Rounds on the farming region (Settings → Match data) stay farming.",
+    "Diese Runde als Farming-Runde zählen bzw. wieder als normale Runde – Farming-Runden zählen überall mit, bis "
+    "„Farming ausblenden“ sie heraushält; der Reiter „Farming“ listet sie immer. Runden auf der Farming-Region "
+    "(Einstellungen → Match-Daten) bleiben Farming.":
+        "Count this round as a farming round or as a normal round again – farming rounds count everywhere until "
+        "\"Hide farming\" keeps them out; the tab \"Farming\" always lists them. Rounds on the farming region "
+        "(Settings → Match data) stay farming.",
+    "Farming ausblenden": "Hide farming",
+    "An: Farming-Runden (Crossplay aus, Farming-Region, Farming-Gegner) bleiben aus Statistik, Aufnahmen und Clips "
+    "draussen – ein Schalter für alle drei. Aus: sie zählen wie jede andere Runde. Der Reiter Statistik → Farming "
+    "zeigt sie immer.":
+        "On: farming rounds (cross-play off, farming region, farming partners) stay out of the statistics, "
+        "recordings and clips – one switch for all three. Off: they count like any other round. The tab "
+        "Statistics → Farming always shows them.",
     "Zeigt die Lobby die Weltkugel mit rotem Kreuz (Crossplay aus), zählt die nächste Runde als Farming-Runde.":
         "If the lobby shows the globe with the red cross (cross-play off), the next round counts as a farming round.",
     "Custom Game – keine Wartezeit.": "Custom game – no waiting time.",
@@ -157,7 +166,6 @@ EN = {
     "Suche abgebrochen.": "Search cancelled.",
     "Lobby gefunden nach {time}{role}.": "Lobby found after {time}{role}.",
     "Lobby gefunden{role}.": "Lobby found{role}.",
-    "Alle inkl. Farming": "All incl. farming",
     "Lobby nur kurz gesehen – Rolle und Crossplay von dort, ohne Wartezeit.": "Lobby seen only briefly – role and cross-play from there, no waiting time.",
     "Wartezeit {time}": "waited {time}",
     "Ergebnisbildschirm: gespielt als {role}.": "Results screen: played as {role}.",
@@ -1292,13 +1300,13 @@ EN = {
     'Läuft DBD in einem kleinen Fenster (Bild kleiner als 1920×1080 oder schmaler als 16:9), zeigt das Programm im Spiel nichts – wie der Hauptschalter. Map-Erkennung, Statistik und OBS-Aufnahmen laufen weiter. Wird das Fenster wieder gross, erscheint das Overlay von selbst.': 'If DBD runs in a small window (picture smaller than 1920×1080 or narrower than 16:9), the program shows nothing in the game – like the master switch. Map detection, statistics and OBS recordings go on. When the window is big again, the overlay comes back by itself.',
     'Kleines DBD-Fenster ({w}×{h}) – Overlay ausgeblendet, Runden werden weiter gezählt und aufgenommen.': 'Small DBD window ({w}×{h}) – overlay hidden, rounds are still counted and recorded.',
     'Update gesperrt: eine Runde läuft. Nach dem Rundenende noch einmal auf „Aktualisieren und neu starten“ klicken.': 'Update locked: a round is running. Click “Update and restart” again after the round ends.',
-    'Alle Farming-Runden der Auswahl (Zeitraum, Region, Map, Modus) – unabhängig vom Rollen-Filter, der sie sonst aus den übrigen Auswertungen heraushält. Farming = Crossplay war in der Lobby aus (oder die eingestellte Farming-Region); korrigieren unter „Letzte Runden“ mit „Farming an/aus“. Aufnahmen liegen im Unterordner „Farming“ des Aufnahmeordners. Wartezeit „sofort“: die Lobby war voll, bevor eine Suchzeit messbar war. Server nur, wenn „Verbunden mit“ auf der Seite Server läuft.': 'All farming rounds of the selection (period, region, map, mode) – whatever the role filter says, which otherwise keeps them out of the other evaluations. Farming = cross-play was off in the lobby (or the farming region you set); correct it under “Last rounds” with “Farming on/off”. Recordings are in the “Farming” subfolder of the recordings folder. Wait "instant": the lobby was full before a search time could be measured. Server only while "Connected to" runs on the Server page.',
+    'Alle Farming-Runden der Auswahl (Zeitraum, Region, Map, Modus) – unabhängig vom Rollen-Filter und von „Farming ausblenden“. Farming = Crossplay war in der Lobby aus (oder die eingestellte Farming-Region); korrigieren unter „Letzte Runden“ mit „Farming an/aus“. Aufnahmen liegen im Unterordner „Farming“ des Aufnahmeordners. Wartezeit „sofort“: die Lobby war voll, bevor eine Suchzeit messbar war. Server nur, wenn „Verbunden mit“ auf der Seite Server läuft.': 'All farming rounds of the selection (period, region, map, mode) – whatever the role filter and "Hide farming" say. Farming = cross-play was off in the lobby (or the farming region you set); correct it under “Last rounds” with “Farming on/off”. Recordings are in the “Farming” subfolder of the recordings folder. Wait "instant": the lobby was full before a search time could be measured. Server only while "Connected to" runs on the Server page.',
     'Keine Farming-Runden in dieser Auswahl.': 'No farming rounds in this selection.',
     '{n} als Killer · {m} als Survivor': '{n} as killer · {m} as survivor',
     'Spielzeit': 'Play time',
     'vom Map-Banner bis zum Rundenende': 'from the map banner to the end of the round',
     'BP': 'BP',
-    '{n} gespeicherte Matches haben ein Loadout, aber keines davon ist in dieser Auswahl. Custom Games und Farming-Runden zählen nur mit dem Rollen-Filter „Custom Games“ bzw. „Farming“, Matches ohne erkannte Runde gar nicht.': '{n} saved matches have a loadout, but none of them is in this selection. Custom games and farming rounds only count with the role filter “Custom games” or “Farming”, matches without a detected round not at all.',
+    '{n} gespeicherte Matches haben ein Loadout, aber keines davon ist in dieser Auswahl. Custom Games zählen nur mit dem Rollen-Filter „Custom Games“, Farming-Runden nicht mit „Farming ausblenden“, Matches ohne erkannte Runde gar nicht.': '{n} saved matches have a loadout, but none of them is in this selection. Custom games only count with the role filter “Custom games”, farming rounds not with “Hide farming”, matches without a detected round not at all.',
     'DBD-Fenster wieder gross genug – Overlay wieder an.': 'DBD window big enough again – overlay back on.',
     "Overlay anzeigen": "Show the overlay",
     'Hauptschalter: aus = das Programm zeigt im Spiel nichts (Karte, Systemwerte, Heute, Musik). Erkennung, '
@@ -1822,7 +1830,7 @@ EN = {
     'BP/h': 'BP/h',
     'BP/h mit Wartezeit': 'BP/h with waiting',
     'Bloodpoints': 'Bloodpoints',
-    'Bloodpoints laut Stats-Seite. BP/h = je Stunde im Match; mit Wartezeit = je Stunde aus Match und Suche zusammen. Mit dem Rollen-Filter „Farming“ steht hier, was das Farmen bringt.': 'Bloodpoints from the stats page. BP/h = per hour in the match; with waiting = per hour of match and search together. With the role filter "Farming" this shows what farming earns.',
+    'Bloodpoints laut Stats-Seite. BP/h = je Stunde im Match; mit Wartezeit = je Stunde aus Match und Suche zusammen. Was das Farmen allein bringt, steht im Reiter „Farming“; „Farming ausblenden“ rechnet hier ohne Farming-Runden.': 'Bloodpoints from the stats page. BP/h = per hour in the match; with waiting = per hour of match and search together. What farming alone earns is on the "Farming" tab; "Hide farming" leaves farming rounds out here.',
     'Bloodpoints pro Stunde': 'Bloodpoints per hour',
     'Summe': 'Total',
     'mit Wartezeit {bp}': 'with waiting {bp}',
@@ -1938,8 +1946,8 @@ EN = {
     'Auf YouTube hochladen': 'Upload to YouTube',
     'YouTube-Link kopieren': 'Copy YouTube link',
     'Auf YouTube öffnen': 'Open on YouTube',
-    'Lädt Clips (F8 und Editor) von selbst auf deinen YouTube-Kanal, Runden nur auf Wunsch: Rechtsklick oder „Auf YouTube hochladen“ unter Aufnahmen. Dafür einmal in der Google Cloud Console ein Projekt anlegen, „YouTube Data API v3“ aktivieren, unter „Anmeldedaten“ einen OAuth-Client vom Typ „Desktop-App“ erstellen und den Zustimmungsbildschirm veröffentlichen (sonst läuft die Anmeldung nach 7 Tagen ab); Client-ID und Client-Secret hier einfügen oder die heruntergeladene JSON-Datei laden, dann „Mit YouTube verbinden“ – der Browser fragt einmal nach der Freigabe. Google erlaubt mit dem Standardkontingent etwa sechs Uploads am Tag; was nicht mehr passt, wartet in der Warteschlange bis zum nächsten Tag. Hochgeladen wird nur, wenn keine Runde läuft; die Datei bleibt immer auch auf der Platte. Gesendet werden nur die Videodatei, Titel (Map, Killer, Datum) und Beschreibung – nie Spielernamen; die Freigabe liegt verschlüsselt auf diesem PC. Mit „Uploads in Playlists einsortieren“ kommt jedes Video zusätzlich in eine Playlist deiner Wahl – dafür fragt die Anmeldung die breitere Berechtigung „YouTube-Konto verwalten“ an (einmal neu verbinden).':
-        'Uploads clips (F8 and editor) to your YouTube channel by themselves, rounds only on request: right click or "Upload to YouTube" under Recordings. For that, create a project once in the Google Cloud console, enable "YouTube Data API v3", create an OAuth client of type "Desktop app" under "Credentials" and publish the consent screen (otherwise the login expires after 7 days); paste the client ID and client secret here or load the downloaded JSON file, then "Connect to YouTube" – the browser asks once for your consent. With the default quota Google allows about six uploads a day; what does not fit waits in the queue until the next day. Uploads run only while no round is on; the file always stays on the disk too. Only the video file, a title (map, killer, date) and a description are sent – never player names; the consent is kept encrypted on this PC. With "Sort uploads into playlists" every video also goes into a playlist of your choice – for that the login asks for the wider permission "Manage your YouTube account" (connect once more).',
+    'Lädt Clips (F8 und Editor) von selbst auf deinen YouTube-Kanal, Runden nur auf Wunsch: Rechtsklick oder „Auf YouTube hochladen“ unter Aufnahmen. Dafür einmal in der Google Cloud Console ein Projekt anlegen, „YouTube Data API v3“ aktivieren, unter „Anmeldedaten“ einen OAuth-Client vom Typ „Desktop-App“ erstellen und den Zustimmungsbildschirm veröffentlichen (sonst läuft die Anmeldung nach 7 Tagen ab); Client-ID und Client-Secret hier einfügen oder die heruntergeladene JSON-Datei laden, dann „Mit YouTube verbinden“ – der Browser fragt einmal nach der Freigabe. Google erlaubt mit dem Standardkontingent etwa sechs Uploads am Tag; was nicht mehr passt, wartet in der Warteschlange bis zum nächsten Tag. Hochgeladen wird nur, wenn du weder in einer Lobby noch in einer Runde bist; die Datei bleibt immer auch auf der Platte. Gesendet werden nur die Videodatei, Titel (Map, Killer, Datum) und Beschreibung – nie Spielernamen; die Freigabe liegt verschlüsselt auf diesem PC. Mit „Uploads in Playlists einsortieren“ kommt jedes Video zusätzlich in eine Playlist deiner Wahl – dafür fragt die Anmeldung die breitere Berechtigung „YouTube-Konto verwalten“ an (einmal neu verbinden).':
+        'Uploads clips (F8 and editor) to your YouTube channel by themselves, rounds only on request: right click or "Upload to YouTube" under Recordings. For that, create a project once in the Google Cloud console, enable "YouTube Data API v3", create an OAuth client of type "Desktop app" under "Credentials" and publish the consent screen (otherwise the login expires after 7 days); paste the client ID and client secret here or load the downloaded JSON file, then "Connect to YouTube" – the browser asks once for your consent. With the default quota Google allows about six uploads a day; what does not fit waits in the queue until the next day. Uploads run only while you are in neither a lobby nor a round; the file always stays on the disk too. Only the video file, a title (map, killer, date) and a description are sent – never player names; the consent is kept encrypted on this PC. With "Sort uploads into playlists" every video also goes into a playlist of your choice – for that the login asks for the wider permission "Manage your YouTube account" (connect once more).',
     'YouTube: Client-ID (…apps.googleusercontent.com) und Client-Secret eintragen.':
         'YouTube: enter the client ID (…apps.googleusercontent.com) and the client secret.',
     'YouTube: öffne die Anmeldung im Browser …': 'YouTube: opening the login in the browser …',
@@ -1969,7 +1977,7 @@ EN = {
     'YouTube: verbunden': 'YouTube: connected',
     'YouTube: Anmeldung abgelaufen – noch einmal „Mit YouTube verbinden“ klicken.':
         'YouTube: login expired – click "Connect to YouTube" once more.',
-    'YouTube: {n} in der Warteschlange – wartet, bis die Runde vorbei ist': 'YouTube: {n} queued – waiting for the round to end',
+    'YouTube: {n} in der Warteschlange – wartet, bis Lobby und Runde vorbei sind': 'YouTube: {n} queued – waiting until lobby and round are over',
     'YouTube: {n} in der Warteschlange – Tageskontingent aufgebraucht, weiter ab {when}':
         'YouTube: {n} queued – daily quota used up, continues at {when}',
     'YouTube: lädt {file} hoch ({pct} %)': 'YouTube: uploading {file} ({pct} %)',
@@ -1999,8 +2007,8 @@ EN = {
         'Fetches the list of your playlists from YouTube (1 unit) into the two choices. New playlists you create on YouTube, then load the list again.',
     'YouTube: Fehler – {error}': 'YouTube: error – {error}',
     # tooltips
-    'Jeder neue Clip (F8 und aus dem Editor) kommt in die Warteschlange und geht auf deinen Kanal, sobald keine Runde läuft – mit der Sichtbarkeit rechts, Standard privat. Runden lädst du nur auf Wunsch hoch (Rechtsklick unter Aufnahmen). Google erlaubt etwa sechs Uploads am Tag, der Rest wartet bis zum nächsten Tag. Die Datei bleibt auf der Platte.':
-        'Every new clip (F8 and from the editor) joins the queue and goes to your channel as soon as no round is on – with the visibility on the right, private by default. Rounds are uploaded only on request (right click under Recordings). Google allows about six uploads a day, the rest waits until the next day. The file stays on the disk.',
+    'Jeder neue Clip (F8 und aus dem Editor) kommt in die Warteschlange und geht auf deinen Kanal, sobald du weder in einer Lobby noch in einer Runde bist – mit der Sichtbarkeit rechts, Standard privat. Runden lädst du nur auf Wunsch hoch (Rechtsklick unter Aufnahmen). Google erlaubt etwa sechs Uploads am Tag, der Rest wartet bis zum nächsten Tag. Die Datei bleibt auf der Platte.':
+        'Every new clip (F8 and from the editor) joins the queue and goes to your channel as soon as you are in neither a lobby nor a round – with the visibility on the right, private by default. Rounds are uploaded only on request (right click under Recordings). Google allows about six uploads a day, the rest waits until the next day. The file stays on the disk.',
     'Liest Client-ID und Client-Secret aus der Datei „client_secret_….json“, die Google nach dem Anlegen des OAuth-Clients zum Herunterladen anbietet („JSON herunterladen“). Die Datei wird nur gelesen und bleibt, wo sie ist; das Secret landet verschlüsselt in den Einstellungen.':
         'Reads client ID and client secret from the file "client_secret_….json" Google offers for download after the OAuth client was created ("Download JSON"). The file is only read and stays where it is; the secret goes encrypted into the settings.',
     'Öffnet die Anmeldedaten der Google Cloud Console im Browser: Projekt anlegen, „YouTube Data API v3“ aktivieren, OAuth-Client „Desktop-App“ erstellen, Client-ID und -Secret hier einfügen.':
@@ -2009,8 +2017,8 @@ EN = {
         'Opens the Google login in the browser (only the right "upload videos"). The browser then comes back to 127.0.0.1 and the program keeps the consent encrypted on this PC. For that it listens once on a free port, only during the login.',
     'Vergisst die Google-Freigabe auf diesem PC; die Warteschlange wartet, bis du dich neu verbindest. In deinem Google-Konto unter Sicherheit → Drittanbieter-Apps lässt sich der Zugriff ebenfalls entfernen.':
         'Forgets the Google consent on this PC; the queue waits until you connect again. In your Google account under Security → Third-party apps the access can be removed as well.',
-    'Die markierte Datei in die YouTube-Warteschlange (Sichtbarkeit wie in den Einstellungen, Standard privat). Hochgeladen wird, sobald keine Runde läuft und das Tageskontingent reicht; der Link erscheint danach im Rechtsklick-Menü.':
-        'The marked file into the YouTube queue (visibility as in the settings, private by default). Uploaded as soon as no round is on and the daily quota allows; the link then appears in the right-click menu.',
+    'Die markierte Datei in die YouTube-Warteschlange (Sichtbarkeit wie in den Einstellungen, Standard privat). Hochgeladen wird, sobald du weder in einer Lobby noch in einer Runde bist und das Tageskontingent reicht; der Link erscheint danach im Rechtsklick-Menü.':
+        'The marked file into the YouTube queue (visibility as in the settings, private by default). Uploaded as soon as you are in neither a lobby nor a round and the daily quota allows; the link then appears in the right-click menu.',
     'Spotify: Client-ID sieht falsch aus – erwartet werden 32 Zeichen aus 0–9 und a–f (Dashboard → deine App → Settings → Basic Information → Client ID).':
         'Spotify: the Client ID looks wrong – expected are 32 characters of 0–9 and a–f (dashboard → your app → Settings → Basic Information → Client ID).',
     'ALS NÄCHSTES': 'UP NEXT',

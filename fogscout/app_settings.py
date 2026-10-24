@@ -222,10 +222,10 @@ class SettingsTab:
         cb.pack(side="left", padx=6)
         cb.bind("<<ComboboxSelected>>", lambda e: self._farming_setting())
         self._reg("st.more.farm_text", ui.Label(fm, text=_(
-            "Farming-Runden zählen nicht zu den normalen Runden (Rollen-Filter, Wartezeiten, Bilanz, Ergebnisse) – "
-            "die Statistik hat dafür den Filter „Farming“. Crossplay aus erkennt das Programm an der Weltkugel mit "
-            "rotem Kreuz neben dem Lobby-Knopf; Runden auf der gewählten Region zählen immer als Farming, auch "
-            "ältere. Einzelne Runden: „Farming an/aus“ unter „Letzte Runden“."),
+            "Farming-Runden zählen in Statistik und Aufnahmen überall mit; das Häkchen „Farming ausblenden“ (bei den "
+            "Filtern) hält sie heraus, der Reiter Statistik → Farming listet sie immer. Crossplay aus erkennt das "
+            "Programm an der Weltkugel mit rotem Kreuz neben dem Lobby-Knopf; Runden auf der gewählten Region zählen "
+            "immer als Farming, auch ältere. Einzelne Runden: „Farming an/aus“ unter „Letzte Runden“."),
             style="Dim.TLabel", wraplength=420)).pack(anchor="w", pady=(4, 0))
         self.farm_opp_var = ui.StringVar(value=self._farming_opponents_text())      # 1.8.73: partners by character
         self._reg("st.more.farm_opp", ui.Label(fm, textvariable=self.farm_opp_var, style="Dim.TLabel",

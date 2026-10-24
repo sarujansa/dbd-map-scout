@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 import time
 
-from . import dashboard, history, layout, media, official, qt_theme, skin, spotify, sysinfo
+from . import dashboard, history, layout, media, official, qt_theme, selfload, skin, spotify, sysinfo
 from .capture import IS_WIN
 from .i18n import N_, _
 from .textnorm import fmt_duration
@@ -123,9 +123,16 @@ def make_hud(title: str = "Fog Scout Systemwerte"):
 
 
 class SysInfo:
+    def _selfload_tick(self):
+        """1.11.3: once a second the own CPU share and working set (overview card, diagnosis) – a tick step."""
+        own = getattr(self, "selfload", None)
+        if own is not None and time.time() - own.current.t >= selfload.EVERY_S:
+            own.tick()
+
     def _hud_init(self):
         self.sysmon = sysinfo.SysMonitor()
         self.sysmon.start()
+        self.selfload = selfload.SelfLoad()           # 1.11.3: what the program itself costs (own process only)
         self.media = media.MediaWatcher()
         self.media.start()
         self.hud = make_hud()

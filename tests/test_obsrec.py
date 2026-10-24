@@ -811,9 +811,10 @@ def test_select_recordings_filters_the_index():
     assert files(obsrec.select_recordings(recs)) == ["d.mkv", "c.mkv", "b.mkv", "a.mkv"]       # newest first
     assert files(obsrec.select_recordings(recs, since=25.0)) == ["d.mkv", "c.mkv"]
     assert files(obsrec.select_recordings(recs, map_label="Gas Heaven")) == ["b.mkv"]
-    assert files(obsrec.select_recordings(recs, role="killer")) == ["d.mkv", "a.mkv"]          # farming not a killer round
+    assert files(obsrec.select_recordings(recs, role="killer")) == ["d.mkv", "c.mkv", "a.mkv"]   # 1.11.5: farming counts
+    assert files(obsrec.select_recordings(recs, role="killer", hide_farming=True)) == ["d.mkv", "a.mkv"]
     assert files(obsrec.select_recordings(recs, role="farming")) == ["c.mkv"]
-    assert files(obsrec.select_recordings(recs, role="normal")) == ["d.mkv", "b.mkv", "a.mkv"]    # 1.8.71
+    assert files(obsrec.select_recordings(recs, hide_farming=True)) == ["d.mkv", "b.mkv", "a.mkv"]
     assert files(obsrec.select_recordings(recs, only="marked")) == ["b.mkv"]
     assert files(obsrec.select_recordings(recs, only="kept")) == ["c.mkv"]
     assert files(obsrec.select_recordings(recs, only="bad")) == ["d.mkv"]
@@ -1249,8 +1250,15 @@ def test_f8_cuts_the_last_seconds_of_the_buffer_into_the_clips_folder(tmp_path, 
 
 def test_the_f8_clip_mixes_its_sources_from_the_buffer_files_tracks(tmp_path, monkeypatch):
     """1.8.6: with the four tracks in the buffer file the instant clip keeps the chosen sources – game + microphone
-    mixed (sound re-encoded, picture copied), one source as a plain stream copy, none = no sound."""
-    posted, calls = _instant(tmp_path, monkeypatch, "ffmpeg", streams=4)
+    mixed (sound re-encoded, picture copied), one source as a plain stream copy, none = no sound. 1.11.4 (user:
+    "es soll auch Discord-Sound etc. beinhalten in Clips"): by default every source the file carries."""
+    posted, calls = _instant(tmp_path, monkeypatch, "ffmpeg", streams=5)
+    cut = calls[-1]
+    i = cut.index("-filter_complex")
+    assert obsrec.DEFAULT_CLIP_SOURCES == obsrec.SOURCES
+    assert cut[i + 1] == ("[0:a:1]volume=1.000[a0];[0:a:2]volume=1.000[a1];[0:a:3]volume=1.000[a2];"
+                          "[0:a:4]volume=1.000[a3];[a0][a1][a2][a3]amix=inputs=4:normalize=0[aout]")
+    posted, calls = _instant(tmp_path, monkeypatch, "ffmpeg", streams=4, clip_sources=("dbd", "mic"))
     cut = calls[-1]
     assert _drain(posted)[-1][1]["ok"] and calls[0][-2:] == ["-i", cut[cut.index("-i") + 1]]   # looked at the file
     i = cut.index("-filter_complex")
@@ -1263,8 +1271,11 @@ def test_the_f8_clip_mixes_its_sources_from_the_buffer_files_tracks(tmp_path, mo
     posted, calls = _instant(tmp_path, monkeypatch, "ffmpeg", streams=4, clip_sources=())
     cut = calls[-1]
     assert cut[cut.index("-map"):][:3] == ["-map", "0:v", "-an"]
-    posted, calls = _instant(tmp_path, monkeypatch, "ffmpeg", streams=2)         # 1.8.5 file: all but Discord
-    cut = calls[-1]
+    posted, calls = _instant(tmp_path, monkeypatch, "ffmpeg", streams=2)         # 1.8.5 file: track 1 = everything
+    cut = calls[-1]                                                                 # (Discord wanted since 1.11.4)
+    assert cut[cut.index("-map"):][:4] == ["-map", "0:v", "-map", "0:a:0"]
+    posted, calls = _instant(tmp_path, monkeypatch, "ffmpeg", streams=2, clip_sources=("dbd", "mic"))
+    cut = calls[-1]                                                                 # all but Discord
     assert cut[cut.index("-map"):][:4] == ["-map", "0:v", "-map", "0:a:1"]
 
 
@@ -1321,7 +1332,8 @@ def test_the_clips_list_knows_the_programs_clips_and_their_rounds_and_filters_th
     assert [c.t for c in clips] == sorted((c.t for c in clips), reverse=True)    # newest first
     pick = lambda **kw: {c.file for c in obsrec.select_clips(clips, **kw)}          # noqa: E731
     assert pick(role="killer") == {"new.mp4", editor.file, hunt.file}
-    assert pick(role="survivor") == {f8.file}                                     # farming rounds apart
+    assert pick(role="survivor") == {f8.file, still.file}                         # 1.11.5: farming counts
+    assert pick(role="survivor", hide_farming=True) == {f8.file}                  # … until the switch hides it
     assert pick(role="farming") == {still.file}
     assert pick(killer="Nurse") == {"new.mp4", editor.file}
     assert pick(kind="still") == {still.file} and pick(kind="instant") == {f8.file, hunt.file}

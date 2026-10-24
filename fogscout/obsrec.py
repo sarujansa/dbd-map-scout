@@ -117,7 +117,8 @@ AUDIO_STREAM_RE = re.compile(rb"Stream #\d+:\d+[^\n]*?: Audio:")   # 1.8.5: one 
 SOURCES = ("dbd", "discord", "mic", "other")              # the mixable sources, in the order of tracks 2, 3, 4, 5
 SOURCE_TRACKS = {"dbd": (1, 2), "desktop": (1,), "discord": (1, 3), "mic": (1, 4), "other": (1, 5)}
 REC_TRACKS_NEEDED = 0b11111
-DEFAULT_CLIP_SOURCES = ("dbd", "mic")                      # F8: the game and the own voice, no Discord
+DEFAULT_CLIP_SOURCES = SOURCES                             # F8: 1.11.4 (user: "Discord sound etc. in clips too") every source;
+                                                           # 1.8.6–1.11.3 only the game and the own voice
 LEGACY = -1                                                # 1.8.5 recordings: track 2 = everything but Discord
 NAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 CLIPS_DIR = "Clips"              # 1.5.3: clips (editor, F8 instant clips) beside the recordings
@@ -507,22 +508,22 @@ def prune(folder: str, recs: list[Recording], limit: int, reserve: int = RESERVE
 
 
 def select_recordings(recs: list[Recording], since: float | None = None, map_label: str | None = None,
-                      role: str | None = None, only: str | None = None) -> list[Recording]:
+                      role: str | None = None, only: str | None = None, hide_farming: bool = False) -> list[Recording]:
     """1.5, tab "Aufnahmen": the index filtered – ``since`` (banner time ≥), map label, role ("killer" /
-    "survivor" / "farming" / "normal" = not farming), ``only`` "marked" / "kept" / "bad". Newest first."""
+    "survivor" / "farming" = farming rounds only), ``only`` "marked" / "kept" / "bad", ``hide_farming`` (1.11.5:
+    the switch "Farming ausblenden"; 1.8.71–1.11.4 a role left farming rounds out by itself). Newest first."""
     out = []
     for r in recs:
         if since is not None and r.t < since:
             continue
         if map_label and r.label != map_label:
             continue
+        if hide_farming and r.farming:
+            continue
         if role == "farming":
             if not r.farming:
                 continue
-        elif role == "normal":              # 1.8.71: every role, no farming
-            if r.farming:
-                continue
-        elif role and (r.role != role or r.farming):
+        elif role and r.role != role:
             continue
         if only == "marked" and not r.marks:
             continue
@@ -668,20 +669,20 @@ def list_clips(cdir: str, recs: list[Recording]) -> list[Clip]:
 
 
 def select_clips(clips: list[Clip], since: float | None = None, role: str | None = None, killer: str | None = None,
-                 kind: str | None = None) -> list[Clip]:
+                 kind: str | None = None, hide_farming: bool = False) -> list[Clip]:
     """1.8.13 (user: "filtern nach Killer/Survivor"): ``role`` like the recordings ("killer" / "survivor" /
-    "farming"), ``killer`` = one killer (rounds as killer), ``kind`` clip / instant / still."""
+    "farming"), ``killer`` = one killer (rounds as killer), ``kind`` clip / instant / still, ``hide_farming``
+    (1.11.5) as for the recordings."""
     out = []
     for c in clips:
         if since is not None and c.t < since:
             continue
+        if hide_farming and c.farming:
+            continue
         if role == "farming":
             if not c.farming:
                 continue
-        elif role == "normal":              # 1.8.71: every role, no farming
-            if c.farming:
-                continue
-        elif role and (c.role != role or c.farming):
+        elif role and c.role != role:
             continue
         if killer and (c.role != "killer" or c.killer != killer):
             continue

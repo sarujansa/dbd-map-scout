@@ -170,6 +170,9 @@ def collect(app) -> str:
     if mon is not None:
         lines.append(mon.diag_line() + f" (Anzeige={app.settings.get('sysinfo')}, Rechteck="
                      f"{getattr(getattr(app, 'worker', None), 'hud_rect', None)})")
+    own = getattr(app, "selfload", None)                 # 1.11.3: what the program itself costs
+    if own is not None:
+        lines.append(own.diag_line())
     med = getattr(app, "media", None)
     if med is not None:
         lines.append(med.diag_line() + f" (Anzeige={app.settings['overlay'].get('show_media')})")

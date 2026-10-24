@@ -96,7 +96,7 @@ class YouTubeUpload:
             "und den Zustimmungsbildschirm veröffentlichen (sonst läuft die Anmeldung nach 7 Tagen ab); Client-ID und "
             "Client-Secret hier einfügen oder die heruntergeladene JSON-Datei laden, dann „Mit YouTube verbinden“ – der Browser fragt einmal nach der Freigabe. "
             "Google erlaubt mit dem Standardkontingent etwa sechs Uploads am Tag; was nicht mehr passt, wartet in der "
-            "Warteschlange bis zum nächsten Tag. Hochgeladen wird nur, wenn keine Runde läuft; die Datei bleibt immer "
+            "Warteschlange bis zum nächsten Tag. Hochgeladen wird nur, wenn du weder in einer Lobby noch in einer Runde bist; die Datei bleibt immer "
             "auch auf der Platte. Gesendet werden nur die Videodatei, Titel (Map, Killer, Datum) und Beschreibung – "
             "nie Spielernamen; die Freigabe liegt verschlüsselt auf diesem PC. Mit „Uploads in Playlists einsortieren“ kommt jedes Video "
             "zusätzlich in eine Playlist deiner Wahl – dafür fragt die Anmeldung die breitere Berechtigung „YouTube-Konto "
@@ -203,18 +203,28 @@ class YouTubeUpload:
         self._log(_("YouTube: Client-Daten aus {file} übernommen.", file=os.path.basename(path)), "System")
 
     def _youtube_tick(self):
-        """Every tick: the thread learns whether a round runs (uploads pause) and where the recordings are."""
+        """Every tick: the thread learns whether uploads must pause and where the recordings are. 1.11.2: paused
+        not only during a round (map detected / OBS recording) but from the lobby on – searching, lobby found,
+        custom game, loading screen – while the game window is there: the upload saturates the upstream, and the
+        connection to the server is made before the banner (before, the first ~40 s of a match were unprotected)."""
         yt = getattr(self, "youtube", None)
         if yt is None:
             return
         now = time.time()
         if now - self._yt_folder_at >= FOLDER_EVERY_S:
             self._yt_folder, self._yt_folder_at = self.recorder.folder() or "", now
-        state = (bool(self._round_running()), self._yt_folder)
+        state = (self._yt_pause_wanted(), self._yt_folder)
         if state != self._yt_sent:
             self._yt_sent = state
             yt.set_paused(state[0])
             yt.set_folder(state[1])
+
+    def _yt_pause_wanted(self) -> bool:
+        """A round runs, or DBD is open and the lobby state is not idle (search / lobby / custom)."""
+        if self._round_running():
+            return True
+        in_game = getattr(self, "game", None) is not None
+        return in_game and str((getattr(self, "_queue", None) or {}).get("state", "idle")) != "idle"
 
     # ---------------------------------------------------------- events from the thread
     def _youtube_event(self, kind, data):

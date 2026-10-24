@@ -24,7 +24,7 @@ from .trendchart import TrendChart
 log = logging.getLogger("fogscout")
 
 STATS_ROLES = [("all", N_("Alle Rollen")), ("killer", N_("Killer")), ("survivor", N_("Survivor")),
-               ("custom", N_("Custom Games")), ("farming", N_("Farming"))]
+               ("custom", N_("Custom Games"))]      # 1.11.5: "Farming" left the list – a box hides farming rounds
 BUILD_KINDS = {"perk": N_("Perk"), "addon": N_("Add-on"), "offering": N_("Opfergabe"), "power": N_("Kraft/Item")}
 # 1.8.51: the stats page's mode ids as the user's matches showed them (others keep the page's name)
 MODE_LABELS = {"Online": N_("Öffentlich"), "SeasonalEvent": N_("Event-Modus")}
@@ -112,6 +112,7 @@ class StatsTab:
                                             values=[lbl for _k, lbl in self._stats_killers])
         self.stats_killer_cb.pack(side="left", padx=(8, 0))
         self.stats_killer_cb.bind("<<ComboboxSelected>>", lambda e: self._stats_render())
+        self._farming_box(fr).pack(side="left", padx=(8, 0))                                    # 1.11.5
         # 1.2.16: map filter – set by hand or by a click on the dashboard (map bar, heatmap cell)
         self._stats_maps_f = [(None, _("Alle Maps"))]
         self.stats_map_var = ui.StringVar(value=self._stats_maps_f[0][1])
@@ -232,8 +233,8 @@ class StatsTab:
                                                  ("hourw", _("BP/h mit Wartezeit"), 120, "e"),
                                                  ("sum", _("Summe"), 80, "e")), 8)
         ui.Label(box_b, text=_("Bloodpoints laut Stats-Seite. BP/h = je Stunde im Match; mit Wartezeit = je Stunde aus "
-                                "Match und Suche zusammen. Mit dem Rollen-Filter „Farming“ steht hier, was das Farmen "
-                                "bringt."), style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
+                                "Match und Suche zusammen. Was das Farmen allein bringt, steht im Reiter „Farming“; "
+                                "„Farming ausblenden“ rechnet hier ohne Farming-Runden."), style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         box_rk = self._stats_page(_("Rekorde"), "rounds", "_stats_part_records")    # 1.7: streaks, best week, busiest day, longest session
         self.stats_records_var = ui.StringVar(value="")
         ui.Label(box_rk, textvariable=self.stats_records_var, wraplength=400).pack(anchor="w")
@@ -374,7 +375,7 @@ class StatsTab:
                                                    ("dur", _("Dauer"), 60, "e"), ("wait", _("Warten"), 65, "e"),
                                                    ("role", _("Rolle/Killer"), 115, "w"), ("bp", _("BP"), 70, "e"),
                                                    ("srv", _("Server"), 100, "w")), 8)
-        ui.Label(box_f, text=_("Alle Farming-Runden der Auswahl (Zeitraum, Region, Map, Modus) – unabhängig vom Rollen-Filter, der sie sonst aus den übrigen Auswertungen heraushält. Farming = Crossplay war in der Lobby aus (oder die eingestellte Farming-Region); korrigieren unter „Letzte Runden“ mit „Farming an/aus“. Aufnahmen liegen im Unterordner „Farming“ des Aufnahmeordners. Wartezeit „sofort“: die Lobby war voll, bevor eine Suchzeit messbar war. Server nur, wenn „Verbunden mit“ auf der Seite Server läuft."), style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
+        ui.Label(box_f, text=_("Alle Farming-Runden der Auswahl (Zeitraum, Region, Map, Modus) – unabhängig vom Rollen-Filter und von „Farming ausblenden“. Farming = Crossplay war in der Lobby aus (oder die eingestellte Farming-Region); korrigieren unter „Letzte Runden“ mit „Farming an/aus“. Aufnahmen liegen im Unterordner „Farming“ des Aufnahmeordners. Wartezeit „sofort“: die Lobby war voll, bevor eine Suchzeit messbar war. Server nur, wenn „Verbunden mit“ auf der Seite Server läuft."), style="Dim.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
         self._stats_sort = ("n", True)
         return outer
 
@@ -520,7 +521,9 @@ class StatsTab:
         self.stats_map_cb.configure(values=[lbl for _k, lbl in self._stats_maps_f])
         self.stats_map_var.set(dict(self._stats_maps_f)[wmap])
         since = history.period_start(period, time.time())
-        rounds = history.select(all_rounds, since=since, region=wanted, role=role, killer=killer, map_label=wmap)
+        hide = self._farming_hidden()                              # 1.11.5: the box "Farming ausblenden"
+        rounds = history.select(all_rounds, since=since, region=wanted, role=role, killer=killer, map_label=wmap,
+                                farming=False if hide else None)
         wmode = next((k for k, lbl in self._stats_modes if lbl == self.stats_mode_var.get()), None)
         self._stats_modes = [(None, _("Alle Modi"))] + [
             (k, _(MODE_LABELS[k]) if k in MODE_LABELS else lbl)
@@ -539,7 +542,7 @@ class StatsTab:
         if wmode is not None:        # a round without the page's mode is not known to be in it
             rounds = [r for r in rounds if official.mode_key(off.get(id(r))) == wmode]
             farm = [r for r in farm if official.mode_key(off.get(id(r))) == wmode]
-        fkey = (period, wanted, role, killer, wmap, wmode)
+        fkey = (period, wanted, role, killer, wmap, wmode, hide)
         if fkey != self._stats_filter_key:                 # other filters: the round list starts short again
             self._stats_filter_key, self._stats_last_limit = fkey, LAST_ROUNDS_STEP
         self._stats_rounds_shown = rounds
@@ -559,11 +562,11 @@ class StatsTab:
             notes.append(_("✓ {n} × Map mitten im Match falsch erkannt (laut Stats-Seite lief da schon ein Match) – "
                            "nicht gezählt. Zuletzt: {map}, {when}.", n=len(ghosts), map=ghosts[-1].map,
                            when=time.strftime("%d.%m.%y %H:%M", time.localtime(ghosts[-1].t))))
-        pairs = [(r, off[id(r)]) for r in rounds if id(r) in off and (role in ("custom", "farming") or history.normal(r))]
+        pairs = [(r, off[id(r)]) for r in rounds if id(r) in off and (role == "custom" or not r.custom)]
         # 1.3.5: only the sub-tab on display is drawn now, the others when they are opened – with 5000 rounds all
         # of them together took 360 ms per filter click (system and trend alone 170 ms)
         self._stats_ctx = SimpleNamespace(rounds=rounds, pairs=pairs, off=off, period=period, notes=notes,
-                                          all_rounds=all_rounds, farm=farm, role=role)
+                                          all_rounds=all_rounds, farm=farm, role=role, hide=hide)
         self._stats_dirty = set(self._stats_parts)
         self._stats_render_tab()
 
@@ -728,8 +731,9 @@ class StatsTab:
         found = {(o.name, o.role): o for o in official.opponents(c.pairs)}
         # 1.8.81 (user: "Slasher 38×, das kommt safe vom Farmen" → 1.8.73 took those rounds out of the normal
         # count, and a character met only while farming vanished from the table): the farming rounds of the same
-        # filters in a column of their own – unless the role filter is "Farming", where the main count has them
-        farm_pairs = [(r, c.off[id(r)]) for r in c.farm if id(r) in c.off] if c.role != "farming" else []
+        # filters in a column of their own – 1.11.5 only while "Farming ausblenden" keeps them out of the main
+        # count (otherwise they are in it already)
+        farm_pairs = [(r, c.off[id(r)]) for r in c.farm if id(r) in c.off] if c.hide else []
         farmed = {(o.name, o.role): o.n for o in official.opponents(farm_pairs)}
         keys = list(dict.fromkeys(list(found) + list(farmed)))
         keys.sort(key=lambda k: (-((found[k].n if k in found else 0) + farmed.get(k, 0)), k[1], k[0].lower()))
@@ -761,8 +765,8 @@ class StatsTab:
             hint = ""
         elif total:
             hint = _("{n} gespeicherte Matches haben ein Loadout, aber keines davon ist in dieser Auswahl. Custom Games "
-                     "und Farming-Runden zählen nur mit dem Rollen-Filter „Custom Games“ bzw. „Farming“, Matches "
-                     "ohne erkannte Runde gar nicht.", n=total)
+                     "zählen nur mit dem Rollen-Filter „Custom Games“, Farming-Runden nicht mit „Farming ausblenden“, "
+                     "Matches ohne erkannte Runde gar nicht.", n=total)
         else:
             hint = _("Noch keine Matches mit Loadout in dieser Auswahl – die Stats-Seite liefert es ab Userscript "
                      "Version 3 (Einstellungen → Match-Daten → Offizielle Match-Daten → „Userscript kopieren“).")
@@ -937,6 +941,32 @@ class StatsTab:
             "ticks": [(v, f"{v} °C") for v in range(lo, hi + 1, 10)],
             "last": f"{last:.0f} °C" if last is not None else "",
             "empty": _("Noch keine GPU-Temperaturen in dieser Auswahl.")}})
+
+    def _farming_box(self, parent):
+        """1.11.5 (user: "die Filterung von Farming find ich kacke" → "überall mitzählen, Schalter zum
+        Ausblenden"): the box "Farming ausblenden" – one per filter row (statistics, recordings, clips), all on the
+        setting ``hide_farming``; a click on one sets the others. Off = farming rounds count like any other."""
+        var = ui.BooleanVar(value=bool(self.settings.get("hide_farming", False)))
+        boxes = self.__dict__.setdefault("_farming_vars", [])
+        boxes.append(var)
+        return ui.Checkbutton(parent, text=_("Farming ausblenden"), variable=var,
+                              command=lambda v=var: self._farming_switch(v))
+
+    def _farming_hidden(self) -> bool:
+        return bool(self.settings.get("hide_farming", False))
+
+    def _farming_set(self, on: bool):
+        """The setting and every box, without drawing anything."""
+        self.settings.set("hide_farming", bool(on))
+        for v in getattr(self, "_farming_vars", ()):
+            if bool(v.get()) != bool(on):
+                v.set(bool(on))
+
+    def _farming_switch(self, var):
+        self._farming_set(bool(var.get()))
+        self._stats_render()
+        if hasattr(self, "_rec_render"):
+            self._rec_render(force=True)
 
     def _stats_role_buttons(self):
         sel = self.stats_last.selection()

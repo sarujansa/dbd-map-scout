@@ -1001,7 +1001,8 @@ class App(ServerTab, StatsTab, ExportDialog, RecordingsTab, DiscordPresence, Spo
     TICK_STEPS = (("overlay", ("_tick_unsure", "_tick_timer", "_place_overlay")), ("layout", ("_layout_size_tick",)),
                   ("verbindung", ("_conn_tick",)), ("offizielle Daten", ("_official_tick",)), ("show", ("_show_tick",)),
                   ("hotkeys", ("_hotkeys_tick",)), ("tray", ("_tray_tick", "_rec_tick")),
-                  ("discord", ("_discord_tick",)), ("youtube", ("_youtube_tick",)), ("Qt", ("_qt_refresh",)))
+                  ("discord", ("_discord_tick",)), ("youtube", ("_youtube_tick",)),
+                  ("eigene Last", ("_selfload_tick",)), ("Qt", ("_qt_refresh",)))
 
     def _tick_overlay(self, reschedule=True):
         # 1.8.67 (user: "Statistik dauert ewig zum Laden"; the diagnosis only said "App._tick_overlay 6005 ms"): each

@@ -126,6 +126,16 @@ def test_the_app_queues_rounds_on_request_and_clips_by_themselves(app_root, tmp_
         app._youtube_tick()
         app._youtube_tick()
         assert sent == [("pause", False), ("folder", folder)]
+        # 1.11.2: paused from the lobby on while the game window is there – not without the game
+        app._yt_sent, app.game, app._queue = None, object(), {"state": "lobby"}
+        app._youtube_tick()
+        assert sent[-2:] == [("pause", True), ("folder", folder)]
+        app._yt_sent, app._queue = None, {"state": "idle"}
+        app._youtube_tick()
+        assert sent[-2:] == [("pause", False), ("folder", folder)]
+        app._yt_sent, app._queue, app.game = None, {"state": "search"}, None
+        app._youtube_tick()
+        assert sent[-2:] == [("pause", False), ("folder", folder)]
         # 1.10.1: the client file from Google fills both fields (the dialog starts in the download folder) …
         asked = []
         monkeypatch.setattr(app, "_qt_file", lambda mode, title, initial, cb, pattern="JSON (*.json)":

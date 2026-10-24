@@ -129,8 +129,11 @@ TIPS = {
     "Survivor": "Diese Runde als Survivor-Runde zählen (falls die Erkennung falsch lag).",
     "Custom Game": "Diese Runde als Custom Game zählen – sie fliesst dann nicht in die Wartezeit ein.",
     "Farming an/aus": "Diese Runde als Farming-Runde zählen bzw. wieder als normale Runde – Farming-Runden "
-                      "erscheinen nur unter dem Filter „Farming“. Runden auf der Farming-Region (Einstellungen → "
-                      "Match-Daten) bleiben Farming.",
+                      "zählen überall mit, bis „Farming ausblenden“ sie heraushält; der Reiter „Farming“ listet sie "
+                      "immer. Runden auf der Farming-Region (Einstellungen → Match-Daten) bleiben Farming.",
+    "Farming ausblenden": "An: Farming-Runden (Crossplay aus, Farming-Region, Farming-Gegner) bleiben aus Statistik, "
+                          "Aufnahmen und Clips draussen – ein Schalter für alle drei. Aus: sie zählen wie jede andere "
+                          "Runde. Der Reiter Statistik → Farming zeigt sie immer.",
     "Runden ohne Crossplay als Farming zählen": "Zeigt die Lobby die Weltkugel mit rotem Kreuz (Crossplay aus), "
                                                  "zählt die nächste Runde als Farming-Runde.",
     "Spielstatus in Discord anzeigen (Rich Presence)": "Dein Discord-Status zeigt Map, Rolle, Killer und die Rundenzeit "
@@ -155,7 +158,7 @@ TIPS = {
                                   "lässt sich die App unter Konto → Apps ebenfalls entfernen.",
     # 1.10: YouTube upload
     "Clips automatisch auf YouTube hochladen": "Jeder neue Clip (F8 und aus dem Editor) kommt in die Warteschlange und "
-                                                "geht auf deinen Kanal, sobald keine Runde läuft – mit der Sichtbarkeit "
+                                                "geht auf deinen Kanal, sobald du weder in einer Lobby noch in einer Runde bist – mit der Sichtbarkeit "
                                                 "rechts, Standard privat. Runden lädst du nur auf Wunsch hoch (Rechtsklick "
                                                 "unter Aufnahmen). Google erlaubt etwa sechs Uploads am Tag, der Rest "
                                                 "wartet bis zum nächsten Tag. Die Datei bleibt auf der Platte.",
@@ -180,7 +183,7 @@ TIPS = {
     "Playlists laden": "Holt die Liste deiner Playlists von YouTube (1 Einheit) in die beiden Auswahlfelder. Neue "
                        "Playlists legst du auf YouTube an und lädst die Liste danach neu.",
     "Auf YouTube hochladen": "Die markierte Datei in die YouTube-Warteschlange (Sichtbarkeit wie in den Einstellungen, "
-                             "Standard privat). Hochgeladen wird, sobald keine Runde läuft und das Tageskontingent "
+                             "Standard privat). Hochgeladen wird, sobald du weder in einer Lobby noch in einer Runde bist und das Tageskontingent "
                              "reicht; der Link erscheint danach im Rechtsklick-Menü.",
     "Auch Lobby, Suche und Menü anzeigen": "Aus = der Status erscheint nur während einer Runde; sonst auch „Sucht ein "
                                            "Match“, „In der Lobby“ und „Im Menü“, solange DBD läuft.",

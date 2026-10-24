@@ -249,7 +249,25 @@ def recordings(app) -> Fact | None:
                 frac=1 - sp.free / sp.total, colour=colour)
 
 
+def self_row(app):
+    """1.11.3 (user: "wie viel Leistung braucht das Programm alleine?"): the program's own CPU share and memory as
+    the last row of the system card – shown whatever the system values' switch says, on every platform."""
+    own = getattr(app, "selfload", None)
+    text = own.text() if own is not None else ""
+    if not text:
+        return None
+    return ("Fog Scout", text, min(1.0, own.current.cpu / 100), None)
+
+
 def system(app, now: float, is_win: bool) -> tuple[list, str]:
+    rows, note = _system_rows(app, now, is_win)
+    own = self_row(app)
+    if own is not None:
+        rows.append(own)
+    return rows, note
+
+
+def _system_rows(app, now: float, is_win: bool) -> tuple[list, str]:
     if app.settings.get("sysinfo", "off") == "off":
         return [], _("Systemwerte sind aus (Tab Overlay → Systemwerte).")
     if not is_win:
