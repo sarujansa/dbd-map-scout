@@ -1431,7 +1431,7 @@ class StatsTab:
         """Own record for the map on display into the overlay (setting overlay.show_record)."""
         text = ""
         hist = self._hist or {}
-        if self.current and self.settings["overlay"].get("show_record", True) and not hist.get("custom"):
+        if self.current and self.settings["overlay"].get("show_record", False) and not hist.get("custom"):
             try:
                 text = self._record_text(self.current[0], hist.get("role") or self._queue.get("role"))
             except Exception:

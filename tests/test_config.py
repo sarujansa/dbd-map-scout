@@ -81,3 +81,17 @@ def test_the_old_instant_clip_sound_default_follows_the_new_one(tmp_path):
     assert Settings(str(p))["rec_clip_sources"] == ["dbd"]
     p.write_text(json.dumps({"settings_version": 11, "rec_clip_sources": ["dbd", "mic"], "hotkeys": {}}))
     assert Settings(str(p))["rec_clip_sources"] == ["dbd", "mic"]                 # chosen after 1.11.4: kept
+
+
+def test_the_kills_average_on_the_map_card_is_off_once_and_can_come_back(tmp_path):
+    """1.11.11 (user: "entferne das Avg-Kill, damit falls es stockt nicht noch eine Zeile entsteht"): the record
+    chip ("Ø 2.0 Kills · 3 Runden") is off by default and switched off once in older files – the amber "Verbindung
+    stockt" then fits the chip row; ticked again afterwards, it stays on."""
+    import json
+    from fogscout.config import DEFAULTS, Settings
+    assert DEFAULTS["overlay"]["show_record"] is False
+    p = tmp_path / "settings.json"
+    p.write_text(json.dumps({"settings_version": 11, "overlay": {"show_record": True}, "hotkeys": {}}))
+    assert Settings(str(p))["overlay"]["show_record"] is False
+    p.write_text(json.dumps({"settings_version": 12, "overlay": {"show_record": True}, "hotkeys": {}}))
+    assert Settings(str(p))["overlay"]["show_record"] is True
