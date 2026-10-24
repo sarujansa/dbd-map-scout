@@ -1060,7 +1060,7 @@ class App(ServerTab, StatsTab, ExportDialog, RecordingsTab, DiscordPresence, Spo
         info = {"timer": "3:27" if o.get("show_timer", True) else "",
                 "server": _("Frankfurt") if o.get("show_server", True) and self.settings.get("show_connection") else "",
                 "ping": 31.0,
-                "record": _("Bilanz: Ø 2,8 Kills · 12 Runden") if o.get("show_record", True) else "",
+                "record": _("Bilanz: Ø 2,8 Kills · 12 Runden") if o.get("show_record", False) else "",
                 "memo": mapnotes.lines(mapnotes.get(self.settings.get(mapnotes.KEY), self.current[0]))
                 if self.current and o.get("show_notes", True) else (),          # 1.8.54: the own note
                 "name": name if pic is not None else "",             # 1.3.1: the styled card's header

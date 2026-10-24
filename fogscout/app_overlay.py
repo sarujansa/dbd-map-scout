@@ -204,7 +204,7 @@ class OverlayTab:
         self.show_map_var = ui.BooleanVar(value=o.get("show_map", True))
         self.waiting_var = ui.BooleanVar(value=o.get("show_waiting", True))
         self.floor_auto_var = ui.BooleanVar(value=o.get("floor_auto", True))
-        self.record_var = ui.BooleanVar(value=o.get("show_record", True))
+        self.record_var = ui.BooleanVar(value=o.get("show_record", False))
         self.notes_var = ui.BooleanVar(value=o.get("show_notes", True))
         self._reg("ov.keep_bar", ui.Checkbutton(
             pos, text=_("Karte im schwarzen Rand halten"),
@@ -558,7 +558,7 @@ class OverlayTab:
         o["keep_in_bar"] = bool(self.keep_bar_var.get())
         o["grow_past_bar"] = bool(self.grow_var.get())
         o["show_waiting"] = bool(self.waiting_var.get())
-        if bool(self.record_var.get()) != o.get("show_record", True):
+        if bool(self.record_var.get()) != o.get("show_record", False):
             o["show_record"] = bool(self.record_var.get())
             self._update_record()
         if bool(self.notes_var.get()) != o.get("show_notes", True):

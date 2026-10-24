@@ -8,7 +8,7 @@ import shutil
 import time
 
 HUD_SHOWN = ("above", "left", "right", "custom")    # settings.sysinfo values that show the system values
-SETTINGS_VERSION = 11
+SETTINGS_VERSION = 12
 
 DEFAULTS = {
     "settings_version": SETTINGS_VERSION,
@@ -49,7 +49,7 @@ DEFAULTS = {
         "map_heights": {},              # map id -> own size (hotkeys / mouse wheel with that map on display)
         "map_rotations": {},            # map id -> map turned clockwise by 90/180/270° (button / hotkey)
         "floor_auto": True,             # maps with floors (Midwich): all one below the other (False: bottom only)
-        "show_record": True,            # own record on the map below the timer (official match data)
+        "show_record": False,           # own record on the map below the timer (official match data); 1.11.11 off
         "show_notes": True,             # 1.8.54: own note on the map below the timer (mapnotes)
         "show_map": True,               # off: overlay shows only timer, server and ping
         "show_media": True,             # "Läuft gerade": music of the Windows media controls (1.64)
@@ -329,6 +329,8 @@ def _load(raw) -> dict:
         (data.get("tab_order") or {}).pop("detect", None)
     if ver < 11 and data.get("rec_clip_sources") == ["dbd", "mic"]:   # 1.11.4: the old default follows the new one
         data["rec_clip_sources"] = list(DEFAULTS["rec_clip_sources"])
+    if ver < 12:  # 1.11.11 (user: "entferne das Avg-Kill, damit falls es stockt nicht noch eine Zeile entsteht")
+        ov["show_record"] = False
     if data.get("color_theme") == "oled":            # 1.62.0: OLED was a theme of its own
         data["color_theme"], data["oled_black"] = "gold", True
     data["settings_version"] = SETTINGS_VERSION
