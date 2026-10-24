@@ -117,7 +117,8 @@ AUDIO_STREAM_RE = re.compile(rb"Stream #\d+:\d+[^\n]*?: Audio:")   # 1.8.5: one 
 SOURCES = ("dbd", "discord", "mic", "other")              # the mixable sources, in the order of tracks 2, 3, 4, 5
 SOURCE_TRACKS = {"dbd": (1, 2), "desktop": (1,), "discord": (1, 3), "mic": (1, 4), "other": (1, 5)}
 REC_TRACKS_NEEDED = 0b11111
-DEFAULT_CLIP_SOURCES = ("dbd", "mic")                      # F8: the game and the own voice, no Discord
+DEFAULT_CLIP_SOURCES = SOURCES                             # F8: 1.11.4 (user: "Discord sound etc. in clips too") every source;
+                                                           # 1.8.6–1.11.3 only the game and the own voice
 LEGACY = -1                                                # 1.8.5 recordings: track 2 = everything but Discord
 NAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 CLIPS_DIR = "Clips"              # 1.5.3: clips (editor, F8 instant clips) beside the recordings

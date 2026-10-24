@@ -666,3 +666,77 @@ def test_threads_never_touch_qt_and_a_closed_editor_ignores_them(clip, four_trac
         host.close()
         app.processEvents()
     assert errors == []
+
+
+def test_marking_a_clip_shows_the_compact_editor_beside_the_clips_table(four_track, tmp_path):
+    """1.11.4 (user: "Clips soll ebenfalls eine Vorschau wie normale Videos erhalten"): marking a clip puts the
+    compact editor beside the clips table like a recording – with the sources of the recording the clip came from;
+    a still hides it; "Grosser Editor" opens the full editor at the same range; leaving the tab stops it."""
+    if sys.platform == "win32":
+        pytest.skip("Linux: the whole program offscreen (like tests/test_uimodel.py)")
+    pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
+    import json
+    import shutil
+    from PySide6.QtWidgets import QApplication
+    from fogscout.app import App
+    from fogscout.app_qt import ui_shown
+    root = os.path.join(os.path.dirname(__file__), "..")
+    for name in ("maps", "models", "maps.json"):
+        os.symlink(os.path.abspath(os.path.join(root, name)), tmp_path / name)
+    (tmp_path / "sim").mkdir()
+    folder = tmp_path / "rec"
+    cdir = folder / obsrec.CLIPS_DIR
+    cdir.mkdir(parents=True)
+    shutil.copy(four_track, cdir / "one.mkv")
+    (cdir / "still.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    t1 = time.time() - 600
+    obsrec.save_index(str(folder), [obsrec.Recording(t=t1, file="gone.mkv", label="Ormond", end=t1 + 6, size=1,
+                                                     extra={"sources": ["dbd", "discord", "mic"]})])
+    obsrec.save_clips(str(cdir), [obsrec.Clip(file="one.mkv", t=t1 + 100, kind="instant", source=t1, label="Ormond",
+                                              role="killer", killer="The Nurse", seconds=6.0),
+                                  obsrec.Clip(file="still.png", t=t1 + 200, kind="still", source=t1, label="Ormond")])
+    (tmp_path / "settings.json").write_text(json.dumps({"rec_on": True, "rec_folder": str(folder),
+                                                       "welcome_seen": True,
+                                                       "clip_mix_on": {"discord": False}}), encoding="utf-8")
+    app = App(str(tmp_path), simulate=str(tmp_path / "sim"))
+    try:
+        qapp = QApplication.instance()
+        app._rec_render()
+        host = app.qt.host(str(app.clip_host))
+        assert host is not None and host.content is None and not ui_shown(app.clip_host)
+        rows = {app._clip_rows[i].file: i for i in app.clip_table.get_children()}
+        app.clip_table.selection_set(rows["one.mkv"])
+        app.clip_table.event_generate("<<TreeviewSelect>>")
+        assert host.content is None                                 # built a moment later, like a recording
+        deadline = time.time() + 3
+        while time.time() < deadline and host.content is None:
+            qapp.processEvents()
+            time.sleep(0.01)
+        ed = host.content
+        assert ed is not None and ed.compact and not ed.isWindow() and ui_shown(app.clip_host)
+        assert ed.info.audio_tracks == 4 and ed.mix() == {"dbd": 1.0, "discord": 0.0, "mic": 1.0}
+        assert ed.expand_btn is not None
+        app._clip_buttons()                                         # the same row again: the same editor
+        assert host.content is ed
+        ed.timeline.set_range(1.0, 3.0)
+        ed.goto(2.0)
+        ed.expand_btn.click()
+        full = app._clip_windows[-1]
+        assert full is not ed and full.isWindow() and not full.compact
+        assert (full.timeline.start, full.timeline.end) == (1.0, 3.0)
+        full.close()
+        app.clip_table.selection_set(rows["still.png"])                   # a still: nothing to play
+        app.clip_table.event_generate("<<TreeviewSelect>>")
+        qapp.processEvents()
+        assert host.content is None and not ui_shown(app.clip_host)
+        app.clip_table.selection_set(rows["one.mkv"])
+        app.clip_table.event_generate("<<TreeviewSelect>>")
+        deadline = time.time() + 3
+        while time.time() < deadline and host.content is None:
+            qapp.processEvents()
+            time.sleep(0.01)
+        assert host.content is not None
+        app._rec_preview_stop()                                     # leaving the tab stops the clip preview too
+        assert not host.content.playing
+    finally:
+        app.quit()

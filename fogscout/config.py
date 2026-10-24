@@ -8,7 +8,7 @@ import shutil
 import time
 
 HUD_SHOWN = ("above", "left", "right", "custom")    # settings.sysinfo values that show the system values
-SETTINGS_VERSION = 10
+SETTINGS_VERSION = 11
 
 DEFAULTS = {
     "settings_version": SETTINGS_VERSION,
@@ -166,7 +166,8 @@ DEFAULTS = {
     "rec_audio_desktop": False,
     "rec_audio_mic": False,
     "rec_tracks": True,                 # 1.8.6: every sound source on its own OBS track (1 all, 2 game, 3 Discord, 4 mic)
-    "rec_clip_sources": ["dbd", "mic"], # 1.8.6: what the F8 instant clip keeps when the buffer file has the tracks
+    "rec_clip_sources": ["dbd", "discord", "mic", "other"],   # 1.8.6: what the F8 instant clip keeps when the buffer
+                                        # file has the tracks; 1.11.4: every source (was game + microphone)
     "clip_mode": "copy",                # 1.5.1: clip editor – "copy" (key frames, fast) / "exact" (re-encoded)
     "clip_sound": True,                 # 1.5.1: clip editor plays the sound while previewing (Windows)
     "clip_target_mb": 10,               # 1.6.1: clip editor "Für Discord" – stays under this many MB
@@ -324,6 +325,8 @@ def _load(raw) -> dict:
             data["nav_order"] = [k for k in data["nav_order"] if k != "detect"]
         (data.get("card_order") or {}).pop("detect", None)
         (data.get("tab_order") or {}).pop("detect", None)
+    if ver < 11 and data.get("rec_clip_sources") == ["dbd", "mic"]:   # 1.11.4: the old default follows the new one
+        data["rec_clip_sources"] = list(DEFAULTS["rec_clip_sources"])
     if data.get("color_theme") == "oled":            # 1.62.0: OLED was a theme of its own
         data["color_theme"], data["oled_black"] = "gold", True
     data["settings_version"] = SETTINGS_VERSION

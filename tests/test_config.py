@@ -64,3 +64,20 @@ def test_old_settings_forget_the_detection_page(tmp_path):
     s = Settings(str(p))
     assert s["nav_order"] == ["log", "overview"] and s["card_order"] == {"settings": {"a": ["x"]}}
     assert s["tab_order"] == {"overlay": {"t": ["a"]}} and s["settings_version"] == SETTINGS_VERSION
+
+
+def test_the_old_instant_clip_sound_default_follows_the_new_one(tmp_path):
+    """1.11.4 (user: "es soll auch Discord-Sound etc. beinhalten in Clips"): F8 clips keep every source by default;
+    a settings file still on the 1.8.6 default (game + microphone) is moved along once, an own choice stays."""
+    import json
+    from fogscout import obsrec
+    from fogscout.config import DEFAULTS, Settings, SETTINGS_VERSION
+    assert DEFAULTS["rec_clip_sources"] == list(obsrec.SOURCES) == ["dbd", "discord", "mic", "other"]
+    p = tmp_path / "settings.json"
+    p.write_text(json.dumps({"settings_version": 10, "rec_clip_sources": ["dbd", "mic"], "hotkeys": {}}))
+    s = Settings(str(p))
+    assert s["rec_clip_sources"] == ["dbd", "discord", "mic", "other"] and s["settings_version"] == SETTINGS_VERSION
+    p.write_text(json.dumps({"settings_version": 10, "rec_clip_sources": ["dbd"], "hotkeys": {}}))
+    assert Settings(str(p))["rec_clip_sources"] == ["dbd"]
+    p.write_text(json.dumps({"settings_version": 11, "rec_clip_sources": ["dbd", "mic"], "hotkeys": {}}))
+    assert Settings(str(p))["rec_clip_sources"] == ["dbd", "mic"]                 # chosen after 1.11.4: kept

@@ -203,6 +203,8 @@ class RecordingsTab:
             self.clip_table.column(key, width=width, anchor=anchor, stretch=key == "file")
         self.clip_table.pack(side="left", fill="both", expand=True)
         self.clip_table.bind("<<TreeviewSelect>>", lambda e: self._clip_buttons())
+        self.clip_host = ui.Host(tf)             # 1.11.4 (user: "Clips soll ebenfalls eine Vorschau erhalten")
+        self._clip_preview_key = None
         self._table_menu(self.clip_table, self._clip_menu_items, self._clip_menu_act)
         ui.Label(f, text=_("Hier stehen die Clips aus dem Editor, die Sofort-Clips (F8) und die Standbilder – mit "
                             "der Runde, aus der sie stammen. Gelöscht werden nur Dateien, die das Programm selbst "
@@ -354,6 +356,7 @@ class RecordingsTab:
         c = self._clip_selected()
         self.clip_edit_btn.configure(state="normal" if c is not None and c.kind != "still" else "disabled")
         self.clip_yt_btn.configure(state="normal" if c is not None and self._clip_uploadable(c) else "disabled")
+        self._clip_preview_follow(c)
 
     @staticmethod
     def _clip_rel(c) -> str:
@@ -401,26 +404,74 @@ class RecordingsTab:
             return
         self._open(path)
 
-    def _clip_edit(self):
+    def _clip_edit(self, at=None):
         """1.8.60 (user: "Clip soll auch bearbeitbar sein"): a clip – editor clip or F8 instant clip – opens in the
         same editor as a recording. What it saves is a new clip of the round the clip came from; the clip itself
-        stays as it is."""
+        stays as it is. ``at`` (1.11.4) = (start, end, position) taken over from the compact preview."""
         c = self._clip_selected()
-        path = self._clip_path(c)
-        if path is None or c.kind == "still":
-            return
-        if not os.path.exists(path):
-            self._log(_("Clip fehlt: {file}", file=c.file), "Fehler")
-            return
-        if obsrec.ffmpeg_exe() is None:
-            self._log(_("ffmpeg fehlt (Paket imageio-ffmpeg) – start.bat installiert es beim nächsten Start."),
-                      "Fehler")
+        path = self._clip_editable(c)
+        if path is None:
             return
         win = self._clip_window(clip_round(c, obsrec.load_index(self.recorder.folder())), path)
+        if at is not None and win.info.ok:
+            start, end, pos = at
+            win.timeline.set_range(start, end)
+            win._show_range()
+            win.goto(pos)
         self._clip_windows = [w for w in self._clip_windows if w.isVisible()] + [win]
         win.show()
         win.raise_()
         win.activateWindow()
+
+    def _clip_editable(self, c, quiet=False):
+        """1.11.4: the path of clip ``c`` if the editor can open it (a video that is there, ffmpeg installed), else
+        None (logged unless ``quiet``) – like _rec_editable for a recording."""
+        path = self._clip_path(c) if c is not None else None
+        if path is None or c.kind == "still":
+            return None
+        if not os.path.exists(path):
+            if not quiet:
+                self._log(_("Clip fehlt: {file}", file=c.file), "Fehler")
+            return None
+        if obsrec.ffmpeg_exe() is None:
+            if not quiet:
+                self._log(_("ffmpeg fehlt (Paket imageio-ffmpeg) – start.bat installiert es beim nächsten Start."),
+                          "Fehler")
+            return None
+        return path
+
+    def _clip_preview_follow(self, c):
+        """1.11.4 (user: "Clips soll ebenfalls eine Vorschau wie normale Videos erhalten"): the compact editor
+        beside the clips table follows the marked clip, like _rec_preview_follow beside the recordings – hidden
+        for a still, a missing file or without ffmpeg."""
+        if self.qt is None:
+            return
+        host = self.qt.host(str(self.clip_host))
+        if host is None:
+            return
+        key = c.file if c is not None else None
+        if key == self._clip_preview_key and (key is None or host.content is not None):
+            return
+        self._clip_preview_key = key
+        job = getattr(self, "_clip_preview_job", None)
+        if job is not None:
+            self.root.after_cancel(job)
+            self._clip_preview_job = None
+        path = self._clip_editable(c, quiet=True)
+        if path is None:
+            host.set_content(None)
+            self.clip_host.pack_forget()
+            return
+        self._clip_preview_job = self.root.after(PREVIEW_DELAY_MS, lambda: self._clip_preview_build(host, c, path))
+
+    def _clip_preview_build(self, host, c, path):
+        self._clip_preview_job = None
+        if self._clip_preview_key != c.file:
+            return
+        win = self._clip_window(clip_round(c, obsrec.load_index(self.recorder.folder())), path, compact=True,
+                                parent=host, on_expand=lambda s, e, p: self._clip_edit(at=(s, e, p)))
+        host.set_content(win)
+        self.clip_host.pack(side="left", fill="both")
 
     def _copy_file(self, path, name):
         """1.8.60: the file onto the clipboard – Ctrl+V in Discord or Explorer pastes it."""
@@ -709,10 +760,11 @@ class RecordingsTab:
         self.rec_host.pack(side="left", fill="both")
 
     def _rec_preview_stop(self):
-        """1.8.8: the recordings tab was left – the preview stops playing."""
-        host = self.qt.host(str(self.rec_host)) if self.qt is not None and hasattr(self, "rec_host") else None
-        if host is not None and host.content is not None:
-            host.content.stop()
+        """1.8.8: the recordings tab was left – the preview stops playing (1.11.4: the clips' preview too)."""
+        for model in (getattr(self, "rec_host", None), getattr(self, "clip_host", None)):
+            host = self.qt.host(str(model)) if self.qt is not None and model is not None else None
+            if host is not None and host.content is not None:
+                host.content.stop()
 
     def _rec_changed(self, d):
         """Recorder → "changed" (keep / delete from this tab): re-read on the next tick, log the deletion."""
