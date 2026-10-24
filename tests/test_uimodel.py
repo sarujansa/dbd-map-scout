@@ -2456,3 +2456,63 @@ def test_the_game_capture_box_reaches_the_setting_and_the_recorder(app_root):
         assert app.settings.get("rec_capture") == "game"
     finally:
         app.quit()
+
+
+def test_a_role_read_on_the_second_look_corrects_the_round_just_saved(app_root):
+    """1.11.8: match_end without a role saves the round with the lobby's role (here none); the worker's later
+    "result_role" for that end sets it – only for the round of that end (gen), a custom game stays one."""
+    from types import SimpleNamespace as NS
+    from fogscout import history
+    from fogscout.app import App
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        t0 = time.time() - 700
+        app._hist = {"t": t0, "map_id": "coal", "map": "Coal Tower", "custom": True}
+        app._event(NS(kind="match_end", data={"gen": None, "t": t0 + 600, "role": None}))
+        assert history.load(str(app_root / "rounds.jsonl"))[0].role == ""
+        app._event(NS(kind="result_role", data={"gen": (99, "x"), "t": t0 + 600, "role": "killer"}))
+        assert history.load(str(app_root / "rounds.jsonl"))[0].role == ""          # another end: ignored
+        app._event(NS(kind="result_role", data={"gen": None, "t": t0 + 600, "role": "killer"}))
+        r = history.load(str(app_root / "rounds.jsonl"))[0]
+        assert (r.role, r.custom) == ("killer", True) and app._queue.get("role") == "killer"
+        assert any("zweiter Blick" in e[2] for e in app._log_entries)
+    finally:
+        app.quit()
+
+
+def test_a_rounds_dropouts_are_counted_shown_and_the_overlay_warns(app_root):
+    """1.11.9: while the server is known its receive gaps go into the round → stored count and longest, a log line,
+    "3× Aussetzer" next to the ping in the statistics; "Verbindung stockt" in the overlay's amber line while it
+    stutters – never over the doubt about the detected map."""
+    from types import SimpleNamespace as NS
+    from fogscout import history
+    from fogscout.app import App
+    app = App(str(app_root), simulate=str(app_root / "sim"))
+    try:
+        notes = []
+        app.overlay.set_note = notes.append
+        gaps = [[0.3, 0.9, 0.4]]
+        app.conn.poll = lambda now, hwnd=None: None
+        app.conn.server = {"ip": "3.120.45.67", "region": "eu-central-1", "pps": 40.0}
+        app.conn.take_gaps = lambda: gaps.pop() if gaps else []
+        lag = [True]
+        app.conn.lagging = lambda now=None: lag[0]
+        t0 = time.time() - 700
+        app._hist = {"t": t0, "map_id": "coal", "map": "Coal Tower"}
+        app._conn_tick(force=True)
+        assert notes[-1] == "Verbindung stockt"
+        app._unsure = {"shown": True}                       # the doubt line wins
+        n = len(notes)
+        app._conn_tick(force=True)
+        assert len(notes) == n
+        app._unsure = None
+        lag[0] = False
+        app._conn_tick(force=True)
+        assert notes[-1] == ""
+        app._event(NS(kind="match_end", data={"gen": None, "t": t0 + 600, "role": "killer"}))
+        r = history.load(str(app_root / "rounds.jsonl"))[0]
+        assert (r.stalls, r.stall_max) == (3, 0.9)
+        assert any("3 × Aussetzer, längster 0.9 s" in e[2] for e in app._log_entries)
+        assert app._server_cell(r).endswith("· 3× Aussetzer") and app._server_cell(history.Round(0, 1, "a", "A")) == "–"
+    finally:
+        app.quit()

@@ -704,8 +704,17 @@ class StatsTab:
                 time.strftime("%d.%m.%y %H:%M", time.localtime(r.t)), r.map, fmt_duration(r.seconds),
                 self._wait_text(r), role,
                 _bp(m.bp) if m is not None and m.bp > 0 else "–",
-                (_(regions.NAMES.get(r.region, r.region)) + (f" · {r.ping:.0f} ms" if r.ping is not None else ""))
-                if r.region else "–"))
+                self._server_cell(r)))
+
+    @staticmethod
+    def _server_cell(r) -> str:
+        """Server column: region · ping · 1.11.9 the receive gaps of the round ("3× Aussetzer"), "–" without."""
+        if not r.region:
+            return "–"
+        text = _(regions.NAMES.get(r.region, r.region)) + (f" · {r.ping:.0f} ms" if r.ping is not None else "")
+        if getattr(r, "stalls", None):
+            text += " · " + _("{n}× Aussetzer", n=r.stalls)
+        return text
 
     def _stats_part_records(self, c):
         self.stats_records_var.set("" if c.rounds else _("Noch keine Runden in dieser Auswahl."))
@@ -861,9 +870,7 @@ class StatsTab:
                                                        fmt_duration(r.seconds),
                                                        self._wait_text(r), role,
                                                        self._official_result(off.get(id(r))),
-                                                       (_(regions.NAMES.get(r.region, r.region))
-                                                        + (f" · {r.ping:.0f} ms" if r.ping is not None else ""))
-                                                       if r.region else "–"))
+                                                       self._server_cell(r)))
         kept = [k for k in keep if t.exists(k)]              # 1.5.4: every marked row stays marked
         if kept:
             t.selection_set(kept)
@@ -1355,6 +1362,12 @@ class StatsTab:
         ping = history.median(rec.pop("pings", []))
         if ping is not None:
             rec["ping"] = round(ping, 1)
+        stalls = rec.pop("stalls", None)                 # 1.11.9: measured while the server was known
+        if stalls is not None:
+            rec["stalls"], rec["stall_max"] = len(stalls), round(max(stalls), 2) if stalls else 0.0
+            if stalls:
+                self._log(_("Verbindung in dieser Runde: {n} × Aussetzer, längster {s} s.", n=len(stalls),
+                            s=f"{max(stalls):.1f}"), "System")
         seconds = max(0.0, t - rec["t"])
         if not history.should_record(seconds):
             return
@@ -1365,6 +1378,24 @@ class StatsTab:
             return
         self._off_open.round_recorded()              # worth opening the stats page once DBD is closed
         if self.nb.select() == str(self.tab_stats):
+            self._stats_render()
+
+    def _result_role(self, d):
+        """1.11.8: the worker read the role on a second look at the result screen, after the round was saved –
+        the round of that end gets it (only the role; a custom game stays one)."""
+        gen, t = getattr(self, "_closed_round", (None, None))
+        role = d.get("role")
+        if role not in history.ROLES or t is None or d.get("gen") != gen:
+            return
+        self._queue = dict(self._queue, role=role)
+        try:
+            r = history.set_result_role(self._hist_path(), t, role)
+        except OSError as e:
+            self._report_once("history", f"{e}")
+            return
+        self._log(_("Ergebnisbildschirm (zweiter Blick): gespielt als {role}.", role=self._role_name(role)),
+                  "Erkennung")
+        if r is not None and self.nb.select() == str(self.tab_stats):
             self._stats_render()
 
     def _hist_path(self):

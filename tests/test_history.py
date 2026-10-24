@@ -1,6 +1,7 @@
 """Round history (fogscout/history.py)."""
 import os
 import sys
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -337,3 +338,31 @@ def test_a_round_after_a_line_cut_off_by_a_crash_is_kept(tmp_path):
     h.append_lost(path, 4.0, "D", "neues Banner")
     assert [r.t for r in h.load(path)] == [1.0, 3.0]
     assert [d["t"] for d in h._lost_lines(path)] == [4.0]
+
+
+def test_a_later_result_role_changes_only_the_role(tmp_path):
+    """1.11.8: the second look at the result screen corrects the role of the round just saved – a custom game stays
+    one, farming stays; the same role again or an unknown round changes nothing."""
+    path = str(tmp_path / "rounds.jsonl")
+    h.append(path, h.Round(100, 600, "a", "A", role="survivor", custom=True))
+    h.append(path, h.Round(200, 600, "a", "A", farming=True))
+    assert h.set_result_role(path, 100, "killer").role == "killer"
+    assert h.set_result_role(path, 200, "survivor").farming
+    got = {r.t: r for r in h.load(path)}
+    assert (got[100].role, got[100].custom) == ("killer", True) and (got[200].role, got[200].farming) == ("survivor", True)
+    assert h.set_result_role(path, 100, "killer") is None and h.set_result_role(path, 999, "killer") is None
+    with pytest.raises(ValueError):
+        h.set_result_role(path, 100, "custom")
+
+
+def test_a_rounds_dropouts_are_stored_and_read_back(tmp_path):
+    """1.11.9: stalls / stall_max per round; old lines without them and broken values read as not measured."""
+    import json
+    path = str(tmp_path / "rounds.jsonl")
+    h.append(path, h.Round(100, 600, "a", "A", region="eu-central-1", stalls=3, stall_max=0.8))
+    h.append(path, h.Round(200, 600, "a", "A"))
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps({"t": 300, "seconds": 600, "map_id": "a", "stalls": "x", "stall_max": 1}) + "\n")
+        fh.write(json.dumps({"t": 400, "seconds": 600, "map_id": "a", "stalls": True}) + "\n")
+    got = [(r.stalls, r.stall_max) for r in h.load(path)]
+    assert got == [(3, 0.8), (None, None), (None, None), (None, None)]

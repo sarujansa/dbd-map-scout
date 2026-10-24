@@ -69,6 +69,7 @@ def is_public(ip: str) -> bool:
 
 
 LPORTS_KEPT = 4             # 1.11.6: local ports listed per partner (a game server talks to one)
+STALL_S = 0.25              # 1.11.9: nothing received from a partner for this long, then a packet = one gap
 SNAPSHOT_LIMIT = 8          # 1.11.6: partners written (5 before) – the game server may not be the busiest one
 
 
@@ -93,14 +94,21 @@ class FlowTable:
         f = self.flows.get(remote)
         if f is None:
             f = self.flows[remote] = {"sent": collections.deque(), "recv": collections.deque(), "ports": {},
-                                      "lports": {}}
+                                      "lports": {}, "last_recv": None, "gaps": collections.deque()}
+        if way == "recv":                    # 1.11.9: gaps between two received packets (arrival times only)
+            last = f["last_recv"]
+            if last is not None and t - last >= STALL_S:
+                f["gaps"].append((t, t - last))
+            f["last_recv"] = t
         f[way].append(t)
         f["ports"][port] = f["ports"].get(port, 0) + 1
         f["lports"][lport] = f["lports"].get(lport, 0) + 1
 
     def snapshot(self, now: float, limit: int = SNAPSHOT_LIMIT) -> list:
-        """Busiest partners first: [{"ip", "port", "lports", "pps", "sent", "recv"}] (sent/recv = packets in the
-        window, lports = the local ports most used with this partner, busiest first)."""
+        """Busiest partners first: [{"ip", "port", "lports", "pps", "sent", "recv", "gaps", "quiet"}] (sent/recv =
+        packets in the window, lports = the local ports most used with this partner, busiest first; 1.11.9: gaps =
+        [[end time, seconds]] of the receive gaps ≥ STALL_S that ended in the window, quiet = seconds since the last
+        packet from it)."""
         cut = now - self.window
         out = []
         for ip in list(self.flows):
@@ -114,8 +122,13 @@ class FlowTable:
                 del self.flows[ip]
                 continue
             lports = sorted(f["lports"], key=lambda k: -f["lports"][k])[:LPORTS_KEPT]
+            gaps = f["gaps"]
+            while gaps and gaps[0][0] < cut:
+                gaps.popleft()
             out.append({"ip": ip, "port": max(f["ports"], key=f["ports"].get), "lports": lports,
-                        "pps": round(n / self.window, 1), "sent": len(f["sent"]), "recv": len(f["recv"])})
+                        "pps": round(n / self.window, 1), "sent": len(f["sent"]), "recv": len(f["recv"]),
+                        "gaps": [[round(te, 3), round(s, 3)] for te, s in gaps],
+                        "quiet": None if f["last_recv"] is None else round(max(0.0, now - f["last_recv"]), 3)})
         out.sort(key=lambda x: -x["pps"])
         return out[:limit]
 

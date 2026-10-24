@@ -466,3 +466,49 @@ def test_the_process_exception_stays_narrow():
                         if re.search(r"\.\s*" + m.group(1) + r"\b", code):          # an attribute = a real call
                             found.setdefault(m.group(1), set()).add(name)
     assert found == {"GetWindowThreadProcessId": {"connwatch.py"}, "GetExtendedUdpTable": {"connwatch.py"}}
+
+
+# ------------------------------------------------------------------ 1.11.9: receive gaps
+def test_the_flow_table_times_the_gaps_between_received_packets():
+    """1.11.9 (user: "1,2 gern" – connection quality per round): a pause of ≥ STALL_S between two packets *from* a
+    partner is one gap, listed with its end for WINDOW seconds; packets we send do not close a gap; quiet = time since
+    the last packet from it. Only arrival times – no contents."""
+    tab = netwatch.FlowTable(window=5.0)
+    for i in range(10):                                        # 30 packets/s from the server
+        tab.add(100.0 + i / 30, LOCAL, (SERVER, LOCAL, 7777, 50000))
+    tab.add(100.5, LOCAL, (LOCAL, SERVER, 50000, 7777))        # sent: no effect on the gap
+    tab.add(101.1, LOCAL, (SERVER, LOCAL, 7777, 50000))        # 0.8 s silent
+    tab.add(101.2, LOCAL, (SERVER, LOCAL, 7777, 50000))        # 0.1 s: normal
+    snap = tab.snapshot(101.5)[0]
+    assert len(snap["gaps"]) == 1 and snap["gaps"][0][0] == 101.1 and abs(snap["gaps"][0][1] - 0.8) < 0.01
+    assert abs(snap["quiet"] - 0.3) < 1e-6
+    tab.add(104.0, LOCAL, (SERVER, LOCAL, 7777, 50000))
+    assert [g[0] for g in tab.snapshot(106.5)[0]["gaps"]] == [104.0]           # the first one left the window
+
+
+def test_the_servers_gaps_count_once_and_a_stall_shows_live(tmp_path, monkeypatch):
+    """The helper lists a gap for 5 s, the program counts it once (take_gaps for the round); a gap ≥ LAG_LIVE_S or a
+    silent server makes lagging() true for LAG_HOLD_S; other partners' gaps do not count."""
+    w, control, result = _watch(tmp_path, monkeypatch)
+    w._rdns = {SERVER: ("eu-central-1", time.time())}
+    other = {"ip": "52.9.9.9", "port": 9000, "pps": 5.0, "gaps": [[1000.0, 2.0]], "quiet": 0.0}
+
+    def write(t, gaps, quiet=0.0):
+        result.write_text(json.dumps({"ok": True, "t": t, "flows": [
+            {"ip": SERVER, "port": 7777, "pps": 40.0, "gaps": gaps, "quiet": quiet}, other]}))
+
+    write(1000.0, [])
+    w.poll(1000.2)
+    assert w.take_gaps() == [] and not w.lagging(1000.2)
+    write(1001.0, [[1000.9, 0.3]])
+    w.poll(1001.2)
+    write(1002.0, [[1000.9, 0.3], [1001.8, 0.9]])
+    w.poll(1002.2)
+    assert w.take_gaps() == [0.3, 0.9] and w.take_gaps() == []                 # each once
+    assert w.lagging(1002.2) and w.lagging(1001.8 + connwatch.LAG_HOLD_S)
+    assert not w.lagging(1001.8 + connwatch.LAG_HOLD_S + 0.1)
+    write(1010.0, [], quiet=0.7)                                               # silent right now
+    w.poll(1010.2)
+    assert w.lagging(1010.2) and abs(w.quiet - 0.9) < 1e-6
+    text = "\n".join(w.diag_lines(1011.0))
+    assert "Aussetzer des Servers" in text and ": 2, längster 0.90 s" in text
